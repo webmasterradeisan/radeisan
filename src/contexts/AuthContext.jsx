@@ -1,6 +1,7 @@
-// src/contexts/AuthContext.jsx - VERSIÓN SIMPLE
+// src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -14,93 +15,484 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
 
-  // Demo user para mantener la app funcionando
+  // Demo user para fallback
   const demoUser = {
     id: 'demo-user-id',
     name: 'Usuario Demo',
-    email: 'usuario@demo.com',
+    email: 'demo@radeisan.com',
     username: 'usuario_demo',
     points: 2847,
-    avatar: null,
-    isBusinessAccount: false,
-    created_at: new Date().toISOString()
+    avatar_url: null,
+    is_business_account: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
 
-  // Inicializar con demo user
+  // Initialize authentication state
   useEffect(() => {
-    setUser(demoUser);
-    setIsAuthenticated(true);
-    setLoading(false);
-    console.log('✅ AuthContext iniciado en modo demo');
+    const initializeAuth = async () => {
+      try {
+        // Get current session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          // Fallback to demo user on error
+          setUser(demoUser);
+          setIsAuthenticated(true);
+          setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          await fetchUserProfile(session.user);
+        } else {
+          // No session, use demo user as fallback
+          setUser(demoUser);
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        // Fallback to demo user on any error
+        setUser(demoUser);
+        setIsAuthenticated(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        await fetchUserProfile(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(demoUser); // Keep demo user instead of null
+        setIsAuthenticated(true); // Keep authenticated with demo
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        await fetchUserProfile(session.user);
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
-  // Funciones básicas (demo por ahora)
+  // Fetch user profile from database
+  const fetchUserProfile = async (authUser) => {
+    try {
+      setLoading(true);
+      
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        
+        // If profile doesn't exist, create it
+        if (error.code === 'PGRST116') {
+          await createUserProfile(authUser);
+          return;
+        }
+        
+        // On any error, use auth user data as fallback
+        const fallbackUser = {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.user_metadata?.name || authUser.email.split('@')[0],
+          username: authUser.user_metadata?.username || authUser.email.split('@')[0],
+          points: 1000, // Initial points for new users
+          avatar_url: authUser.user_metadata?.avatar_url || null,
+          is_business_account: authUser.user_metadata?.account_type === 'business',
+          created_at: authUser.created_at,
+          updated_at: new Date().toISOString()
+        };
+        
+        setUser(fallbackUser);
+        setIsAuthenticated(true);
+        return;
+      }
+
+      setUser(profile);
+      setIsAuthenticated(true);
+      
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+      // Fallback to demo user on any error
+      setUser(demoUser);
+      setIsAuthenticated(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Create user profile in database
+  const createUserProfile = async (authUser) => {
+    try {
+      const newProfile = {
+        id: authUser.id,
+        email: authUser.email,
+        name: authUser.user_metadata?.name || authUser.email.split('@')[0],
+        username: authUser.user_metadata?.username || authUser.email.split('@')[0],
+        points: 1000, // Initial welcome points
+        avatar_url: authUser.user_metadata?.avatar_url || null,
+        is_business_account: authUser.user_metadata?.account_type === 'business',
+        created_at: authUser.created_at,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .insert([newProfile])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating profile:', error);
+        // Use the profile data we tried to insert as fallback
+        setUser(newProfile);
+      } else {
+        setUser(data);
+      }
+      
+      setIsAuthenticated(true);
+      
+      // Award registration points
+      console.log('✅ User registered! Awarded 1000 welcome points');
+      
+    } catch (error) {
+      console.error('Error in createUserProfile:', error);
+      setUser(demoUser);
+      setIsAuthenticated(true);
+    }
+  };
+
+  // Sign in function
   const signIn = async (email, password) => {
-    console.log('Demo signIn llamado');
-    return { user: demoUser, error: null };
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        return { user: null, error: error.message };
+      }
+
+      // User profile will be fetched by auth state change listener
+      return { user: data.user, error: null };
+      
+    } catch (error) {
+      console.error('Error in signIn:', error);
+      return { user: null, error: 'Error de conexión' };
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Sign up function
   const signUp = async (userData) => {
-    console.log('Demo signUp llamado');
-    return { user: demoUser, error: null };
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          data: {
+            name: userData.name,
+            username: userData.username,
+            account_type: userData.accountType || 'personal'
+          }
+        }
+      });
+
+      if (error) {
+        return { user: null, error: error.message };
+      }
+
+      return { user: data.user, error: null };
+      
+    } catch (error) {
+      console.error('Error in signUp:', error);
+      return { user: null, error: 'Error de conexión' };
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Sign out function
   const signOut = async () => {
-    console.log('Demo signOut llamado');
-    setUser(demoUser); // Mantener demo user
-    setIsAuthenticated(true);
-    navigate('/');
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Error signing out:', error);
+      }
+      
+      // Keep demo user instead of signing out completely
+      setUser(demoUser);
+      setIsAuthenticated(true);
+      navigate('/video-feed-dashboard');
+      
+    } catch (error) {
+      console.error('Error in signOut:', error);
+      // Even on error, fallback to demo
+      setUser(demoUser);
+      setIsAuthenticated(true);
+      navigate('/video-feed-dashboard');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Sign in with OAuth provider
   const signInWithProvider = async (provider) => {
-    console.log(`Demo signInWithProvider: ${provider}`);
-    return { user: demoUser, error: null };
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/video-feed-dashboard`
+        }
+      });
+
+      if (error) {
+        return { user: null, error: error.message };
+      }
+
+      return { user: data.user, error: null };
+      
+    } catch (error) {
+      console.error(`Error in signInWithProvider (${provider}):`, error);
+      return { user: null, error: 'Error de conexión' };
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Update user points
+  const updateUserPoints = async (newPoints) => {
+    try {
+      // Update local state immediately for better UX
+      setUser(prev => ({ ...prev, points: newPoints }));
+      
+      if (user?.id === 'demo-user-id') {
+        // Demo user - just update local state
+        console.log('Demo: Updated points to', newPoints);
+        return { success: true };
+      }
+
+      // Update in database
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          points: newPoints,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Error updating points:', error);
+        // Revert local state on error
+        setUser(prev => ({ ...prev, points: prev.points }));
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error('Error in updateUserPoints:', error);
+      return { success: false, error: 'Error de conexión' };
+    }
+  };
+
+  // Add points (helper function)
+  const addPoints = async (pointsToAdd, reason = 'Activity') => {
+    if (!user) return { success: false, error: 'No user found' };
+    
+    const newPoints = (user.points || 0) + pointsToAdd;
+    const result = await updateUserPoints(newPoints);
+    
+    if (result.success) {
+      console.log(`✅ Added ${pointsToAdd} points for: ${reason}`);
+    }
+    
+    return result;
+  };
+
+  // Update user profile
+  const updateUserProfile = async (updates) => {
+    try {
+      // Update local state immediately
+      setUser(prev => ({ ...prev, ...updates, updated_at: new Date().toISOString() }));
+      
+      if (user?.id === 'demo-user-id') {
+        // Demo user - just update local state
+        console.log('Demo: Updated profile', updates);
+        return { success: true };
+      }
+
+      // Update in database
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        // Revert local state on error
+        await fetchUserProfile({ id: user.id });
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error('Error in updateUserProfile:', error);
+      return { success: false, error: 'Error de conexión' };
+    }
+  };
+
+  // Reset password
+  const resetPassword = async (email) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error('Error in resetPassword:', error);
+      return { success: false, error: 'Error de conexión' };
+    }
+  };
+
+  // Check authentication status
+  const checkAuthStatus = async () => {
+    try {
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error('Error checking auth status:', error);
+        return;
+      }
+
+      if (authUser && (!user || user.id !== authUser.id)) {
+        await fetchUserProfile(authUser);
+      }
+      
+    } catch (error) {
+      console.error('Error in checkAuthStatus:', error);
+    }
+  };
+
+  // Get current user session
+  const getCurrentSession = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error getting session:', error);
+        return null;
+      }
+      
+      return session;
+      
+    } catch (error) {
+      console.error('Error in getCurrentSession:', error);
+      return null;
+    }
+  };
+
+  // Clear auth data (for testing/debugging)
   const clearAuthData = () => {
-    console.log('Demo clearAuthData llamado');
     setUser(demoUser);
     setIsAuthenticated(true);
-  };
-
-  const updateUserPoints = async (newPoints) => {
-    console.log('Demo updateUserPoints:', newPoints);
-    const updatedUser = { ...user, points: newPoints };
-    setUser(updatedUser);
-  };
-
-  const updateUserProfile = async (updates) => {
-    console.log('Demo updateUserProfile:', updates);
-    const updatedUser = { ...user, ...updates };
-    setUser(updatedUser);
-  };
-
-  const resetPassword = async (email) => {
-    console.log('Demo resetPassword:', email);
-    return { success: true, error: null };
-  };
-
-  const checkAuthStatus = async () => {
-    console.log('Demo checkAuthStatus llamado');
     setLoading(false);
+    console.log('Auth data cleared, using demo user');
+  };
+
+  // Check if user is demo
+  const isDemoUser = () => {
+    return user?.id === 'demo-user-id';
+  };
+
+  // Award points for specific activities
+  const awardActivityPoints = async (activity) => {
+    const pointsMap = {
+      registration: 1000,
+      daily_login: 25,
+      video_watch_complete: 20,
+      video_watch_50: 10,
+      video_watch_25: 5,
+      video_upload: 50,
+      photo_upload: 30,
+      like_given: 2,
+      share: 3,
+      comment: 5,
+      first_business_setup: 100,
+      profile_complete: 50
+    };
+
+    const points = pointsMap[activity];
+    if (!points) return { success: false, error: 'Unknown activity' };
+
+    return await addPoints(points, activity);
   };
 
   const value = {
+    // State
     user,
     loading,
     isAuthenticated,
+    isDemoUser,
+    
+    // Auth functions
     signIn,
     signUp,
     signOut,
     signInWithProvider,
-    updateUserPoints,
-    updateUserProfile,
     resetPassword,
-    checkAuthStatus
+    checkAuthStatus,
+    getCurrentSession,
+    clearAuthData,
+    
+    // Profile functions
+    updateUserProfile,
+    fetchUserProfile: () => user ? fetchUserProfile({ id: user.id }) : null,
+    
+    // Points functions
+    updateUserPoints,
+    addPoints,
+    awardActivityPoints,
+    
+    // Utility functions
+    isDemoUser: isDemoUser(),
   };
 
   return (
