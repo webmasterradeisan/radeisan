@@ -9,6 +9,7 @@ import BusinessProfileManagement from './pages/business-profile-management';
 import BusinessMarketplace from './pages/business-marketplace';
 import UserProfileSettings from './pages/user-profile-settings';
 import VideoUploadStudio from './pages/video-upload-studio';
+import UserLogin from './pages/user-login';
 
 const Routes = () => {
   return (
@@ -18,6 +19,7 @@ const Routes = () => {
       <RouterRoutes>
         {/* Define your route here */}
         <Route path="/" element={<BusinessMarketplace />} />
+        <Route path="/login" element={<UserLogin />} /> {/* 👈 NUEVA LÍNEA */}
         <Route path="/points-rewards-store" element={<PointsRewardsStore />} />
         <Route path="/video-feed-dashboard" element={<VideoFeedDashboard />} />
         <Route path="/business-profile-management" element={<BusinessProfileManagement />} />
