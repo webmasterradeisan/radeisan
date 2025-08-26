@@ -24,12 +24,13 @@
             "build",
             "serve"
         ],
-        "warning": "\ud83d\udea8 CRITICAL: DO NOT REMOVE OR MODIFY ABOVE DEPENDENCIES - Required for app functionality"
+        "warning": "🚨 CRITICAL: DO NOT REMOVE OR MODIFY ABOVE DEPENDENCIES - Required for app functionality"
     },
     "dependencies": {
         "@dhiwise/component-tagger": "^1.0.10",
         "@radix-ui/react-slot": "^1.2.3",
         "@reduxjs/toolkit": "^2.6.1",
+        "@supabase/supabase-js": "^2.39.0",
         "@tailwindcss/forms": "^0.5.7",
         "@testing-library/jest-dom": "^5.15.1",
         "@testing-library/react": "^11.2.7",
