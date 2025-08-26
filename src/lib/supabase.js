@@ -1,33 +1,21 @@
-// src/lib/supabase.js - TEMPORAL MOCK
-console.log('⚠️ USANDO SUPABASE MOCK - Configura las credenciales reales');
+// src/lib/supabase.js
+import { createClient } from '@supabase/supabase-js'
 
-export const supabase = {
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables:', {
+    url: !!supabaseUrl,
+    key: !!supabaseAnonKey
+  });
+  throw new Error('Missing Supabase environment variables')
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    signInWithPassword: () => ({ data: null, error: { message: 'Mock Supabase' } }),
-    signUp: () => ({ data: null, error: { message: 'Mock Supabase' } }),
-    signOut: () => ({ error: null }),
-    getUser: () => ({ data: { user: null }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    signInWithOAuth: () => ({ data: null, error: { message: 'Mock Supabase' } }),
-    resetPasswordForEmail: () => ({ data: null, error: null })
-  },
-  from: () => ({
-    select: () => ({
-      eq: () => ({
-        single: () => ({ data: null, error: { code: 'PGRST116' } })
-      })
-    }),
-    insert: () => ({
-      select: () => ({
-        single: () => ({ data: null, error: { message: 'Mock Supabase' } })
-      })
-    }),
-    update: () => ({
-      eq: () => ({
-        select: () => ({
-          single: () => ({ data: null, error: { message: 'Mock Supabase' } })
-        })
-      })
-    })
-  })
-};
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+})
