@@ -1,6 +1,7 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -18,40 +19,47 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
 
-  // Initialize Supabase client (you'll need to install @supabase/supabase-js)
-  // import { createClient } from '@supabase/supabase-js'
-  // const supabase = createClient(process.env.REACT_APP_SUPABASE_URL, process.env.REACT_APP_SUPABASE_ANON_KEY)
-
   // Check authentication status on mount
   useEffect(() => {
     checkAuthStatus();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session);
+      
+      if (event === 'SIGNED_IN') {
+        await handleUserSignedIn(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        handleUserSignedOut();
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log('Token refreshed');
+      }
+      
+      setLoading(false);
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const checkAuthStatus = async () => {
     try {
       setLoading(true);
       
-      // Check localStorage first for immediate UI feedback
-      const storedUser = localStorage.getItem('userData');
-      const storedToken = localStorage.getItem('authToken');
+      const { data: { user }, error } = await supabase.auth.getUser();
       
-      if (storedUser && storedToken) {
-        const userData = JSON.parse(storedUser);
-        setUser(userData);
-        setIsAuthenticated(true);
+      if (error) {
+        console.error('Error checking auth status:', error);
+        clearAuthData();
+        return;
       }
 
-      // TODO: Replace with actual Supabase auth check
-      // const { data: { user }, error } = await supabase.auth.getUser()
-      // if (error) throw error;
-      // if (user) {
-      //   const userData = await getUserProfile(user.id);
-      //   setUser(userData);
-      //   setIsAuthenticated(true);
-      // } else {
-      //   clearAuthData();
-      // }
-
+      if (user) {
+        await handleUserSignedIn(user);
+      } else {
+        clearAuthData();
+      }
     } catch (error) {
       console.error('Error checking auth status:', error);
       clearAuthData();
@@ -60,76 +68,100 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const handleUserSignedIn = async (supabaseUser) => {
+    try {
+      // Get or create user profile
+      let { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      // If profile doesn't exist, create one
+      if (error && error.code === 'PGRST116') {
+        const newProfile = {
+          id: supabaseUser.id,
+          email: supabaseUser.email,
+          name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Usuario',
+          username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0],
+          points: 0,
+          avatar_url: supabaseUser.user_metadata?.avatar_url || null,
+          is_business_account: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('user_profiles')
+          .insert([newProfile])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          // Use basic user data if profile creation fails
+          profile = {
+            ...newProfile,
+            points: 0
+          };
+        } else {
+          profile = createdProfile;
+        }
+      } else if (error) {
+        console.error('Error fetching profile:', error);
+        // Use basic user data if there's an error
+        profile = {
+          id: supabaseUser.id,
+          email: supabaseUser.email,
+          name: supabaseUser.user_metadata?.name || 'Usuario',
+          username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0],
+          points: 0,
+          avatar_url: null,
+          is_business_account: false
+        };
+      }
+
+      const userData = {
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        username: profile.username,
+        points: profile.points || 0,
+        avatar: profile.avatar_url,
+        isBusinessAccount: profile.is_business_account || false,
+        created_at: profile.created_at
+      };
+
+      // Store in localStorage for immediate UI feedback
+      localStorage.setItem('userData', JSON.stringify(userData));
+      
+      setUser(userData);
+      setIsAuthenticated(true);
+      
+    } catch (error) {
+      console.error('Error handling signed in user:', error);
+    }
+  };
+
+  const handleUserSignedOut = () => {
+    clearAuthData();
+  };
+
   const signIn = async (email, password) => {
     try {
       setLoading(true);
 
-      // TODO: Replace with actual Supabase auth
-      // const { data, error } = await supabase.auth.signInWithPassword({
-      //   email,
-      //   password,
-      // })
-      // if (error) throw error;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      // Mock authentication for development
-      const mockUsers = [
-        { 
-          id: '1',
-          email: 'admin@radeisan.com', 
-          password: '123456',
-          name: 'Admin Usuario',
-          username: 'admin',
-          points: 5000,
-          avatar: null,
-          isBusinessAccount: true,
-          created_at: new Date().toISOString()
-        },
-        { 
-          id: '2',
-          email: 'usuario@ejemplo.com', 
-          password: '123456',
-          name: 'Usuario Demo',
-          username: 'usuario_demo',
-          points: 2847,
-          avatar: null,
-          isBusinessAccount: false,
-          created_at: new Date().toISOString()
-        }
-      ];
-
-      const user = mockUsers.find(u => 
-        u.email === email && u.password === password
-      );
-
-      if (!user) {
-        throw new Error('Credenciales incorrectas');
+      if (error) {
+        return { user: null, error: error.message };
       }
 
-      // Create session data
-      const authData = {
-        token: 'mock-jwt-token-' + Date.now(),
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          username: user.username,
-          points: user.points,
-          avatar: user.avatar,
-          isBusinessAccount: user.isBusinessAccount,
-          created_at: user.created_at
-        },
-        expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
-      };
-
-      // Store authentication data
-      localStorage.setItem('authToken', authData.token);
-      localStorage.setItem('userData', JSON.stringify(authData.user));
-      localStorage.setItem('authExpires', authData.expiresAt.toString());
-
-      setUser(authData.user);
-      setIsAuthenticated(true);
-
-      return { user: authData.user, error: null };
+      // User data will be handled by the auth state change listener
+      return { user: data.user, error: null };
 
     } catch (error) {
       console.error('Error signing in:', error);
@@ -143,46 +175,30 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      // TODO: Replace with actual Supabase auth
-      // const { data, error } = await supabase.auth.signUp({
-      //   email: userData.email,
-      //   password: userData.password,
-      //   options: {
-      //     data: {
-      //       name: userData.name,
-      //       username: userData.username
-      //     }
-      //   }
-      // })
-      // if (error) throw error;
-
-      // Mock registration
-      const newUser = {
-        id: Date.now().toString(),
-        name: userData.name,
+      const { data, error } = await supabase.auth.signUp({
         email: userData.email,
-        username: userData.username,
-        points: 0,
-        avatar: null,
-        isBusinessAccount: false,
-        created_at: new Date().toISOString()
-      };
+        password: userData.password,
+        options: {
+          data: {
+            name: userData.name,
+            username: userData.username
+          }
+        }
+      });
 
-      // Auto sign in after registration
-      const authData = {
-        token: 'mock-jwt-token-' + Date.now(),
-        user: newUser,
-        expiresAt: Date.now() + (24 * 60 * 60 * 1000)
-      };
+      if (error) {
+        return { user: null, error: error.message };
+      }
 
-      localStorage.setItem('authToken', authData.token);
-      localStorage.setItem('userData', JSON.stringify(authData.user));
-      localStorage.setItem('authExpires', authData.expiresAt.toString());
+      if (data.user && !data.user.email_confirmed_at) {
+        return { 
+          user: data.user, 
+          error: null, 
+          message: 'Por favor revisa tu email para confirmar tu cuenta.' 
+        };
+      }
 
-      setUser(authData.user);
-      setIsAuthenticated(true);
-
-      return { user: authData.user, error: null };
+      return { user: data.user, error: null };
 
     } catch (error) {
       console.error('Error signing up:', error);
@@ -196,10 +212,13 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      // TODO: Replace with actual Supabase auth
-      // const { error } = await supabase.auth.signOut()
-      // if (error) throw error;
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Error signing out:', error);
+      }
 
+      // Clear local data regardless of API result
       clearAuthData();
       navigate('/login');
 
@@ -213,11 +232,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const signInWithProvider = async (provider) => {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: provider.toLowerCase(),
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+
+      if (error) {
+        return { user: null, error: error.message };
+      }
+
+      return { user: data, error: null };
+
+    } catch (error) {
+      console.error(`Error signing in with ${provider}:`, error);
+      return { user: null, error: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const clearAuthData = () => {
     // Clear all auth-related data
-    localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
-    localStorage.removeItem('authExpires');
     localStorage.removeItem('rememberUser');
     
     // Clear any other app-specific data
@@ -228,40 +270,83 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
   };
 
-  const updateUserPoints = (newPoints) => {
-    if (user) {
+  const updateUserPoints = async (newPoints) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ points: newPoints, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating points:', error);
+        return;
+      }
+
       const updatedUser = { ...user, points: newPoints };
       setUser(updatedUser);
       localStorage.setItem('userData', JSON.stringify(updatedUser));
+
+    } catch (error) {
+      console.error('Error updating user points:', error);
     }
   };
 
-  const updateUserProfile = (updates) => {
-    if (user) {
-      const updatedUser = { ...user, ...updates };
+  const updateUserProfile = async (updates) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          ...updates, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        return;
+      }
+
+      const updatedUser = { 
+        ...user, 
+        name: data.name,
+        username: data.username,
+        avatar: data.avatar_url,
+        isBusinessAccount: data.is_business_account
+      };
+      
       setUser(updatedUser);
       localStorage.setItem('userData', JSON.stringify(updatedUser));
+
+    } catch (error) {
+      console.error('Error updating user profile:', error);
     }
   };
 
-  // Check if token is expired
-  useEffect(() => {
-    const checkTokenExpiry = () => {
-      const expires = localStorage.getItem('authExpires');
-      if (expires && Date.now() > parseInt(expires)) {
-        console.log('Token expired, signing out...');
-        clearAuthData();
+  const resetPassword = async (email) => {
+    try {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
       }
-    };
 
-    // Check immediately
-    checkTokenExpiry();
+      return { success: true, error: null };
 
-    // Check every minute
-    const interval = setInterval(checkTokenExpiry, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      return { success: false, error: error.message };
+    }
+  };
 
   const value = {
     user,
@@ -270,8 +355,10 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signUp,
     signOut,
+    signInWithProvider,
     updateUserPoints,
     updateUserProfile,
+    resetPassword,
     checkAuthStatus
   };
 
