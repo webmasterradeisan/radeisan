@@ -99,17 +99,12 @@ export const AuthProvider = ({ children }) => {
 
         if (createError) {
           console.error('Error creating profile:', createError);
-          // Use basic user data if profile creation fails
-          profile = {
-            ...newProfile,
-            points: 0
-          };
+          profile = { ...newProfile, points: 0 };
         } else {
           profile = createdProfile;
         }
       } else if (error) {
         console.error('Error fetching profile:', error);
-        // Use basic user data if there's an error
         profile = {
           id: supabaseUser.id,
           email: supabaseUser.email,
@@ -132,9 +127,7 @@ export const AuthProvider = ({ children }) => {
         created_at: profile.created_at
       };
 
-      // Store in localStorage for immediate UI feedback
       localStorage.setItem('userData', JSON.stringify(userData));
-      
       setUser(userData);
       setIsAuthenticated(true);
       
@@ -160,7 +153,6 @@ export const AuthProvider = ({ children }) => {
         return { user: null, error: error.message };
       }
 
-      // User data will be handled by the auth state change listener
       return { user: data.user, error: null };
 
     } catch (error) {
@@ -218,13 +210,11 @@ export const AuthProvider = ({ children }) => {
         console.error('Error signing out:', error);
       }
 
-      // Clear local data regardless of API result
       clearAuthData();
       navigate('/login');
 
     } catch (error) {
       console.error('Error signing out:', error);
-      // Force clear even if there's an error
       clearAuthData();
       navigate('/login');
     } finally {
@@ -258,11 +248,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const clearAuthData = () => {
-    // Clear all auth-related data
     localStorage.removeItem('userData');
     localStorage.removeItem('rememberUser');
-    
-    // Clear any other app-specific data
     localStorage.removeItem('userPreferences');
     localStorage.removeItem('cartItems');
     
