@@ -1,5 +1,6 @@
+// src/Routes.jsx
 import React from "react";
-import { BrowserRouter, Routes as RouterRoutes, Route } from "react-router-dom";
+import { Routes as RouterRoutes, Route } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import NotFound from "pages/NotFound";
@@ -9,17 +10,15 @@ import BusinessProfileManagement from './pages/business-profile-management';
 import BusinessMarketplace from './pages/business-marketplace';
 import UserProfileSettings from './pages/user-profile-settings';
 import VideoUploadStudio from './pages/video-upload-studio';
-import UserLogin from './pages/user-login';
+import UserLogin from './pages/user-login'; // Si tienes la página de login
 
 const Routes = () => {
   return (
-    <BrowserRouter>
-      <ErrorBoundary>
+    <ErrorBoundary>
       <ScrollToTop />
       <RouterRoutes>
-        {/* Define your route here */}
         <Route path="/" element={<BusinessMarketplace />} />
-        <Route path="/login" element={<UserLogin />} /> {/* 👈 NUEVA LÍNEA */}
+        <Route path="/login" element={<UserLogin />} />
         <Route path="/points-rewards-store" element={<PointsRewardsStore />} />
         <Route path="/video-feed-dashboard" element={<VideoFeedDashboard />} />
         <Route path="/business-profile-management" element={<BusinessProfileManagement />} />
@@ -28,8 +27,7 @@ const Routes = () => {
         <Route path="/video-upload-studio" element={<VideoUploadStudio />} />
         <Route path="*" element={<NotFound />} />
       </RouterRoutes>
-      </ErrorBoundary>
-    </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 
