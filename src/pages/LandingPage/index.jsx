@@ -363,7 +363,7 @@ const PublicFooter = () => (
               </span>
             </div>
             <p className="text-gray-400 mb-6 leading-relaxed">
-              La plataforma social española donde tu creatividad tiene recompensa. 
+              La plataforma social donde tu creatividad tiene recompensa. 
               Conectamos creadores con audiencias y empresas con oportunidades reales de crecimiento.
             </p>
             <div className="flex space-x-4">
@@ -431,7 +431,7 @@ const LandingPage = () => {
     } else {
       const meta = document.createElement('meta');
       meta.name = 'description';
-      meta.content = 'La plataforma social española donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.';
+      meta.content = 'La plataforma social donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.';
       document.getElementsByTagName('head')[0].appendChild(meta);
     }
 
