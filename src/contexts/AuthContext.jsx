@@ -13,121 +13,123 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Estados simples y claros
+  const [user, setUser] = useState(null); // null = no autenticado, object = autenticado
+  const [loading, setLoading] = useState(true); // true hasta verificar sesión inicial
+  
+  // Computed state
+  const isAuthenticated = !!user;
 
-  // Initialize authentication state
+  // Inicializar estado de autenticación al cargar la app
   useEffect(() => {
+    let mounted = true;
+
     const initializeAuth = async () => {
       try {
-        // Get current session
+        // Obtener sesión actual
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('Error getting session:', error);
-          setUser(null);
-          setIsAuthenticated(false);
-          setLoading(false);
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
           return;
         }
 
+        // Si hay sesión, obtener perfil del usuario
         if (session?.user) {
-          await fetchUserProfile(session.user);
+          await fetchUserProfile(session.user.id);
         } else {
-          // No session - user not authenticated
-          setUser(null);
-          setIsAuthenticated(false);
+          // No hay sesión - usuario no autenticado
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-        setUser(null);
-        setIsAuthenticated(false);
-      } finally {
-        setLoading(false);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
+        }
       }
     };
 
     initializeAuth();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event);
-      
-      if (event === 'SIGNED_IN' && session?.user) {
-        await fetchUserProfile(session.user);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setIsAuthenticated(false);
-      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        await fetchUserProfile(session.user);
-      }
-    });
+    // Escuchar cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
 
+        console.log('🔑 Auth state changed:', event);
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          await fetchUserProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setLoading(false);
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          // Refrescar perfil si es necesario
+          if (!user || user.id !== session.user.id) {
+            await fetchUserProfile(session.user.id);
+          }
+        }
+      }
+    );
+
+    // Cleanup
     return () => {
+      mounted = false;
       subscription?.unsubscribe();
     };
   }, []);
 
-  // Fetch user profile from database
-  const fetchUserProfile = async (authUser) => {
+  // Obtener perfil del usuario desde la base de datos
+  const fetchUserProfile = async (userId) => {
     try {
       setLoading(true);
-      
+
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', authUser.id)
+        .eq('id', userId)
         .single();
 
       if (error) {
         console.error('Error fetching profile:', error);
-        
-        // If profile doesn't exist, create it
+        // Si no existe el perfil, intentar crearlo
         if (error.code === 'PGRST116') {
-          await createUserProfile(authUser);
-          return;
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            await createUserProfile(authUser);
+            return;
+          }
         }
-        
-        // On any error, use auth user data as fallback
-        const fallbackUser = {
-          id: authUser.id,
-          email: authUser.email,
-          name: authUser.user_metadata?.name || authUser.email.split('@')[0],
-          username: authUser.user_metadata?.username || authUser.email.split('@')[0],
-          points: 1000, // Initial points for new users
-          avatar_url: authUser.user_metadata?.avatar_url || null,
-          is_business_account: authUser.user_metadata?.account_type === 'business',
-          created_at: authUser.created_at,
-          updated_at: new Date().toISOString()
-        };
-        
-        setUser(fallbackUser);
-        setIsAuthenticated(true);
+        setUser(null);
         return;
       }
 
       setUser(profile);
-      setIsAuthenticated(true);
-      
     } catch (error) {
       console.error('Error in fetchUserProfile:', error);
       setUser(null);
-      setIsAuthenticated(false);
     } finally {
       setLoading(false);
     }
   };
 
-  // Create user profile in database
+  // Crear perfil de usuario en la base de datos
   const createUserProfile = async (authUser) => {
     try {
       const newProfile = {
         id: authUser.id,
         email: authUser.email,
         name: authUser.user_metadata?.name || authUser.email.split('@')[0],
-        username: authUser.user_metadata?.username || authUser.email.split('@')[0],
-        points: 1000, // Initial welcome points
+        username: authUser.user_metadata?.username || `user_${Date.now()}`,
+        points: 1000, // Puntos de bienvenida
         avatar_url: authUser.user_metadata?.avatar_url || null,
         is_business_account: authUser.user_metadata?.account_type === 'business',
         created_at: authUser.created_at,
@@ -142,31 +144,25 @@ export const AuthProvider = ({ children }) => {
 
       if (error) {
         console.error('Error creating profile:', error);
-        // Use the profile data we tried to insert as fallback
-        setUser(newProfile);
-      } else {
-        setUser(data);
+        setUser(null);
+        return;
       }
-      
-      setIsAuthenticated(true);
-      
-      // Award registration points
-      console.log('✅ User registered! Awarded 1000 welcome points');
-      
+
+      setUser(data);
+      console.log('✅ Profile created with 1000 welcome points');
     } catch (error) {
       console.error('Error in createUserProfile:', error);
       setUser(null);
-      setIsAuthenticated(false);
     }
   };
 
-  // Sign in function
+  // Iniciar sesión con email y contraseña
   const signIn = async (email, password) => {
     try {
       setLoading(true);
       
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password
       });
 
@@ -174,30 +170,28 @@ export const AuthProvider = ({ children }) => {
         return { user: null, error: error.message };
       }
 
-      // User profile will be fetched by auth state change listener
+      // El perfil se cargará automáticamente por el listener de auth state
       return { user: data.user, error: null };
       
     } catch (error) {
       console.error('Error in signIn:', error);
       return { user: null, error: 'Error de conexión' };
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Sign up function
-  const signUp = async (userData) => {
+  // Registrar nuevo usuario
+  const signUp = async ({ email, password, name, username, accountType = 'personal' }) => {
     try {
       setLoading(true);
       
       const { data, error } = await supabase.auth.signUp({
-        email: userData.email,
-        password: userData.password,
+        email: email.trim(),
+        password,
         options: {
           data: {
-            name: userData.name,
-            username: userData.username,
-            account_type: userData.accountType || 'personal'
+            name: name.trim(),
+            username: username.trim(),
+            account_type: accountType
           }
         }
       });
@@ -206,42 +200,24 @@ export const AuthProvider = ({ children }) => {
         return { user: null, error: error.message };
       }
 
+      // Si la confirmación por email está deshabilitada, el usuario se crea inmediatamente
+      if (data.user && !data.user.email_confirmed_at) {
+        return { 
+          user: data.user, 
+          error: null,
+          needsEmailConfirmation: true
+        };
+      }
+
       return { user: data.user, error: null };
       
     } catch (error) {
       console.error('Error in signUp:', error);
       return { user: null, error: 'Error de conexión' };
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Sign out function
-  const logout = async () => {
-    try {
-      setLoading(true);
-      
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error('Error signing out:', error);
-      }
-      
-      // Clear user state
-      setUser(null);
-      setIsAuthenticated(false);
-      
-    } catch (error) {
-      console.error('Error in logout:', error);
-      // Even on error, clear user state
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Sign in with OAuth provider
+  // Iniciar sesión con proveedor OAuth
   const signInWithProvider = async (provider) => {
     try {
       setLoading(true);
@@ -249,7 +225,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/video-feed-dashboard`
+          redirectTo: `${window.location.origin}/dashboard`
         }
       });
 
@@ -257,7 +233,7 @@ export const AuthProvider = ({ children }) => {
         return { user: null, error: error.message };
       }
 
-      return { user: data.user, error: null };
+      return { user: null, error: null }; // OAuth redirect, no user returned immediately
       
     } catch (error) {
       console.error(`Error in signInWithProvider (${provider}):`, error);
@@ -267,94 +243,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Update user points
-  const updateUserPoints = async (newPoints) => {
-    if (!user || !isAuthenticated) {
-      return { success: false, error: 'Usuario no autenticado' };
-    }
-
+  // Cerrar sesión
+  const signOut = async () => {
     try {
-      // Update local state immediately for better UX
-      setUser(prev => ({ ...prev, points: newPoints }));
-
-      // Update in database
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ 
-          points: newPoints,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
+      setLoading(true);
+      
+      const { error } = await supabase.auth.signOut();
+      
       if (error) {
-        console.error('Error updating points:', error);
-        // Revert local state on error
-        setUser(prev => ({ ...prev, points: prev.points }));
-        return { success: false, error: error.message };
+        console.error('Error signing out:', error);
       }
-
-      return { success: true };
+      
+      // El estado se limpiará automáticamente por el listener
       
     } catch (error) {
-      console.error('Error in updateUserPoints:', error);
-      return { success: false, error: 'Error de conexión' };
+      console.error('Error in signOut:', error);
     }
   };
 
-  // Add points (helper function)
-  const addPoints = async (pointsToAdd, reason = 'Activity') => {
-    if (!user || !isAuthenticated) {
-      return { success: false, error: 'Usuario no autenticado' };
-    }
-    
-    const newPoints = (user.points || 0) + pointsToAdd;
-    const result = await updateUserPoints(newPoints);
-    
-    if (result.success) {
-      console.log(`✅ Added ${pointsToAdd} points for: ${reason}`);
-    }
-    
-    return result;
-  };
-
-  // Update user profile
-  const updateUserProfile = async (updates) => {
-    if (!user || !isAuthenticated) {
-      return { success: false, error: 'Usuario no autenticado' };
-    }
-
-    try {
-      // Update local state immediately
-      setUser(prev => ({ ...prev, ...updates, updated_at: new Date().toISOString() }));
-
-      // Update in database
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ 
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        console.error('Error updating profile:', error);
-        // Revert local state on error
-        await fetchUserProfile({ id: user.id });
-        return { success: false, error: error.message };
-      }
-
-      return { success: true };
-      
-    } catch (error) {
-      console.error('Error in updateUserProfile:', error);
-      return { success: false, error: 'Error de conexión' };
-    }
-  };
-
-  // Reset password
+  // Restablecer contraseña
   const resetPassword = async (email) => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/auth/reset-password`
       });
 
@@ -370,96 +280,106 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Check authentication status
-  const checkAuthStatus = async () => {
-    try {
-      const { data: { user: authUser }, error } = await supabase.auth.getUser();
-      
-      if (error) {
-        console.error('Error checking auth status:', error);
-        return;
-      }
-
-      if (authUser && (!user || user.id !== authUser.id)) {
-        await fetchUserProfile(authUser);
-      } else if (!authUser) {
-        setUser(null);
-        setIsAuthenticated(false);
-      }
-      
-    } catch (error) {
-      console.error('Error in checkAuthStatus:', error);
-    }
-  };
-
-  // Get current user session
-  const getCurrentSession = async () => {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('Error getting session:', error);
-        return null;
-      }
-      
-      return session;
-      
-    } catch (error) {
-      console.error('Error in getCurrentSession:', error);
-      return null;
-    }
-  };
-
-  // Award points for specific activities
-  const awardActivityPoints = async (activity) => {
-    if (!user || !isAuthenticated) {
+  // Actualizar perfil de usuario
+  const updateProfile = async (updates) => {
+    if (!user) {
       return { success: false, error: 'Usuario no autenticado' };
     }
 
-    const pointsMap = {
-      registration: 1000,
-      daily_login: 25,
-      video_watch_complete: 20,
-      video_watch_50: 10,
-      video_watch_25: 5,
-      video_upload: 50,
-      photo_upload: 30,
-      like_given: 2,
-      share: 3,
-      comment: 5,
-      first_business_setup: 100,
-      profile_complete: 50
-    };
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
 
-    const points = pointsMap[activity];
-    if (!points) return { success: false, error: 'Unknown activity' };
+      if (error) {
+        console.error('Error updating profile:', error);
+        return { success: false, error: error.message };
+      }
 
-    return await addPoints(points, activity);
+      // Actualizar estado local
+      setUser(data);
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error('Error in updateProfile:', error);
+      return { success: false, error: 'Error de conexión' };
+    }
+  };
+
+  // Actualizar puntos del usuario
+  const updatePoints = async (newPoints, reason = 'Activity') => {
+    if (!user) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          points: newPoints,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating points:', error);
+        return { success: false, error: error.message };
+      }
+
+      // Actualizar estado local
+      setUser(data);
+      console.log(`✅ Points updated: ${newPoints} (${reason})`);
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error('Error in updatePoints:', error);
+      return { success: false, error: 'Error de conexión' };
+    }
+  };
+
+  // Añadir puntos (helper function)
+  const addPoints = async (pointsToAdd, reason = 'Activity') => {
+    if (!user) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
+    
+    const newPoints = (user.points || 0) + pointsToAdd;
+    return await updatePoints(newPoints, reason);
+  };
+
+  // Verificar si el usuario está autenticado (útil para componentes)
+  const checkAuth = () => {
+    return isAuthenticated;
   };
 
   const value = {
-    // State
+    // Estado
     user,
     loading,
     isAuthenticated,
     
-    // Auth functions
+    // Funciones de autenticación
     signIn,
     signUp,
-    logout,
+    signOut,
     signInWithProvider,
     resetPassword,
-    checkAuthStatus,
-    getCurrentSession,
     
-    // Profile functions
-    updateUserProfile,
-    fetchUserProfile: () => user ? fetchUserProfile({ id: user.id }) : null,
-    
-    // Points functions
-    updateUserPoints,
+    // Funciones de perfil
+    updateProfile,
+    updatePoints,
     addPoints,
-    awardActivityPoints
+    
+    // Utilidades
+    checkAuth
   };
 
   return (
