@@ -4,34 +4,151 @@ import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-ro
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import { AuthProvider } from "contexts/AuthContext";
+import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
 
-// Auth Pages
+// ===============================
+// PÁGINAS PÚBLICAS
+// ===============================
+
+// Landing Page (será creada en Fase 2)
+const LandingPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full text-center">
+      <div className="bg-gradient-to-r from-primary to-secondary text-white p-12 rounded-lg shadow-elevation-3 mb-8">
+        <h1 className="text-5xl font-bold mb-4">¡Bienvenido a Radeisan!</h1>
+        <p className="text-xl mb-8">La plataforma donde creas, compartes y ganas</p>
+        <div className="space-x-4">
+          <a 
+            href="/register" 
+            className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors inline-block"
+          >
+            Únete Gratis
+          </a>
+          <a 
+            href="/login" 
+            className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary transition-colors inline-block"
+          >
+            Iniciar Sesión
+          </a>
+        </div>
+      </div>
+      <div className="bg-card rounded-lg shadow-elevation-2 p-8">
+        <h2 className="text-2xl font-bold text-foreground mb-4">🚀 Próximamente: Landing Page Completa</h2>
+        <p className="text-muted-foreground">
+          Esta será una landing page profesional con características, testimonios y call-to-actions.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+// Páginas de información pública
+const AboutPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Sobre Radeisan</h1>
+      <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <p className="text-muted-foreground mb-4">
+          Radeisan es una plataforma social innovadora que conecta creadores de contenido 
+          y empresas a través de videos engaging y un sistema de recompensas.
+        </p>
+        <p className="text-muted-foreground">
+          Nuestra misión es empoderar a los creadores mientras ayudamos a las empresas 
+          a conectar con su audiencia de manera auténtica.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+const FeaturesPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Características</h1>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">🎥 Feed de Videos</h3>
+          <p className="text-muted-foreground">Descubre contenido increíble y gana puntos viendo videos</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">🏪 Marketplace</h3>
+          <p className="text-muted-foreground">Conecta con empresas y descubre productos únicos</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">🎁 Sistema de Recompensas</h3>
+          <p className="text-muted-foreground">Canjea tus puntos por premios y beneficios exclusivos</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">💼 Perfil de Negocio</h3>
+          <p className="text-muted-foreground">Herramientas profesionales para empresas</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const TermsPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Términos y Condiciones</h1>
+      <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <p className="text-muted-foreground">
+          Los términos y condiciones de Radeisan serán implementados próximamente.
+          Por ahora, al usar la plataforma aceptas nuestras políticas de uso responsable.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+const PrivacyPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Política de Privacidad</h1>
+      <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <p className="text-muted-foreground">
+          La política de privacidad de Radeisan será implementada próximamente.
+          Nos comprometemos a proteger tu información personal y datos.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+// ===============================
+// PÁGINAS DE AUTENTICACIÓN  
+// ===============================
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 
-// Main App Pages
-import NotFound from "pages/NotFound";
-import PointsRewardsStore from './pages/points-rewards-store';
+// Auth Callback para OAuth
+const AuthCallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center">
+      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-muted-foreground">Procesando autenticación...</p>
+    </div>
+  </div>
+);
+
+// ===============================
+// PÁGINAS PROTEGIDAS (APLICACIÓN)
+// ===============================
 import VideoFeedDashboard from './pages/video-feed-dashboard';
-import BusinessProfileManagement from './pages/business-profile-management';
-import BusinessMarketplace from './pages/business-marketplace';
-import UserProfileSettings from './pages/user-profile-settings';
 import VideoUploadStudio from './pages/video-upload-studio';
+import BusinessMarketplace from './pages/business-marketplace';
+import PointsRewardsStore from './pages/points-rewards-store';
+import UserProfileSettings from './pages/user-profile-settings';
+import BusinessProfileManagement from './pages/business-profile-management';
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  // Since we always have demo user fallback, all routes are accessible
-  // This component is here for future enhancement if needed
-  return children;
-};
+// ===============================
+// OTRAS PÁGINAS
+// ===============================
+import NotFound from "pages/NotFound";
 
-// Public Route Component (for auth pages)
-const PublicRoute = ({ children }) => {
-  // These routes should be accessible whether user is logged in or not
-  // Could add logic here to redirect logged-in users away from login/register
-  return children;
-};
-
+// ===============================
+// COMPONENTE DE RUTAS PRINCIPAL
+// ===============================
 const Routes = () => {
   return (
     <BrowserRouter>
@@ -39,7 +156,55 @@ const Routes = () => {
         <ErrorBoundary>
           <ScrollToTop />
           <RouterRoutes>
-            {/* Authentication Routes */}
+            
+            {/* =================== PÁGINAS PÚBLICAS =================== */}
+            
+            {/* Landing Page */}
+            <Route 
+              path="/" 
+              element={
+                <UniversalRoute>
+                  <LandingPage />
+                </UniversalRoute>
+              } 
+            />
+            
+            {/* Páginas de información */}
+            <Route 
+              path="/about" 
+              element={
+                <UniversalRoute>
+                  <AboutPage />
+                </UniversalRoute>
+              } 
+            />
+            <Route 
+              path="/features" 
+              element={
+                <UniversalRoute>
+                  <FeaturesPage />
+                </UniversalRoute>
+              } 
+            />
+            <Route 
+              path="/terms" 
+              element={
+                <UniversalRoute>
+                  <TermsPage />
+                </UniversalRoute>
+              } 
+            />
+            <Route 
+              path="/privacy" 
+              element={
+                <UniversalRoute>
+                  <PrivacyPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== AUTENTICACIÓN =================== */}
+            
             <Route 
               path="/login" 
               element={
@@ -56,19 +221,20 @@ const Routes = () => {
                 </PublicRoute>
               } 
             />
-
-            {/* Main App Routes */}
             <Route 
-              path="/" 
+              path="/auth/callback" 
               element={
-                <ProtectedRoute>
-                  <Navigate to="/video-feed-dashboard" replace />
-                </ProtectedRoute>
+                <UniversalRoute>
+                  <AuthCallback />
+                </UniversalRoute>
               } 
             />
+
+            {/* =================== APLICACIÓN PROTEGIDA =================== */}
             
+            {/* Dashboard principal */}
             <Route 
-              path="/video-feed-dashboard" 
+              path="/dashboard" 
               element={
                 <ProtectedRoute>
                   <VideoFeedDashboard />
@@ -76,8 +242,9 @@ const Routes = () => {
               } 
             />
             
+            {/* Estudio de creación */}
             <Route 
-              path="/video-upload-studio" 
+              path="/upload" 
               element={
                 <ProtectedRoute>
                   <VideoUploadStudio />
@@ -85,8 +252,9 @@ const Routes = () => {
               } 
             />
             
+            {/* Marketplace de negocios */}
             <Route 
-              path="/business-marketplace" 
+              path="/marketplace" 
               element={
                 <ProtectedRoute>
                   <BusinessMarketplace />
@@ -94,8 +262,9 @@ const Routes = () => {
               } 
             />
             
+            {/* Tienda de recompensas */}
             <Route 
-              path="/points-rewards-store" 
+              path="/rewards" 
               element={
                 <ProtectedRoute>
                   <PointsRewardsStore />
@@ -103,8 +272,9 @@ const Routes = () => {
               } 
             />
             
+            {/* Perfil de usuario */}
             <Route 
-              path="/user-profile-settings" 
+              path="/profile" 
               element={
                 <ProtectedRoute>
                   <UserProfileSettings />
@@ -112,8 +282,9 @@ const Routes = () => {
               } 
             />
             
+            {/* Gestión de negocio */}
             <Route 
-              path="/business-profile-management" 
+              path="/business" 
               element={
                 <ProtectedRoute>
                   <BusinessProfileManagement />
@@ -121,93 +292,45 @@ const Routes = () => {
               } 
             />
 
-            {/* Legacy Routes (for backward compatibility) */}
-            <Route 
-              path="/marketplace" 
-              element={<Navigate to="/business-marketplace" replace />} 
-            />
+            {/* =================== REDIRECCIONES DE URLs ANTIGUAS =================== */}
             
+            {/* Redirigir URLs antiguas a nuevas */}
             <Route 
-              path="/rewards" 
-              element={<Navigate to="/points-rewards-store" replace />} 
+              path="/video-feed-dashboard" 
+              element={<Navigate to="/dashboard" replace />} 
             />
-            
             <Route 
-              path="/profile" 
-              element={<Navigate to="/user-profile-settings" replace />} 
+              path="/video-upload-studio" 
+              element={<Navigate to="/upload" replace />} 
             />
-            
             <Route 
-              path="/upload" 
-              element={<Navigate to="/video-upload-studio" replace />} 
+              path="/business-marketplace" 
+              element={<Navigate to="/marketplace" replace />} 
+            />
+            <Route 
+              path="/points-rewards-store" 
+              element={<Navigate to="/rewards" replace />} 
+            />
+            <Route 
+              path="/user-profile-settings" 
+              element={<Navigate to="/profile" replace />} 
+            />
+            <Route 
+              path="/business-profile-management" 
+              element={<Navigate to="/business" replace />} 
             />
 
-            {/* Utility Routes */}
+            {/* =================== 404 - PÁGINA NO ENCONTRADA =================== */}
+            
             <Route 
-              path="/auth/callback" 
+              path="*" 
               element={
-                <div className="min-h-screen flex items-center justify-center bg-background">
-                  <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Procesando autenticación...</p>
-                  </div>
-                </div>
-              } 
-            />
-
-            {/* Terms and Privacy (placeholder routes) */}
-            <Route 
-              path="/terms" 
-              element={
-                <div className="min-h-screen flex items-center justify-center bg-background p-4">
-                  <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
-                    <h1 className="text-3xl font-bold text-foreground mb-6">Términos y Condiciones</h1>
-                    <div className="prose prose-neutral dark:prose-invert max-w-none">
-                      <p className="text-muted-foreground">
-                        Los términos y condiciones de Radeisan serán implementados próximamente.
-                        Por ahora, al usar la plataforma aceptas nuestras políticas de uso responsable.
-                      </p>
-                      <div className="mt-8">
-                        <a 
-                          href="/login" 
-                          className="text-primary hover:underline"
-                        >
-                          ← Volver al Login
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <UniversalRoute>
+                  <NotFound />
+                </UniversalRoute>
               } 
             />
             
-            <Route 
-              path="/privacy" 
-              element={
-                <div className="min-h-screen flex items-center justify-center bg-background p-4">
-                  <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
-                    <h1 className="text-3xl font-bold text-foreground mb-6">Política de Privacidad</h1>
-                    <div className="prose prose-neutral dark:prose-invert max-w-none">
-                      <p className="text-muted-foreground">
-                        Nuestra política de privacidad será publicada próximamente.
-                        Nos comprometemos a proteger tu información personal y usarla responsablemente.
-                      </p>
-                      <div className="mt-8">
-                        <a 
-                          href="/register" 
-                          className="text-primary hover:underline"
-                        >
-                          ← Volver al Registro
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              } 
-            />
-
-            {/* 404 Not Found */}
-            <Route path="*" element={<NotFound />} />
           </RouterRoutes>
         </ErrorBoundary>
       </AuthProvider>
