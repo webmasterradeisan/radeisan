@@ -225,21 +225,21 @@ const TestimonialsSection = () => {
       role: "Creadora de Contenido",
       avatar: "https://ui-avatars.com/api/?name=Maria+Gonzalez&background=E63946&color=ffffff",
       content: "Radeisan cambió mi forma de crear contenido. En 6 meses pasé de 0 a 50K seguidores y genero ingresos constantes.",
-      earnings: "2.500€/mes"
+      earnings: "2.5K/mes"
     },
     {
       name: "Carlos Ruiz",
       role: "Emprendedor",
       avatar: "https://ui-avatars.com/api/?name=Carlos+Ruiz&background=457B9D&color=ffffff", 
       content: "Nuestra empresa local encontró su audiencia perfecta en Radeisan. Las ventas aumentaron un 300% en el primer trimestre.",
-      earnings: "15K€ en ventas"
+      earnings: "15K en ventas"
     },
     {
       name: "Ana Martín",
       role: "Influencer",
       avatar: "https://ui-avatars.com/api/?name=Ana+Martin&background=F77F00&color=ffffff",
       content: "La comunidad de Radeisan es increíble. Colaboraciones auténticas, audiencia comprometida y herramientas profesionales.",
-      earnings: "1.800€/mes"
+      earnings: "1.8/mes"
     }
   ];
 
@@ -408,7 +408,7 @@ const PublicFooter = () => (
             © 2025 Radeisan. Todos los derechos reservados.
           </div>
           <div className="text-gray-400 text-sm mt-4 md:mt-0">
-            Hecho con ❤️ en España
+            Hecho con ❤️ en Colombia
           </div>
         </div>
       </div>
@@ -427,7 +427,7 @@ const LandingPage = () => {
     // Meta description
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute('content', 'La plataforma social española donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.');
+      metaDescription.setAttribute('content', 'La plataforma social colombiana donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.');
     } else {
       const meta = document.createElement('meta');
       meta.name = 'description';
