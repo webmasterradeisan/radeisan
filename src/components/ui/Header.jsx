@@ -6,7 +6,7 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 const Header = () => {
-  const { user, logout, loading } = useAuth();
+  const { user, signOut, loading } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,10 +38,13 @@ const Header = () => {
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
     try {
-      await logout();
-      navigate('/');
+      await signOut();
+      // Redirigir a landing page después de logout
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Error during logout:', error);
+      // Aún así redirigir a landing page
+      navigate('/', { replace: true });
     }
   };
 
@@ -54,21 +57,27 @@ const Header = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+          {/* ===============================
+              LOGO
+              =============================== */}
+          <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center">
               <Icon name="Video" size={20} color="white" />
             </div>
-            <span className="text-xl font-bold text-foreground">Radeisan</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Radeisan
+            </span>
           </Link>
 
-          {/* Center Navigation - Only for authenticated users */}
+          {/* ===============================
+              NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS)
+              =============================== */}
           {user && (
             <nav className="hidden md:flex items-center space-x-6">
               <Link
-                to="/video-feed-dashboard"
+                to="/dashboard"
                 className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === '/video-feed-dashboard' 
+                  location.pathname === '/dashboard' 
                     ? 'text-primary' 
                     : 'text-muted-foreground'
                 }`}
@@ -76,9 +85,9 @@ const Header = () => {
                 Inicio
               </Link>
               <Link
-                to="/business-marketplace"
+                to="/marketplace"
                 className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === '/business-marketplace' 
+                  location.pathname === '/marketplace' 
                     ? 'text-primary' 
                     : 'text-muted-foreground'
                 }`}
@@ -86,9 +95,9 @@ const Header = () => {
                 Marketplace
               </Link>
               <Link
-                to="/points-rewards-store"
+                to="/rewards"
                 className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === '/points-rewards-store' 
+                  location.pathname === '/rewards' 
                     ? 'text-primary' 
                     : 'text-muted-foreground'
                 }`}
@@ -98,13 +107,15 @@ const Header = () => {
             </nav>
           )}
 
-          {/* Right Side */}
+          {/* ===============================
+              SECCIÓN DERECHA
+              =============================== */}
           <div className="flex items-center space-x-4">
             
             {user ? (
-              // Authenticated User Section
+              // ============= USUARIO AUTENTICADO =============
               <>
-                {/* Points Balance */}
+                {/* Balance de Puntos */}
                 <div className="hidden sm:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full">
                   <Icon name="Star" size={16} color="var(--color-accent)" />
                   <span className="font-mono text-sm font-medium text-accent">
@@ -112,21 +123,21 @@ const Header = () => {
                   </span>
                 </div>
 
-                {/* Upload Button */}
+                {/* Botón de Subir Contenido */}
                 <Button size="sm" asChild className="hidden md:flex">
-                  <Link to="/video-upload-studio">
+                  <Link to="/upload">
                     <Icon name="Plus" size={16} className="mr-2" />
                     Subir
                   </Link>
                 </Button>
 
-                {/* Notifications */}
+                {/* Notificaciones */}
                 <Button variant="ghost" size="icon" className="relative">
                   <Icon name="Bell" size={20} />
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
                 </Button>
 
-                {/* User Menu */}
+                {/* Menú de Usuario */}
                 <div className="relative" ref={userMenuRef}>
                   <Button
                     variant="ghost"
@@ -138,144 +149,82 @@ const Header = () => {
                       {user.avatar_url ? (
                         <img 
                           src={user.avatar_url} 
-                          alt={user.name}
+                          alt={user.name || 'Avatar'} 
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <Icon name="User" size={20} color="white" />
+                        <Icon name="User" size={18} color="white" />
                       )}
                     </div>
                   </Button>
 
-                  {/* User Dropdown Menu */}
+                  {/* Dropdown Menu */}
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-72 bg-popover border border-border rounded-lg shadow-elevation-3 z-50 animate-in slide-in-from-top-2 duration-200">
-                      
-                      {/* User Info Header */}
-                      <div className="p-4 border-b border-border">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {user.avatar_url ? (
-                              <img 
-                                src={user.avatar_url} 
-                                alt={user.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Icon name="User" size={24} color="white" />
-                            )}
+                    <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
+                      <div className="py-1">
+                        {/* Información del Usuario */}
+                        <div className="px-4 py-2 border-b border-border">
+                          <div className="text-sm font-medium text-popover-foreground truncate">
+                            {user.name || 'Usuario'}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2">
-                              <p className="font-medium text-foreground truncate">
-                                {user.name || 'Usuario'}
-                              </p>
-                              {user.is_business_account && (
-                                <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded-full font-medium">
-                                  Business
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground truncate">
-                              {user.email || ''}
-                            </p>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {user.email}
                           </div>
                         </div>
-                        
-                        {/* Points Balance Mobile */}
-                        <div className="mt-3 flex items-center justify-between sm:hidden">
-                          <span className="text-sm text-muted-foreground">Puntos:</span>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Star" size={14} color="var(--color-accent)" />
-                            <span className="font-mono text-sm font-medium text-accent">
-                              {user.points?.toLocaleString() || '0'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Menu Items */}
-                      <div className="py-2">
+
+                        {/* Enlaces del Menú */}
                         <Link
-                          to="/user-profile-settings"
-                          className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                          to="/profile"
+                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                           onClick={() => setIsUserMenuOpen(false)}
                         >
-                          <Icon name="User" size={16} />
-                          <span>Mi Perfil</span>
+                          <Icon name="User" size={16} className="mr-2" />
+                          Mi Perfil
                         </Link>
-                        
-                        <Link
-                          to="/video-upload-studio"
-                          className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="Video" size={16} />
-                          <span>Mis Videos</span>
-                        </Link>
-                        
-                        {user.is_business_account ? (
+
+                        {user.is_business_account && (
                           <Link
-                            to="/business-profile-management"
-                            className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                            to="/business"
+                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                             onClick={() => setIsUserMenuOpen(false)}
                           >
-                            <Icon name="Building2" size={16} />
-                            <span>Gestión de Negocio</span>
-                          </Link>
-                        ) : (
-                          <Link
-                            to="/business-profile-management"
-                            className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                            onClick={() => setIsUserMenuOpen(false)}
-                          >
-                            <Icon name="Plus" size={16} />
-                            <span>Crear Negocio</span>
+                            <Icon name="Building" size={16} className="mr-2" />
+                            Mi Negocio
                           </Link>
                         )}
-                        
+
                         <Link
-                          to="/points-rewards-store"
-                          className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                          to="/rewards"
+                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                           onClick={() => setIsUserMenuOpen(false)}
                         >
-                          <Icon name="Gift" size={16} />
-                          <span>Tienda de Recompensas</span>
+                          <Icon name="Gift" size={16} className="mr-2" />
+                          Mis Recompensas
                         </Link>
-                        
-                        <Link
-                          to="/user-profile-settings"
-                          className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="Settings" size={16} />
-                          <span>Configuración</span>
-                        </Link>
-                        
-                        <button 
-                          className="flex items-center space-x-3 px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors w-full text-left"
-                          onClick={() => {
-                            setIsUserMenuOpen(false);
-                            // TODO: Open help modal or navigate to help page
-                            window.open('/help', '_blank');
-                          }}
-                        >
-                          <Icon name="HelpCircle" size={16} />
-                          <span>Ayuda</span>
+
+                        <div className="border-t border-border my-1"></div>
+
+                        {/* Configuración */}
+                        <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
+                          <Icon name="Settings" size={16} className="mr-2" />
+                          Configuración
                         </button>
-                      </div>
-                      
-                      {/* Logout Section */}
-                      <div className="border-t border-border pt-2">
-                        <button 
+
+                        <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
+                          <Icon name="HelpCircle" size={16} className="mr-2" />
+                          Ayuda
+                        </button>
+
+                        <div className="border-t border-border my-1"></div>
+
+                        {/* Cerrar Sesión */}
+                        <button
                           onClick={handleLogout}
+                          className="flex items-center w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
                           disabled={loading}
-                          className="flex items-center space-x-3 px-4 py-2 text-sm text-error hover:bg-error/10 transition-colors w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Icon name="LogOut" size={16} />
-                          <span>
-                            {loading ? 'Cerrando sesión...' : 'Cerrar Sesión'}
-                          </span>
+                          <Icon name="LogOut" size={16} className="mr-2" />
+                          {loading ? 'Cerrando...' : 'Cerrar Sesión'}
                         </button>
                       </div>
                     </div>
@@ -283,13 +232,18 @@ const Header = () => {
                 </div>
               </>
             ) : (
-              // Non-Authenticated User Section
-              <div className="flex items-center space-x-3">
-                <Button variant="ghost" asChild>
-                  <Link to="/login">Iniciar Sesión</Link>
-                </Button>
-                <Button asChild>
-                  <Link to="/register">Registrarse</Link>
+              // ============= USUARIO NO AUTENTICADO =============
+              <div className="flex items-center space-x-4">
+                <Link
+                  to="/login"
+                  className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Iniciar Sesión
+                </Link>
+                <Button size="sm" asChild>
+                  <Link to="/register">
+                    Registrarse
+                  </Link>
                 </Button>
               </div>
             )}
