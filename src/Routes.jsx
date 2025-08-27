@@ -10,37 +10,8 @@ import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/Protecte
 // PÁGINAS PÚBLICAS
 // ===============================
 
-// Landing Page (será creada en Fase 2)
-const LandingPage = () => (
-  <div className="min-h-screen flex items-center justify-center bg-background p-4">
-    <div className="max-w-4xl w-full text-center">
-      <div className="bg-gradient-to-r from-primary to-secondary text-white p-12 rounded-lg shadow-elevation-3 mb-8">
-        <h1 className="text-5xl font-bold mb-4">¡Bienvenido a Radeisan!</h1>
-        <p className="text-xl mb-8">La plataforma donde creas, compartes y ganas</p>
-        <div className="space-x-4">
-          <a 
-            href="/register" 
-            className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors inline-block"
-          >
-            Únete Gratis
-          </a>
-          <a 
-            href="/login" 
-            className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary transition-colors inline-block"
-          >
-            Iniciar Sesión
-          </a>
-        </div>
-      </div>
-      <div className="bg-card rounded-lg shadow-elevation-2 p-8">
-        <h2 className="text-2xl font-bold text-foreground mb-4">🚀 Próximamente: Landing Page Completa</h2>
-        <p className="text-muted-foreground">
-          Esta será una landing page profesional con características, testimonios y call-to-actions.
-        </p>
-      </div>
-    </div>
-  </div>
-);
+// Landing Page profesional
+import LandingPage from './pages/LandingPage';
 
 // Páginas de información pública
 const AboutPage = () => (
