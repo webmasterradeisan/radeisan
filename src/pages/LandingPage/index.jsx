@@ -1,7 +1,6 @@
 // src/pages/LandingPage/index.jsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
 import Icon from '../../components/AppIcon';
 
 // ===============================
@@ -421,28 +420,44 @@ const PublicFooter = () => (
 // COMPONENTE PRINCIPAL
 // ===============================
 const LandingPage = () => {
+  // SEO nativo sin dependencias externas
+  useEffect(() => {
+    document.title = 'Radeisan - Crea, comparte y gana con tu contenido';
+    
+    // Meta description
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', 'La plataforma social española donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.');
+    } else {
+      const meta = document.createElement('meta');
+      meta.name = 'description';
+      meta.content = 'La plataforma social española donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.';
+      document.getElementsByTagName('head')[0].appendChild(meta);
+    }
+
+    // Meta keywords
+    const metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', 'creador contenido, social media, monetización, videos, España, influencer, emprendedor');
+    } else {
+      const meta = document.createElement('meta');
+      meta.name = 'keywords';
+      meta.content = 'creador contenido, social media, monetización, videos, España, influencer, emprendedor';
+      document.getElementsByTagName('head')[0].appendChild(meta);
+    }
+  }, []);
+
   return (
-    <>
-      <Helmet>
-        <title>Radeisan - Crea, comparte y gana con tu contenido</title>
-        <meta name="description" content="La plataforma social española donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas." />
-        <meta name="keywords" content="creador contenido, social media, monetización, videos, España, influencer, emprendedor" />
-        <meta property="og:title" content="Radeisan - Crea, comparte y gana" />
-        <meta property="og:description" content="La plataforma social donde tu creatividad tiene recompensa" />
-        <meta property="og:type" content="website" />
-      </Helmet>
-      
-      <div className="min-h-screen">
-        <PublicHeader />
-        <main>
-          <HeroSection />
-          <FeaturesSection />
-          <TestimonialsSection />
-          <CallToActionSection />
-        </main>
-        <PublicFooter />
-      </div>
-    </>
+    <div className="min-h-screen">
+      <PublicHeader />
+      <main>
+        <HeroSection />
+        <FeaturesSection />
+        <TestimonialsSection />
+        <CallToActionSection />
+      </main>
+      <PublicFooter />
+    </div>
   );
 };
 
