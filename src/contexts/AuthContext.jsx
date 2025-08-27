@@ -1,6 +1,5 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext();
@@ -17,20 +16,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const navigate = useNavigate();
-
-  // Demo user para fallback
-  const demoUser = {
-    id: 'demo-user-id',
-    name: 'Usuario Demo',
-    email: 'demo@radeisan.com',
-    username: 'usuario_demo',
-    points: 2847,
-    avatar_url: null,
-    is_business_account: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
 
   // Initialize authentication state
   useEffect(() => {
@@ -41,9 +26,8 @@ export const AuthProvider = ({ children }) => {
         
         if (error) {
           console.error('Error getting session:', error);
-          // Fallback to demo user on error
-          setUser(demoUser);
-          setIsAuthenticated(true);
+          setUser(null);
+          setIsAuthenticated(false);
           setLoading(false);
           return;
         }
@@ -51,15 +35,14 @@ export const AuthProvider = ({ children }) => {
         if (session?.user) {
           await fetchUserProfile(session.user);
         } else {
-          // No session, use demo user as fallback
-          setUser(demoUser);
-          setIsAuthenticated(true);
+          // No session - user not authenticated
+          setUser(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-        // Fallback to demo user on any error
-        setUser(demoUser);
-        setIsAuthenticated(true);
+        setUser(null);
+        setIsAuthenticated(false);
       } finally {
         setLoading(false);
       }
@@ -74,8 +57,8 @@ export const AuthProvider = ({ children }) => {
       if (event === 'SIGNED_IN' && session?.user) {
         await fetchUserProfile(session.user);
       } else if (event === 'SIGNED_OUT') {
-        setUser(demoUser); // Keep demo user instead of null
-        setIsAuthenticated(true); // Keep authenticated with demo
+        setUser(null);
+        setIsAuthenticated(false);
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         await fetchUserProfile(session.user);
       }
@@ -129,9 +112,8 @@ export const AuthProvider = ({ children }) => {
       
     } catch (error) {
       console.error('Error in fetchUserProfile:', error);
-      // Fallback to demo user on any error
-      setUser(demoUser);
-      setIsAuthenticated(true);
+      setUser(null);
+      setIsAuthenticated(false);
     } finally {
       setLoading(false);
     }
@@ -173,8 +155,8 @@ export const AuthProvider = ({ children }) => {
       
     } catch (error) {
       console.error('Error in createUserProfile:', error);
-      setUser(demoUser);
-      setIsAuthenticated(true);
+      setUser(null);
+      setIsAuthenticated(false);
     }
   };
 
@@ -235,7 +217,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Sign out function
-  const signOut = async () => {
+  const logout = async () => {
     try {
       setLoading(true);
       
@@ -245,17 +227,15 @@ export const AuthProvider = ({ children }) => {
         console.error('Error signing out:', error);
       }
       
-      // Keep demo user instead of signing out completely
-      setUser(demoUser);
-      setIsAuthenticated(true);
-      navigate('/video-feed-dashboard');
+      // Clear user state
+      setUser(null);
+      setIsAuthenticated(false);
       
     } catch (error) {
-      console.error('Error in signOut:', error);
-      // Even on error, fallback to demo
-      setUser(demoUser);
-      setIsAuthenticated(true);
-      navigate('/video-feed-dashboard');
+      console.error('Error in logout:', error);
+      // Even on error, clear user state
+      setUser(null);
+      setIsAuthenticated(false);
     } finally {
       setLoading(false);
     }
@@ -289,15 +269,13 @@ export const AuthProvider = ({ children }) => {
 
   // Update user points
   const updateUserPoints = async (newPoints) => {
+    if (!user || !isAuthenticated) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
+
     try {
       // Update local state immediately for better UX
       setUser(prev => ({ ...prev, points: newPoints }));
-      
-      if (user?.id === 'demo-user-id') {
-        // Demo user - just update local state
-        console.log('Demo: Updated points to', newPoints);
-        return { success: true };
-      }
 
       // Update in database
       const { error } = await supabase
@@ -325,7 +303,9 @@ export const AuthProvider = ({ children }) => {
 
   // Add points (helper function)
   const addPoints = async (pointsToAdd, reason = 'Activity') => {
-    if (!user) return { success: false, error: 'No user found' };
+    if (!user || !isAuthenticated) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
     
     const newPoints = (user.points || 0) + pointsToAdd;
     const result = await updateUserPoints(newPoints);
@@ -339,15 +319,13 @@ export const AuthProvider = ({ children }) => {
 
   // Update user profile
   const updateUserProfile = async (updates) => {
+    if (!user || !isAuthenticated) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
+
     try {
       // Update local state immediately
       setUser(prev => ({ ...prev, ...updates, updated_at: new Date().toISOString() }));
-      
-      if (user?.id === 'demo-user-id') {
-        // Demo user - just update local state
-        console.log('Demo: Updated profile', updates);
-        return { success: true };
-      }
 
       // Update in database
       const { error } = await supabase
@@ -404,6 +382,9 @@ export const AuthProvider = ({ children }) => {
 
       if (authUser && (!user || user.id !== authUser.id)) {
         await fetchUserProfile(authUser);
+      } else if (!authUser) {
+        setUser(null);
+        setIsAuthenticated(false);
       }
       
     } catch (error) {
@@ -429,21 +410,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Clear auth data (for testing/debugging)
-  const clearAuthData = () => {
-    setUser(demoUser);
-    setIsAuthenticated(true);
-    setLoading(false);
-    console.log('Auth data cleared, using demo user');
-  };
-
-  // Check if user is demo
-  const isDemoUser = () => {
-    return user?.id === 'demo-user-id';
-  };
-
   // Award points for specific activities
   const awardActivityPoints = async (activity) => {
+    if (!user || !isAuthenticated) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
+
     const pointsMap = {
       registration: 1000,
       daily_login: 25,
@@ -470,17 +442,15 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     isAuthenticated,
-    isDemoUser,
     
     // Auth functions
     signIn,
     signUp,
-    signOut,
+    logout,
     signInWithProvider,
     resetPassword,
     checkAuthStatus,
     getCurrentSession,
-    clearAuthData,
     
     // Profile functions
     updateUserProfile,
@@ -489,10 +459,7 @@ export const AuthProvider = ({ children }) => {
     // Points functions
     updateUserPoints,
     addPoints,
-    awardActivityPoints,
-    
-    // Utility functions
-    isDemoUser: isDemoUser(),
+    awardActivityPoints
   };
 
   return (
