@@ -1,5 +1,10 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/video-upload-studio/index.jsx
+// VideoUploadStudio con integración real de Supabase
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import Icon from '../../components/AppIcon';
@@ -7,121 +12,382 @@ import Button from '../../components/ui/Button';
 import VideoUploadZone from './components/VideoUploadZone';
 import VideoPreview from './components/VideoPreview';
 import VideoMetadataForm from './components/VideoMetadataForm';
-import UploadProgressModal from './components/UploadProgressModal';
-import PublishConfirmationModal from './components/PublishConfirmationModal';
 
-const VideoUploadStudio = () => {
-  const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [selectedThumbnail, setSelectedThumbnail] = useState(null);
+// ===============================
+// HOOKS PERSONALIZADOS
+// ===============================
+
+// Hook para subir videos a Supabase Storage
+const useVideoUpload = () => {
+  const { user } = useAuth();
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStage, setUploadStage] = useState('uploading');
   const [isUploading, setIsUploading] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [estimatedTime, setEstimatedTime] = useState(0);
 
+  // Validar archivo de video
+  const validateVideoFile = (file) => {
+    const validTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/mkv', 'video/webm'];
+    const maxSizeBytes = 2 * 1024 * 1024 * 1024; // 2GB
+    const maxDurationSeconds = 3600; // 60 minutos
+
+    if (!validTypes.includes(file.type)) {
+      throw new Error(`Formato no soportado. Use: ${validTypes.join(', ')}`);
+    }
+
+    if (file.size > maxSizeBytes) {
+      throw new Error(`El archivo es demasiado grande. Máximo: 2GB`);
+    }
+
+    return true;
+  };
+
+  // Generar thumbnail del video
+  const generateThumbnail = (videoFile) => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      video.onloadedmetadata = () => {
+        // Buscar thumbnail en diferentes momentos del video
+        const times = [0, video.duration * 0.25, video.duration * 0.5, video.duration * 0.75];
+        const thumbnails = [];
+        let currentIndex = 0;
+
+        const captureThumbnail = () => {
+          if (currentIndex >= times.length) {
+            resolve(thumbnails);
+            return;
+          }
+
+          video.currentTime = times[currentIndex];
+          video.onseeked = () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            
+            canvas.toBlob(blob => {
+              thumbnails.push({
+                time: times[currentIndex],
+                blob: blob,
+                url: URL.createObjectURL(blob)
+              });
+              currentIndex++;
+              captureThumbnail();
+            }, 'image/jpeg', 0.8);
+          };
+        };
+
+        captureThumbnail();
+      };
+
+      video.onerror = () => reject(new Error('Error generando thumbnails'));
+      video.src = URL.createObjectURL(videoFile);
+    });
+  };
+
+  // Subir video a Supabase Storage
+  const uploadVideo = async (file, metadata) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+      setUploadError(null);
+
+      // Validar archivo
+      validateVideoFile(file);
+
+      // Generar nombre único para el archivo
+      const timestamp = Date.now();
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `${user.id}/${timestamp}_${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExtension}`;
+
+      let startTime = Date.now();
+      let lastLoaded = 0;
+
+      // Subir archivo con progreso
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(fileName, file, {
+          onUploadProgress: (progress) => {
+            const percentage = (progress.loaded / progress.total) * 100;
+            setUploadProgress(percentage);
+
+            // Calcular velocidad y tiempo estimado
+            const currentTime = Date.now();
+            const elapsedSeconds = (currentTime - startTime) / 1000;
+            const uploadedBytes = progress.loaded - lastLoaded;
+            const speed = uploadedBytes / elapsedSeconds;
+            const remainingBytes = progress.total - progress.loaded;
+            const estimatedSeconds = remainingBytes / speed;
+
+            setUploadSpeed(speed);
+            setEstimatedTime(estimatedSeconds);
+            lastLoaded = progress.loaded;
+            startTime = currentTime;
+          }
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obtener URL pública del video
+      const { data: urlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(fileName);
+
+      // Generar y subir thumbnail
+      const thumbnails = await generateThumbnail(file);
+      let thumbnailUrl = null;
+
+      if (thumbnails.length > 0) {
+        const selectedThumbnail = thumbnails[Math.floor(thumbnails.length / 2)]; // Usar el del medio
+        const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
+        
+        const { error: thumbError } = await supabase.storage
+          .from('thumbnails')
+          .upload(thumbnailFileName, selectedThumbnail.blob);
+
+        if (!thumbError) {
+          const { data: thumbUrlData } = supabase.storage
+            .from('thumbnails')
+            .getPublicUrl(thumbnailFileName);
+          thumbnailUrl = thumbUrlData.publicUrl;
+        }
+      }
+
+      // Obtener duración del video
+      const videoDuration = await getVideoDuration(file);
+
+      // Insertar metadata en la tabla videos
+      const { data: videoData, error: insertError } = await supabase
+        .from('videos')
+        .insert({
+          user_id: user.id,
+          title: metadata.title,
+          description: metadata.description,
+          video_url: urlData.publicUrl,
+          thumbnail_url: thumbnailUrl,
+          category: metadata.category,
+          tags: metadata.tags || [],
+          duration_seconds: Math.round(videoDuration),
+          file_size_bytes: file.size,
+          is_published: metadata.visibility === 'public',
+          points_earned: 0 // Se calculará cuando tenga views
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Otorgar puntos por subir video
+      const uploadPoints = calculateUploadPoints(videoDuration, metadata.category);
+      await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
+
+      setUploadProgress(100);
+      return {
+        success: true,
+        videoId: videoData.id,
+        videoUrl: urlData.publicUrl,
+        thumbnailUrl,
+        pointsEarned: uploadPoints
+      };
+
+    } catch (error) {
+      console.error('Error uploading video:', error);
+      setUploadError(error.message);
+      return { success: false, error: error.message };
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return {
+    uploadVideo,
+    uploadProgress,
+    isUploading,
+    uploadError,
+    uploadSpeed,
+    estimatedTime
+  };
+};
+
+// Hook para obtener videos recientes del usuario
+const useUserVideos = () => {
+  const { user } = useAuth();
+  const [recentVideos, setRecentVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchRecentVideos = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('videos')
+        .select(`
+          id,
+          title,
+          thumbnail_url,
+          duration_seconds,
+          views_count,
+          is_published,
+          created_at
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      const transformedVideos = data?.map(video => ({
+        id: video.id,
+        title: video.title,
+        thumbnail: video.thumbnail_url || '/default-thumbnail.jpg',
+        duration: formatDuration(video.duration_seconds),
+        status: video.is_published ? 'published' : 'draft',
+        views: video.views_count,
+        uploadDate: formatDate(video.created_at)
+      }));
+
+      setRecentVideos(transformedVideos);
+    } catch (error) {
+      console.error('Error fetching recent videos:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchRecentVideos();
+  }, [fetchRecentVideos]);
+
+  return { recentVideos, loading, refetch: fetchRecentVideos };
+};
+
+// ===============================
+// UTILIDADES
+// ===============================
+
+// Obtener duración del video
+const getVideoDuration = (file) => {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.onloadedmetadata = () => {
+      resolve(video.duration);
+      URL.revokeObjectURL(video.src);
+    };
+    video.onerror = () => resolve(0);
+    video.src = URL.createObjectURL(file);
+  });
+};
+
+// Calcular puntos por subir video
+const calculateUploadPoints = (durationSeconds, category) => {
+  let basePoints = 50; // Base por subir
+  let durationPoints = Math.floor(durationSeconds / 60) * 10; // 10 puntos por minuto
+  
+  // Multiplicador por categoría
+  const categoryMultipliers = {
+    'education': 1.5,
+    'business': 1.3,
+    'technology': 1.2,
+    'entertainment': 1.0,
+    'lifestyle': 1.0,
+    'sports': 1.1,
+    'music': 1.1,
+    'cooking': 1.2,
+    'travel': 1.1
+  };
+  
+  const multiplier = categoryMultipliers[category] || 1.0;
+  return Math.round((basePoints + durationPoints) * multiplier);
+};
+
+// Agregar transacción de puntos
+const addPointsTransaction = async (points, type, description) => {
+  // Esta función se implementaría en el backend o con permisos service_role
+  // Por ahora es un placeholder
+  console.log(`Points transaction: +${points} for ${type}: ${description}`);
+};
+
+// Formatear duración en MM:SS
+const formatDuration = (seconds) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Formatear fecha
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('es-ES');
+};
+
+// Formatear velocidad de subida
+const formatSpeed = (bytesPerSecond) => {
+  const mbps = bytesPerSecond / (1024 * 1024);
+  return mbps < 1 ? `${(mbps * 1024).toFixed(0)} KB/s` : `${mbps.toFixed(1)} MB/s`;
+};
+
+// Formatear tiempo estimado
+const formatTime = (seconds) => {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+// ===============================
+// COMPONENTE PRINCIPAL
+// ===============================
+const VideoUploadStudio = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime } = useVideoUpload();
+  const { recentVideos, loading: recentLoading } = useUserVideos();
+
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedThumbnail, setSelectedThumbnail] = useState(null);
+  const [generatedThumbnails, setGeneratedThumbnails] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(null);
+  
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     category: '',
     tags: [],
     visibility: 'public',
-    monetization: 'enabled',
     allowComments: true,
     allowRatings: true,
     scheduledDate: ''
   });
 
-  const [recentUploads] = useState([
-    {
-      id: 1,
-      title: "Tutorial de React Hooks",
-      thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=300&h=200&fit=crop",
-      duration: "12:34",
-      status: "published",
-      views: 1247,
-      uploadDate: "2025-01-15"
-    },
-    {
-      id: 2,
-      title: "Receta de Paella Valenciana",
-      thumbnail: "https://images.unsplash.com/photo-1534080564583-6be75777b70a?w=300&h=200&fit=crop",
-      duration: "8:45",
-      status: "processing",
-      views: 0,
-      uploadDate: "2025-01-16"
-    },
-    {
-      id: 3,
-      title: "Viaje por Barcelona",
-      thumbnail: "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=300&h=200&fit=crop",
-      duration: "15:22",
-      status: "draft",
-      views: 0,
-      uploadDate: "2025-01-16"
-    }
-  ]);
+  // ===============================
+  // EVENT HANDLERS
+  // ===============================
 
-  const steps = [
-    { number: 1, title: 'Subir video', description: 'Selecciona tu archivo de video' },
-    { number: 2, title: 'Configurar', description: 'Añade información y metadatos' },
-    { number: 3, title: 'Publicar', description: 'Revisa y publica tu contenido' }
-  ];
+  const handleFileSelect = async (file) => {
+    try {
+      setSelectedFile(file);
+      setCurrentStep(2);
+      
+      // Auto-generar título basado en el nombre del archivo
+      const title = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+      setFormData(prev => ({
+        ...prev,
+        title: prev.title || title
+      }));
 
-  useEffect(() => {
-    // Simulate upload progress when file is selected
-    if (selectedFile && isUploading) {
-      simulateUpload();
-    }
-  }, [selectedFile, isUploading]);
-
-  // Declare uploadStartTime at component level
-  let uploadStartTime = Date.now();
-
-  const simulateUpload = () => {
-    setShowUploadModal(true);
-    uploadStartTime = Date.now(); // Reset the start time when simulation begins
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        setUploadStage('processing');
-        setTimeout(() => {
-          setUploadStage('generating');
-          setTimeout(() => {
-            setUploadStage('finalizing');
-            setTimeout(() => {
-              setIsUploading(false);
-              setShowUploadModal(false);
-              setCurrentStep(2);
-            }, 1000);
-          }, 1500);
-        }, 2000);
-        clearInterval(interval);
+      // Generar thumbnails automáticamente
+      const thumbnails = await generateThumbnail(file);
+      setGeneratedThumbnails(thumbnails);
+      if (thumbnails.length > 0) {
+        setSelectedThumbnail(thumbnails[0]);
       }
-      setUploadProgress(progress);
-      
-      // Simulate upload speed and estimated time
-      const fileSize = selectedFile?.size || 100000000; // 100MB default
-      const bytesUploaded = (progress / 100) * fileSize;
-      const speed = bytesUploaded / ((Date.now() - uploadStartTime) / 1000);
-      const remainingBytes = fileSize - bytesUploaded;
-      const estimatedSeconds = remainingBytes / speed;
-      
-      setUploadSpeed(speed);
-      setEstimatedTime(estimatedSeconds);
-    }, 500);
-  };
-
-  const handleFileSelect = (file) => {
-    setSelectedFile(file);
-    setIsUploading(true);
-    uploadStartTime = Date.now();
+    } catch (error) {
+      console.error('Error processing file:', error);
+    }
   };
 
   const handleThumbnailSelect = (thumbnail) => {
@@ -132,31 +398,26 @@ const VideoUploadStudio = () => {
     setFormData(newFormData);
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e?.preventDefault();
     if (!selectedFile || !formData?.title || !formData?.category) return;
     
-    setShowConfirmModal(true);
-  };
-
-  const handlePublishConfirm = async (publishOptions) => {
     setIsSubmitting(true);
-    setShowConfirmModal(false);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const result = await uploadVideo(selectedFile, formData);
+      
+      if (result.success) {
+        setUploadSuccess(result);
+        setCurrentStep(3);
+      } else {
+        console.error('Upload failed:', result.error);
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error);
+    } finally {
       setIsSubmitting(false);
-      // Navigate to video feed or show success message
-      navigate('/video-feed-dashboard');
-    }, 2000);
-  };
-
-  const handleCancelUpload = () => {
-    setIsUploading(false);
-    setShowUploadModal(false);
-    setSelectedFile(null);
-    setUploadProgress(0);
-    setCurrentStep(1);
+    }
   };
 
   const handleStepClick = (stepNumber) => {
@@ -164,353 +425,406 @@ const VideoUploadStudio = () => {
       setCurrentStep(1);
     } else if (stepNumber === 2 && selectedFile) {
       setCurrentStep(2);
-    } else if (stepNumber === 3 && selectedFile && formData?.title && formData?.category) {
+    } else if (stepNumber === 3 && uploadSuccess) {
       setCurrentStep(3);
     }
   };
 
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      published: { label: 'Publicado', color: 'bg-success text-success-foreground' },
-      processing: { label: 'Procesando', color: 'bg-warning text-warning-foreground' },
-      draft: { label: 'Borrador', color: 'bg-muted text-muted-foreground' }
-    };
-    
-    const config = statusConfig?.[status] || statusConfig?.draft;
-    
-    return (
-      <span className={`px-2 py-1 text-xs font-medium rounded-full ${config?.color}`}>
-        {config?.label}
-      </span>
-    );
+  const resetForm = () => {
+    setCurrentStep(1);
+    setSelectedFile(null);
+    setSelectedThumbnail(null);
+    setGeneratedThumbnails([]);
+    setUploadSuccess(null);
+    setFormData({
+      title: '',
+      description: '',
+      category: '',
+      tags: [],
+      visibility: 'public',
+      allowComments: true,
+      allowRatings: true,
+      scheduledDate: ''
+    });
   };
 
+  // ===============================
+  // RENDER HELPERS
+  // ===============================
+
+  const generateThumbnail = async (videoFile) => {
+    try {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          const times = [0, video.duration * 0.33, video.duration * 0.66];
+          const thumbnails = [];
+          let currentIndex = 0;
+
+          const captureThumbnail = () => {
+            if (currentIndex >= times.length) {
+              resolve(thumbnails);
+              return;
+            }
+
+            video.currentTime = times[currentIndex];
+            video.onseeked = () => {
+              canvas.width = Math.min(video.videoWidth, 1920);
+              canvas.height = Math.min(video.videoHeight, 1080);
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              
+              canvas.toBlob(blob => {
+                thumbnails.push({
+                  time: times[currentIndex],
+                  blob: blob,
+                  url: URL.createObjectURL(blob)
+                });
+                currentIndex++;
+                captureThumbnail();
+              }, 'image/jpeg', 0.8);
+            };
+          };
+
+          captureThumbnail();
+        };
+
+        video.src = URL.createObjectURL(videoFile);
+      });
+    } catch (error) {
+      console.error('Error generating thumbnails:', error);
+      return [];
+    }
+  };
+
+  // Progreso steps
+  const steps = [
+    { number: 1, title: 'Subir', icon: 'Upload', active: currentStep >= 1, completed: currentStep > 1 },
+    { number: 2, title: 'Configurar', icon: 'Settings', active: currentStep >= 2, completed: currentStep > 2 },
+    { number: 3, title: 'Publicar', icon: 'CheckCircle', active: currentStep >= 3, completed: uploadSuccess !== null }
+  ];
+
+  // ===============================
+  // RENDER
+  // ===============================
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <PrimaryNavigation />
-      <main className="pt-16 lg:pt-28 pb-20 lg:pb-8">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6">
-          {/* Page Header */}
-          <div className="mb-8">
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-2">
-              <button 
-                onClick={() => navigate('/video-feed-dashboard')}
-                className="hover:text-foreground transition-colors"
-              >
-                Inicio
-              </button>
-              <Icon name="ChevronRight" size={14} />
-              <span>Estudio de creación</span>
+    <>
+      <Helmet>
+        <title>Estudio de Subida - Comparte tu Contenido | RADEISAN</title>
+        <meta name="description" content="Sube videos, gana puntos y comparte tu creatividad con la comunidad RADEISAN" />
+        <meta name="keywords" content="subir video, contenido, creador, puntos, recompensas" />
+      </Helmet>
+
+      <div className="min-h-screen bg-background">
+        <Header />
+        <PrimaryNavigation />
+        
+        <main className="pt-32 pb-16">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-foreground mb-2">Estudio de Creación</h1>
+              <p className="text-muted-foreground">Sube tu contenido y compártelo con la comunidad</p>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">
-              Estudio de creación de videos
-            </h1>
-            <p className="text-muted-foreground">
-              Sube y gestiona tu contenido de video para compartir con tu audiencia
-            </p>
-          </div>
 
-          {/* Progress Steps */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between max-w-2xl">
-              {steps?.map((step, index) => (
-                <div key={step?.number} className="flex items-center">
-                  <button
-                    onClick={() => handleStepClick(step?.number)}
-                    className={`
-                      flex items-center space-x-3 p-3 rounded-lg transition-all duration-200
-                      ${currentStep === step?.number 
-                        ? 'bg-primary/10 text-primary' 
-                        : currentStep > step?.number 
-                          ? 'text-success hover:bg-success/10' :'text-muted-foreground hover:bg-muted'
-                      }
-                    `}
-                    disabled={
-                      (step?.number === 2 && !selectedFile) ||
-                      (step?.number === 3 && (!selectedFile || !formData?.title || !formData?.category))
-                    }
-                  >
-                    <div className={`
-                      w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
-                      ${currentStep === step?.number 
-                        ? 'bg-primary text-primary-foreground' 
-                        : currentStep > step?.number 
-                          ? 'bg-success text-success-foreground' 
-                          : 'bg-muted text-muted-foreground'
-                      }
-                    `}>
-                      {currentStep > step?.number ? (
-                        <Icon name="Check" size={16} />
-                      ) : (
-                        step?.number
-                      )}
-                    </div>
-                    <div className="hidden sm:block text-left">
-                      <div className="font-medium">{step?.title}</div>
-                      <div className="text-xs opacity-75">{step?.description}</div>
-                    </div>
-                  </button>
-                  {index < steps?.length - 1 && (
-                    <div className={`
-                      w-8 lg:w-16 h-0.5 mx-2
-                      ${currentStep > step?.number ? 'bg-success' : 'bg-border'}
-                    `} />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-8">
-              {/* Step 1: Upload */}
-              {currentStep === 1 && (
-                <div className="bg-card rounded-lg border border-border p-6">
-                  <h2 className="text-xl font-medium text-foreground mb-6">
-                    Subir nuevo video
-                  </h2>
-                  <VideoUploadZone
-                    onFileSelect={handleFileSelect}
-                    uploadProgress={uploadProgress}
-                    isUploading={isUploading}
-                  />
-                </div>
-              )}
-
-              {/* Step 2: Configure */}
-              {currentStep === 2 && selectedFile && (
-                <div className="space-y-6">
-                  <div className="bg-card rounded-lg border border-border p-6">
-                    <h2 className="text-xl font-medium text-foreground mb-6">
-                      Vista previa del video
-                    </h2>
-                    <VideoPreview
-                      videoFile={selectedFile}
-                      onThumbnailSelect={handleThumbnailSelect}
-                      selectedThumbnail={selectedThumbnail}
-                    />
-                  </div>
-
-                  <div className="bg-card rounded-lg border border-border p-6">
-                    <h2 className="text-xl font-medium text-foreground mb-6">
-                      Información del video
-                    </h2>
-                    <VideoMetadataForm
-                      formData={formData}
-                      onChange={handleFormChange}
-                      onSubmit={handleFormSubmit}
-                      isSubmitting={isSubmitting}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Review */}
-              {currentStep === 3 && (
-                <div className="bg-card rounded-lg border border-border p-6">
-                  <h2 className="text-xl font-medium text-foreground mb-6">
-                    Revisar y publicar
-                  </h2>
-                  <div className="space-y-6">
-                    {/* Final Review */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Progress Steps */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                {steps.map((step, index) => (
+                  <React.Fragment key={step.number}>
+                    <div 
+                      className={`flex items-center cursor-pointer transition-all ${
+                        step.active ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                      onClick={() => handleStepClick(step.number)}
+                    >
+                      <div className={`
+                        w-10 h-10 rounded-full flex items-center justify-center mr-3 transition-all
+                        ${step.completed ? 'bg-primary text-primary-foreground' : 
+                          step.active ? 'bg-primary/10 text-primary border-2 border-primary' : 
+                          'bg-muted text-muted-foreground'}
+                      `}>
+                        <Icon name={step.completed ? 'Check' : step.icon} size={20} />
+                      </div>
                       <div>
-                        <h4 className="font-medium text-foreground mb-3">Vista previa</h4>
-                        <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                          {selectedThumbnail ? (
-                            <img
-                              src={selectedThumbnail?.url}
-                              alt="Miniatura seleccionada"
+                        <p className="font-medium">{step.title}</p>
+                        <p className="text-sm text-muted-foreground">Paso {step.number}</p>
+                      </div>
+                    </div>
+                    {index < steps.length - 1 && (
+                      <div className={`flex-1 h-0.5 mx-4 ${
+                        step.completed ? 'bg-primary' : 'bg-muted'
+                      }`} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              
+              {/* Main Content */}
+              <div className="lg:col-span-2 space-y-8">
+                
+                {/* Step 1: Upload */}
+                {currentStep === 1 && (
+                  <div className="bg-card rounded-lg border p-6">
+                    <h2 className="text-xl font-medium text-foreground mb-6">
+                      Selecciona tu video
+                    </h2>
+                    <VideoUploadZone
+                      onFileSelect={handleFileSelect}
+                      uploadProgress={uploadProgress}
+                      isUploading={isUploading}
+                    />
+                    {uploadError && (
+                      <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <Icon name="AlertCircle" size={20} color="var(--color-destructive)" />
+                          <p className="text-destructive font-medium">Error de subida</p>
+                        </div>
+                        <p className="text-sm text-destructive/80 mt-1">{uploadError}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 2: Configure */}
+                {currentStep === 2 && selectedFile && (
+                  <div className="space-y-6">
+                    {/* File Preview */}
+                    <div className="bg-card rounded-lg border p-6">
+                      <h2 className="text-xl font-medium text-foreground mb-4">
+                        Vista previa
+                      </h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3">
+                            <video 
+                              src={URL.createObjectURL(selectedFile)}
+                              controls
                               className="w-full h-full object-cover"
                             />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Icon name="Video" size={48} color="var(--color-muted-foreground)" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="font-medium text-foreground mb-1">Título</h4>
-                          <p className="text-sm text-muted-foreground">{formData?.title}</p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-foreground mb-1">Descripción</h4>
-                          <p className="text-sm text-muted-foreground line-clamp-3">
-                            {formData?.description}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {selectedFile.name} • {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
                           </p>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        
+                        {/* Thumbnails */}
+                        {generatedThumbnails.length > 0 && (
                           <div>
-                            <h4 className="font-medium text-foreground mb-1">Categoría</h4>
-                            <p className="text-sm text-muted-foreground">{formData?.category}</p>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-foreground mb-1">Visibilidad</h4>
-                            <p className="text-sm text-muted-foreground">{formData?.visibility}</p>
-                          </div>
-                        </div>
-                        {formData?.tags?.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-foreground mb-2">Etiquetas</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {formData?.tags?.slice(0, 5)?.map((tag, index) => (
-                                <span
+                            <h4 className="font-medium text-foreground mb-3">Seleccionar miniatura</h4>
+                            <div className="grid grid-cols-3 gap-2">
+                              {generatedThumbnails.map((thumb, index) => (
+                                <div 
                                   key={index}
-                                  className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-md"
+                                  className={`aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
+                                    selectedThumbnail?.time === thumb.time 
+                                      ? 'border-primary ring-2 ring-primary/20' 
+                                      : 'border-border hover:border-primary/50'
+                                  }`}
+                                  onClick={() => handleThumbnailSelect(thumb)}
                                 >
-                                  #{tag}
-                                </span>
+                                  <img 
+                                    src={thumb.url} 
+                                    alt={`Thumbnail ${index + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
                               ))}
-                              {formData?.tags?.length > 5 && (
-                                <span className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-md">
-                                  +{formData?.tags?.length - 5} más
-                                </span>
-                              )}
                             </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border">
-                      <Button
-                        variant="outline"
-                        onClick={() => setCurrentStep(2)}
+                    {/* Metadata Form */}
+                    <div className="bg-card rounded-lg border p-6">
+                      <h2 className="text-xl font-medium text-foreground mb-6">
+                        Información del video
+                      </h2>
+                      <VideoMetadataForm
+                        formData={formData}
+                        onChange={handleFormChange}
+                        onSubmit={handleFormSubmit}
+                        isSubmitting={isSubmitting}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Success */}
+                {currentStep === 3 && uploadSuccess && (
+                  <div className="bg-card rounded-lg border p-6 text-center">
+                    <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Icon name="CheckCircle" size={32} color="var(--color-success)" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
+                      ¡Video publicado exitosamente!
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                      Tu video está ahora disponible para la comunidad
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Icon name="Award" size={20} color="var(--color-primary)" />
+                          <span className="font-medium">Puntos ganados</span>
+                        </div>
+                        <p className="text-2xl font-bold text-primary">+{uploadSuccess.pointsEarned}</p>
+                      </div>
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Icon name="Eye" size={20} color="var(--color-muted-foreground)" />
+                          <span className="font-medium">Visualizaciones</span>
+                        </div>
+                        <p className="text-2xl font-bold text-foreground">0</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <Button 
+                        onClick={() => navigate('/dashboard')}
                         className="flex-1"
                       >
-                        <Icon name="ArrowLeft" size={16} className="mr-2" />
-                        Editar información
+                        <Icon name="Eye" size={16} className="mr-2" />
+                        Ver en Feed
                       </Button>
-                      <Button
-                        onClick={() => setShowConfirmModal(true)}
+                      <Button 
+                        variant="outline"
+                        onClick={resetForm}
                         className="flex-1"
-                        disabled={!formData?.title || !formData?.category}
                       >
-                        {formData?.scheduledDate ? 'Programar publicación' : 'Publicar video'}
-                        <Icon name="ArrowRight" size={16} className="ml-2" />
+                        <Icon name="Plus" size={16} className="mr-2" />
+                        Subir Otro Video
                       </Button>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Upload Tips */}
-              <div className="bg-card rounded-lg border border-border p-6">
-                <h3 className="font-medium text-foreground mb-4 flex items-center">
-                  <Icon name="Lightbulb" size={16} className="mr-2" color="var(--color-accent)" />
-                  Consejos para subir videos
-                </h3>
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex items-start space-x-2">
-                    <Icon name="Check" size={14} className="mt-0.5 text-success flex-shrink-0" />
-                    <span>Usa títulos descriptivos y atractivos</span>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <Icon name="Check" size={14} className="mt-0.5 text-success flex-shrink-0" />
-                    <span>Añade etiquetas relevantes para mejor descubrimiento</span>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <Icon name="Check" size={14} className="mt-0.5 text-success flex-shrink-0" />
-                    <span>Selecciona una miniatura llamativa</span>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <Icon name="Check" size={14} className="mt-0.5 text-success flex-shrink-0" />
-                    <span>Escribe descripciones detalladas</span>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Recent Uploads */}
-              <div className="bg-card rounded-lg border border-border p-6">
-                <h3 className="font-medium text-foreground mb-4">
-                  Videos recientes
-                </h3>
-                <div className="space-y-3">
-                  {recentUploads?.map((video) => (
-                    <div key={video?.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                      <div className="w-12 h-8 bg-muted rounded overflow-hidden flex-shrink-0">
-                        <img
-                          src={video?.thumbnail}
-                          alt={video?.title}
-                          className="w-full h-full object-cover"
+              {/* Sidebar */}
+              <div className="space-y-6">
+                
+                {/* Upload Stats */}
+                {isUploading && (
+                  <div className="bg-card rounded-lg border p-6">
+                    <h3 className="font-medium text-foreground mb-4">Progreso de subida</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Progreso</span>
+                        <span>{Math.round(uploadProgress)}%</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
                         />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {video?.title}
-                        </p>
-                        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                          {getStatusBadge(video?.status)}
-                          <span>{video?.duration}</span>
-                          {video?.views > 0 && <span>{video?.views} vistas</span>}
-                        </div>
-                      </div>
+                      {uploadSpeed > 0 && (
+                        <>
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>Velocidad</span>
+                            <span>{formatSpeed(uploadSpeed)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>Tiempo restante</span>
+                            <span>{formatTime(estimatedTime)}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  ))}
-                </div>
-                <Button
-                  variant="ghost"
-                  className="w-full mt-4 text-sm"
-                  onClick={() => navigate('/video-feed-dashboard')}
-                >
-                  Ver todos los videos
-                  <Icon name="ArrowRight" size={14} className="ml-2" />
-                </Button>
-              </div>
+                  </div>
+                )}
 
-              {/* Quick Stats */}
-              <div className="bg-card rounded-lg border border-border p-6">
-                <h3 className="font-medium text-foreground mb-4">
-                  Estadísticas rápidas
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Videos publicados</span>
-                    <span className="font-medium text-foreground">12</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Total de vistas</span>
-                    <span className="font-medium text-foreground">8,547</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Puntos ganados</span>
-                    <span className="font-medium text-accent">1,234</span>
+                {/* Recent Uploads */}
+                <div className="bg-card rounded-lg border p-6">
+                  <h3 className="font-medium text-foreground mb-4">Videos recientes</h3>
+                  {recentLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center space-x-3 animate-pulse">
+                          <div className="w-16 h-12 bg-muted rounded" />
+                          <div className="flex-1">
+                            <div className="h-4 bg-muted rounded mb-2" />
+                            <div className="h-3 bg-muted rounded w-20" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : recentVideos.length > 0 ? (
+                    <div className="space-y-3">
+                      {recentVideos.map((video) => (
+                        <div key={video.id} className="flex items-center space-x-3">
+                          <div className="w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                            <img 
+                              src={video.thumbnail} 
+                              alt={video.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-foreground text-sm truncate">
+                              {video.title}
+                            </h4>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                video.status === 'published' 
+                                  ? 'bg-success/10 text-success' 
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {video.status === 'published' ? 'Publicado' : 'Borrador'}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {video.views} views
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No tienes videos aún
+                    </p>
+                  )}
+                </div>
+
+                {/* Tips */}
+                <div className="bg-card rounded-lg border p-6">
+                  <h3 className="font-medium text-foreground mb-4">Consejos para creadores</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Lightbulb" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Los videos educativos y de negocios ganan más puntos
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Videos más largos generan más puntos por minuto
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Hash" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Usa tags relevantes para mayor visibilidad
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </main>
-      {/* Upload Progress Modal */}
-      <UploadProgressModal
-        isOpen={showUploadModal}
-        progress={uploadProgress}
-        stage={uploadStage}
-        onCancel={handleCancelUpload}
-        onComplete={() => setShowUploadModal(false)}
-        estimatedTime={estimatedTime}
-        uploadSpeed={uploadSpeed}
-      />
-      {/* Publish Confirmation Modal */}
-      <PublishConfirmationModal
-        isOpen={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
-        onConfirm={handlePublishConfirm}
-        videoData={{
-          ...formData,
-          thumbnail: selectedThumbnail
-        }}
-        isScheduled={!!formData?.scheduledDate}
-      />
-    </div>
+        </main>
+      </div>
+    </>
   );
 };
 
