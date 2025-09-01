@@ -1,5 +1,5 @@
 // src/pages/video-upload-studio/index.jsx
-// VideoUploadStudio con integración real de Supabase
+// VideoUploadStudio con integración real de Supabase - CORREGIDO
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -9,9 +9,8 @@ import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
-import VideoUploadZone from './components/VideoUploadZone';
-import VideoPreview from './components/VideoPreview';
-import VideoMetadataForm from './components/VideoMetadataForm';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -337,6 +336,77 @@ const formatTime = (seconds) => {
 };
 
 // ===============================
+// COMPONENTES INTERNOS
+// ===============================
+
+// Componente VideoUploadZone
+const VideoUploadZone = ({ onFileSelect, uploadProgress, isUploading }) => {
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const videoFile = files.find(file => file.type.startsWith('video/'));
+    
+    if (videoFile) {
+      onFileSelect(videoFile);
+    }
+  };
+
+  const handleFileInput = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      onFileSelect(file);
+    }
+  };
+
+  return (
+    <div 
+      className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+        dragOver 
+          ? 'border-primary bg-primary/5' 
+          : 'border-border hover:border-primary/50'
+      } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
+      <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Icon name="Upload" size={32} color="var(--color-primary)" />
+      </div>
+      
+      <h3 className="text-lg font-medium text-foreground mb-2">
+        Arrastra tu video aquí
+      </h3>
+      <p className="text-muted-foreground mb-4">
+        O haz clic para seleccionar desde tu computadora
+      </p>
+      
+      <input
+        type="file"
+        accept="video/*"
+        onChange={handleFileInput}
+        className="hidden"
+        id="video-upload"
+      />
+      
+      <Button asChild variant="outline">
+        <label htmlFor="video-upload" className="cursor-pointer">
+          <Icon name="FolderOpen" size={16} className="mr-2" />
+          Seleccionar archivo
+        </label>
+      </Button>
+      
+      <p className="text-xs text-muted-foreground mt-4">
+        MP4, MOV, AVI, MKV, WebM • Max 2GB • Max 60 minutos
+      </p>
+    </div>
+  );
+};
+
+// ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
 const VideoUploadStudio = () => {
@@ -363,6 +433,27 @@ const VideoUploadStudio = () => {
     scheduledDate: ''
   });
 
+  // Opciones de categorías
+  const categories = [
+    { value: '', label: 'Selecciona una categoría' },
+    { value: 'entertainment', label: 'Entretenimiento' },
+    { value: 'education', label: 'Educación (+50% puntos)' },
+    { value: 'business', label: 'Negocios (+30% puntos)' },
+    { value: 'technology', label: 'Tecnología (+20% puntos)' },
+    { value: 'lifestyle', label: 'Estilo de Vida' },
+    { value: 'sports', label: 'Deportes (+10% puntos)' },
+    { value: 'music', label: 'Música (+10% puntos)' },
+    { value: 'cooking', label: 'Cocina (+20% puntos)' },
+    { value: 'travel', label: 'Viajes (+10% puntos)' },
+    { value: 'other', label: 'Otros' }
+  ];
+
+  const visibilityOptions = [
+    { value: 'public', label: 'Público' },
+    { value: 'unlisted', label: 'No listado' },
+    { value: 'private', label: 'Privado' }
+  ];
+
   // ===============================
   // EVENT HANDLERS
   // ===============================
@@ -380,7 +471,7 @@ const VideoUploadStudio = () => {
       }));
 
       // Generar thumbnails automáticamente
-      const thumbnails = await generateThumbnail(file);
+      const thumbnails = await generateThumbnails(file);
       setGeneratedThumbnails(thumbnails);
       if (thumbnails.length > 0) {
         setSelectedThumbnail(thumbnails[0]);
@@ -394,13 +485,39 @@ const VideoUploadStudio = () => {
     setSelectedThumbnail(thumbnail);
   };
 
-  const handleFormChange = (newFormData) => {
-    setFormData(newFormData);
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleTagsChange = (tagsString) => {
+    const tags = tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+    setFormData(prev => ({
+      ...prev,
+      tags
+    }));
   };
 
   const handleFormSubmit = async (e) => {
-    e?.preventDefault();
-    if (!selectedFile || !formData?.title || !formData?.category) return;
+    e.preventDefault();
+    
+    // Validación básica
+    if (!selectedFile) {
+      alert('Por favor selecciona un archivo de video');
+      return;
+    }
+    
+    if (!formData.title.trim()) {
+      alert('Por favor ingresa un título para el video');
+      return;
+    }
+    
+    if (!formData.category) {
+      alert('Por favor selecciona una categoría');
+      return;
+    }
     
     setIsSubmitting(true);
     
@@ -411,10 +528,11 @@ const VideoUploadStudio = () => {
         setUploadSuccess(result);
         setCurrentStep(3);
       } else {
-        console.error('Upload failed:', result.error);
+        alert('Error al subir el video: ' + result.error);
       }
     } catch (error) {
       console.error('Error submitting form:', error);
+      alert('Error al procesar el formulario');
     } finally {
       setIsSubmitting(false);
     }
@@ -452,7 +570,7 @@ const VideoUploadStudio = () => {
   // RENDER HELPERS
   // ===============================
 
-  const generateThumbnail = async (videoFile) => {
+  const generateThumbnails = async (videoFile) => {
     try {
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
@@ -642,17 +760,137 @@ const VideoUploadStudio = () => {
                       </div>
                     </div>
 
-                    {/* Metadata Form */}
+                    {/* Metadata Form - IMPLEMENTADO DIRECTAMENTE */}
                     <div className="bg-card rounded-lg border p-6">
                       <h2 className="text-xl font-medium text-foreground mb-6">
                         Información del video
                       </h2>
-                      <VideoMetadataForm
-                        formData={formData}
-                        onChange={handleFormChange}
-                        onSubmit={handleFormSubmit}
-                        isSubmitting={isSubmitting}
-                      />
+                      
+                      <form onSubmit={handleFormSubmit} className="space-y-6">
+                        {/* Título */}
+                        <div>
+                          <Input
+                            label="Título del video"
+                            type="text"
+                            placeholder="Ingresa un título atractivo"
+                            value={formData.title}
+                            onChange={(e) => handleInputChange('title', e.target.value)}
+                            required
+                            maxLength={100}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formData.title.length}/100 caracteres
+                          </p>
+                        </div>
+
+                        {/* Descripción */}
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Descripción
+                          </label>
+                          <textarea
+                            placeholder="Describe tu video..."
+                            value={formData.description}
+                            onChange={(e) => handleInputChange('description', e.target.value)}
+                            rows={4}
+                            maxLength={500}
+                            className="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formData.description.length}/500 caracteres
+                          </p>
+                        </div>
+
+                        {/* Categoría */}
+                        <div>
+                          <Select
+                            label="Categoría"
+                            value={formData.category}
+                            onChange={(value) => handleInputChange('category', value)}
+                            options={categories}
+                            required
+                          />
+                        </div>
+
+                        {/* Tags */}
+                        <div>
+                          <Input
+                            label="Etiquetas (separadas por coma)"
+                            type="text"
+                            placeholder="gaming, tutorial, tech, español"
+                            value={formData.tags.join(', ')}
+                            onChange={(e) => handleTagsChange(e.target.value)}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Ayuda a que otros usuarios encuentren tu video
+                          </p>
+                        </div>
+
+                        {/* Visibilidad */}
+                        <div>
+                          <Select
+                            label="Visibilidad"
+                            value={formData.visibility}
+                            onChange={(value) => handleInputChange('visibility', value)}
+                            options={visibilityOptions}
+                          />
+                        </div>
+
+                        {/* Configuraciones adicionales */}
+                        <div className="space-y-3">
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.allowComments}
+                              onChange={(e) => handleInputChange('allowComments', e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-foreground">Permitir comentarios</span>
+                          </label>
+                          
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.allowRatings}
+                              onChange={(e) => handleInputChange('allowRatings', e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-foreground">Permitir calificaciones</span>
+                          </label>
+                        </div>
+
+                        {/* Botón de envío - ESTE ES EL BOTÓN QUE NO FUNCIONABA */}
+                        <div className="flex gap-4 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCurrentStep(1)}
+                            disabled={isSubmitting}
+                          >
+                            <Icon name="ArrowLeft" size={16} className="mr-2" />
+                            Volver
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={isSubmitting || !formData.title || !formData.category}
+                            className="flex-1"
+                          >
+                            {isSubmitting ? (
+                              <>
+                                <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                                Publicando...
+                              </>
+                            ) : (
+                              <>
+                                <Icon name="Upload" size={16} className="mr-2" />
+                                Publicar Video
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </form>
                     </div>
                   </div>
                 )}
