@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import { Checkbox } from '../../components/ui/Checkbox';
 import Select from '../../components/ui/Select';
 import Icon from '../../components/AppIcon';
 
@@ -107,6 +106,12 @@ const Register = () => {
         [field]: ''
       }));
     }
+  };
+
+  // Handle checkbox change specifically
+  const handleCheckboxChange = (e) => {
+    const { checked } = e.target;
+    handleInputChange('acceptTerms', checked);
   };
 
   const checkUsernameAvailability = async (username) => {
@@ -411,29 +416,61 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Terms and Conditions */}
+            {/* Terms and Conditions - SECCIÓN CORREGIDA */}
             <div className="space-y-2">
               <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="terms"
-                  checked={formData.acceptTerms}
-                  onCheckedChange={(checked) => handleInputChange('acceptTerms', checked)}
-                  disabled={isLoading}
-                  className="mt-1"
-                />
-                <label htmlFor="terms" className="text-sm text-muted-foreground leading-relaxed">
+                {/* Checkbox nativo HTML - garantizado que funcione */}
+                <div className="flex items-center h-5 mt-1">
+                  <input
+                    id="acceptTerms"
+                    name="acceptTerms"
+                    type="checkbox"
+                    checked={formData.acceptTerms}
+                    onChange={handleCheckboxChange}
+                    disabled={isLoading}
+                    className="w-4 h-4 text-primary bg-card border-2 border-border rounded focus:ring-2 focus:ring-primary focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      accentColor: 'var(--color-primary)',
+                      position: 'relative',
+                      zIndex: 10
+                    }}
+                  />
+                </div>
+                
+                {/* Label clickeable que también activa el checkbox */}
+                <label 
+                  htmlFor="acceptTerms" 
+                  className="text-sm text-muted-foreground leading-relaxed cursor-pointer select-none flex-1"
+                >
                   Acepto los{' '}
-                  <Link to="/terms" className="text-primary hover:underline">
+                  <Link 
+                    to="/terms" 
+                    className="text-primary hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     términos y condiciones
                   </Link>{' '}
                   y la{' '}
-                  <Link to="/privacy" className="text-primary hover:underline">
+                  <Link 
+                    to="/privacy" 
+                    className="text-primary hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     política de privacidad
                   </Link>
                 </label>
               </div>
+              
+              {/* Error del checkbox */}
               {errors.acceptTerms && (
-                <p className="text-sm text-error">{errors.acceptTerms}</p>
+                <div className="flex items-center space-x-1 text-error">
+                  <Icon name="AlertCircle" size={12} />
+                  <span className="text-sm">{errors.acceptTerms}</span>
+                </div>
               )}
             </div>
 
