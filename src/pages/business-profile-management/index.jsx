@@ -769,10 +769,8 @@ const BusinessProfileManagement = () => {
       const result = await createBusinessAccount(businessInfo);
       if (result.success) {
         setShowCreateFlow(false);
-        // TODO: Mostrar mensaje de éxito
         console.log('Business account created successfully');
       } else {
-        // TODO: Mostrar mensaje de error
         console.error('Failed to create business account:', result.error);
       }
     } catch (error) {
@@ -1062,8 +1060,8 @@ const BusinessProfileManagement = () => {
                 </div>
               </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </>
     );
   }
@@ -1118,14 +1116,14 @@ const BusinessProfileManagement = () => {
                 </Button>
               </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </>
     );
   }
 
   // ===============================
-  // RENDER PRINCIPAL
+  // RENDER PRINCIPAL - CORREGIDO
   // ===============================
   return (
     <>
