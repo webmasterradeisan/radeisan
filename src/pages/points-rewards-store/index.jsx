@@ -1,438 +1,899 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/points-rewards-store/index.jsx
+// PointsRewardsStore con integración real de Supabase
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import RewardCard from './components/RewardCard';
-import CategoryFilter from './components/CategoryFilter';
 import PointsBalanceCard from './components/PointsBalanceCard';
-import RedemptionModal from './components/RedemptionModal';
 import TransactionHistory from './components/TransactionHistory';
-import AchievementBadges from './components/AchievementBadges';
+import RedemptionModal from './components/RedemptionModal';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 
+// ===============================
+// HOOKS PERSONALIZADOS
+// ===============================
+
+// Hook para manejar recompensas con datos reales de Supabase
+const useRewards = () => {
+  const [rewards, setRewards] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Obtener recompensas de Supabase
+  const fetchRewards = useCallback(async (filters = {}) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let query = supabase
+        .from('rewards')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_featured', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      // Aplicar filtros
+      if (filters.category && filters.category !== 'all') {
+        query = query.eq('category', filters.category);
+      }
+
+      if (filters.searchQuery) {
+        query = query.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`);
+      }
+
+      if (filters.maxPoints) {
+        query = query.lte('points_cost', filters.maxPoints);
+      }
+
+      if (filters.inStock) {
+        query = query.or('stock_quantity.gt.0,stock_quantity.eq.-1'); // -1 = unlimited stock
+      }
+
+      // Aplicar ordenamiento
+      switch (filters.sortBy) {
+        case 'points_low':
+          query = query.order('points_cost', { ascending: true });
+          break;
+        case 'points_high':
+          query = query.order('points_cost', { ascending: false });
+          break;
+        case 'newest':
+          query = query.order('created_at', { ascending: false });
+          break;
+        default: // popular
+          query = query.order('redeemed_count', { ascending: false });
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Transformar datos para compatibilidad con componentes existentes
+      const transformedRewards = data?.map(reward => ({
+        id: reward.id,
+        title: reward.title,
+        description: reward.description,
+        image: reward.image_url || 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400',
+        pointsCost: reward.points_cost,
+        originalPrice: reward.original_points_cost,
+        category: reward.category,
+        rewardType: reward.reward_type,
+        rewardValue: reward.reward_value ? JSON.parse(reward.reward_value) : {},
+        stock: reward.stock_quantity,
+        maxPerUser: reward.max_per_user,
+        minLevelRequired: reward.min_level_required,
+        isAvailable: reward.stock_quantity !== 0,
+        isExclusive: reward.category === 'exclusive',
+        isFeatured: reward.is_featured,
+        isPopular: reward.redeemed_count > 100,
+        redeemedCount: reward.redeemed_count,
+        validFrom: reward.valid_from,
+        validUntil: reward.valid_until,
+        categoryIcon: getCategoryIcon(reward.category),
+        typeIcon: getTypeIcon(reward.reward_type)
+      })) || [];
+
+      setRewards(transformedRewards);
+
+    } catch (err) {
+      console.error('Error fetching rewards:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Refresh
+  const refresh = useCallback(async (filters = {}) => {
+    await fetchRewards(filters);
+  }, [fetchRewards]);
+
+  return {
+    rewards,
+    loading,
+    error,
+    refresh
+  };
+};
+
+// Hook para manejar puntos del usuario
+const useUserPoints = () => {
+  const { user } = useAuth();
+  const [pointsData, setPointsData] = useState({
+    currentPoints: 0,
+    pointsEarnedToday: 0,
+    pointsEarnedThisWeek: 0,
+    pointsEarnedThisMonth: 0,
+    totalPointsEarned: 0,
+    totalPointsSpent: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Obtener balance y estadísticas de puntos
+  const fetchPointsData = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Obtener balance actual
+      const { data: balanceData, error: balanceError } = await supabase
+        .rpc('get_user_points_balance', { target_user_id: user.id });
+
+      if (balanceError && balanceError.code !== 'PGRST116') { // PGRST116 = function not found
+        throw balanceError;
+      }
+
+      const currentPoints = balanceData || 0;
+
+      // Obtener transacciones para estadísticas
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const monthAgo = new Date(today);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from('points_transactions')
+        .select('points_change, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (transactionsError) {
+        throw transactionsError;
+      }
+
+      // Calcular estadísticas
+      const transactions = transactionsData || [];
+      const todayTransactions = transactions.filter(t => new Date(t.created_at) >= today);
+      const weekTransactions = transactions.filter(t => new Date(t.created_at) >= weekAgo);
+      const monthTransactions = transactions.filter(t => new Date(t.created_at) >= monthAgo);
+
+      const pointsEarnedToday = todayTransactions
+        .filter(t => t.points_change > 0)
+        .reduce((sum, t) => sum + t.points_change, 0);
+
+      const pointsEarnedThisWeek = weekTransactions
+        .filter(t => t.points_change > 0)
+        .reduce((sum, t) => sum + t.points_change, 0);
+
+      const pointsEarnedThisMonth = monthTransactions
+        .filter(t => t.points_change > 0)
+        .reduce((sum, t) => sum + t.points_change, 0);
+
+      const totalPointsEarned = transactions
+        .filter(t => t.points_change > 0)
+        .reduce((sum, t) => sum + t.points_change, 0);
+
+      const totalPointsSpent = Math.abs(transactions
+        .filter(t => t.points_change < 0)
+        .reduce((sum, t) => sum + t.points_change, 0));
+
+      setPointsData({
+        currentPoints,
+        pointsEarnedToday,
+        pointsEarnedThisWeek,
+        pointsEarnedThisMonth,
+        totalPointsEarned,
+        totalPointsSpent
+      });
+
+    } catch (err) {
+      console.error('Error fetching points data:', err);
+      setError(err.message);
+      // Fallback con datos mock si hay error
+      setPointsData({
+        currentPoints: 0,
+        pointsEarnedToday: 0,
+        pointsEarnedThisWeek: 0,
+        pointsEarnedThisMonth: 0,
+        totalPointsEarned: 0,
+        totalPointsSpent: 0
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchPointsData();
+  }, [fetchPointsData]);
+
+  return {
+    ...pointsData,
+    loading,
+    error,
+    refreshBalance: fetchPointsData
+  };
+};
+
+// Hook para manejar transacciones de puntos
+const usePointsTransactions = () => {
+  const { user } = useAuth();
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchTransactions = useCallback(async (limit = 50) => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('points_transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+
+      const transformedTransactions = data?.map(transaction => ({
+        id: transaction.id,
+        points: transaction.points_change,
+        type: transaction.transaction_type,
+        description: transaction.description,
+        date: transaction.created_at,
+        balanceAfter: transaction.points_balance_after,
+        metadata: transaction.metadata,
+        icon: getTransactionIcon(transaction.transaction_type),
+        isPositive: transaction.points_change > 0
+      })) || [];
+
+      setTransactions(transformedTransactions);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  return {
+    transactions,
+    loading,
+    refresh: fetchTransactions
+  };
+};
+
+// Hook para canjear recompensas
+const useRewardRedemption = () => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const redeemReward = useCallback(async (reward, deliveryDetails = {}) => {
+    if (!user?.id) {
+      throw new Error('Usuario no autenticado');
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Verificar balance de puntos actual
+      const { data: balanceData } = await supabase
+        .rpc('get_user_points_balance', { target_user_id: user.id });
+
+      const currentBalance = balanceData || 0;
+
+      if (currentBalance < reward.pointsCost) {
+        throw new Error('Puntos insuficientes para este canje');
+      }
+
+      // Verificar stock disponible
+      const { data: rewardData } = await supabase
+        .from('rewards')
+        .select('stock_quantity, max_per_user')
+        .eq('id', reward.id)
+        .single();
+
+      if (rewardData.stock_quantity === 0) {
+        throw new Error('Recompensa agotada');
+      }
+
+      // TODO: Verificar límite por usuario si es necesario
+
+      // Procesar el canje según el tipo de recompensa
+      let redemptionResult = {};
+
+      switch (reward.rewardType) {
+        case 'instant':
+          redemptionResult = await processInstantReward(reward, user.id);
+          break;
+        case 'code':
+          redemptionResult = await processCodeReward(reward, user.id);
+          break;
+        case 'physical_shipping':
+          redemptionResult = await processPhysicalReward(reward, user.id, deliveryDetails);
+          break;
+        case 'service_booking':
+          redemptionResult = await processServiceReward(reward, user.id, deliveryDetails);
+          break;
+        default:
+          throw new Error('Tipo de recompensa no soportado');
+      }
+
+      // Crear transacción de puntos (esto debería ser manejado por el backend)
+      // Por ahora es un placeholder
+      console.log(`Reward redeemed: -${reward.pointsCost} points for ${reward.title}`);
+
+      return {
+        success: true,
+        ...redemptionResult
+      };
+
+    } catch (err) {
+      console.error('Error redeeming reward:', err);
+      setError(err.message);
+      return {
+        success: false,
+        error: err.message
+      };
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  return {
+    redeemReward,
+    loading,
+    error
+  };
+};
+
+// ===============================
+// UTILIDADES
+// ===============================
+
+// Obtener icono según categoría
+const getCategoryIcon = (category) => {
+  const icons = {
+    'digital': 'Smartphone',
+    'physical': 'Package',
+    'service': 'Briefcase',
+    'discount': 'Percent',
+    'exclusive': 'Crown',
+    'other': 'Gift'
+  };
+  return icons[category] || 'Gift';
+};
+
+// Obtener icono según tipo de recompensa
+const getTypeIcon = (type) => {
+  const icons = {
+    'instant': 'Zap',
+    'code': 'Key',
+    'physical_shipping': 'Truck',
+    'service_booking': 'Calendar'
+  };
+  return icons[type] || 'Gift';
+};
+
+// Obtener icono según tipo de transacción
+const getTransactionIcon = (type) => {
+  const icons = {
+    'video_upload': 'Upload',
+    'video_view': 'Eye',
+    'video_like': 'Heart',
+    'daily_login': 'Calendar',
+    'referral': 'Users',
+    'reward_redemption': 'Gift',
+    'admin_adjustment': 'Settings',
+    'bonus': 'Award',
+    'contest_win': 'Trophy',
+    'other': 'Plus'
+  };
+  return icons[type] || 'Plus';
+};
+
+// Procesar diferentes tipos de recompensas
+const processInstantReward = async (reward, userId) => {
+  // Lógica para recompensas instantáneas (ej: destacar video)
+  return {
+    type: 'instant',
+    message: 'Recompensa aplicada instantáneamente',
+    details: reward.rewardValue
+  };
+};
+
+const processCodeReward = async (reward, userId) => {
+  // Generar código de descuento único
+  const code = `RADEISAN${Date.now()}${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  
+  return {
+    type: 'code',
+    code: code,
+    message: `Tu código de descuento: ${code}`,
+    instructions: 'Usa este código en el checkout del marketplace'
+  };
+};
+
+const processPhysicalReward = async (reward, userId, deliveryDetails) => {
+  // Lógica para productos físicos
+  return {
+    type: 'physical',
+    trackingNumber: `RDS${Date.now()}`,
+    estimatedDelivery: '7-10 días hábiles',
+    shippingAddress: deliveryDetails.address,
+    message: 'Tu pedido será enviado en las próximas 24-48 horas'
+  };
+};
+
+const processServiceReward = async (reward, userId, serviceDetails) => {
+  // Lógica para servicios/bookings
+  return {
+    type: 'service',
+    bookingId: `BK${Date.now()}`,
+    scheduledDate: serviceDetails.preferredDate,
+    message: 'Te contactaremos para confirmar tu cita'
+  };
+};
+
+// Categorías de recompensas
+const REWARD_CATEGORIES = [
+  { id: 'all', name: 'Todas', icon: 'Grid3X3', description: 'Todas las recompensas' },
+  { id: 'digital', name: 'Digital', icon: 'Smartphone', description: 'Contenido y servicios digitales' },
+  { id: 'physical', name: 'Físicas', icon: 'Package', description: 'Productos tangibles entregados a domicilio' },
+  { id: 'service', name: 'Servicios', icon: 'Briefcase', description: 'Consultas y servicios profesionales' },
+  { id: 'discount', name: 'Descuentos', icon: 'Percent', description: 'Cupones y ofertas especiales' },
+  { id: 'exclusive', name: 'Exclusivas', icon: 'Crown', description: 'Recompensas premium y limitadas' }
+];
+
+// ===============================
+// COMPONENTE PRINCIPAL
+// ===============================
 const PointsRewardsStore = () => {
-  const [userPoints, setUserPoints] = useState(2847);
+  const { user } = useAuth();
+  const { rewards, loading, error, refresh } = useRewards();
+  const { 
+    currentPoints, 
+    pointsEarnedToday, 
+    pointsEarnedThisWeek,
+    loading: pointsLoading,
+    refreshBalance 
+  } = useUserPoints();
+  const { transactions, loading: transactionsLoading } = usePointsTransactions();
+  const { redeemReward, loading: redemptionLoading } = useRewardRedemption();
+
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('popular');
+  const [viewMode, setViewMode] = useState('grid');
   const [selectedReward, setSelectedReward] = useState(null);
   const [isRedemptionModalOpen, setIsRedemptionModalOpen] = useState(false);
-  const [sortBy, setSortBy] = useState('popular'); // popular, points_low, points_high, newest
-  const [viewMode, setViewMode] = useState('grid'); // grid, list
+  const [showTransactions, setShowTransactions] = useState(false);
 
-  // Mock data for categories
-  const categories = [
-    { id: 'all', name: 'Todas', icon: 'Grid3X3', count: 24 },
-    { id: 'digital', name: 'Digital', icon: 'Smartphone', count: 8 },
-    { id: 'physical', name: 'Físicos', icon: 'Package', count: 12 },
-    { id: 'experiences', name: 'Experiencias', icon: 'MapPin', count: 4 },
-    { id: 'platform', name: 'Plataforma', icon: 'Star', count: 6 }
-  ];
+  const [filters, setFilters] = useState({
+    category: 'all',
+    searchQuery: '',
+    maxPoints: null,
+    inStock: true,
+    sortBy: 'popular'
+  });
 
-  // Mock data for rewards
-  const allRewards = [
-    {
-      id: 1,
-      title: "Auriculares Bluetooth Premium",
-      description: "Auriculares inalámbricos con cancelación de ruido y 30h de batería",
-      image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400",
-      pointsCost: 2500,
-      originalPrice: 89.99,
-      category: "physical",
-      categoryIcon: "Headphones",
-      type: "physical",
-      stock: 15,
-      isPopular: true,
-      isExclusive: false
-    },
-    {
-      id: 2,
-      title: "Suscripción Premium 3 Meses",
-      description: "Acceso completo a contenido exclusivo y funciones avanzadas",
-      image: "https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=400",
-      pointsCost: 1200,
-      originalPrice: 29.99,
-      category: "platform",
-      categoryIcon: "Crown",
-      type: "digital",
-      stock: 999,
-      isPopular: false,
-      isExclusive: false
-    },
-    {
-      id: 3,
-      title: "Tarjeta Regalo Amazon €50",
-      description: "Tarjeta regalo digital para compras en Amazon España",
-      image: "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=400",
-      pointsCost: 4800,
-      originalPrice: 50.00,
-      category: "digital",
-      categoryIcon: "Gift",
-      type: "digital",
-      stock: 25,
-      isPopular: true,
-      isExclusive: false
-    },
-    {
-      id: 4,
-      title: "Camiseta Edición Limitada",
-      description: "Camiseta oficial de VideoRewards con diseño exclusivo",
-      image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400",
-      pointsCost: 1800,
-      originalPrice: 24.99,
-      category: "physical",
-      categoryIcon: "Shirt",
-      type: "physical",
-      stock: 3,
-      isPopular: false,
-      isExclusive: true
-    },
-    {
-      id: 5,
-      title: "Entrada Cine Premium",
-      description: "Entrada para cualquier película en cines seleccionados",
-      image: "https://images.unsplash.com/photo-1489599904472-84b0e19e8b0c?w=400",
-      pointsCost: 900,
-      originalPrice: 12.50,
-      category: "experiences",
-      categoryIcon: "Film",
-      type: "digital",
-      stock: 50,
-      isPopular: true,
-      isExclusive: false
-    },
-    {
-      id: 6,
-      title: "Powerbank 20000mAh",
-      description: "Batería externa de alta capacidad con carga rápida",
-      image: "https://images.unsplash.com/photo-1609592806596-7f6e4b6b6b6b?w=400",
-      pointsCost: 3200,
-      originalPrice: 45.99,
-      category: "physical",
-      categoryIcon: "Battery",
-      type: "physical",
-      stock: 8,
-      isPopular: false,
-      isExclusive: false
-    },
-    {
-      id: 7,
-      title: "Curso Online Marketing Digital",
-      description: "Curso completo de marketing digital con certificado",
-      image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400",
-      pointsCost: 5500,
-      originalPrice: 199.99,
-      category: "digital",
-      categoryIcon: "GraduationCap",
-      type: "digital",
-      stock: 100,
-      isPopular: false,
-      isExclusive: true
-    },
-    {
-      id: 8,
-      title: "Experiencia Gastronómica",
-      description: "Cena para dos personas en restaurante seleccionado",
-      image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400",
-      pointsCost: 6800,
-      originalPrice: 120.00,
-      category: "experiences",
-      categoryIcon: "UtensilsCrossed",
-      type: "experience",
-      stock: 5,
-      isPopular: true,
-      isExclusive: true
+  // ===============================
+  // EFECTOS
+  // ===============================
+
+  // Cargar recompensas cuando cambien los filtros
+  useEffect(() => {
+    const delayedFilters = {
+      ...filters,
+      category: activeCategory,
+      searchQuery,
+      sortBy
+    };
+
+    const timeoutId = setTimeout(() => {
+      refresh(delayedFilters);
+    }, searchQuery ? 500 : 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, activeCategory, sortBy, filters, refresh]);
+
+  // ===============================
+  // COMPUTED VALUES
+  // ===============================
+
+  // Filtrar recompensas que el usuario puede costear
+  const affordableRewards = useMemo(() => {
+    return rewards.filter(reward => currentPoints >= reward.pointsCost);
+  }, [rewards, currentPoints]);
+
+  // Próxima recompensa alcanzable
+  const nextRewardThreshold = useMemo(() => {
+    const unaffordable = rewards
+      .filter(reward => reward.pointsCost > currentPoints)
+      .sort((a, b) => a.pointsCost - b.pointsCost);
+    return unaffordable.length > 0 ? unaffordable[0].pointsCost : null;
+  }, [rewards, currentPoints]);
+
+  // Recompensas destacadas
+  const featuredRewards = useMemo(() => {
+    return rewards.filter(reward => reward.isFeatured).slice(0, 4);
+  }, [rewards]);
+
+  // ===============================
+  // EVENT HANDLERS
+  // ===============================
+
+  const handleCategoryChange = useCallback((category) => {
+    setActiveCategory(category);
+  }, []);
+
+  const handleSearch = useCallback((query) => {
+    setSearchQuery(query);
+  }, []);
+
+  const handleSortChange = useCallback((sort) => {
+    setSortBy(sort);
+  }, []);
+
+  const handleRewardClick = useCallback((reward) => {
+    if (currentPoints >= reward.pointsCost && reward.isAvailable) {
+      setSelectedReward(reward);
+      setIsRedemptionModalOpen(true);
     }
-  ];
+  }, [currentPoints]);
 
-  // Mock transaction history
-  const transactionHistory = [
-    {
-      type: 'earned',
-      category: 'video_watch',
-      description: 'Video completado: "Tutorial React"',
-      points: 15,
-      date: '2025-01-16T10:30:00Z',
-      source: 'Video Feed'
-    },
-    {
-      type: 'earned',
-      category: 'daily_login',
-      description: 'Inicio de sesión diario',
-      points: 25,
-      date: '2025-01-16T08:00:00Z',
-      source: 'Sistema'
-    },
-    {
-      type: 'spent',
-      category: 'reward_redemption',
-      description: 'Entrada Cine Premium canjeada',
-      points: -900,
-      date: '2025-01-15T16:45:00Z',
-      source: 'Tienda de Recompensas'
-    },
-    {
-      type: 'earned',
-      category: 'social_interaction',
-      description: 'Me gusta y comentarios',
-      points: 8,
-      date: '2025-01-15T14:20:00Z',
-      source: 'Interacciones'
-    },
-    {
-      type: 'earned',
-      category: 'bonus',
-      description: 'Bonus fin de semana',
-      points: 50,
-      date: '2025-01-14T12:00:00Z',
-      source: 'Promoción'
-    }
-  ];
-
-  // Mock achievements
-  const achievements = [
-    {
-      name: "Primer Canje",
-      description: "Canjea tu primera recompensa",
-      type: "first_redemption",
-      rarity: "common",
-      pointsReward: 100,
-      unlockedAt: "2025-01-15T16:45:00Z",
-      isNew: true
-    },
-    {
-      name: "Cinéfilo",
-      description: "Ve 50 videos completos",
-      type: "video_watcher",
-      rarity: "rare",
-      pointsReward: 250,
-      progress: { current: 32, target: 50 }
-    },
-    {
-      name: "Racha de 7 Días",
-      description: "Inicia sesión 7 días consecutivos",
-      type: "daily_streak",
-      rarity: "epic",
-      pointsReward: 500,
-      progress: { current: 4, target: 7 }
-    }
-  ];
-
-  // Filter and sort rewards
-  const filteredRewards = allRewards?.filter(reward => {
-      const matchesCategory = activeCategory === 'all' || reward?.category === activeCategory;
-      const matchesSearch = reward?.title?.toLowerCase()?.includes(searchQuery?.toLowerCase()) ||
-                           reward?.description?.toLowerCase()?.includes(searchQuery?.toLowerCase());
-      return matchesCategory && matchesSearch;
-    })?.sort((a, b) => {
-      switch (sortBy) {
-        case 'points_low':
-          return a?.pointsCost - b?.pointsCost;
-        case 'points_high':
-          return b?.pointsCost - a?.pointsCost;
-        case 'newest':
-          return b?.id - a?.id;
-        case 'popular':
-        default:
-          return (b?.isPopular ? 1 : 0) - (a?.isPopular ? 1 : 0);
+  const handleRedemption = useCallback(async (reward, deliveryDetails = {}) => {
+    try {
+      const result = await redeemReward(reward, deliveryDetails);
+      
+      if (result.success) {
+        // Actualizar balance de puntos
+        await refreshBalance();
+        // Actualizar lista de recompensas
+        await refresh({ ...filters, category: activeCategory, searchQuery, sortBy });
+        // Cerrar modal
+        setIsRedemptionModalOpen(false);
+        setSelectedReward(null);
+        
+        // TODO: Mostrar mensaje de éxito con detalles del canje
+        console.log('Redemption successful:', result);
       }
-    });
+    } catch (error) {
+      console.error('Redemption failed:', error);
+    }
+  }, [redeemReward, refreshBalance, refresh, filters, activeCategory, searchQuery, sortBy]);
 
-  const handleRedemption = async (reward, deliveryDetails = {}) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Update user points
-    setUserPoints(prev => prev - reward?.pointsCost);
-    
-    // Update reward stock
-    const updatedRewards = allRewards?.map(r => 
-      r?.id === reward?.id ? { ...r, stock: r?.stock - 1 } : r
-    );
-    
-    console.log('Reward redeemed:', reward, deliveryDetails);
-  };
-
-  const handleWaitlist = (reward) => {
+  const handleWaitlist = useCallback((reward) => {
+    // TODO: Implementar lista de espera
     console.log('Added to waitlist:', reward);
-    // Show success message or handle waitlist logic
-  };
+  }, []);
 
-  const nextRewardThreshold = 3000; // Next affordable reward
-  const pointsEarnedToday = 98;
+  // ===============================
+  // RENDER HELPERS
+  // ===============================
 
+  const EmptyState = () => (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="w-24 h-24 bg-gradient-to-br from-accent/10 to-primary/10 rounded-full flex items-center justify-center mb-6">
+        <Icon name="Gift" size={32} color="var(--color-accent)" />
+      </div>
+      <h3 className="text-xl font-semibold text-foreground mb-3">
+        {searchQuery ? 'No se encontraron recompensas' : 'Próximamente más recompensas'}
+      </h3>
+      <p className="text-muted-foreground mb-6 max-w-md">
+        {searchQuery 
+          ? `No hay resultados para "${searchQuery}". Intenta con otros términos.`
+          : 'Estamos preparando recompensas increíbles para ti. ¡Sigue ganando puntos!'
+        }
+      </p>
+      <div className="flex flex-col sm:flex-row gap-3">
+        {searchQuery && (
+          <Button variant="outline" onClick={() => setSearchQuery('')}>
+            <Icon name="X" size={16} className="mr-2" />
+            Limpiar búsqueda
+          </Button>
+        )}
+        <Button onClick={() => window.location.href = '/dashboard'}>
+          <Icon name="Play" size={16} className="mr-2" />
+          Ganar más puntos
+        </Button>
+      </div>
+    </div>
+  );
+
+  const ErrorState = () => (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6">
+        <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
+      </div>
+      <h3 className="text-xl font-semibold text-foreground mb-3">
+        Error al cargar recompensas
+      </h3>
+      <p className="text-muted-foreground mb-6 max-w-md">
+        Ha ocurrido un problema al cargar las recompensas. Por favor, intenta nuevamente.
+      </p>
+      <Button onClick={() => refresh(filters)}>
+        <Icon name="RefreshCw" size={16} className="mr-2" />
+        Reintentar
+      </Button>
+    </div>
+  );
+
+  // ===============================
+  // RENDER
+  // ===============================
   return (
     <>
       <Helmet>
-        <title>Tienda de Recompensas - VideoRewards</title>
-        <meta name="description" content="Canjea tus puntos por increíbles recompensas digitales y físicas en VideoRewards" />
+        <title>Tienda de Recompensas - Canjea tus Puntos | RADEISAN</title>
+        <meta name="description" content="Canjea tus puntos por recompensas increíbles: productos digitales, físicos, descuentos y experiencias exclusivas" />
+        <meta name="keywords" content="recompensas, puntos, canjear, productos, descuentos, premios" />
       </Helmet>
+
       <div className="min-h-screen bg-background">
         <Header />
         <PrimaryNavigation />
         
-        {/* Main Content */}
-        <main className="pt-16 lg:pt-28 pb-20 lg:pb-8">
-          <div className="max-w-7xl mx-auto px-4 lg:px-6">
-            {/* Page Header */}
+        <main className="pt-32 pb-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            {/* Header */}
             <div className="mb-8">
               <div className="flex items-center space-x-3 mb-4">
                 <div className="w-12 h-12 bg-accent rounded-lg flex items-center justify-center">
                   <Icon name="Gift" size={24} color="white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl lg:text-3xl font-heading font-bold text-foreground">
-                    Tienda de Recompensas
-                  </h1>
-                  <p className="text-muted-foreground">
-                    Canjea tus puntos por increíbles premios y experiencias
-                  </p>
+                  <h1 className="text-3xl font-bold text-foreground">Tienda de Recompensas</h1>
+                  <p className="text-muted-foreground">Canjea tus puntos por increíbles premios</p>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
               {/* Sidebar */}
-              <div className="lg:col-span-1 space-y-6">
-                {/* Points Balance */}
-                <PointsBalanceCard
-                  currentPoints={userPoints}
-                  pointsEarnedToday={pointsEarnedToday}
-                  nextRewardThreshold={nextRewardThreshold}
-                />
+              <div className="lg:col-span-4 xl:col-span-3">
+                <div className="sticky top-32 space-y-6">
+                  
+                  {/* Points Balance Card */}
+                  <PointsBalanceCard
+                    currentPoints={currentPoints}
+                    pointsEarnedToday={pointsEarnedToday}
+                    pointsEarnedThisWeek={pointsEarnedThisWeek}
+                    nextRewardThreshold={nextRewardThreshold}
+                    loading={pointsLoading}
+                  />
 
-                {/* Achievement Badges */}
-                <AchievementBadges achievements={achievements} />
+                  {/* Quick Stats */}
+                  <div className="bg-card rounded-lg border p-6">
+                    <h3 className="font-semibold text-foreground mb-4">Estadísticas</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Recompensas disponibles</span>
+                        <span className="font-medium">{rewards.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Puedes canjear</span>
+                        <span className="font-medium text-success">{affordableRewards.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Destacadas</span>
+                        <span className="font-medium">{featuredRewards.length}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Transactions Toggle */}
+                  <div className="bg-card rounded-lg border p-6">
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => setShowTransactions(!showTransactions)}
+                      iconName={showTransactions ? "ChevronUp" : "ChevronDown"}
+                      iconPosition="right"
+                    >
+                      {showTransactions ? 'Ocultar' : 'Ver'} Historial
+                    </Button>
+                    
+                    {showTransactions && (
+                      <div className="mt-4 max-h-96 overflow-y-auto">
+                        <TransactionHistory
+                          transactions={transactions}
+                          loading={transactionsLoading}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Main Content */}
-              <div className="lg:col-span-3 space-y-6">
-                {/* Filters and Search */}
-                <div className="bg-card border border-border rounded-lg p-6">
-                  {/* Search */}
-                  <div className="mb-6">
-                    <Input
-                      type="search"
-                      placeholder="Buscar recompensas..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e?.target?.value)}
-                      className="w-full"
-                    />
-                  </div>
-
-                  {/* Category Filter */}
-                  <CategoryFilter
-                    categories={categories}
-                    activeCategory={activeCategory}
-                    onCategoryChange={setActiveCategory}
-                    className="mb-6"
-                  />
-
-                  {/* Sort and View Options */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
+              <div className="lg:col-span-8 xl:col-span-9">
+                
+                {/* Search and Controls */}
+                <div className="mb-6">
+                  <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <div className="flex-1">
+                      <Input
+                        type="search"
+                        placeholder="Buscar recompensas..."
+                        value={searchQuery}
+                        onChange={(e) => handleSearch(e.target.value)}
+                        className="w-full"
+                        iconName="Search"
+                        iconPosition="left"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
                       <select
                         value={sortBy}
-                        onChange={(e) => setSortBy(e?.target?.value)}
-                        className="bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        onChange={(e) => handleSortChange(e.target.value)}
+                        className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
                       >
-                        <option value="popular">Más Popular</option>
-                        <option value="points_low">Puntos: Menor a Mayor</option>
-                        <option value="points_high">Puntos: Mayor a Menor</option>
-                        <option value="newest">Más Recientes</option>
+                        <option value="popular">Más populares</option>
+                        <option value="points_low">Menos puntos</option>
+                        <option value="points_high">Más puntos</option>
+                        <option value="newest">Más recientes</option>
                       </select>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
                       <Button
-                        variant={viewMode === 'grid' ? 'default' : 'outline'}
+                        variant="outline"
                         size="icon"
-                        onClick={() => setViewMode('grid')}
+                        onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                       >
-                        <Icon name="Grid3X3" size={16} />
-                      </Button>
-                      <Button
-                        variant={viewMode === 'list' ? 'default' : 'outline'}
-                        size="icon"
-                        onClick={() => setViewMode('list')}
-                      >
-                        <Icon name="List" size={16} />
+                        <Icon name={viewMode === 'grid' ? 'List' : 'Grid3X3'} size={20} />
                       </Button>
                     </div>
                   </div>
                 </div>
 
-                {/* Results Summary */}
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    {filteredRewards?.length} recompensas encontradas
-                  </p>
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Icon name="Star" size={14} color="var(--color-accent)" />
-                    <span>Tu balance: {userPoints?.toLocaleString()} puntos</span>
-                  </div>
-                </div>
-
-                {/* Rewards Grid */}
-                {filteredRewards?.length === 0 ? (
-                  <div className="bg-card border border-border rounded-lg p-12 text-center">
-                    <Icon name="Search" size={48} color="var(--color-muted-foreground)" className="mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">
-                      No se encontraron recompensas
-                    </h3>
-                    <p className="text-muted-foreground mb-4">
-                      Intenta ajustar tus filtros o términos de búsqueda
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setActiveCategory('all');
-                      }}
-                    >
-                      Limpiar Filtros
-                    </Button>
-                  </div>
-                ) : (
-                  <div className={`
-                    ${viewMode === 'grid' ?'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' :'space-y-4'
-                    }
-                  `}>
-                    {filteredRewards?.map((reward) => (
-                      <RewardCard
-                        key={reward?.id}
-                        reward={reward}
-                        userPoints={userPoints}
-                        onRedeem={(reward) => {
-                          setSelectedReward(reward);
-                          setIsRedemptionModalOpen(true);
-                        }}
-                        onWaitlist={handleWaitlist}
-                        className={viewMode === 'list' ? 'flex-row' : ''}
-                      />
+                {/* Categories */}
+                <div className="mb-6">
+                  <div className="flex items-center space-x-2 overflow-x-auto pb-2">
+                    {REWARD_CATEGORIES.map((category) => (
+                      <button
+                        key={category.id}
+                        onClick={() => handleCategoryChange(category.id)}
+                        className={`flex-shrink-0 flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                          activeCategory === category.id
+                            ? 'bg-accent text-accent-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        <Icon name={category.icon} size={16} />
+                        <span>{category.name}</span>
+                      </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Featured Rewards */}
+                {featuredRewards.length > 0 && activeCategory === 'all' && !searchQuery && (
+                  <div className="mb-8">
+                    <h2 className="text-xl font-semibold text-foreground mb-4">🌟 Destacadas</h2>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {featuredRewards.map((reward) => (
+                        <RewardCard
+                          key={reward.id}
+                          reward={reward}
+                          userPoints={currentPoints}
+                          onRedeem={handleRewardClick}
+                          onWaitlist={handleWaitlist}
+                          compact
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                {/* Transaction History */}
-                <TransactionHistory transactions={transactionHistory} />
+                {/* Rewards Grid */}
+                <div className="min-h-[400px]">
+                  {error ? (
+                    <ErrorState />
+                  ) : loading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <div className="text-center">
+                        <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-muted-foreground">Cargando recompensas increíbles...</p>
+                      </div>
+                    </div>
+                  ) : rewards.length === 0 ? (
+                    <EmptyState />
+                  ) : (
+                    <div className={`grid gap-6 ${
+                      viewMode === 'grid' 
+                        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+                        : 'grid-cols-1'
+                    }`}>
+                      {rewards.map((reward) => (
+                        <RewardCard
+                          key={reward.id}
+                          reward={reward}
+                          userPoints={currentPoints}
+                          onRedeem={handleRewardClick}
+                          onWaitlist={handleWaitlist}
+                          layout={viewMode}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </main>
 
         {/* Redemption Modal */}
-        <RedemptionModal
-          reward={selectedReward}
-          userPoints={userPoints}
-          isOpen={isRedemptionModalOpen}
-          onClose={() => {
-            setIsRedemptionModalOpen(false);
-            setSelectedReward(null);
-          }}
-          onConfirm={handleRedemption}
-        />
+        {selectedReward && (
+          <RedemptionModal
+            reward={selectedReward}
+            userPoints={currentPoints}
+            isOpen={isRedemptionModalOpen}
+            onClose={() => {
+              setIsRedemptionModalOpen(false);
+              setSelectedReward(null);
+            }}
+            onConfirm={handleRedemption}
+            loading={redemptionLoading}
+          />
+        )}
+
+        {/* Floating Action Button */}
+        <div className="fixed bottom-20 lg:bottom-6 right-4 z-40">
+          <Button
+            size="lg"
+            className="rounded-full shadow-lg"
+            onClick={() => window.location.href = '/dashboard'}
+          >
+            <Icon name="Plus" size={16} className="mr-2" />
+            Ganar Puntos
+          </Button>
+        </div>
+
+        {/* Welcome Message for New Users */}
+        {!loading && currentPoints === 0 && user && (
+          <div className="fixed bottom-4 left-4 max-w-sm bg-card border rounded-lg p-4 shadow-lg z-50">
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 bg-accent/10 rounded-full flex items-center justify-center flex-shrink-0">
+                <Icon name="Gift" size={20} color="var(--color-accent)" />
+              </div>
+              <div>
+                <h4 className="font-medium text-foreground mb-1">¡Comienza a ganar puntos!</h4>
+                <p className="text-sm text-muted-foreground">
+                  Ve videos, sube contenido y gana puntos para canjear por recompensas increíbles.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
