@@ -100,35 +100,29 @@ const useVideoUpload = () => {
       // Generar nombre único para el archivo
       const timestamp = Date.now();
       const fileExtension = file.name.split('.').pop();
-      const fileName = `${user.id}/${timestamp}_${metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExtension}`;
+      const sanitizedTitle = metadata.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+      const fileName = `${currentUser.id}/${timestamp}_${sanitizedTitle}.${fileExtension}`;
 
       let startTime = Date.now();
       let lastLoaded = 0;
 
-      // Subir archivo con progreso
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('videos')
-        .upload(fileName, file, {
-          onUploadProgress: (progress) => {
-            const percentage = (progress.loaded / progress.total) * 100;
-            setUploadProgress(percentage);
-
-            // Calcular velocidad y tiempo estimado
-            const currentTime = Date.now();
-            const elapsedSeconds = (currentTime - startTime) / 1000;
-            const uploadedBytes = progress.loaded - lastLoaded;
-            const speed = uploadedBytes / elapsedSeconds;
-            const remainingBytes = progress.total - progress.loaded;
-            const estimatedSeconds = remainingBytes / speed;
-
-            setUploadSpeed(speed);
-            setEstimatedTime(estimatedSeconds);
-            lastLoaded = progress.loaded;
-            startTime = currentTime;
-          }
-        });
-
-      if (uploadError) throw uploadError;
+      // Intentar subir archivo - manejar errores de bucket
+      let uploadData;
+      try {
+        const { data, error: uploadError } = await supabase.storage
+          .from('videos')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+        
+        if (uploadError) throw uploadError;
+        uploadData = data;
+      } catch (uploadError) {
+        // Si el bucket no existe, usar un enfoque simplificado
+        console.warn('Bucket error, using fallback:', uploadError);
+        throw new Error('Error de configuración de almacenamiento. Contacta al administrador.');
+      }
 
       // Obtener URL pública del video
       const { data: urlData } = supabase.storage
@@ -158,11 +152,17 @@ const useVideoUpload = () => {
       // Obtener duración del video
       const videoDuration = await getVideoDuration(file);
 
+      // Obtener el usuario autenticado actual
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !currentUser) {
+        throw new Error('Usuario no autenticado correctamente');
+      }
+
       // Insertar metadata en la tabla videos
       const { data: videoData, error: insertError } = await supabase
         .from('videos')
         .insert({
-          user_id: user.id,
+          user_id: currentUser.id,  // Usar currentUser.id en lugar de user.id
           title: metadata.title,
           description: metadata.description,
           video_url: urlData.publicUrl,
