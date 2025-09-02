@@ -196,32 +196,76 @@ const useVideos = () => {
   const fetchVideosWithProfiles = async (videoData) => {
     console.log('📋 Intento 2: Obteniendo perfiles de usuarios...');
     
-    if (!videoData?.length) return videoData;
-
-    const userIds = [...new Set(videoData.map(v => v.user_id).filter(Boolean))];
-    
-    if (userIds.length === 0) {
-      console.log('⚠️ No hay user_ids válidos');
+    if (!videoData?.length) {
+      console.log('⚠️ No hay videos para obtener perfiles');
       return videoData;
     }
 
-    const { data: profiles, error: profilesError } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, username, avatar_url')
-      .in('id', userIds);
-
-    if (profilesError) {
-      console.error('❌ Error obteniendo perfiles:', profilesError);
-      return videoData; // Continuar sin perfiles
+    // Extraer user_ids únicos y válidos
+    const userIds = [...new Set(videoData.map(v => v.user_id).filter(Boolean))];
+    console.log('🔍 User IDs extraídos:', userIds);
+    
+    if (userIds.length === 0) {
+      console.log('⚠️ No hay user_ids válidos en los videos');
+      return videoData.map(video => ({
+        ...video,
+        user_profile: null
+      }));
     }
 
-    console.log(`✅ Perfiles obtenidos: ${profiles?.length || 0}`);
+    try {
+      // Consulta de perfiles con mejor logging
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, username, avatar_url, email')
+        .in('id', userIds);
 
-    // Mapear perfiles a videos
-    return videoData.map(video => ({
-      ...video,
-      user_profile: profiles?.find(p => p.id === video.user_id) || null
-    }));
+      if (profilesError) {
+        console.error('❌ Error obteniendo perfiles:', profilesError);
+        // Intentar consulta alternativa por email si falla por ID
+        console.log('🔄 Intentando consulta alternativa...');
+        
+        const { data: authUsers } = await supabase.auth.admin.listUsers();
+        const authUsersMap = {};
+        authUsers?.users?.forEach(user => {
+          authUsersMap[user.id] = {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuario',
+            username: user.user_metadata?.username || 'usuario',
+            avatar_url: user.user_metadata?.avatar_url,
+            email: user.email
+          };
+        });
+
+        return videoData.map(video => ({
+          ...video,
+          user_profile: authUsersMap[video.user_id] || null
+        }));
+      }
+
+      console.log(`✅ Perfiles obtenidos exitosamente: ${profiles?.length || 0}`);
+      console.log('👥 Perfiles encontrados:', profiles?.map(p => ({ id: p.id, name: p.full_name })));
+
+      // Mapear perfiles a videos con logging detallado
+      const mappedVideos = videoData.map(video => {
+        const userProfile = profiles?.find(p => p.id === video.user_id);
+        console.log(`🔗 Video "${video.title}" (user_id: ${video.user_id}) → Perfil: ${userProfile?.full_name || 'NO ENCONTRADO'}`);
+        
+        return {
+          ...video,
+          user_profile: userProfile || null
+        };
+      });
+
+      return mappedVideos;
+
+    } catch (err) {
+      console.error('❌ Error crítico en fetchVideosWithProfiles:', err);
+      return videoData.map(video => ({
+        ...video,
+        user_profile: null
+      }));
+    }
   };
 
   // Transformar datos a formato esperado
