@@ -1,5 +1,5 @@
 // src/pages/video-upload-studio/index.jsx
-// VideoUploadStudio con integración real de Supabase - CORREGIDO
+// VideoUploadStudio con integración real de Supabase - BUG #6 CORREGIDO
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -87,26 +87,31 @@ const useVideoUpload = () => {
     });
   };
 
-  // Subir video a Supabase Storage
+  // Subir video a Supabase Storage - CORREGIDO
   const uploadVideo = async (file, metadata) => {
     try {
       setIsUploading(true);
       setUploadProgress(0);
       setUploadError(null);
 
-      // Validar archivo
+      // PASO 1: OBTENER USUARIO AUTENTICADO PRIMERO
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !currentUser) {
+        throw new Error('Usuario no autenticado correctamente');
+      }
+
+      // PASO 2: VALIDAR ARCHIVO
       validateVideoFile(file);
 
-      // Generar nombre único para el archivo
+      // PASO 3: GENERAR NOMBRE ÚNICO PARA EL ARCHIVO (AHORA currentUser YA EXISTE)
       const timestamp = Date.now();
       const fileExtension = file.name.split('.').pop();
       const sanitizedTitle = metadata.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
       const fileName = `${currentUser.id}/${timestamp}_${sanitizedTitle}.${fileExtension}`;
 
-      let startTime = Date.now();
-      let lastLoaded = 0;
+      setUploadProgress(10);
 
-      // Intentar subir archivo - manejar errores de bucket
+      // PASO 4: SUBIR ARCHIVO A STORAGE
       let uploadData;
       try {
         const { data, error: uploadError } = await supabase.storage
@@ -119,57 +124,62 @@ const useVideoUpload = () => {
         if (uploadError) throw uploadError;
         uploadData = data;
       } catch (uploadError) {
-        // Si el bucket no existe, usar un enfoque simplificado
         console.warn('Bucket error, using fallback:', uploadError);
         throw new Error('Error de configuración de almacenamiento. Contacta al administrador.');
       }
 
-      // Obtener URL pública del video
+      setUploadProgress(50);
+
+      // PASO 5: OBTENER URL PÚBLICA DEL VIDEO
       const { data: urlData } = supabase.storage
         .from('videos')
         .getPublicUrl(fileName);
 
-      // Generar y subir thumbnail
-      const thumbnails = await generateThumbnail(file);
+      setUploadProgress(65);
+
+      // PASO 6: GENERAR Y SUBIR THUMBNAIL
       let thumbnailUrl = null;
-
-      if (thumbnails.length > 0) {
-        const selectedThumbnail = thumbnails[Math.floor(thumbnails.length / 2)]; // Usar el del medio
-        const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
-        
-        const { error: thumbError } = await supabase.storage
-          .from('thumbnails')
-          .upload(thumbnailFileName, selectedThumbnail.blob);
-
-        if (!thumbError) {
-          const { data: thumbUrlData } = supabase.storage
+      try {
+        const thumbnails = await generateThumbnail(file);
+        if (thumbnails.length > 0) {
+          const selectedThumbnail = thumbnails[Math.floor(thumbnails.length / 2)]; // Usar el del medio
+          const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
+          
+          const { error: thumbError } = await supabase.storage
             .from('thumbnails')
-            .getPublicUrl(thumbnailFileName);
-          thumbnailUrl = thumbUrlData.publicUrl;
+            .upload(thumbnailFileName, selectedThumbnail.blob);
+
+          if (!thumbError) {
+            const { data: thumbUrlData } = supabase.storage
+              .from('thumbnails')
+              .getPublicUrl(thumbnailFileName);
+            thumbnailUrl = thumbUrlData.publicUrl;
+          }
         }
+      } catch (thumbError) {
+        console.warn('Error generating thumbnail:', thumbError);
+        // Continuar sin thumbnail si hay error
       }
 
-      // Obtener duración del video
+      setUploadProgress(75);
+
+      // PASO 7: OBTENER DURACIÓN DEL VIDEO
       const videoDuration = await getVideoDuration(file);
 
-      // Obtener el usuario autenticado actual
-      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-      if (userError || !currentUser) {
-        throw new Error('Usuario no autenticado correctamente');
-      }
+      setUploadProgress(85);
 
-      // Insertar metadata en la tabla videos
+      // PASO 8: INSERTAR METADATA EN LA BASE DE DATOS
       const { data: videoData, error: insertError } = await supabase
         .from('videos')
         .insert({
-          user_id: currentUser.id,  // Usar currentUser.id en lugar de user.id
+          user_id: currentUser.id,
           title: metadata.title,
-          description: metadata.description,
+          description: metadata.description || '',
           video_url: urlData.publicUrl,
           thumbnail_url: thumbnailUrl,
           category: metadata.category,
           tags: metadata.tags || [],
-          duration_seconds: Math.round(videoDuration),
+          duration_seconds: Math.round(videoDuration || 0),
           file_size_bytes: file.size,
           is_published: metadata.visibility === 'public',
           points_earned: 0 // Se calculará cuando tenga views
@@ -179,11 +189,14 @@ const useVideoUpload = () => {
 
       if (insertError) throw insertError;
 
-      // Otorgar puntos por subir video
-      const uploadPoints = calculateUploadPoints(videoDuration, metadata.category);
+      setUploadProgress(95);
+
+      // PASO 9: OTORGAR PUNTOS POR SUBIR VIDEO
+      const uploadPoints = calculateUploadPoints(videoDuration || 0, metadata.category);
       await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
 
       setUploadProgress(100);
+
       return {
         success: true,
         videoId: videoData.id,
@@ -861,7 +874,7 @@ const VideoUploadStudio = () => {
                           </label>
                         </div>
 
-                        {/* Botón de envío - ESTE ES EL BOTÓN QUE NO FUNCIONABA */}
+                        {/* Botón de envío - CORREGIDO */}
                         <div className="flex gap-4 pt-4">
                           <Button
                             type="button"
