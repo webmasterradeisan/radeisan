@@ -21,6 +21,7 @@ import Button from '../../components/ui/Button';
 
 // Hook para manejar videos con datos reales de Supabase - VERSIÓN ROBUSTA
 const useVideos = () => {
+  const { user: currentUser } = useAuth(); // Para usar en fallbacks
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -65,72 +66,6 @@ const useVideos = () => {
     isLiked: false,
     isSaved: false
   });
-
-  // NUEVA: Función para crear perfiles faltantes automáticamente
-  const createMissingProfiles = async (missingUserIds) => {
-    console.log('🔧 CREANDO PERFILES FALTANTES:', missingUserIds);
-    
-    try {
-      // Obtener datos de auth.users para los IDs faltantes
-      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-      
-      if (authError) {
-        console.error('❌ Error obteniendo usuarios de auth:', authError);
-        return [];
-      }
-
-      // Filtrar solo los usuarios que nos interesan
-      const targetUsers = authData.users.filter(user => missingUserIds.includes(user.id));
-      console.log('📋 Usuarios encontrados en auth:', targetUsers.map(u => ({ id: u.id, email: u.email })));
-
-      // Crear perfiles para cada usuario faltante
-      const profilesToCreate = targetUsers.map(user => ({
-        id: user.id,
-        email: user.email,
-        full_name: user.user_metadata?.full_name || 
-                  user.user_metadata?.name || 
-                  user.email?.split('@')[0] || 
-                  'Usuario',
-        username: user.user_metadata?.username || 
-                 `user_${user.id.substring(0, 8)}`,
-        avatar_url: user.user_metadata?.avatar_url || null,
-        bio: null,
-        is_business_account: user.user_metadata?.account_type === 'business',
-        points: 1000, // Puntos de bienvenida
-        created_at: user.created_at,
-        updated_at: new Date().toISOString()
-      }));
-
-      // Insertar perfiles en batch
-      if (profilesToCreate.length > 0) {
-        const { data: insertedProfiles, error: insertError } = await supabase
-          .from('user_profiles')
-          .insert(profilesToCreate)
-          .select('id, full_name, username, avatar_url, email');
-
-        if (insertError) {
-          console.error('❌ Error insertando perfiles:', insertError);
-          // Si falla la inserción, retornar perfiles básicos desde auth
-          return profilesToCreate.map(profile => ({
-            id: profile.id,
-            full_name: profile.full_name,
-            username: profile.username,
-            avatar_url: profile.avatar_url,
-            email: profile.email
-          }));
-        }
-
-        console.log('✅ Perfiles creados exitosamente:', insertedProfiles?.length || 0);
-        return insertedProfiles || [];
-      }
-
-      return [];
-
-    } catch (error) {
-      console.error('❌ Error crítico creando perfiles:', error);
-      return [];
-    }
-  };
 
   // Función para diagnóstico de base de datos
   const diagnoseDatabaseIssues = async () => {
@@ -258,7 +193,7 @@ const useVideos = () => {
     return data || [];
   };
 
-  // MEJORADA: Consulta con JOIN a user_profiles y auto-creación de perfiles
+  // CORREGIDA: Consulta con múltiples estrategias para obtener perfiles
   const fetchVideosWithProfiles = async (videoData) => {
     console.log('📋 Intento 2: Obteniendo perfiles de usuarios...');
     
@@ -280,71 +215,157 @@ const useVideos = () => {
     }
 
     try {
-      // Paso 1: Consultar perfiles existentes
-      console.log('📋 Paso 1: Consultando perfiles existentes...');
-      const { data: existingProfiles, error: profilesError } = await supabase
+      // ESTRATEGIA 1: Intentar consulta directa con RLS
+      console.log('🔐 Estrategia 1: Consulta directa con RLS...');
+      const { data: profiles, error: profilesError } = await supabase
         .from('user_profiles')
         .select('id, full_name, username, avatar_url, email')
         .in('id', userIds);
 
-      if (profilesError) {
-        console.error('❌ Error obteniendo perfiles existentes:', profilesError);
-        return videoData.map(video => ({
-          ...video,
-          user_profile: null
-        }));
-      }
-
-      const foundProfileIds = existingProfiles?.map(p => p.id) || [];
-      const missingUserIds = userIds.filter(id => !foundProfileIds.includes(id));
-      
-      console.log(`📊 Perfiles encontrados: ${foundProfileIds.length}/${userIds.length}`);
-      console.log('✅ Perfiles existentes:', existingProfiles?.map(p => ({ id: p.id, name: p.full_name })));
-      console.log('❓ IDs faltantes:', missingUserIds);
-
-      let allProfiles = existingProfiles || [];
-
-      // Paso 2: Crear perfiles faltantes si es necesario
-      if (missingUserIds.length > 0) {
-        console.log(`🔧 Creando ${missingUserIds.length} perfiles faltantes...`);
-        const newProfiles = await createMissingProfiles(missingUserIds);
-        allProfiles = [...allProfiles, ...newProfiles];
-        console.log(`✅ Perfiles totales después de creación: ${allProfiles.length}`);
-      }
-
-      // Paso 3: Mapear perfiles a videos con logging detallado
-      console.log('🔗 Mapeando perfiles a videos...');
-      const mappedVideos = videoData.map(video => {
-        const userProfile = allProfiles.find(p => p.id === video.user_id);
+      // Si la consulta RLS funciona, usarla
+      if (!profilesError && profiles?.length > 0) {
+        console.log(`✅ RLS permitió consulta: ${profiles.length} perfiles encontrados`);
+        console.log('👥 Perfiles obtenidos:', profiles.map(p => ({ id: p.id, name: p.full_name })));
         
-        const logStatus = userProfile ? 
-          `✅ "${userProfile.full_name}"` : 
-          `❌ PERFIL NO ENCONTRADO`;
+        const mappedVideos = videoData.map(video => {
+          const userProfile = profiles.find(p => p.id === video.user_id);
+          console.log(`🔗 Video "${video.title}" → ${userProfile?.full_name || 'NO ENCONTRADO'}`);
           
-        console.log(`🔗 Video "${video.title}" (user_id: ${video.user_id}) → ${logStatus}`);
+          return {
+            ...video,
+            user_profile: userProfile || null
+          };
+        });
+        
+        return mappedVideos;
+      }
+
+      // ESTRATEGIA 2: Usar función RPC si está disponible
+      console.log('🔄 Estrategia 2: Función RPC...');
+      console.log('❌ Error RLS:', profilesError);
+      
+      const { data: rpcProfiles, error: rpcError } = await supabase
+        .rpc('get_user_profiles_by_ids', { user_ids: userIds });
+
+      if (!rpcError && rpcProfiles?.length > 0) {
+        console.log(`✅ RPC funcionó: ${rpcProfiles.length} perfiles encontrados`);
+        
+        const mappedVideos = videoData.map(video => {
+          const userProfile = rpcProfiles.find(p => p.id === video.user_id);
+          console.log(`🔗 Video "${video.title}" → ${userProfile?.full_name || 'NO ENCONTRADO'}`);
+          
+          return {
+            ...video,
+            user_profile: userProfile || null
+          };
+        });
+        
+        return mappedVideos;
+      }
+
+      // ESTRATEGIA 3: Consulta JOIN directa en videos
+      console.log('🔄 Estrategia 3: JOIN directo...');
+      console.log('❌ Error RPC:', rpcError);
+      
+      const videoIds = videoData.map(v => v.id);
+      const { data: videosWithProfiles, error: joinError } = await supabase
+        .from('videos')
+        .select(`
+          id,
+          user_id,
+          user_profiles!inner (
+            id,
+            full_name,
+            username,
+            avatar_url,
+            email
+          )
+        `)
+        .in('id', videoIds);
+
+      if (!joinError && videosWithProfiles?.length > 0) {
+        console.log(`✅ JOIN funcionó: ${videosWithProfiles.length} videos con perfiles`);
+        
+        const mappedVideos = videoData.map(video => {
+          const videoWithProfile = videosWithProfiles.find(v => v.id === video.id);
+          const userProfile = videoWithProfile?.user_profiles;
+          console.log(`🔗 Video "${video.title}" → ${userProfile?.full_name || 'NO ENCONTRADO'}`);
+          
+          return {
+            ...video,
+            user_profile: userProfile || null
+          };
+        });
+        
+        return mappedVideos;
+      }
+
+      // ESTRATEGIA 4: Crear perfiles "virtuales" inteligentes
+      console.log('🔄 Estrategia 4: Perfiles virtuales...');
+      console.log('❌ Error JOIN:', joinError);
+      
+      const mappedVideos = videoData.map(video => {
+        // Si el video pertenece al usuario actual, usar su perfil
+        if (currentUser && video.user_id === currentUser.id) {
+          const userProfile = {
+            id: currentUser.id,
+            full_name: currentUser.full_name || currentUser.name || 'Mi Usuario',
+            username: currentUser.username || 'mi_usuario',
+            avatar_url: currentUser.avatar_url,
+            email: currentUser.email
+          };
+          
+          console.log(`🔗 Video "${video.title}" → ${userProfile.full_name} (usuario actual)`);
+          
+          return {
+            ...video,
+            user_profile: userProfile
+          };
+        }
+        
+        // Para otros usuarios, crear un perfil básico con el ID
+        const basicProfile = {
+          id: video.user_id,
+          full_name: `Usuario ${video.user_id.substring(0, 8)}`,
+          username: `user_${video.user_id.substring(0, 8)}`,
+          avatar_url: null,
+          email: null
+        };
+        
+        console.log(`🔗 Video "${video.title}" → ${basicProfile.full_name} (perfil básico)`);
         
         return {
           ...video,
-          user_profile: userProfile || null
+          user_profile: basicProfile
         };
       });
 
-      // Estadísticas finales
-      const videosWithProfiles = mappedVideos.filter(v => v.user_profile).length;
-      const videosWithoutProfiles = mappedVideos.filter(v => !v.user_profile).length;
-      
-      console.log(`📈 RESULTADO FINAL:`);
-      console.log(`   ✅ Videos con perfil: ${videosWithProfiles}`);
-      console.log(`   ❌ Videos sin perfil: ${videosWithoutProfiles}`);
-
+      console.log('✅ Perfiles virtuales creados');
       return mappedVideos;
 
     } catch (err) {
       console.error('❌ Error crítico en fetchVideosWithProfiles:', err);
-      return videoData.map(video => ({
-        ...video,
-        user_profile: null
-      }));
+      
+      // FALLBACK FINAL: Al menos mostrar IDs de usuarios
+      const fallbackVideos = videoData.map(video => {
+        const fallbackProfile = {
+          id: video.user_id || 'unknown',
+          full_name: video.user_id ? `Usuario ${video.user_id.substring(0, 8)}` : 'Usuario Desconocido',
+          username: video.user_id ? `@${video.user_id.substring(0, 8)}` : '@desconocido',
+          avatar_url: null,
+          email: null
+        };
+        
+        console.log(`🆘 Video "${video.title}" → ${fallbackProfile.full_name} (fallback final)`);
+        
+        return {
+          ...video,
+          user_profile: fallbackProfile
+        };
+      });
+
+      console.log('🆘 Usando fallback final con IDs de usuario');
+      return fallbackVideos;
     }
   };
 
@@ -452,7 +473,7 @@ const useVideos = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser]); // Agregar currentUser como dependencia
 
   // Cargar más videos
   const loadMore = useCallback(() => {
