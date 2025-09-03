@@ -66,6 +66,72 @@ const useVideos = () => {
     isSaved: false
   });
 
+  // NUEVA: Función para crear perfiles faltantes automáticamente
+  const createMissingProfiles = async (missingUserIds) => {
+    console.log('🔧 CREANDO PERFILES FALTANTES:', missingUserIds);
+    
+    try {
+      // Obtener datos de auth.users para los IDs faltantes
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('❌ Error obteniendo usuarios de auth:', authError);
+        return [];
+      }
+
+      // Filtrar solo los usuarios que nos interesan
+      const targetUsers = authData.users.filter(user => missingUserIds.includes(user.id));
+      console.log('📋 Usuarios encontrados en auth:', targetUsers.map(u => ({ id: u.id, email: u.email })));
+
+      // Crear perfiles para cada usuario faltante
+      const profilesToCreate = targetUsers.map(user => ({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || 
+                  user.user_metadata?.name || 
+                  user.email?.split('@')[0] || 
+                  'Usuario',
+        username: user.user_metadata?.username || 
+                 `user_${user.id.substring(0, 8)}`,
+        avatar_url: user.user_metadata?.avatar_url || null,
+        bio: null,
+        is_business_account: user.user_metadata?.account_type === 'business',
+        points: 1000, // Puntos de bienvenida
+        created_at: user.created_at,
+        updated_at: new Date().toISOString()
+      }));
+
+      // Insertar perfiles en batch
+      if (profilesToCreate.length > 0) {
+        const { data: insertedProfiles, error: insertError } = await supabase
+          .from('user_profiles')
+          .insert(profilesToCreate)
+          .select('id, full_name, username, avatar_url, email');
+
+        if (insertError) {
+          console.error('❌ Error insertando perfiles:', insertError);
+          // Si falla la inserción, retornar perfiles básicos desde auth
+          return profilesToCreate.map(profile => ({
+            id: profile.id,
+            full_name: profile.full_name,
+            username: profile.username,
+            avatar_url: profile.avatar_url,
+            email: profile.email
+          }));
+        }
+
+        console.log('✅ Perfiles creados exitosamente:', insertedProfiles?.length || 0);
+        return insertedProfiles || [];
+      }
+
+      return [];
+
+    } catch (error) {
+      console.error('❌ Error crítico creando perfiles:', error);
+      return [];
+    }
+  };
+
   // Función para diagnóstico de base de datos
   const diagnoseDatabaseIssues = async () => {
     console.log('🔍 INICIANDO DIAGNÓSTICO DE BASE DE DATOS...');
@@ -192,7 +258,7 @@ const useVideos = () => {
     return data || [];
   };
 
-  // Consulta con JOIN a user_profiles
+  // MEJORADA: Consulta con JOIN a user_profiles y auto-creación de perfiles
   const fetchVideosWithProfiles = async (videoData) => {
     console.log('📋 Intento 2: Obteniendo perfiles de usuarios...');
     
@@ -214,48 +280,62 @@ const useVideos = () => {
     }
 
     try {
-      // Consulta de perfiles con mejor logging
-      const { data: profiles, error: profilesError } = await supabase
+      // Paso 1: Consultar perfiles existentes
+      console.log('📋 Paso 1: Consultando perfiles existentes...');
+      const { data: existingProfiles, error: profilesError } = await supabase
         .from('user_profiles')
         .select('id, full_name, username, avatar_url, email')
         .in('id', userIds);
 
       if (profilesError) {
-        console.error('❌ Error obteniendo perfiles:', profilesError);
-        // Intentar consulta alternativa por email si falla por ID
-        console.log('🔄 Intentando consulta alternativa...');
-        
-        const { data: authUsers } = await supabase.auth.admin.listUsers();
-        const authUsersMap = {};
-        authUsers?.users?.forEach(user => {
-          authUsersMap[user.id] = {
-            id: user.id,
-            full_name: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuario',
-            username: user.user_metadata?.username || 'usuario',
-            avatar_url: user.user_metadata?.avatar_url,
-            email: user.email
-          };
-        });
-
+        console.error('❌ Error obteniendo perfiles existentes:', profilesError);
         return videoData.map(video => ({
           ...video,
-          user_profile: authUsersMap[video.user_id] || null
+          user_profile: null
         }));
       }
 
-      console.log(`✅ Perfiles obtenidos exitosamente: ${profiles?.length || 0}`);
-      console.log('👥 Perfiles encontrados:', profiles?.map(p => ({ id: p.id, name: p.full_name })));
+      const foundProfileIds = existingProfiles?.map(p => p.id) || [];
+      const missingUserIds = userIds.filter(id => !foundProfileIds.includes(id));
+      
+      console.log(`📊 Perfiles encontrados: ${foundProfileIds.length}/${userIds.length}`);
+      console.log('✅ Perfiles existentes:', existingProfiles?.map(p => ({ id: p.id, name: p.full_name })));
+      console.log('❓ IDs faltantes:', missingUserIds);
 
-      // Mapear perfiles a videos con logging detallado
+      let allProfiles = existingProfiles || [];
+
+      // Paso 2: Crear perfiles faltantes si es necesario
+      if (missingUserIds.length > 0) {
+        console.log(`🔧 Creando ${missingUserIds.length} perfiles faltantes...`);
+        const newProfiles = await createMissingProfiles(missingUserIds);
+        allProfiles = [...allProfiles, ...newProfiles];
+        console.log(`✅ Perfiles totales después de creación: ${allProfiles.length}`);
+      }
+
+      // Paso 3: Mapear perfiles a videos con logging detallado
+      console.log('🔗 Mapeando perfiles a videos...');
       const mappedVideos = videoData.map(video => {
-        const userProfile = profiles?.find(p => p.id === video.user_id);
-        console.log(`🔗 Video "${video.title}" (user_id: ${video.user_id}) → Perfil: ${userProfile?.full_name || 'NO ENCONTRADO'}`);
+        const userProfile = allProfiles.find(p => p.id === video.user_id);
+        
+        const logStatus = userProfile ? 
+          `✅ "${userProfile.full_name}"` : 
+          `❌ PERFIL NO ENCONTRADO`;
+          
+        console.log(`🔗 Video "${video.title}" (user_id: ${video.user_id}) → ${logStatus}`);
         
         return {
           ...video,
           user_profile: userProfile || null
         };
       });
+
+      // Estadísticas finales
+      const videosWithProfiles = mappedVideos.filter(v => v.user_profile).length;
+      const videosWithoutProfiles = mappedVideos.filter(v => !v.user_profile).length;
+      
+      console.log(`📈 RESULTADO FINAL:`);
+      console.log(`   ✅ Videos con perfil: ${videosWithProfiles}`);
+      console.log(`   ❌ Videos sin perfil: ${videosWithoutProfiles}`);
 
       return mappedVideos;
 
