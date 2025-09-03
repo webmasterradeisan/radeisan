@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
+import ReelsContainer from './ReelsContainer';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
 const VideoFeedGrid = ({ 
   videos = [], 
   layout = 'grid', 
+  orientation = 'all',
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
@@ -19,6 +21,9 @@ const VideoFeedGrid = ({
   }, [videos]);
 
   const handleScroll = useCallback(() => {
+    // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
+    if (layout === 'reels') return;
+
     if (
       window.innerHeight + document.documentElement?.scrollTop
       >= document.documentElement?.offsetHeight - 1000
@@ -27,12 +32,15 @@ const VideoFeedGrid = ({
       setIsLoadingMore(true);
       onLoadMore && onLoadMore();
     }
-  }, [hasMore, isLoadingMore, loading, onLoadMore]);
+  }, [hasMore, isLoadingMore, loading, onLoadMore, layout]);
 
   useEffect(() => {
+    // Solo agregar event listener si NO estamos en modo reels
+    if (layout === 'reels') return;
+
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+  }, [handleScroll, layout]);
 
   useEffect(() => {
     if (!loading) {
@@ -61,15 +69,19 @@ const VideoFeedGrid = ({
   };
 
   const handleVideoShare = (video) => {
+    const shareUrl = layout === 'reels' 
+      ? `${window.location?.origin}/reel/${video?.id}`
+      : `${window.location?.origin}/video/${video?.id}`;
+
     if (navigator.share) {
       navigator.share({
         title: video?.title,
-        text: `Mira este video de ${video?.creator?.name}`,
-        url: `${window.location?.origin}/video/${video?.id}`
+        text: `Mira este ${layout === 'reels' ? 'reel' : 'video'} de ${video?.creator?.name}`,
+        url: shareUrl
       });
     } else {
       // Fallback to clipboard
-      navigator.clipboard?.writeText(`${window.location?.origin}/video/${video?.id}`);
+      navigator.clipboard?.writeText(shareUrl);
     }
   };
 
@@ -83,37 +95,83 @@ const VideoFeedGrid = ({
     }
   };
 
+  // ===============================
+  // LOADING STATE
+  // ===============================
   if (loading && displayVideos?.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Cargando videos...</p>
+          <p className="text-muted-foreground">
+            Cargando {layout === 'reels' ? 'reels' : 'videos'}...
+          </p>
         </div>
       </div>
     );
   }
 
+  // ===============================
+  // EMPTY STATE
+  // ===============================
   if (displayVideos?.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-          <Icon name="Video" size={24} color="var(--color-muted-foreground)" />
+          <Icon 
+            name={layout === 'reels' ? 'Smartphone' : 'Video'} 
+            size={24} 
+            color="var(--color-muted-foreground)" 
+          />
         </div>
         <h3 className="text-lg font-semibold text-foreground mb-2">
-          No hay videos disponibles
+          No hay {layout === 'reels' ? 'reels' : 'videos'} disponibles
         </h3>
         <p className="text-muted-foreground mb-4">
-          Prueba cambiando los filtros o vuelve más tarde
+          {layout === 'reels' 
+            ? 'Sé el primero en crear contenido vertical para la comunidad'
+            : 'Prueba cambiando los filtros o vuelve más tarde'
+          }
         </p>
-        <Button variant="outline" onClick={() => window.location?.reload()}>
-          <Icon name="RefreshCw" size={16} className="mr-2" />
-          Actualizar
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button 
+            onClick={() => window.location.href = '/upload'}
+            className="px-6"
+          >
+            <Icon name="Plus" size={16} className="mr-2" />
+            Crear {layout === 'reels' ? 'Reel' : 'Video'}
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => window.location?.reload()}
+            className="px-6"
+          >
+            <Icon name="RefreshCw" size={16} className="mr-2" />
+            Actualizar
+          </Button>
+        </div>
       </div>
     );
   }
 
+  // ===============================
+  // RENDER REELS CONTAINER
+  // ===============================
+  if (layout === 'reels') {
+    return (
+      <ReelsContainer
+        videos={displayVideos}
+        onLoadMore={onLoadMore}
+        onPointsEarned={onPointsEarned}
+        hasMore={hasMore}
+        loading={loading}
+      />
+    );
+  }
+
+  // ===============================
+  // RENDER TRADITIONAL GRID/LIST
+  // ===============================
   return (
     <div className="space-y-6">
       <div className={getGridClasses()}>
@@ -129,7 +187,8 @@ const VideoFeedGrid = ({
           />
         ))}
       </div>
-      {/* Loading More Indicator */}
+
+      {/* Loading More Indicator - Solo para grid/list */}
       {(isLoadingMore || loading) && hasMore && (
         <div className="flex items-center justify-center py-8">
           <div className="flex items-center space-x-3 text-muted-foreground">
@@ -138,7 +197,8 @@ const VideoFeedGrid = ({
           </div>
         </div>
       )}
-      {/* Load More Button (fallback for devices without infinite scroll) */}
+
+      {/* Load More Button - Solo para grid/list */}
       {!isLoadingMore && !loading && hasMore && displayVideos?.length > 0 && (
         <div className="flex justify-center py-6">
           <Button
@@ -154,7 +214,8 @@ const VideoFeedGrid = ({
           </Button>
         </div>
       )}
-      {/* End of Feed Message */}
+
+      {/* End of Feed Message - Solo para grid/list */}
       {!hasMore && displayVideos?.length > 0 && (
         <div className="text-center py-8">
           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
