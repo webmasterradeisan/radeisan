@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/index.jsx
-// VideoFeedDashboard con Sistema de Orientaciones (Reels vs Videos Horizontales)
+// VideoFeedDashboard CORREGIDO - Muestra videos reales con orientación simplificada
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,11 +14,16 @@ import PullToRefresh from './components/PullToRefresh';
 import PointsBalanceIndicator from '../../components/ui/PointsBalanceIndicator';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
-import { detectVideoOrientationFromUrl, VIDEO_ORIENTATIONS, ORIENTATION_CONFIG } from './components/OrientationDetector';
 
 // ===============================
-// CONSTANTES DE ORIENTACIÓN
+// CONSTANTES DE ORIENTACIÓN SIMPLIFICADAS
 // ===============================
+const VIDEO_ORIENTATIONS = {
+  HORIZONTAL: 'horizontal',
+  VERTICAL: 'vertical',
+  SQUARE: 'square'
+};
+
 const ORIENTATION_TABS = [
   {
     id: 'all',
@@ -47,7 +52,7 @@ const ORIENTATION_TABS = [
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar videos con detección de orientación
+// Hook simplificado para manejar videos REALES
 const useVideos = () => {
   const { user: currentUser } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -76,175 +81,33 @@ const useVideos = () => {
     return `hace ${Math.floor(diffInSeconds / 2592000)}m`;
   };
 
-  // Función para crear video de ejemplo con orientación
-  const createExampleVideo = (id = 'example-1', index = 0) => {
-    const isVertical = index % 2 === 0;
-    const orientation = isVertical ? VIDEO_ORIENTATIONS.VERTICAL : VIDEO_ORIENTATIONS.HORIZONTAL;
-    
-    return {
-      id,
-      title: `${isVertical ? 'Reel' : 'Video'} de ejemplo ${index + 1}`,
-      description: `Contenido de muestra ${isVertical ? 'vertical' : 'horizontal'} mientras configuramos tu feed personalizado.`,
-      thumbnail: `https://via.placeholder.com/${isVertical ? '270x480' : '480x270'}/6366f1/ffffff?text=${isVertical ? 'Reel' : 'Video'}+${index + 1}`,
-      videoUrl: 'https://sample-videos.com/zip/10/mp4/SampleVideo_720x480_1mb.mp4',
-      duration: 120 + (index * 30),
-      views: Math.floor(Math.random() * 1000),
-      likes: Math.floor(Math.random() * 100),
-      comments: Math.floor(Math.random() * 50),
-      pointsReward: 25,
-      creator: {
-        id: 'radeisan-system',
-        name: 'RADEISAN Oficial',
-        username: '@radeisan_oficial',
-        avatar: 'https://ui-avatars.com/api/?name=RADEISAN&background=6366f1&color=ffffff'
-      },
-      category: 'entertainment',
-      tags: ['ejemplo', 'demo', 'bienvenida'],
-      timeAgo: 'hace 2h',
-      isLiked: false,
-      isSaved: false,
-      
-      // 🎬 DATOS DE ORIENTACIÓN
-      orientation,
-      aspectRatio: isVertical ? 0.5625 : 1.777,
-      width: isVertical ? 1080 : 1920,
-      height: isVertical ? 1920 : 1080,
-      orientationConfig: ORIENTATION_CONFIG[orientation]
-    };
-  };
-
-  // 🎬 DETECTAR ORIENTACIÓN DE VIDEOS EXISTENTES
-  const detectVideoOrientations = async (videoData) => {
-    console.log('🔍 Detectando orientaciones de videos existentes...');
-    
-    const videosWithOrientation = await Promise.all(
-      videoData.map(async (video) => {
-        try {
-          // Si ya tiene orientación, no detectar de nuevo
-          if (video.orientation) {
-            return video;
-          }
-          
-          // Si tiene URL de video, detectar orientación
-          if (video.videoUrl || video.video_url) {
-            const videoUrl = video.videoUrl || video.video_url;
-            const orientationData = await detectVideoOrientationFromUrl(videoUrl);
-            
-            return {
-              ...video,
-              orientation: orientationData.orientation,
-              aspectRatio: orientationData.aspectRatio,
-              width: orientationData.width,
-              height: orientationData.height,
-              orientationConfig: orientationData.config
-            };
-          }
-          
-          // Fallback: asumir horizontal si no se puede detectar
-          return {
-            ...video,
-            orientation: VIDEO_ORIENTATIONS.HORIZONTAL,
-            aspectRatio: 1.777,
-            width: 1920,
-            height: 1080,
-            orientationConfig: ORIENTATION_CONFIG[VIDEO_ORIENTATIONS.HORIZONTAL]
-          };
-          
-        } catch (error) {
-          console.error(`❌ Error detectando orientación para video ${video.id}:`, error);
-          
-          // Fallback en caso de error
-          return {
-            ...video,
-            orientation: VIDEO_ORIENTATIONS.HORIZONTAL,
-            aspectRatio: 1.777,
-            width: 1920,
-            height: 1080,
-            orientationConfig: ORIENTATION_CONFIG[VIDEO_ORIENTATIONS.HORIZONTAL]
-          };
-        }
-      })
-    );
-    
-    // 📊 Calcular estadísticas de orientación
-    const stats = {
-      total: videosWithOrientation.length,
-      vertical: 0,
-      horizontal: 0,
-      square: 0
-    };
-    
-    videosWithOrientation.forEach(video => {
-      if (video.orientation === VIDEO_ORIENTATIONS.VERTICAL) stats.vertical++;
-      else if (video.orientation === VIDEO_ORIENTATIONS.HORIZONTAL) stats.horizontal++;
-      else if (video.orientation === VIDEO_ORIENTATIONS.SQUARE) stats.square++;
-    });
-    
-    setOrientationStats(stats);
-    console.log('📊 Estadísticas de orientación:', stats);
-    
-    return videosWithOrientation;
-  };
-
-  // Función para diagnóstico de base de datos
-  const diagnoseDatabaseIssues = async () => {
-    console.log('🔍 INICIANDO DIAGNÓSTICO DE BASE DE DATOS...');
-    
-    try {
-      // Test 1: Verificar conectividad básica
-      console.log('Test 1: Verificando conectividad a Supabase...');
-      const { data: connectionTest, error: connectionError } = await supabase
-        .from('videos')
-        .select('count', { count: 'exact' })
-        .limit(1);
-      
-      if (connectionError) {
-        console.error('❌ Error de conectividad:', connectionError);
-        return { issue: 'connection', error: connectionError };
-      }
-      console.log('✅ Conectividad OK');
-
-      // Test 2: Verificar si existe la tabla videos
-      console.log('Test 2: Verificando tabla videos...');
-      const { data: videosExist, error: videosError } = await supabase
-        .from('videos')
-        .select('id')
-        .limit(1);
-      
-      if (videosError) {
-        console.error('❌ Error accediendo tabla videos:', videosError);
-        return { issue: 'table_access', error: videosError };
-      }
-      console.log('✅ Tabla videos accesible');
-
-      // Test 3: Contar videos totales
-      console.log('Test 3: Contando videos en BD...');
-      const { count, error: countError } = await supabase
-        .from('videos')
-        .select('*', { count: 'exact', head: true });
-      
-      if (countError) {
-        console.error('❌ Error contando videos:', countError);
-        return { issue: 'count', error: countError };
-      }
-      console.log(`✅ Total videos en BD: ${count || 0}`);
-
-      return { 
-        issue: null, 
-        summary: {
-          totalVideos: count || 0
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ Error en diagnóstico:', error);
-      return { issue: 'diagnosis_failed', error };
+  // SIMPLIFICADO: Detectar orientación básica sin análisis de video
+  const detectSimpleOrientation = (video) => {
+    // Si ya tiene orientación en BD, usarla
+    if (video.orientation) {
+      return video.orientation;
     }
+
+    // Detectar por título o descripción (heurística simple)
+    const title = (video.title || '').toLowerCase();
+    const description = (video.description || '').toLowerCase();
+    const text = title + ' ' + description;
+
+    if (text.includes('reel') || text.includes('vertical') || text.includes('movil')) {
+      return VIDEO_ORIENTATIONS.VERTICAL;
+    }
+
+    if (text.includes('short') || text.includes('tiktok') || text.includes('instagram')) {
+      return VIDEO_ORIENTATIONS.VERTICAL;
+    }
+
+    // Por defecto, asumir horizontal
+    return VIDEO_ORIENTATIONS.HORIZONTAL;
   };
 
-  // Consulta básica sin JOIN
+  // SIMPLIFICADO: Consulta básica SIN diagnósticos complejos
   const fetchVideosBasic = async (pageNum = 0, category = 'all', orientation = 'all') => {
-    console.log(`📋 Intento 1: Consulta básica (página ${pageNum}, categoría ${category}, orientación ${orientation})`);
+    console.log(`📋 Cargando videos: página ${pageNum}, categoría ${category}, orientación ${orientation}`);
     
     let query = supabase
       .from('videos')
@@ -273,7 +136,7 @@ const useVideos = () => {
       query = query.eq('category', category);
     }
 
-    // 🎬 APLICAR FILTRO DE ORIENTACIÓN
+    // Aplicar filtro de orientación SI ya está en la BD
     if (orientation && orientation !== 'all') {
       query = query.eq('orientation', orientation);
     }
@@ -281,29 +144,26 @@ const useVideos = () => {
     const { data, error } = await query;
     
     if (error) {
-      console.error('❌ Error en consulta básica:', error);
+      console.error('❌ Error cargando videos:', error);
       throw error;
     }
 
-    console.log(`✅ Consulta básica exitosa: ${data?.length || 0} videos`);
+    console.log(`✅ Videos cargados exitosamente: ${data?.length || 0}`);
     return data || [];
   };
 
-  // Consulta con múltiples estrategias para obtener perfiles
+  // SIMPLIFICADO: Obtener perfiles con estrategia única más robusta
   const fetchVideosWithProfiles = async (videoData) => {
-    console.log('📋 Intento 2: Obteniendo perfiles de usuarios...');
+    console.log('👥 Obteniendo perfiles de usuarios...');
     
     if (!videoData?.length) {
-      console.log('⚠️ No hay videos para obtener perfiles');
       return videoData;
     }
 
-    // Extraer user_ids únicos y válidos
     const userIds = [...new Set(videoData.map(v => v.user_id).filter(Boolean))];
-    console.log('🔍 User IDs extraídos:', userIds);
+    console.log(`🔍 Buscando perfiles para ${userIds.length} usuarios`);
     
     if (userIds.length === 0) {
-      console.log('⚠️ No hay user_ids válidos en los videos');
       return videoData.map(video => ({
         ...video,
         user_profile: null
@@ -311,63 +171,41 @@ const useVideos = () => {
     }
 
     try {
-      // ESTRATEGIA 1: Intentar consulta directa con RLS
-      console.log('🔐 Estrategia 1: Consulta directa con RLS...');
+      // ESTRATEGIA ÚNICA: Intentar consulta RLS, fallback inteligente
       const { data: profiles, error: profilesError } = await supabase
         .from('user_profiles')
         .select('id, full_name, username, avatar_url, email')
         .in('id', userIds);
 
-      // Si la consulta RLS funciona, usarla
       if (!profilesError && profiles?.length > 0) {
-        console.log(`✅ RLS permitió consulta: ${profiles.length} perfiles encontrados`);
+        console.log(`✅ Perfiles encontrados: ${profiles.length}/${userIds.length}`);
         
-        const mappedVideos = videoData.map(video => {
+        return videoData.map(video => {
           const userProfile = profiles.find(p => p.id === video.user_id);
-          console.log(`🔗 Video "${video.title}" → ${userProfile?.full_name || 'NO ENCONTRADO'}`);
-          
           return {
             ...video,
             user_profile: userProfile || null
           };
         });
-        
-        return mappedVideos;
       }
 
-      // ESTRATEGIA 4: Crear perfiles "virtuales" inteligentes
-      console.log('🔄 Estrategia 4: Perfiles virtuales...');
-      console.log('❌ Error RLS:', profilesError);
+      // FALLBACK: Crear perfiles básicos
+      console.log(`⚠️ RLS bloqueado (${profilesError?.message}), usando perfiles básicos`);
       
-      const mappedVideos = videoData.map(video => {
-        // Si el video pertenece al usuario actual, usar su perfil
-        if (currentUser && video.user_id === currentUser.id) {
-          const userProfile = {
-            id: currentUser.id,
-            full_name: currentUser.full_name || currentUser.name || 'Mi Usuario',
-            username: currentUser.username || 'mi_usuario',
-            avatar_url: currentUser.avatar_url,
-            email: currentUser.email
-          };
-          
-          console.log(`🔗 Video "${video.title}" → ${userProfile.full_name} (usuario actual)`);
-          
-          return {
-            ...video,
-            user_profile: userProfile
-          };
-        }
+      return videoData.map(video => {
+        const isCurrentUser = currentUser && video.user_id === currentUser.id;
         
-        // Para otros usuarios, crear un perfil básico con el ID
         const basicProfile = {
           id: video.user_id,
-          full_name: `Usuario ${video.user_id.substring(0, 8)}`,
-          username: `user_${video.user_id.substring(0, 8)}`,
-          avatar_url: null,
-          email: null
+          full_name: isCurrentUser ? 
+            (currentUser.full_name || currentUser.name || 'Mi Usuario') :
+            `Usuario ${video.user_id.substring(0, 8)}`,
+          username: isCurrentUser ?
+            (currentUser.username || 'mi_usuario') :
+            `user_${video.user_id.substring(0, 8)}`,
+          avatar_url: isCurrentUser ? currentUser.avatar_url : null,
+          email: isCurrentUser ? currentUser.email : null
         };
-        
-        console.log(`🔗 Video "${video.title}" → ${basicProfile.full_name} (perfil básico)`);
         
         return {
           ...video,
@@ -375,149 +213,125 @@ const useVideos = () => {
         };
       });
 
-      console.log('✅ Perfiles virtuales creados');
-      return mappedVideos;
-
     } catch (err) {
-      console.error('❌ Error crítico en fetchVideosWithProfiles:', err);
+      console.error('❌ Error obteniendo perfiles:', err);
       
-      // FALLBACK FINAL: Al menos mostrar IDs de usuarios
-      const fallbackVideos = videoData.map(video => {
-        const fallbackProfile = {
+      // ÚLTIMO RECURSO: Perfiles mínimos
+      return videoData.map(video => ({
+        ...video,
+        user_profile: {
           id: video.user_id || 'unknown',
-          full_name: video.user_id ? `Usuario ${video.user_id.substring(0, 8)}` : 'Usuario Desconocido',
-          username: video.user_id ? `@${video.user_id.substring(0, 8)}` : '@desconocido',
+          full_name: `Usuario ${(video.user_id || 'desconocido').substring(0, 8)}`,
+          username: `@${(video.user_id || 'desconocido').substring(0, 8)}`,
           avatar_url: null,
           email: null
-        };
-        
-        console.log(`🆘 Video "${video.title}" → ${fallbackProfile.full_name} (fallback final)`);
-        
-        return {
-          ...video,
-          user_profile: fallbackProfile
-        };
-      });
-
-      console.log('🆘 Usando fallback final con IDs de usuario');
-      return fallbackVideos;
+        }
+      }));
     }
   };
 
-  // Transformar datos a formato esperado
+  // SIMPLIFICADO: Transformar datos sin análisis complejo de orientación
   const transformVideoData = (rawVideos) => {
-    return rawVideos.map((video, index) => ({
-      id: video.id,
-      title: video.title || `Video sin título ${index + 1}`,
-      description: video.description || 'Sin descripción disponible',
-      thumbnail: video.thumbnail_url || `https://via.placeholder.com/${
-        video.orientation === VIDEO_ORIENTATIONS.VERTICAL ? '270x480' : '480x270'
-      }/1f2937/ffffff?text=${encodeURIComponent(video.title?.substring(0, 20) || 'Video')}`,
-      videoUrl: video.video_url || '',
-      duration: video.duration_seconds || 0,
-      views: video.views_count || 0,
-      likes: video.likes_count || 0,
-      comments: video.comments_count || 0,
-      pointsReward: Math.floor((video.duration_seconds || 60) / 60) * 5 + 10,
-      creator: {
-        id: video.user_profile?.id || video.user_id || 'unknown',
-        name: video.user_profile?.full_name || 'Usuario Anónimo',
-        username: video.user_profile?.username ? `@${video.user_profile.username}` : '@anonimo',
-        avatar: video.user_profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.user_profile?.full_name || 'U')}&background=6366f1&color=ffffff`
-      },
-      category: video.category || 'entertainment',
-      tags: Array.isArray(video.tags) ? video.tags : [],
-      timeAgo: formatTimeAgo(video.created_at),
-      isLiked: false,
-      isSaved: false,
+    return rawVideos.map((video, index) => {
+      // Detectar orientación simple
+      const detectedOrientation = detectSimpleOrientation(video);
       
-      // 🎬 DATOS DE ORIENTACIÓN
-      orientation: video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL,
-      aspectRatio: video.aspectRatio || (video.orientation === VIDEO_ORIENTATIONS.VERTICAL ? 0.5625 : 1.777),
-      width: video.width || (video.orientation === VIDEO_ORIENTATIONS.VERTICAL ? 1080 : 1920),
-      height: video.height || (video.orientation === VIDEO_ORIENTATIONS.VERTICAL ? 1920 : 1080),
-      orientationConfig: ORIENTATION_CONFIG[video.orientation] || ORIENTATION_CONFIG[VIDEO_ORIENTATIONS.HORIZONTAL]
-    }));
+      return {
+        id: video.id,
+        title: video.title || `Video sin título ${index + 1}`,
+        description: video.description || 'Sin descripción disponible',
+        thumbnail: video.thumbnail_url || `https://via.placeholder.com/480x270/1f2937/ffffff?text=${encodeURIComponent(video.title?.substring(0, 20) || 'Video')}`,
+        videoUrl: video.video_url || '',
+        duration: video.duration_seconds || 0,
+        views: video.views_count || 0,
+        likes: video.likes_count || 0,
+        comments: video.comments_count || 0,
+        pointsReward: Math.floor((video.duration_seconds || 60) / 60) * 5 + 10,
+        creator: {
+          id: video.user_profile?.id || video.user_id || 'unknown',
+          name: video.user_profile?.full_name || 'Usuario Anónimo',
+          username: video.user_profile?.username ? `@${video.user_profile.username}` : '@anonimo',
+          avatar: video.user_profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.user_profile?.full_name || 'U')}&background=6366f1&color=ffffff`
+        },
+        category: video.category || 'entertainment',
+        tags: Array.isArray(video.tags) ? video.tags : [],
+        timeAgo: formatTimeAgo(video.created_at),
+        isLiked: false,
+        isSaved: false,
+        
+        // Orientación simplificada
+        orientation: detectedOrientation,
+        aspectRatio: detectedOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 0.5625 : 1.777
+      };
+    });
   };
 
-  // Función principal para obtener videos
+  // SIMPLIFICADO: Función principal sin diagnósticos complejos
   const fetchVideos = useCallback(async (pageNum = 0, category = 'all', orientation = 'all', reset = false) => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log(`🚀 INICIANDO FETCH DE VIDEOS (página ${pageNum}, categoría ${category}, orientación ${orientation}, reset ${reset})`);
+      console.log(`🚀 Cargando videos: página ${pageNum}, categoría ${category}, orientación ${orientation}`);
 
-      // Si es la primera página, hacer diagnóstico
-      if (pageNum === 0) {
-        const diagnosis = await diagnoseDatabaseIssues();
-        if (diagnosis.issue) {
-          throw new Error(`Problema de BD: ${diagnosis.issue} - ${diagnosis.error?.message || 'Desconocido'}`);
-        }
-        
-        // Si no hay videos en la BD, mostrar ejemplos directamente
-        if (diagnosis.summary?.totalVideos === 0) {
-          console.log('ℹ️ BD vacía, mostrando videos de ejemplo');
-          const exampleVideos = Array.from({ length: 6 }, (_, i) => createExampleVideo(`example-${i + 1}`, i));
-          const orientationDetectedVideos = await detectVideoOrientations(exampleVideos);
-          setVideos(orientationDetectedVideos);
-          setHasMore(false);
-          setPage(0);
-          return;
-        }
-      }
-
-      // Intentar consulta básica
+      // Cargar videos directamente
       let videoData = await fetchVideosBasic(pageNum, category, orientation);
       
-      // Si hay datos, intentar obtener perfiles
+      // Si hay datos, obtener perfiles
       if (videoData?.length > 0) {
         videoData = await fetchVideosWithProfiles(videoData);
-      }
+        
+        // Transformar datos
+        const transformedVideos = transformVideoData(videoData);
 
-      // 🎬 Detectar orientaciones si no están presentes
-      videoData = await detectVideoOrientations(videoData);
+        console.log(`✅ ${transformedVideos.length} videos procesados correctamente`);
 
-      // Transformar datos
-      const transformedVideos = transformVideoData(videoData);
+        // Calcular estadísticas
+        const stats = {
+          total: 0,
+          vertical: 0,
+          horizontal: 0,
+          square: 0
+        };
 
-      console.log(`✅ Videos transformados: ${transformedVideos.length}`);
+        transformedVideos.forEach(video => {
+          stats.total++;
+          if (video.orientation === VIDEO_ORIENTATIONS.VERTICAL) stats.vertical++;
+          else if (video.orientation === VIDEO_ORIENTATIONS.HORIZONTAL) stats.horizontal++;
+          else if (video.orientation === VIDEO_ORIENTATIONS.SQUARE) stats.square++;
+        });
 
-      // Si no hay videos reales, mostrar ejemplos
-      if (transformedVideos.length === 0 && pageNum === 0) {
-        console.log('ℹ️ No hay videos reales, mostrando ejemplos');
-        const exampleVideos = Array.from({ length: 6 }, (_, i) => createExampleVideo(`example-${i + 1}`, i));
-        const orientationDetectedVideos = await detectVideoOrientations(exampleVideos);
-        setVideos(orientationDetectedVideos);
+        setOrientationStats(stats);
+
+        // Actualizar estado
+        if (reset || pageNum === 0) {
+          setVideos(transformedVideos);
+        } else {
+          setVideos(prev => [...prev, ...transformedVideos]);
+        }
+
+        setHasMore(transformedVideos.length === VIDEOS_PER_PAGE);
+        setPage(pageNum);
+
+      } else if (pageNum === 0) {
+        // Solo si es primera página y NO hay videos
+        console.log('ℹ️ No hay videos en la base de datos');
+        setVideos([]);
         setHasMore(false);
         setPage(0);
-        return;
+        setOrientationStats({ total: 0, vertical: 0, horizontal: 0, square: 0 });
       }
-
-      // Actualizar estado
-      if (reset || pageNum === 0) {
-        setVideos(transformedVideos);
-      } else {
-        setVideos(prev => [...prev, ...transformedVideos]);
-      }
-
-      setHasMore(transformedVideos.length === VIDEOS_PER_PAGE);
-      setPage(pageNum);
-
-      console.log(`🎉 FETCH COMPLETADO EXITOSAMENTE: ${transformedVideos.length} videos cargados`);
 
     } catch (err) {
-      console.error('❌ ERROR CRÍTICO EN FETCH:', err);
-      setError(err.message || 'Error desconocido al cargar videos');
+      console.error('❌ Error cargando videos:', err);
+      setError(err.message || 'Error al cargar videos');
       
-      // Si es primera página y hay error, mostrar videos de ejemplo
+      // Solo limpiar si es primera página
       if (pageNum === 0) {
-        console.log('🆘 Mostrando videos de ejemplo por error crítico');
-        const exampleVideos = Array.from({ length: 6 }, (_, i) => createExampleVideo(`fallback-${i + 1}`, i));
-        const orientationDetectedVideos = await detectVideoOrientations(exampleVideos);
-        setVideos(orientationDetectedVideos);
+        setVideos([]);
         setHasMore(false);
         setPage(0);
+        setOrientationStats({ total: 0, vertical: 0, horizontal: 0, square: 0 });
       }
     } finally {
       setLoading(false);
@@ -527,20 +341,20 @@ const useVideos = () => {
   // Cargar más videos
   const loadMore = useCallback((category = 'all', orientation = 'all') => {
     if (!loading && hasMore) {
-      console.log('🔄 Cargando más videos...');
+      console.log('📜 Cargando más videos...');
       fetchVideos(page + 1, category, orientation);
     }
   }, [loading, hasMore, page, fetchVideos]);
 
   // Refresh
   const refresh = useCallback(async (category = 'all', orientation = 'all') => {
-    console.log(`🔄 REFRESH solicitado para categoría: ${category}, orientación: ${orientation}`);
+    console.log(`🔄 Refrescando videos...`);
     await fetchVideos(0, category, orientation, true);
   }, [fetchVideos]);
 
-  // Inicialización automática
+  // Inicialización
   useEffect(() => {
-    console.log('🎬 INICIALIZANDO useVideos...');
+    console.log('🎬 Inicializando carga de videos...');
     fetchVideos(0, 'all', 'all', true);
   }, []);
 
@@ -562,12 +376,10 @@ const useUserPoints = () => {
   const [points, setPoints] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Obtener balance de puntos actual
   const fetchPointsBalance = useCallback(async () => {
     if (!user?.id) return;
 
     try {
-      // Llamar a la función de Supabase para obtener balance
       const { data, error } = await supabase
         .rpc('get_user_points_balance', { target_user_id: user.id });
 
@@ -575,13 +387,12 @@ const useUserPoints = () => {
       setPoints(data || 0);
     } catch (error) {
       console.error('Error fetching points balance:', error);
-      setPoints(2847); // Valor de ejemplo
+      setPoints(2847);
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
 
-  // Agregar puntos por acción
   const addPoints = useCallback(async (pointsAmount, transactionType, description) => {
     if (!user?.id) return;
 
@@ -607,8 +418,6 @@ const useUserPoints = () => {
 // ===============================
 // UTILIDADES
 // ===============================
-
-// Categorías disponibles
 const VIDEO_CATEGORIES = [
   { id: 'todos', label: 'Todos', icon: 'Grid3X3' },
   { id: 'entertainment', label: 'Entretenimiento', icon: 'PlayCircle' },
@@ -632,11 +441,11 @@ const VideoFeedDashboard = () => {
 
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [activeFilter, setActiveFilter] = useState('todos');
-  const [activeOrientation, setActiveOrientation] = useState('all'); // 🆕 Filtro de orientación
+  const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
 
-  // 🎬 Filtrar videos cuando cambian los datos, filtro o orientación
+  // Filtrar videos cuando cambian los datos, filtro o orientación
   useEffect(() => {
     let filtered = videos;
 
@@ -645,7 +454,7 @@ const VideoFeedDashboard = () => {
       filtered = filtered.filter(video => video.category === activeFilter);
     }
 
-    // 🎬 Filtrar por orientación
+    // Filtrar por orientación
     if (activeOrientation !== 'all') {
       filtered = filtered.filter(video => video.orientation === activeOrientation);
     }
@@ -656,14 +465,12 @@ const VideoFeedDashboard = () => {
   // ===============================
   // EVENT HANDLERS
   // ===============================
-
   const handleFilterChange = useCallback((filterId) => {
     console.log(`🔄 Cambiando filtro a: ${filterId}`);
     setActiveFilter(filterId);
     refresh(filterId, activeOrientation);
   }, [refresh, activeOrientation]);
 
-  // 🆕 HANDLER PARA CAMBIO DE ORIENTACIÓN
   const handleOrientationChange = useCallback((orientationId) => {
     console.log(`🎬 Cambiando orientación a: ${orientationId}`);
     setActiveOrientation(orientationId);
@@ -675,12 +482,12 @@ const VideoFeedDashboard = () => {
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    console.log('🔄 Refresh manual solicitado');
+    console.log('🔄 Refresh manual');
     await refresh(activeFilter, activeOrientation);
   }, [refresh, activeFilter, activeOrientation]);
 
   const handleLoadMore = useCallback(() => {
-    console.log('📜 Load more solicitado');
+    console.log('📜 Load more');
     loadMore(activeFilter, activeOrientation);
   }, [loadMore, activeFilter, activeOrientation]);
 
@@ -694,7 +501,7 @@ const VideoFeedDashboard = () => {
   }, []);
 
   // ===============================
-  // COMPONENTE DE TABS DE ORIENTACIÓN
+  // COMPONENTES UI
   // ===============================
   const OrientationTabs = () => (
     <div className="mb-6">
@@ -736,7 +543,6 @@ const VideoFeedDashboard = () => {
         })}
       </div>
       
-      {/* 📊 Información de la pestaña activa */}
       <div className="mt-3 text-center">
         <p className="text-sm text-muted-foreground">
           {activeOrientation === 'all' && 'Mostrando todos los tipos de contenido'}
@@ -747,9 +553,6 @@ const VideoFeedDashboard = () => {
     </div>
   );
 
-  // ===============================
-  // EMPTY STATE COMPONENT
-  // ===============================
   const EmptyState = () => {
     const orientationConfig = ORIENTATION_TABS.find(tab => tab.id === activeOrientation);
     
@@ -793,44 +596,31 @@ const VideoFeedDashboard = () => {
     );
   };
 
-  // ===============================
-  // ERROR STATE COMPONENT
-  // ===============================
   const ErrorState = () => (
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
       <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6">
         <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
       </div>
       <h3 className="text-xl font-semibold text-foreground mb-3">
-        Problema de conexión detectado
+        Error al cargar videos
       </h3>
       <p className="text-muted-foreground mb-4 max-w-md">
-        Detectamos un problema al conectar con la base de datos. Estamos mostrando contenido de ejemplo.
+        Hubo un problema al conectar con la base de datos. Por favor intenta de nuevo.
       </p>
       <div className="bg-muted/50 rounded-lg p-3 mb-6 max-w-md">
         <p className="text-xs text-muted-foreground">
-          Error técnico: {error}
+          Error: {error}
         </p>
       </div>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Button onClick={handleRefresh} className="px-6">
-          <Icon name="RefreshCw" size={16} className="mr-2" />
-          Reintentar Conexión
-        </Button>
-        <Button 
-          variant="outline"
-          onClick={() => console.log('Abrir DevTools para logs')}
-          className="px-6"
-        >
-          <Icon name="Terminal" size={16} className="mr-2" />
-          Ver Logs (F12)
-        </Button>
-      </div>
+      <Button onClick={handleRefresh} className="px-6">
+        <Icon name="RefreshCw" size={16} className="mr-2" />
+        Reintentar
+      </Button>
     </div>
   );
 
   // ===============================
-  // RENDER
+  // RENDER PRINCIPAL
   // ===============================
   return (
     <>
@@ -838,18 +628,9 @@ const VideoFeedDashboard = () => {
         <title>
           {activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Reels - ' : 
            activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Videos - ' : 
-           'Dashboard - '}Descubre Contenido | RADEISAN
+           'Dashboard - '}RADEISAN
         </title>
-        <meta name="description" content={`
-          ${activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Explora reels verticales increíbles' : 
-            activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Descubre videos horizontales de calidad' : 
-            'Descubre videos increíbles'}, gana puntos y conecta con creadores en RADEISAN
-        `} />
-        <meta name="keywords" content={`
-          ${activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'reels, videos verticales, móvil' : 
-            activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'videos horizontales, desktop, tradicional' : 
-            'videos, reels'}, dashboard, contenido, creadores, puntos, recompensas
-        `} />
+        <meta name="description" content="Descubre videos increíbles, gana puntos y conecta con creadores en RADEISAN" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
@@ -860,10 +641,9 @@ const VideoFeedDashboard = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col xl:flex-row gap-8">
               
-              {/* Main Content */}
               <div className="flex-1 min-w-0">
                 
-                {/* Header Section */}
+                {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
                   <div className="flex items-center space-x-4 mb-4 sm:mb-0">
                     <h1 className="text-2xl font-bold text-foreground">
@@ -910,10 +690,10 @@ const VideoFeedDashboard = () => {
                   </div>
                 </div>
 
-                {/* 🎬 TABS DE ORIENTACIÓN */}
+                {/* Tabs de Orientación */}
                 <OrientationTabs />
 
-                {/* Filter Chips */}
+                {/* Filtros */}
                 <div className="mb-8">
                   <FilterChips
                     categories={VIDEO_CATEGORIES}
@@ -922,7 +702,7 @@ const VideoFeedDashboard = () => {
                   />
                 </div>
 
-                {/* Content Area */}
+                {/* Contenido */}
                 <div className="min-h-[400px]">
                   {loading && filteredVideos.length === 0 ? (
                     <div className="flex items-center justify-center py-16">
@@ -932,44 +712,29 @@ const VideoFeedDashboard = () => {
                           Cargando {activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'reels' : 
                                    activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'videos' : 'contenido'}...
                         </p>
-                        <p className="text-xs text-muted-foreground mt-2">Conectando con base de datos...</p>
                       </div>
                     </div>
-                  ) : error && filteredVideos.length === 0 ? (
+                  ) : error ? (
                     <ErrorState />
                   ) : filteredVideos.length === 0 ? (
                     <EmptyState />
                   ) : (
-                    <div>
-                      {/* Mostrar alerta si hay error pero también videos */}
-                      {error && (
-                        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                          <div className="flex items-center space-x-2">
-                            <Icon name="AlertTriangle" size={16} color="orange" />
-                            <p className="text-sm text-yellow-800">
-                              Algunos videos pueden no cargarse correctamente. Mostrando contenido disponible.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <PullToRefresh onRefresh={handleRefresh}>
-                        <VideoFeedGrid
-                          videos={filteredVideos}
-                          layout={activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'reels' : layout}
-                          orientation={activeOrientation}
-                          onLoadMore={handleLoadMore}
-                          onPointsEarned={handlePointsEarned}
-                          hasMore={hasMore}
-                          loading={loading}
-                        />
-                      </PullToRefresh>
-                    </div>
+                    <PullToRefresh onRefresh={handleRefresh}>
+                      <VideoFeedGrid
+                        videos={filteredVideos}
+                        layout={activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'reels' : layout}
+                        orientation={activeOrientation}
+                        onLoadMore={handleLoadMore}
+                        onPointsEarned={handlePointsEarned}
+                        hasMore={hasMore}
+                        loading={loading}
+                      />
+                    </PullToRefresh>
                   )}
                 </div>
               </div>
 
-              {/* Desktop Sidebar */}
+              {/* Sidebar */}
               <div className="hidden xl:block">
                 <TrendingSidebar onPointsEarned={handlePointsEarned} />
               </div>
@@ -977,7 +742,7 @@ const VideoFeedDashboard = () => {
           </div>
         </main>
 
-        {/* Points Animation */}
+        {/* Animaciones y elementos fijos */}
         {pointsAnimation && (
           <PointsFloatingAnimation
             points={pointsAnimation?.points}
@@ -985,7 +750,6 @@ const VideoFeedDashboard = () => {
           />
         )}
 
-        {/* Mobile Points Indicator */}
         <div className="fixed top-20 right-4 z-40 sm:hidden">
           <PointsBalanceIndicator 
             points={userPoints} 
@@ -995,10 +759,10 @@ const VideoFeedDashboard = () => {
           />
         </div>
 
-        {/* 🎬 Debug Info for Development */}
+        {/* Debug Info */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-2 rounded text-xs font-mono">
-            Videos: {videos.length} | Filtered: {filteredVideos.length} | Orientation: {activeOrientation} | Loading: {loading.toString()}
+            Videos: {videos.length} | Filtrados: {filteredVideos.length} | Orientación: {activeOrientation}
           </div>
         )}
       </div>
