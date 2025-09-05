@@ -1,5 +1,7 @@
 // src/contexts/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+// AuthContext CORREGIDO - Sin loops al cambiar pestañas/ventanas
+
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext();
@@ -13,507 +15,357 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  // Estados simples y claros
+  // Estados principales
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+  const [error, setError] = useState(null);
+
+  // Referencias para evitar múltiples llamadas
+  const initializingRef = useRef(false);
+  const lastSessionCheckRef = useRef(0);
+  const mountedRef = useRef(true);
+
   // Computed state
   const isAuthenticated = !!user;
 
-  // CORREGIDO: Función para obtener perfil con mejor manejo de errores
+  // Debounce para evitar múltiples verificaciones
+  const DEBOUNCE_TIME = 2000; // 2 segundos
+
+  // ===============================
+  // FUNCIÓN PARA OBTENER PERFIL
+  // ===============================
   const fetchUserProfile = useCallback(async (userId) => {
-    console.log('👤 INICIANDO fetchUserProfile para:', userId);
-    
+    if (!userId || !mountedRef.current) return null;
+
     try {
-      // No cambiar loading aquí, se maneja desde donde se llama
-      console.log('📋 Consultando user_profiles...');
+      console.log('👤 Obteniendo perfil para usuario:', userId);
       
-      const { data: profile, error } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
-        .select('*')
+        .select('id, full_name, username, avatar_url, email, points')
         .eq('id', userId)
         .single();
 
       if (error) {
         console.error('❌ Error obteniendo perfil:', error);
-        
-        // Si no existe el perfil (código PGRST116), intentar crearlo
-        if (error.code === 'PGRST116') {
-          console.log('🔧 Perfil no existe, intentando crear...');
-          const success = await createUserProfile(userId);
-          return success; // true o false
-        }
-        
-        // Otros errores
-        console.error('❌ Error no recoverable en user_profiles:', error.message);
-        return false;
+        return null;
       }
 
-      if (!profile) {
-        console.warn('⚠️ Perfil vacío obtenido de BD');
-        return false;
-      }
-
-      console.log('✅ Perfil obtenido exitosamente:', { id: profile.id, name: profile.full_name });
-      setUser(profile);
-      return true;
-
-    } catch (error) {
-      console.error('❌ Error crítico en fetchUserProfile:', error);
-      return false;
-    }
-  }, []);
-
-  // CORREGIDO: Función para crear perfil con mejor manejo
-  const createUserProfile = useCallback(async (userId) => {
-    console.log('🔧 INICIANDO createUserProfile para:', userId);
-    
-    try {
-      // Obtener datos del usuario de auth
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !authUser) {
-        console.error('❌ Error obteniendo datos de auth:', authError);
-        return false;
-      }
-
-      if (authUser.id !== userId) {
-        console.error('❌ Mismatch de user ID:', { expected: userId, actual: authUser.id });
-        return false;
-      }
-
-      // CORREGIDO: Usar los nombres correctos de campos
-      const newProfile = {
-        id: authUser.id,
-        email: authUser.email,
-        full_name: authUser.user_metadata?.full_name || 
-                  authUser.user_metadata?.name || 
-                  authUser.email?.split('@')[0] || 'Usuario',
-        username: authUser.user_metadata?.username || `user_${Date.now()}`,
-        points: 1000, // Puntos de bienvenida
-        avatar_url: authUser.user_metadata?.avatar_url || null,
-        is_business_account: authUser.user_metadata?.account_type === 'business' || false,
-        created_at: authUser.created_at,
-        updated_at: new Date().toISOString()
+      const profile = {
+        id: data.id,
+        name: data.full_name || data.name || 'Usuario',
+        full_name: data.full_name || data.name || 'Usuario',
+        username: data.username || 'usuario',
+        avatar_url: data.avatar_url,
+        email: data.email,
+        points: data.points || 0
       };
 
-      console.log('📝 Insertando nuevo perfil:', {
-        id: newProfile.id,
-        email: newProfile.email, 
-        full_name: newProfile.full_name,
-        username: newProfile.username
-      });
+      console.log('✅ Perfil obtenido exitosamente:', profile.name);
+      return profile;
 
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .insert([newProfile])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Error insertando perfil:', error);
-        return false;
-      }
-
-      if (!data) {
-        console.error('❌ No se recibió data del perfil insertado');
-        return false;
-      }
-
-      console.log('✅ Perfil creado exitosamente:', { id: data.id, name: data.full_name });
-      setUser(data);
-      return true;
-
-    } catch (error) {
-      console.error('❌ Error crítico en createUserProfile:', error);
-      return false;
+    } catch (err) {
+      console.error('❌ Error crítico obteniendo perfil:', err);
+      return null;
     }
   }, []);
 
-  // CORREGIDO: Inicialización mejorada con mejor manejo de estados
-  useEffect(() => {
-    let mounted = true;
+  // ===============================
+  // INICIALIZACIÓN DE AUTENTICACIÓN
+  // ===============================
+  const initializeAuth = useCallback(async (forceRefresh = false) => {
+    // Evitar múltiples inicializaciones simultáneas
+    if (initializingRef.current && !forceRefresh) {
+      console.log('⏸️ Inicialización ya en curso, saltando...');
+      return;
+    }
 
-    const initializeAuth = async () => {
-      console.log('🚀 INICIANDO inicialización de AuthContext...');
+    // Debounce para evitar llamadas muy frecuentes
+    const now = Date.now();
+    if (now - lastSessionCheckRef.current < DEBOUNCE_TIME && !forceRefresh) {
+      console.log('⏸️ Verificación reciente, saltando...');
+      return;
+    }
+
+    initializingRef.current = true;
+    lastSessionCheckRef.current = now;
+
+    try {
+      console.log('🚀 Inicializando autenticación...');
       
-      try {
-        // Obtener sesión actual
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('❌ Error obteniendo sesión:', error);
-          if (mounted) {
-            setUser(null);
-            setLoading(false);
-          }
-          return;
-        }
+      if (!mountedRef.current) return;
+      setError(null);
 
-        // Si hay sesión, obtener perfil del usuario
-        if (session?.user) {
-          console.log('👤 Sesión encontrada, obteniendo perfil...');
-          const success = await fetchUserProfile(session.user.id);
-          
-          if (mounted) {
-            if (!success) {
-              console.warn('⚠️ No se pudo obtener/crear perfil, limpiando sesión');
-              setUser(null);
-            }
-            setLoading(false);
-          }
-        } else {
-          console.log('ℹ️ No hay sesión activa');
-          if (mounted) {
-            setUser(null);
-            setLoading(false);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error crítico en inicialización:', error);
-        if (mounted) {
+      // Obtener sesión actual de Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('❌ Error obteniendo sesión:', sessionError);
+        if (mountedRef.current) {
           setUser(null);
           setLoading(false);
+          setError('Error de autenticación');
         }
+        return;
       }
+
+      if (session?.user && mountedRef.current) {
+        console.log('✅ Sesión válida encontrada');
+        
+        // Obtener perfil del usuario
+        const profile = await fetchUserProfile(session.user.id);
+        
+        if (profile && mountedRef.current) {
+          setUser(profile);
+          console.log('✅ Usuario autenticado:', profile.name);
+        } else if (mountedRef.current) {
+          // Si no se puede obtener el perfil, usar datos básicos de la sesión
+          const basicUser = {
+            id: session.user.id,
+            name: session.user.email?.split('@')[0] || 'Usuario',
+            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+            email: session.user.email,
+            avatar_url: session.user.user_metadata?.avatar_url || null,
+            points: 0
+          };
+          setUser(basicUser);
+          console.log('⚠️ Usando datos básicos de sesión');
+        }
+      } else if (mountedRef.current) {
+        console.log('ℹ️ No hay sesión activa');
+        setUser(null);
+      }
+
+    } catch (err) {
+      console.error('❌ Error crítico en inicialización:', err);
+      if (mountedRef.current) {
+        setUser(null);
+        setError('Error de conexión');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+      initializingRef.current = false;
+    }
+  }, [fetchUserProfile]);
+
+  // ===============================
+  // EFECTOS PRINCIPALES
+  // ===============================
+
+  // Inicialización única al montar
+  useEffect(() => {
+    console.log('🎬 INICIANDO AuthProvider...');
+    mountedRef.current = true;
+    initializeAuth(true);
+
+    return () => {
+      mountedRef.current = false;
     };
+  }, []);
 
-    initializeAuth();
+  // Listener de cambios de autenticación (solo eventos importantes)
+  useEffect(() => {
+    console.log('🔄 Configurando listener de auth...');
 
-    // CORREGIDO: Listener mejorado con mejor manejo de estados
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
 
-        console.log('🔑 Auth state changed:', event, session?.user?.id || 'no-user');
+        console.log('📡 Auth event:', event);
 
-        try {
-          if (event === 'SIGNED_IN' && session?.user) {
-            console.log('✅ Usuario firmado, obteniendo perfil...');
-            setLoading(true);
-            const success = await fetchUserProfile(session.user.id);
-            
-            if (!success) {
-              console.warn('⚠️ Fallo obtener perfil después de sign in');
-              setUser(null);
-            }
-            setLoading(false);
-            
-          } else if (event === 'SIGNED_OUT') {
-            console.log('👋 Usuario desconectado');
-            setUser(null);
-            setLoading(false);
-            
-          } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-            console.log('🔄 Token refrescado');
-            // Solo recargar perfil si no tenemos usuario o es diferente
-            if (!user || user.id !== session.user.id) {
-              setLoading(true);
-              const success = await fetchUserProfile(session.user.id);
-              if (!success) {
-                console.warn('⚠️ Fallo obtener perfil después de token refresh');
-                setUser(null);
-              }
+        // Solo manejar eventos importantes, ignorar TOKEN_REFRESHED
+        if (event === 'SIGNED_IN') {
+          if (session?.user) {
+            const profile = await fetchUserProfile(session.user.id);
+            if (profile && mountedRef.current) {
+              setUser(profile);
               setLoading(false);
+              setError(null);
             }
-            
-          } else if (event === 'USER_UPDATED' && session?.user) {
-            console.log('👤 Usuario actualizado');
-            // Recargar perfil cuando el usuario se actualiza
-            setLoading(true);
-            await fetchUserProfile(session.user.id);
-            setLoading(false);
           }
-          
-        } catch (error) {
-          console.error('❌ Error en onAuthStateChange:', error);
-          if (mounted) {
+        } else if (event === 'SIGNED_OUT') {
+          if (mountedRef.current) {
             setUser(null);
             setLoading(false);
+            setError(null);
           }
         }
+        // Ignorar TOKEN_REFRESHED y otros eventos para evitar loops
       }
     );
 
-    // Cleanup
     return () => {
-      console.log('🧹 Limpiando AuthContext...');
-      mounted = false;
       subscription?.unsubscribe();
     };
-  }, [fetchUserProfile]); // CORREGIDO: Dependencias correctas
+  }, [fetchUserProfile]);
 
-  // Iniciar sesión con email y contraseña
-  const signIn = async (email, password) => {
-    console.log('🔐 Intentando sign in:', email);
-    
+  // ===============================
+  // FUNCIONES DE AUTENTICACIÓN
+  // ===============================
+
+  const signIn = useCallback(async (email, password) => {
     try {
       setLoading(true);
-      
+      setError(null);
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email,
         password
       });
 
       if (error) {
-        console.error('❌ Error en signIn:', error.message);
-        setLoading(false);
-        return { user: null, error: error.message };
+        setError(error.message);
+        return { success: false, error: error.message };
       }
 
-      console.log('✅ SignIn exitoso, esperando auth state change...');
-      // No cambiar loading aquí, se manejará en onAuthStateChange
-      return { user: data.user, error: null };
-      
-    } catch (error) {
-      console.error('❌ Error crítico en signIn:', error);
-      setLoading(false);
-      return { user: null, error: 'Error de conexión' };
-    }
-  };
+      // El listener se encargará de actualizar el estado
+      return { success: true, data };
 
-  // Registrar nuevo usuario
-  const signUp = async ({ email, password, name, username, accountType = 'personal' }) => {
-    console.log('📝 Intentando sign up:', email);
-    
+    } catch (err) {
+      const errorMessage = 'Error de conexión';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
       setLoading(true);
-      
+      setError(null);
+
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email,
         password,
         options: {
-          data: {
-            full_name: name.trim(), // CORREGIDO: usar full_name
-            name: name.trim(), // Mantener ambos por compatibilidad
-            username: username.trim(),
-            account_type: accountType
-          }
+          data: metadata
         }
       });
 
       if (error) {
-        console.error('❌ Error en signUp:', error.message);
-        setLoading(false);
-        return { user: null, error: error.message };
+        setError(error.message);
+        return { success: false, error: error.message };
       }
 
-      // Si la confirmación por email está deshabilitada, el usuario se crea inmediatamente
-      if (data.user && !data.user.email_confirmed_at) {
-        console.log('📧 Usuario creado, requiere confirmación de email');
-        setLoading(false);
-        return { 
-          user: data.user, 
-          error: null,
-          needsEmailConfirmation: true
-        };
-      }
+      return { success: true, data };
 
-      console.log('✅ SignUp exitoso, esperando auth state change...');
-      // No cambiar loading aquí, se manejará en onAuthStateChange
-      return { user: data.user, error: null };
-      
-    } catch (error) {
-      console.error('❌ Error crítico en signUp:', error);
+    } catch (err) {
+      const errorMessage = 'Error de conexión';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
       setLoading(false);
-      return { user: null, error: 'Error de conexión' };
     }
-  };
+  }, []);
 
-  // Iniciar sesión con proveedor OAuth
-  const signInWithProvider = async (provider) => {
-    console.log('🔗 Intentando OAuth con:', provider);
-    
+  const signOut = useCallback(async () => {
     try {
       setLoading(true);
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: `${window.location.origin}/video-feed-dashboard`
-        }
-      });
-
-      if (error) {
-        console.error('❌ Error en OAuth:', error.message);
-        setLoading(false);
-        return { user: null, error: error.message };
-      }
-
-      console.log('🔗 OAuth iniciado, redirigiendo...');
-      return { user: null, error: null }; // OAuth redirect, no user returned immediately
-      
-    } catch (error) {
-      console.error(`❌ Error crítico en OAuth (${provider}):`, error);
-      setLoading(false);
-      return { user: null, error: 'Error de conexión' };
-    }
-  };
-
-  // Cerrar sesión
-  const signOut = async () => {
-    console.log('👋 Intentando sign out');
-    
-    try {
-      setLoading(true);
-      
       const { error } = await supabase.auth.signOut();
       
       if (error) {
-        console.error('❌ Error en signOut:', error);
-      } else {
-        console.log('✅ SignOut exitoso');
+        console.error('Error signing out:', error);
       }
       
-      // El estado se limpiará automáticamente por el listener
-      
-    } catch (error) {
-      console.error('❌ Error crítico en signOut:', error);
-      // Forzar limpieza local si falla el signOut remoto
+      // Limpiar estado local inmediatamente
       setUser(null);
+      setError(null);
+      
+      return { success: !error };
+    } catch (err) {
+      console.error('Error in signOut:', err);
+      return { success: false };
+    } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Restablecer contraseña
-  const resetPassword = async (email) => {
-    console.log('🔄 Intentando reset password:', email);
-    
+  const resetPassword = useCallback(async (email) => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/auth/reset-password`
-      });
-
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      
       if (error) {
-        console.error('❌ Error en resetPassword:', error.message);
         return { success: false, error: error.message };
       }
-
-      console.log('✅ Reset password email enviado');
+      
       return { success: true };
-      
-    } catch (error) {
-      console.error('❌ Error crítico en resetPassword:', error);
+    } catch (err) {
       return { success: false, error: 'Error de conexión' };
     }
-  };
+  }, []);
 
-  // Actualizar perfil de usuario
-  const updateProfile = async (updates) => {
+  // ===============================
+  // ACTUALIZACIÓN DE PERFIL
+  // ===============================
+
+  const updateProfile = useCallback(async (updates) => {
     if (!user) {
       return { success: false, error: 'Usuario no autenticado' };
     }
 
-    console.log('✏️ Actualizando perfil:', updates);
-
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .update({ 
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
+        .update(updates)
         .eq('id', user.id)
         .select()
         .single();
 
       if (error) {
-        console.error('❌ Error actualizando perfil:', error);
         return { success: false, error: error.message };
       }
 
       // Actualizar estado local
-      setUser(data);
-      console.log('✅ Perfil actualizado exitosamente');
-      return { success: true, data };
+      const updatedUser = {
+        ...user,
+        ...updates,
+        name: updates.full_name || updates.name || user.name,
+        full_name: updates.full_name || user.full_name
+      };
       
-    } catch (error) {
-      console.error('❌ Error crítico en updateProfile:', error);
+      setUser(updatedUser);
+      return { success: true, data: updatedUser };
+
+    } catch (err) {
       return { success: false, error: 'Error de conexión' };
     }
-  };
+  }, [user]);
 
-  // Actualizar puntos del usuario
-  const updatePoints = async (newPoints, reason = 'Activity') => {
-    if (!user) {
-      return { success: false, error: 'Usuario no autenticado' };
-    }
+  // ===============================
+  // REFRESH MANUAL
+  // ===============================
 
-    console.log('💰 Actualizando puntos:', { newPoints, reason });
+  const refreshAuth = useCallback(() => {
+    console.log('🔄 Refresh manual solicitado');
+    initializeAuth(true);
+  }, [initializeAuth]);
 
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .update({ 
-          points: newPoints,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Error actualizando puntos:', error);
-        return { success: false, error: error.message };
-      }
-
-      // Actualizar estado local
-      setUser(data);
-      console.log(`✅ Puntos actualizados: ${newPoints} (${reason})`);
-      return { success: true, data };
-      
-    } catch (error) {
-      console.error('❌ Error crítico en updatePoints:', error);
-      return { success: false, error: 'Error de conexión' };
-    }
-  };
-
-  // Añadir puntos (helper function)
-  const addPoints = async (pointsToAdd, reason = 'Activity') => {
-    if (!user) {
-      return { success: false, error: 'Usuario no autenticado' };
-    }
-    
-    const newPoints = (user.points || 0) + pointsToAdd;
-    return await updatePoints(newPoints, reason);
-  };
-
-  // Verificar si el usuario está autenticado (útil para componentes)
-  const checkAuth = () => {
-    return isAuthenticated;
-  };
+  // ===============================
+  // PROVIDER VALUE
+  // ===============================
 
   const value = {
     // Estado
     user,
     loading,
+    error,
     isAuthenticated,
     
     // Funciones de autenticación
     signIn,
     signUp,
     signOut,
-    signInWithProvider,
     resetPassword,
     
     // Funciones de perfil
     updateProfile,
-    updatePoints,
-    addPoints,
     
     // Utilidades
-    checkAuth
+    refreshAuth
   };
-
-  // Debug info en desarrollo
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🔍 AuthContext State:', {
-      hasUser: !!user,
-      loading,
-      isAuthenticated,
-      userId: user?.id
-    });
-  }
 
   return (
     <AuthContext.Provider value={value}>
@@ -521,3 +373,5 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
+export default AuthProvider;
