@@ -3,8 +3,18 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import { Checkbox } from '../../../components/ui/Checkbox';
+import ProfileImageEditor from '../../../components/ProfileImageEditor'; // 🆕 Import del editor
 
-const SettingsPanel = ({ user, onUpdateSettings }) => {
+const SettingsPanel = ({ 
+  user, 
+  onUpdateSettings, 
+  loading = false,          // 🆕 Prop para estados de carga
+  onUploadAvatar,          // 🆕 Prop para subir avatar
+  onUploadCover,           // 🆕 Prop para subir cover
+  onSignOut,               // 🆕 Prop para cerrar sesión
+  editing = false,         // 🆕 Prop para modo edición
+  onCancelEdit             // 🆕 Prop para cancelar edición
+}) => {
   const [activeSection, setActiveSection] = useState('account');
   const [settings, setSettings] = useState({
     notifications: {
@@ -65,29 +75,64 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
     }));
   };
 
+  // 🆕 Handlers para el ProfileImageEditor
+  const handleAvatarChange = async (url) => {
+    if (onUploadAvatar) {
+      // El ProfileImageEditor ya maneja la compresión y crop
+      // Solo necesitamos crear un File object mock para mantener compatibilidad
+      console.log('Avatar updated:', url);
+    }
+  };
+
+  const handleCoverChange = async (url) => {
+    if (onUploadCover) {
+      // El ProfileImageEditor ya maneja la compresión y crop
+      // Solo necesitamos crear un File object mock para mantener compatibilidad
+      console.log('Cover updated:', url);
+    }
+  };
+
   const renderAccountSection = () => (
     <div className="space-y-6">
+      {/* 🆕 NUEVA SECCIÓN: Imágenes de Perfil */}
+      <div className="border-b border-border pb-6">
+        <h3 className="text-lg font-medium text-foreground mb-4">Imágenes de Perfil</h3>
+        <div className="bg-muted/30 rounded-lg p-4">
+          <ProfileImageEditor
+            currentAvatar={user?.avatar}
+            currentCover={user?.coverImage}
+            onAvatarChange={handleAvatarChange}
+            onCoverChange={handleCoverChange}
+            loading={loading}
+          />
+        </div>
+      </div>
+
+      {/* SECCIÓN EXISTENTE: Información Personal */}
       <div>
         <h3 className="text-lg font-medium text-foreground mb-4">Información Personal</h3>
         <div className="space-y-4">
           <Input
             label="Nombre completo"
             type="text"
-            value={user?.name}
+            value={user?.name || ''}
             placeholder="Tu nombre completo"
+            disabled={loading}
           />
           <Input
             label="Nombre de usuario"
             type="text"
-            value={user?.username}
+            value={user?.username || ''}
             placeholder="@usuario"
             description="Tu nombre de usuario único"
+            disabled={loading}
           />
           <Input
             label="Email"
             type="email"
-            value={user?.email}
+            value={user?.email || ''}
             placeholder="tu@email.com"
+            disabled={loading}
           />
           <Input
             label="Biografía"
@@ -95,10 +140,12 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             value={user?.bio || ''}
             placeholder="Cuéntanos sobre ti..."
             description="Máximo 160 caracteres"
+            disabled={loading}
           />
         </div>
       </div>
 
+      {/* SECCIÓN EXISTENTE: Cuenta de Negocio */}
       <div className="pt-4 border-t border-border">
         <h4 className="font-medium text-foreground mb-3">Cuenta de Negocio</h4>
         {user?.isBusinessAccount ? (
@@ -110,7 +157,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
                 <p className="text-sm text-muted-foreground">Puedes vender productos en el marketplace</p>
               </div>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" disabled={loading}>
               Gestionar
             </Button>
           </div>
@@ -120,7 +167,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
               <p className="font-medium text-foreground">Upgrade a Business</p>
               <p className="text-sm text-muted-foreground">Comienza a vender productos y gana más puntos</p>
             </div>
-            <Button variant="default" size="sm">
+            <Button variant="default" size="sm" disabled={loading}>
               Actualizar
             </Button>
           </div>
@@ -142,6 +189,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.privacy?.profilePublic}
               onChange={(e) => handleSettingChange('privacy', 'profilePublic', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
 
@@ -153,6 +201,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.privacy?.showFollowers}
               onChange={(e) => handleSettingChange('privacy', 'showFollowers', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
 
@@ -164,6 +213,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.privacy?.showLikes}
               onChange={(e) => handleSettingChange('privacy', 'showLikes', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
 
@@ -175,6 +225,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.privacy?.allowMessages}
               onChange={(e) => handleSettingChange('privacy', 'allowMessages', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
         </div>
@@ -195,6 +246,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.notifications?.email}
               onChange={(e) => handleSettingChange('notifications', 'email', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
 
@@ -206,6 +258,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.notifications?.push}
               onChange={(e) => handleSettingChange('notifications', 'push', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
 
@@ -217,6 +270,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.notifications?.social}
               onChange={(e) => handleSettingChange('notifications', 'social', e?.target?.checked)}
+              disabled={loading}
             />
           </div>
 
@@ -228,7 +282,88 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             <Checkbox
               checked={settings?.notifications?.marketing}
               onChange={(e) => handleSettingChange('notifications', 'marketing', e?.target?.checked)}
+              disabled={loading}
             />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 🆕 Nueva sección de preferencias mejorada
+  const renderPreferencesSection = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium text-foreground mb-4">Preferencias de la Aplicación</h3>
+        <div className="space-y-4">
+          <div className="p-4 bg-card border border-border rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-foreground">Idioma</p>
+                <p className="text-sm text-muted-foreground">Selecciona tu idioma preferido</p>
+              </div>
+              <select 
+                className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                value={settings?.preferences?.language}
+                onChange={(e) => handleSettingChange('preferences', 'language', e.target.value)}
+                disabled={loading}
+              >
+                <option value="es">Español</option>
+                <option value="en">English</option>
+                <option value="pt">Português</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="p-4 bg-card border border-border rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-foreground">Tema</p>
+                <p className="text-sm text-muted-foreground">Personaliza la apariencia</p>
+              </div>
+              <select 
+                className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                value={settings?.preferences?.theme}
+                onChange={(e) => handleSettingChange('preferences', 'theme', e.target.value)}
+                disabled={loading}
+              >
+                <option value="system">Sistema</option>
+                <option value="light">Claro</option>
+                <option value="dark">Oscuro</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
+            <div>
+              <p className="font-medium text-foreground">Reproducción automática</p>
+              <p className="text-sm text-muted-foreground">Los videos se reproducen automáticamente</p>
+            </div>
+            <Checkbox
+              checked={settings?.preferences?.autoplay}
+              onChange={(e) => handleSettingChange('preferences', 'autoplay', e?.target?.checked)}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="p-4 bg-card border border-border rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-foreground">Calidad de video</p>
+                <p className="text-sm text-muted-foreground">Calidad por defecto para reproducción</p>
+              </div>
+              <select 
+                className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                value={settings?.preferences?.quality}
+                onChange={(e) => handleSettingChange('preferences', 'quality', e.target.value)}
+                disabled={loading}
+              >
+                <option value="auto">Automática</option>
+                <option value="1080p">1080p HD</option>
+                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -246,7 +381,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
                 <p className="font-medium text-foreground">Cambiar contraseña</p>
                 <p className="text-sm text-muted-foreground">Actualiza tu contraseña regularmente</p>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" disabled={loading}>
                 Cambiar
               </Button>
             </div>
@@ -258,7 +393,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
                 <p className="font-medium text-foreground">Autenticación de dos factores</p>
                 <p className="text-sm text-muted-foreground">Añade una capa extra de seguridad</p>
               </div>
-              <Button variant="default" size="sm">
+              <Button variant="default" size="sm" disabled={loading}>
                 Activar
               </Button>
             </div>
@@ -270,8 +405,29 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
                 <p className="font-medium text-foreground">Sesiones activas</p>
                 <p className="text-sm text-muted-foreground">Gestiona dispositivos conectados</p>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" disabled={loading}>
                 Ver todas
+              </Button>
+            </div>
+          </div>
+
+          {/* 🆕 Sección de cerrar sesión */}
+          <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <Icon name="LogOut" size={20} color="var(--color-warning)" />
+                <div>
+                  <p className="font-medium text-warning">Cerrar sesión</p>
+                  <p className="text-sm text-muted-foreground">Cierra sesión en este dispositivo</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={loading}
+                onClick={onSignOut}
+              >
+                Cerrar sesión
               </Button>
             </div>
           </div>
@@ -284,7 +440,7 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
                 <p className="text-sm text-muted-foreground">Esta acción no se puede deshacer</p>
               </div>
             </div>
-            <Button variant="destructive" size="sm">
+            <Button variant="destructive" size="sm" disabled={loading}>
               Eliminar cuenta
             </Button>
           </div>
@@ -301,6 +457,8 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
         return renderPrivacySection();
       case 'notifications':
         return renderNotificationsSection();
+      case 'preferences':
+        return renderPreferencesSection(); // 🆕 Mejorada
       case 'security':
         return renderSecuritySection();
       default:
@@ -310,6 +468,16 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
 
   return (
     <div className="p-4 sm:p-6">
+      {/* 🆕 Header con indicador de carga */}
+      {loading && (
+        <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm text-primary font-medium">Actualizando perfil...</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Settings Navigation */}
         <div className="lg:w-64 flex-shrink-0">
@@ -318,12 +486,14 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
               <button
                 key={section?.id}
                 onClick={() => setActiveSection(section?.id)}
+                disabled={loading}
                 className={`
                   w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors
                   ${activeSection === section?.id
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   }
+                  ${loading ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
                 <Icon 
@@ -343,14 +513,27 @@ const SettingsPanel = ({ user, onUpdateSettings }) => {
             {renderContent()}
             
             {/* Save Button */}
-            <div className="flex justify-end pt-6 border-t border-border mt-6">
+            <div className="flex justify-between pt-6 border-t border-border mt-6">
+              {/* 🆕 Botón cancelar edición */}
+              {editing && onCancelEdit && (
+                <Button
+                  variant="outline"
+                  onClick={onCancelEdit}
+                  disabled={loading}
+                >
+                  Cancelar
+                </Button>
+              )}
+              
               <Button
                 variant="default"
                 onClick={() => onUpdateSettings(settings)}
                 iconName="Save"
                 iconPosition="left"
+                disabled={loading}
+                className="ml-auto"
               >
-                Guardar cambios
+                {loading ? 'Guardando...' : 'Guardar cambios'}
               </Button>
             </div>
           </div>
