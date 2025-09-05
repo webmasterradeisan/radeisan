@@ -536,6 +536,7 @@ const UserProfileSettings = () => {
     uploading,
     updateProfile,
     uploadAvatar,
+    refreshProfile, // 🆕 Función para refresh
     
     // 🆕 Cover image states
     coverUploading,
@@ -600,7 +601,7 @@ const UserProfileSettings = () => {
   }), [videos.length, purchases.length, transactions.length]);
 
   // ===============================
-  // EVENT HANDLERS (ACTUALIZAR PARA REFRESH INMEDIATO)
+  // EVENT HANDLERS (CORREGIDOS PARA REFRESH)
   // ===============================
 
   const handleEditProfile = useCallback(() => {
@@ -629,43 +630,24 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile]);
 
-  // 🔧 HANDLER CORREGIDO - Avatar con actualización inmediata
-  const handleAvatarUpload = useCallback(async (file) => {
-    try {
-      const result = await uploadAvatar(file);
-      if (result.success) {
-        // ✅ ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
-        setProfileData(prev => prev ? {
-          ...prev,
-          avatar_url: result.url
-        } : null);
-        console.log('Avatar uploaded successfully');
-      } else {
-        console.error('Failed to upload avatar:', result.error);
-      }
-    } catch (error) {
-      console.error('Error uploading avatar:', error);
+  // 🔧 HANDLERS CORREGIDOS - Usa callbacks del ProfileImageEditor
+  const handleAvatarUpload = useCallback(async (url) => {
+    // El ProfileImageEditor ya subió y actualizó la BD
+    // Solo necesitamos refrescar el perfil para ver los cambios
+    if (url) {
+      await refreshProfile();
+      console.log('Avatar updated, profile refreshed');
     }
-  }, [uploadAvatar]);
+  }, [refreshProfile]);
 
-  // 🔧 HANDLER CORREGIDO - Cover con actualización inmediata  
-  const handleCoverUpload = useCallback(async (file) => {
-    try {
-      const result = await uploadCover(file);
-      if (result.success) {
-        // ✅ ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
-        setProfileData(prev => prev ? {
-          ...prev,
-          cover_image_url: result.url
-        } : null);
-        console.log('Cover image uploaded successfully');
-      } else {
-        console.error('Failed to upload cover:', result.error);
-      }
-    } catch (error) {
-      console.error('Error uploading cover:', error);
+  const handleCoverUpload = useCallback(async (url) => {
+    // El ProfileImageEditor ya subió y actualizó la BD
+    // Solo necesitamos refrescar el perfil para ver los cambios
+    if (url) {
+      await refreshProfile();
+      console.log('Cover updated, profile refreshed');
     }
-  }, [uploadCover]);
+  }, [refreshProfile]);
 
   const handleVideoAction = useCallback(async (action, videoId, data = {}) => {
     switch (action) {
@@ -697,7 +679,7 @@ const UserProfileSettings = () => {
   }, [signOut]);
 
   // ===============================
-  // RENDER HELPERS (ACTUALIZAR SettingsPanel)
+  // RENDER HELPERS
   // ===============================
 
   const renderTabContent = () => {
@@ -746,10 +728,10 @@ const UserProfileSettings = () => {
         return (
           <SettingsPanel 
             user={userData}
-            loading={profileLoading || uploading || coverUploading} // 🆕 Incluir coverUploading
+            loading={profileLoading || uploading || coverUploading}
             onUpdateSettings={handleUpdateSettings}
             onUploadAvatar={handleAvatarUpload}
-            onUploadCover={handleCoverUpload} // 🆕 Nuevo prop
+            onUploadCover={handleCoverUpload}
             onSignOut={handleSignOut}
             editing={editingProfile}
             onCancelEdit={() => setEditingProfile(false)}
@@ -844,8 +826,8 @@ const UserProfileSettings = () => {
               loading={uploading || coverUploading}
               onEditProfile={handleEditProfile}
               onUpgradeAccount={handleUpgradeAccount}
-              onUploadAvatar={handleAvatarChange} // 🔧 ACTUALIZADO
-              onUploadCover={handleCoverChange}   // 🔧 ACTUALIZADO
+              onUploadAvatar={handleAvatarUpload}
+              onUploadCover={handleCoverUpload}
               stats={{
                 videos: stats.totalVideos,
                 views: stats.totalViews,
