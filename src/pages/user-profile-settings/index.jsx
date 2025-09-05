@@ -600,7 +600,7 @@ const UserProfileSettings = () => {
   }), [videos.length, purchases.length, transactions.length]);
 
   // ===============================
-  // EVENT HANDLERS (EXTENDER)
+  // EVENT HANDLERS (ACTUALIZAR PARA REFRESH INMEDIATO)
   // ===============================
 
   const handleEditProfile = useCallback(() => {
@@ -629,14 +629,18 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile]);
 
+  // 🔧 HANDLER CORREGIDO - Avatar con actualización inmediata
   const handleAvatarUpload = useCallback(async (file) => {
     try {
       const result = await uploadAvatar(file);
       if (result.success) {
-        // TODO: Mostrar mensaje de éxito
+        // ✅ ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
+        setProfileData(prev => prev ? {
+          ...prev,
+          avatar_url: result.url
+        } : null);
         console.log('Avatar uploaded successfully');
       } else {
-        // TODO: Mostrar mensaje de error
         console.error('Failed to upload avatar:', result.error);
       }
     } catch (error) {
@@ -644,15 +648,18 @@ const UserProfileSettings = () => {
     }
   }, [uploadAvatar]);
 
-  // 🆕 Handler para cover image
+  // 🔧 HANDLER CORREGIDO - Cover con actualización inmediata  
   const handleCoverUpload = useCallback(async (file) => {
     try {
       const result = await uploadCover(file);
       if (result.success) {
-        // TODO: Mostrar mensaje de éxito
+        // ✅ ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE
+        setProfileData(prev => prev ? {
+          ...prev,
+          cover_image_url: result.url
+        } : null);
         console.log('Cover image uploaded successfully');
       } else {
-        // TODO: Mostrar mensaje de error
         console.error('Failed to upload cover:', result.error);
       }
     } catch (error) {
