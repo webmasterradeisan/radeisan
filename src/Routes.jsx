@@ -103,6 +103,11 @@ const AuthCallback = () => (
 );
 
 // ===============================
+// HERRAMIENTAS DE DEBUGGING (TEMPORAL)
+// ===============================
+import SupabaseDebugChecker from './components/SupabaseDebugChecker';
+
+// ===============================
 // PÁGINAS PROTEGIDAS (APLICACIÓN)
 // ===============================
 import VideoFeedDashboard from './pages/video-feed-dashboard';
@@ -197,6 +202,18 @@ const Routes = () => {
               element={
                 <UniversalRoute>
                   <AuthCallback />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== HERRAMIENTAS DE DEBUGGING (TEMPORAL) =================== */}
+            
+            {/* Herramienta de debugging para Supabase */}
+            <Route 
+              path="/debug" 
+              element={
+                <UniversalRoute>
+                  <SupabaseDebugChecker />
                 </UniversalRoute>
               } 
             />
