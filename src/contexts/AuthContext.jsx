@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.jsx
-// AuthContext CORREGIDO - Sin loops al cambiar pestañas/ventanas
+// AuthContext ULTRA ROBUSTO - Solución definitiva para loops y problemas de pestañas
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
@@ -20,48 +20,127 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Referencias para evitar múltiples llamadas
-  const initializingRef = useRef(false);
-  const lastSessionCheckRef = useRef(0);
+  // Referencias para control de estado
   const mountedRef = useRef(true);
+  const initializingRef = useRef(false);
+  const authSubscriptionRef = useRef(null);
+  const lastCheckTimeRef = useRef(0);
+  const userCacheRef = useRef(null);
+  const loadingTimeoutRef = useRef(null);
 
-  // Computed state
+  // Estados computados
   const isAuthenticated = !!user;
 
-  // Debounce para evitar múltiples verificaciones
-  const DEBOUNCE_TIME = 2000; // 2 segundos
+  // Constantes de configuración
+  const DEBOUNCE_TIME = 3000; // 3 segundos entre verificaciones
+  const MAX_LOADING_TIME = 10000; // 10 segundos máximo de loading
+  const CACHE_DURATION = 30000; // 30 segundos de cache de usuario
 
   // ===============================
-  // FUNCIÓN PARA OBTENER PERFIL
+  // UTILIDADES DE CONTROL
   // ===============================
-  const fetchUserProfile = useCallback(async (userId) => {
+
+  const setLoadingWithTimeout = useCallback((isLoading) => {
+    if (!mountedRef.current) return;
+
+    setLoading(isLoading);
+
+    // Timeout de seguridad para evitar loading infinito
+    if (isLoading) {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      
+      loadingTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          console.warn('⚠️ Loading timeout alcanzado, forzando fin de loading');
+          setLoading(false);
+          setError('Timeout de autenticación');
+        }
+      }, MAX_LOADING_TIME);
+    } else {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    }
+  }, []);
+
+  const shouldSkipCheck = useCallback(() => {
+    const now = Date.now();
+    return (
+      !mountedRef.current ||
+      initializingRef.current ||
+      (now - lastCheckTimeRef.current) < DEBOUNCE_TIME
+    );
+  }, []);
+
+  // ===============================
+  // GESTIÓN DE PERFIL DE USUARIO
+  // ===============================
+
+  const fetchUserProfile = useCallback(async (userId, useCache = true) => {
     if (!userId || !mountedRef.current) return null;
 
+    // Verificar cache primero
+    const cachedUser = userCacheRef.current;
+    if (useCache && cachedUser && cachedUser.id === userId) {
+      const cacheAge = Date.now() - cachedUser._cacheTime;
+      if (cacheAge < CACHE_DURATION) {
+        console.log('📦 Usando perfil en cache');
+        return cachedUser;
+      }
+    }
+
     try {
-      console.log('👤 Obteniendo perfil para usuario:', userId);
+      console.log('🔍 Fetching perfil para usuario:', userId);
       
       const { data, error } = await supabase
         .from('user_profiles')
         .select('id, full_name, username, avatar_url, email, points')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Usar maybeSingle en lugar de single para evitar errores si no existe
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
         console.error('❌ Error obteniendo perfil:', error);
         return null;
       }
 
-      const profile = {
-        id: data.id,
-        name: data.full_name || data.name || 'Usuario',
-        full_name: data.full_name || data.name || 'Usuario',
-        username: data.username || 'usuario',
-        avatar_url: data.avatar_url,
-        email: data.email,
-        points: data.points || 0
-      };
+      let profile;
+      if (data) {
+        // Perfil encontrado en BD
+        profile = {
+          id: data.id,
+          name: data.full_name || 'Usuario',
+          full_name: data.full_name || 'Usuario',
+          username: data.username || 'usuario',
+          avatar_url: data.avatar_url,
+          email: data.email,
+          points: data.points || 0,
+          _cacheTime: Date.now()
+        };
+      } else {
+        // No hay perfil en BD, usar datos básicos de auth
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser && authUser.id === userId) {
+          profile = {
+            id: authUser.id,
+            name: authUser.email?.split('@')[0] || 'Usuario',
+            full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Usuario',
+            username: authUser.email?.split('@')[0] || 'usuario',
+            avatar_url: authUser.user_metadata?.avatar_url || null,
+            email: authUser.email,
+            points: 0,
+            _cacheTime: Date.now()
+          };
+        } else {
+          return null;
+        }
+      }
 
-      console.log('✅ Perfil obtenido exitosamente:', profile.name);
+      // Actualizar cache
+      userCacheRef.current = profile;
+      console.log('✅ Perfil obtenido:', profile.name);
       return profile;
 
     } catch (err) {
@@ -73,133 +152,175 @@ export const AuthProvider = ({ children }) => {
   // ===============================
   // INICIALIZACIÓN DE AUTENTICACIÓN
   // ===============================
-  const initializeAuth = useCallback(async (forceRefresh = false) => {
-    // Evitar múltiples inicializaciones simultáneas
-    if (initializingRef.current && !forceRefresh) {
-      console.log('⏸️ Inicialización ya en curso, saltando...');
-      return;
-    }
 
-    // Debounce para evitar llamadas muy frecuentes
-    const now = Date.now();
-    if (now - lastSessionCheckRef.current < DEBOUNCE_TIME && !forceRefresh) {
-      console.log('⏸️ Verificación reciente, saltando...');
+  const initializeAuth = useCallback(async (forceRefresh = false) => {
+    if (shouldSkipCheck() && !forceRefresh) {
+      console.log('⏭️ Saltando verificación (debounce/ya inicializando)');
       return;
     }
 
     initializingRef.current = true;
-    lastSessionCheckRef.current = now;
+    lastCheckTimeRef.current = Date.now();
 
     try {
-      console.log('🚀 Inicializando autenticación...');
+      console.log('🚀 Inicializando autenticación...', { forceRefresh });
       
-      if (!mountedRef.current) return;
-      setError(null);
+      if (mountedRef.current) {
+        setLoadingWithTimeout(true);
+        setError(null);
+      }
 
-      // Obtener sesión actual de Supabase
+      // Verificar sesión actual
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
       if (sessionError) {
         console.error('❌ Error obteniendo sesión:', sessionError);
-        if (mountedRef.current) {
-          setUser(null);
-          setLoading(false);
-          setError('Error de autenticación');
-        }
-        return;
+        throw new Error(`Error de sesión: ${sessionError.message}`);
       }
 
       if (session?.user && mountedRef.current) {
         console.log('✅ Sesión válida encontrada');
         
         // Obtener perfil del usuario
-        const profile = await fetchUserProfile(session.user.id);
+        const profile = await fetchUserProfile(session.user.id, !forceRefresh);
         
         if (profile && mountedRef.current) {
           setUser(profile);
-          console.log('✅ Usuario autenticado:', profile.name);
-        } else if (mountedRef.current) {
-          // Si no se puede obtener el perfil, usar datos básicos de la sesión
-          const basicUser = {
-            id: session.user.id,
-            name: session.user.email?.split('@')[0] || 'Usuario',
-            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-            email: session.user.email,
-            avatar_url: session.user.user_metadata?.avatar_url || null,
-            points: 0
-          };
-          setUser(basicUser);
-          console.log('⚠️ Usando datos básicos de sesión');
+          console.log('✅ Usuario autenticado exitosamente:', profile.name);
+        } else {
+          throw new Error('No se pudo cargar el perfil del usuario');
         }
-      } else if (mountedRef.current) {
+      } else {
         console.log('ℹ️ No hay sesión activa');
-        setUser(null);
+        if (mountedRef.current) {
+          setUser(null);
+          userCacheRef.current = null;
+        }
       }
 
     } catch (err) {
-      console.error('❌ Error crítico en inicialización:', err);
+      console.error('❌ Error en inicialización:', err);
       if (mountedRef.current) {
         setUser(null);
-        setError('Error de conexión');
+        userCacheRef.current = null;
+        setError(`Error de autenticación: ${err.message}`);
       }
     } finally {
       if (mountedRef.current) {
-        setLoading(false);
+        setLoadingWithTimeout(false);
       }
       initializingRef.current = false;
     }
-  }, [fetchUserProfile]);
+  }, [shouldSkipCheck, fetchUserProfile, setLoadingWithTimeout]);
 
   // ===============================
-  // EFECTOS PRINCIPALES
+  // CONFIGURACIÓN DE LISTENERS
   // ===============================
 
-  // Inicialización única al montar
   useEffect(() => {
-    console.log('🎬 INICIANDO AuthProvider...');
+    console.log('🎬 Iniciando AuthProvider...');
     mountedRef.current = true;
+
+    // Inicialización principal
     initializeAuth(true);
 
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+    // Configurar listener de auth (UNA SOLA VEZ)
+    if (!authSubscriptionRef.current) {
+      console.log('🔗 Configurando listener de autenticación...');
+      
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!mountedRef.current) return;
 
-  // Listener de cambios de autenticación (solo eventos importantes)
-  useEffect(() => {
-    console.log('🔄 Configurando listener de auth...');
+          console.log('📡 Auth event recibido:', event);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mountedRef.current) return;
+          // Solo manejar eventos críticos
+          switch (event) {
+            case 'SIGNED_IN':
+              if (session?.user) {
+                console.log('🔑 Usuario se autenticó');
+                const profile = await fetchUserProfile(session.user.id, false);
+                if (profile && mountedRef.current) {
+                  setUser(profile);
+                  setLoadingWithTimeout(false);
+                  setError(null);
+                }
+              }
+              break;
 
-        console.log('📡 Auth event:', event);
+            case 'SIGNED_OUT':
+              console.log('🚪 Usuario cerró sesión');
+              if (mountedRef.current) {
+                setUser(null);
+                userCacheRef.current = null;
+                setLoadingWithTimeout(false);
+                setError(null);
+              }
+              break;
 
-        // Solo manejar eventos importantes, ignorar TOKEN_REFRESHED
-        if (event === 'SIGNED_IN') {
-          if (session?.user) {
-            const profile = await fetchUserProfile(session.user.id);
-            if (profile && mountedRef.current) {
-              setUser(profile);
-              setLoading(false);
-              setError(null);
-            }
-          }
-        } else if (event === 'SIGNED_OUT') {
-          if (mountedRef.current) {
-            setUser(null);
-            setLoading(false);
-            setError(null);
+            case 'TOKEN_REFRESHED':
+              // Solo hacer log, no cambiar estado para evitar loops
+              console.log('🔄 Token refrescado automáticamente');
+              break;
+
+            default:
+              console.log('📋 Evento de auth ignorado:', event);
+              break;
           }
         }
-        // Ignorar TOKEN_REFRESHED y otros eventos para evitar loops
-      }
-    );
+      );
 
+      authSubscriptionRef.current = subscription;
+    }
+
+    // Cleanup function
     return () => {
-      subscription?.unsubscribe();
+      console.log('🧹 Limpiando AuthProvider...');
+      mountedRef.current = false;
+      
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      
+      if (authSubscriptionRef.current) {
+        authSubscriptionRef.current.unsubscribe();
+        authSubscriptionRef.current = null;
+      }
     };
-  }, [fetchUserProfile]);
+  }, []); // Sin dependencias para evitar re-inicializaciones
+
+  // ===============================
+  // MANEJO DE VISIBILIDAD DE PÁGINA
+  // ===============================
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!mountedRef.current) return;
+
+      if (document.visibilityState === 'visible') {
+        const timeSinceLastCheck = Date.now() - lastCheckTimeRef.current;
+        
+        // Solo verificar si ha pasado tiempo suficiente y hay un usuario
+        if (timeSinceLastCheck > DEBOUNCE_TIME && user) {
+          console.log('👁️ Página visible, verificando sesión...');
+          
+          // Verificación rápida sin cambiar loading
+          supabase.auth.getSession().then(({ data: { session }, error }) => {
+            if (!mountedRef.current) return;
+            
+            if (error || !session) {
+              console.log('⚠️ Sesión inválida detectada, limpiando estado');
+              setUser(null);
+              userCacheRef.current = null;
+            }
+          });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user]);
 
   // ===============================
   // FUNCIONES DE AUTENTICACIÓN
@@ -207,7 +328,7 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = useCallback(async (email, password) => {
     try {
-      setLoading(true);
+      setLoadingWithTimeout(true);
       setError(null);
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -220,21 +341,21 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: error.message };
       }
 
-      // El listener se encargará de actualizar el estado
+      // El listener se encargará del resto
       return { success: true, data };
 
     } catch (err) {
-      const errorMessage = 'Error de conexión';
+      const errorMessage = `Error de conexión: ${err.message}`;
       setError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
-      setLoading(false);
+      // No quitar loading aquí, lo hace el listener
     }
-  }, []);
+  }, [setLoadingWithTimeout]);
 
   const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
-      setLoading(true);
+      setLoadingWithTimeout(true);
       setError(null);
 
       const { data, error } = await supabase.auth.signUp({
@@ -253,35 +374,41 @@ export const AuthProvider = ({ children }) => {
       return { success: true, data };
 
     } catch (err) {
-      const errorMessage = 'Error de conexión';
+      const errorMessage = `Error de conexión: ${err.message}`;
       setError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
-      setLoading(false);
+      setLoadingWithTimeout(false);
     }
-  }, []);
+  }, [setLoadingWithTimeout]);
 
   const signOut = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoadingWithTimeout(true);
+      
       const { error } = await supabase.auth.signOut();
       
       if (error) {
-        console.error('Error signing out:', error);
+        console.error('Error al cerrar sesión:', error);
+        setError(error.message);
+        return { success: false, error: error.message };
       }
-      
-      // Limpiar estado local inmediatamente
+
+      // Limpiar estado inmediatamente
       setUser(null);
+      userCacheRef.current = null;
       setError(null);
       
-      return { success: !error };
+      return { success: true };
+      
     } catch (err) {
-      console.error('Error in signOut:', err);
-      return { success: false };
+      const errorMessage = `Error cerrando sesión: ${err.message}`;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
-      setLoading(false);
+      setLoadingWithTimeout(false);
     }
-  }, []);
+  }, [setLoadingWithTimeout]);
 
   const resetPassword = useCallback(async (email) => {
     try {
@@ -293,12 +420,12 @@ export const AuthProvider = ({ children }) => {
       
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Error de conexión' };
+      return { success: false, error: `Error de conexión: ${err.message}` };
     }
   }, []);
 
   // ===============================
-  // ACTUALIZACIÓN DE PERFIL
+  // FUNCIONES DE PERFIL
   // ===============================
 
   const updateProfile = useCallback(async (updates) => {
@@ -318,33 +445,41 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: error.message };
       }
 
-      // Actualizar estado local
+      // Actualizar estado local y cache
       const updatedUser = {
         ...user,
         ...updates,
         name: updates.full_name || updates.name || user.name,
-        full_name: updates.full_name || user.full_name
+        full_name: updates.full_name || user.full_name,
+        _cacheTime: Date.now()
       };
       
       setUser(updatedUser);
+      userCacheRef.current = updatedUser;
+      
       return { success: true, data: updatedUser };
 
     } catch (err) {
-      return { success: false, error: 'Error de conexión' };
+      return { success: false, error: `Error de conexión: ${err.message}` };
     }
   }, [user]);
 
   // ===============================
-  // REFRESH MANUAL
+  // FUNCIONES DE UTILIDAD
   // ===============================
 
   const refreshAuth = useCallback(() => {
     console.log('🔄 Refresh manual solicitado');
+    userCacheRef.current = null; // Limpiar cache
     initializeAuth(true);
   }, [initializeAuth]);
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
   // ===============================
-  // PROVIDER VALUE
+  // VALOR DEL CONTEXT
   // ===============================
 
   const value = {
@@ -364,7 +499,8 @@ export const AuthProvider = ({ children }) => {
     updateProfile,
     
     // Utilidades
-    refreshAuth
+    refreshAuth,
+    clearError
   };
 
   return (
