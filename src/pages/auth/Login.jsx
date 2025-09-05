@@ -149,10 +149,16 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      console.log('🔑 Intentando login con:', formData.email);
+      console.log('🔑 INICIANDO LOGIN DEBUG');
+      console.log('📧 Email:', formData.email);
+      console.log('🔗 Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      console.log('🔑 Supabase Key existe:', !!import.meta.env.VITE_SUPABASE_ANON_KEY);
 
       // Llamar a la función signIn del AuthContext
+      console.log('📡 Llamando a signIn...');
       const result = await signIn(formData.email, formData.password);
+      
+      console.log('📥 Resultado de signIn:', result);
 
       if (result.success) {
         console.log('✅ Login exitoso, redirigiendo a:', from);
