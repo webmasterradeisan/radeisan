@@ -841,11 +841,11 @@ const UserProfileSettings = () => {
             {/* Profile Header */}
             <ProfileHeader 
               user={userData}
-              loading={uploading || coverUploading} // 🆕 Incluir coverUploading
+              loading={uploading || coverUploading}
               onEditProfile={handleEditProfile}
               onUpgradeAccount={handleUpgradeAccount}
-              onUploadAvatar={handleAvatarUpload}
-              onUploadCover={handleCoverUpload} // 🆕 Nuevo prop
+              onUploadAvatar={handleAvatarChange} // 🔧 ACTUALIZADO
+              onUploadCover={handleCoverChange}   // 🔧 ACTUALIZADO
               stats={{
                 videos: stats.totalVideos,
                 views: stats.totalViews,
