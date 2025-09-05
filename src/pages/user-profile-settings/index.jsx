@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con integración real de Supabase
+// UserProfileSettings con integración real de Supabase + Sistema de Fotos
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,13 +19,17 @@ import Button from '../../components/ui/Button';
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar datos del perfil de usuario
+// Hook para manejar datos del perfil de usuario + Sistema de Fotos
 const useUserProfile = () => {
   const { user, updateProfile } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
+  
+  // 🆕 Estados específicos para cover image
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverError, setCoverError] = useState(null);
 
   // Obtener datos completos del perfil
   const fetchProfile = useCallback(async () => {
@@ -52,6 +56,8 @@ const useUserProfile = () => {
               username: generateUsername(user.email),
               email: user.email,
               avatar_url: user.user_metadata?.avatar_url,
+              cover_image_url: null, // 🆕 Inicializar cover image
+              photos_count: 0,       // 🆕 Inicializar contador de fotos
               created_at: new Date().toISOString()
             })
             .select()
@@ -103,7 +109,7 @@ const useUserProfile = () => {
     }
   }, [user?.id]);
 
-  // Upload de avatar
+  // Upload de avatar (MANTENER EXACTAMENTE IGUAL)
   const uploadAvatar = useCallback(async (file) => {
     if (!user?.id || !file) return { success: false, error: 'Invalid parameters' };
 
@@ -151,6 +157,56 @@ const useUserProfile = () => {
     }
   }, [user?.id, updateUserProfile]);
 
+  // 🆕 Upload de cover image
+  const uploadCover = useCallback(async (file) => {
+    if (!user?.id || !file) return { success: false, error: 'Invalid parameters' };
+
+    try {
+      setCoverUploading(true);
+      setCoverError(null);
+      
+      // Validar archivo
+      if (!file.type.startsWith('image/')) {
+        throw new Error('El archivo debe ser una imagen');
+      }
+
+      if (file.size > 10 * 1024 * 1024) { // 10MB max para covers (mayor que avatars)
+        throw new Error('La imagen debe ser menor a 10MB');
+      }
+
+      // Generar nombre único para cover
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `${user.id}/cover_${Date.now()}.${fileExtension}`;
+
+      // Subir a Supabase Storage - bucket 'covers'
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('covers')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obtener URL pública
+      const { data: urlData } = supabase.storage
+        .from('covers')
+        .getPublicUrl(fileName);
+
+      // Actualizar perfil con nueva cover URL
+      const result = await updateUserProfile({ cover_image_url: urlData.publicUrl });
+      
+      return { success: true, url: urlData.publicUrl };
+
+    } catch (err) {
+      console.error('Error uploading cover:', err);
+      setCoverError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setCoverUploading(false);
+    }
+  }, [user?.id, updateUserProfile]);
+
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
@@ -162,11 +218,16 @@ const useUserProfile = () => {
     uploading,
     updateProfile: updateUserProfile,
     uploadAvatar,
-    refreshProfile: fetchProfile
+    refreshProfile: fetchProfile,
+    
+    // 🆕 Cover image functionality
+    coverUploading,
+    coverError,
+    uploadCover
   };
 };
 
-// Hook para videos del usuario
+// Hook para videos del usuario (MANTENER EXACTAMENTE IGUAL)
 const useUserVideos = () => {
   const { user } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -291,7 +352,7 @@ const useUserVideos = () => {
   };
 };
 
-// Hook para historial de puntos
+// Hook para historial de puntos (MANTENER EXACTAMENTE IGUAL)
 const usePointsHistory = () => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState([]);
@@ -380,7 +441,7 @@ const usePointsHistory = () => {
   };
 };
 
-// Hook para historial de compras/canjes
+// Hook para historial de compras/canjes (MANTENER EXACTAMENTE IGUAL)
 const usePurchaseHistory = () => {
   const { user } = useAuth();
   const [purchases, setPurchases] = useState([]);
@@ -423,7 +484,7 @@ const usePurchaseHistory = () => {
 };
 
 // ===============================
-// UTILIDADES
+// UTILIDADES (MANTENER EXACTAMENTE IGUAL)
 // ===============================
 
 // Generar username único
@@ -474,7 +535,12 @@ const UserProfileSettings = () => {
     error: profileError,
     uploading,
     updateProfile,
-    uploadAvatar 
+    uploadAvatar,
+    
+    // 🆕 Cover image states
+    coverUploading,
+    coverError,
+    uploadCover
   } = useUserProfile();
   const { videos, stats, loading: videosLoading, deleteVideo, updateVideo } = useUserVideos();
   const { transactions, summary, loading: pointsLoading } = usePointsHistory();
@@ -484,7 +550,7 @@ const UserProfileSettings = () => {
   const [editingProfile, setEditingProfile] = useState(false);
 
   // ===============================
-  // COMPUTED VALUES
+  // COMPUTED VALUES (EXTENDER LIGERAMENTE)
   // ===============================
 
   // Combinar datos del auth y perfil
@@ -498,7 +564,7 @@ const UserProfileSettings = () => {
       email: profileData.email,
       bio: profileData.bio,
       avatar: profileData.avatar_url,
-      coverImage: profileData.cover_image_url,
+      coverImage: profileData.cover_image_url, // ✅ Ya existía
       isVerified: profileData.is_verified || false,
       isBusinessAccount: !!profileData.business_name,
       businessName: profileData.business_name,
@@ -506,6 +572,9 @@ const UserProfileSettings = () => {
       location: profileData.business_location,
       website: profileData.website,
       phoneNumber: profileData.phone_number,
+      
+      // 🆕 Añadir contador de fotos
+      photosCount: profileData.photos_count || 0,
       
       // Estadísticas calculadas
       followersCount: 0, // TODO: Implementar sistema de follows
@@ -521,7 +590,7 @@ const UserProfileSettings = () => {
     };
   }, [profileData, stats, summary]);
 
-  // Contadores para tabs
+  // Contadores para tabs (MANTENER IGUAL)
   const tabCounts = useMemo(() => ({
     videos: videos.length,
     liked: 0, // TODO: Implementar videos liked
@@ -531,7 +600,7 @@ const UserProfileSettings = () => {
   }), [videos.length, purchases.length, transactions.length]);
 
   // ===============================
-  // EVENT HANDLERS
+  // EVENT HANDLERS (EXTENDER)
   // ===============================
 
   const handleEditProfile = useCallback(() => {
@@ -575,6 +644,22 @@ const UserProfileSettings = () => {
     }
   }, [uploadAvatar]);
 
+  // 🆕 Handler para cover image
+  const handleCoverUpload = useCallback(async (file) => {
+    try {
+      const result = await uploadCover(file);
+      if (result.success) {
+        // TODO: Mostrar mensaje de éxito
+        console.log('Cover image uploaded successfully');
+      } else {
+        // TODO: Mostrar mensaje de error
+        console.error('Failed to upload cover:', result.error);
+      }
+    } catch (error) {
+      console.error('Error uploading cover:', error);
+    }
+  }, [uploadCover]);
+
   const handleVideoAction = useCallback(async (action, videoId, data = {}) => {
     switch (action) {
       case 'delete':
@@ -605,7 +690,7 @@ const UserProfileSettings = () => {
   }, [signOut]);
 
   // ===============================
-  // RENDER HELPERS
+  // RENDER HELPERS (ACTUALIZAR SettingsPanel)
   // ===============================
 
   const renderTabContent = () => {
@@ -654,9 +739,10 @@ const UserProfileSettings = () => {
         return (
           <SettingsPanel 
             user={userData}
-            loading={profileLoading || uploading}
+            loading={profileLoading || uploading || coverUploading} // 🆕 Incluir coverUploading
             onUpdateSettings={handleUpdateSettings}
             onUploadAvatar={handleAvatarUpload}
+            onUploadCover={handleCoverUpload} // 🆕 Nuevo prop
             onSignOut={handleSignOut}
             editing={editingProfile}
             onCancelEdit={() => setEditingProfile(false)}
@@ -674,7 +760,7 @@ const UserProfileSettings = () => {
     }
   };
 
-  // Loading state
+  // Loading state (MANTENER IGUAL)
   if (profileLoading && !profileData) {
     return (
       <div className="min-h-screen bg-background">
@@ -694,7 +780,7 @@ const UserProfileSettings = () => {
     );
   }
 
-  // Error state
+  // Error state (MANTENER IGUAL)
   if (profileError) {
     return (
       <div className="min-h-screen bg-background">
@@ -728,7 +814,7 @@ const UserProfileSettings = () => {
   }
 
   // ===============================
-  // RENDER
+  // RENDER (MANTENER EXACTAMENTE IGUAL)
   // ===============================
   return (
     <>
@@ -748,10 +834,11 @@ const UserProfileSettings = () => {
             {/* Profile Header */}
             <ProfileHeader 
               user={userData}
-              loading={uploading}
+              loading={uploading || coverUploading} // 🆕 Incluir coverUploading
               onEditProfile={handleEditProfile}
               onUpgradeAccount={handleUpgradeAccount}
               onUploadAvatar={handleAvatarUpload}
+              onUploadCover={handleCoverUpload} // 🆕 Nuevo prop
               stats={{
                 videos: stats.totalVideos,
                 views: stats.totalViews,
