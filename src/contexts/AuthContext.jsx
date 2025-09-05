@@ -328,30 +328,87 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = useCallback(async (email, password) => {
     try {
+      console.log('🔑 INICIANDO signIn para:', email);
       setLoadingWithTimeout(true);
       setError(null);
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (error) {
-        setError(error.message);
-        return { success: false, error: error.message };
+      // Verificar que tenemos credenciales
+      if (!email || !password) {
+        throw new Error('Email y contraseña son requeridos');
       }
 
-      // El listener se encargará del resto
-      return { success: true, data };
+      console.log('📡 Llamando a supabase.auth.signInWithPassword...');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
+      });
+
+      console.log('📥 Respuesta de Supabase:', { data: !!data, error: !!error });
+
+      if (error) {
+        console.error('❌ Error de Supabase:', error);
+        const errorMessage = error.message === 'Invalid login credentials' 
+          ? 'Email o contraseña incorrectos'
+          : error.message;
+        
+        if (mountedRef.current) {
+          setError(errorMessage);
+          setLoadingWithTimeout(false);
+        }
+        return { success: false, error: errorMessage };
+      }
+
+      if (data?.session?.user) {
+        console.log('✅ Session obtenida exitosamente');
+        
+        // Intentar obtener el perfil inmediatamente
+        try {
+          const profile = await fetchUserProfile(data.session.user.id, false);
+          if (profile && mountedRef.current) {
+            console.log('✅ Perfil obtenido en signIn:', profile.name);
+            setUser(profile);
+            setLoadingWithTimeout(false);
+            return { success: true, user: profile };
+          }
+        } catch (profileError) {
+          console.warn('⚠️ Error obteniendo perfil en signIn:', profileError);
+          // Continuar con datos básicos de la sesión
+        }
+
+        // Fallback: usar datos básicos de la sesión
+        const basicUser = {
+          id: data.session.user.id,
+          name: data.session.user.email?.split('@')[0] || 'Usuario',
+          full_name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
+          email: data.session.user.email,
+          avatar_url: data.session.user.user_metadata?.avatar_url || null,
+          points: 0,
+          _cacheTime: Date.now()
+        };
+
+        if (mountedRef.current) {
+          setUser(basicUser);
+          setLoadingWithTimeout(false);
+        }
+
+        return { success: true, user: basicUser };
+      }
+
+      // No debería llegar aquí, pero por seguridad
+      throw new Error('No se recibió sesión válida de Supabase');
 
     } catch (err) {
-      const errorMessage = `Error de conexión: ${err.message}`;
-      setError(errorMessage);
+      console.error('❌ Error crítico en signIn:', err);
+      const errorMessage = err.message || 'Error de conexión';
+      
+      if (mountedRef.current) {
+        setError(errorMessage);
+        setLoadingWithTimeout(false);
+      }
+      
       return { success: false, error: errorMessage };
-    } finally {
-      // No quitar loading aquí, lo hace el listener
     }
-  }, [setLoadingWithTimeout]);
+  }, [setLoadingWithTimeout, fetchUserProfile]);
 
   const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
