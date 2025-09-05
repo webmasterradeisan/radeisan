@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
+import HorizontalVideoGrid from './HorizontalVideoGrid';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
@@ -160,6 +161,21 @@ const VideoFeedGrid = ({
   if (layout === 'reels') {
     return (
       <ReelsContainer
+        videos={displayVideos}
+        onLoadMore={onLoadMore}
+        onPointsEarned={onPointsEarned}
+        hasMore={hasMore}
+        loading={loading}
+      />
+    );
+  }
+
+  // ===============================
+  // RENDER HORIZONTAL VIDEO GRID
+  // ===============================
+  if (orientation === 'horizontal' && layout !== 'list') {
+    return (
+      <HorizontalVideoGrid
         videos={displayVideos}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
