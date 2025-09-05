@@ -95,9 +95,10 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔍 Fetching perfil para usuario:', userId);
       
+      // CORREGIDO: Solo seleccionar columnas que existen
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, full_name, username, avatar_url, email, points')
+        .select('id, username, avatar_url, email, points')
         .eq('id', userId)
         .maybeSingle(); // Usar maybeSingle en lugar de single para evitar errores si no existe
 
@@ -111,8 +112,8 @@ export const AuthProvider = ({ children }) => {
         // Perfil encontrado en BD
         profile = {
           id: data.id,
-          name: data.full_name || 'Usuario',
-          full_name: data.full_name || 'Usuario',
+          name: data.username || 'Usuario', // Usar username como nombre
+          full_name: data.username || 'Usuario',
           username: data.username || 'usuario',
           avatar_url: data.avatar_url,
           email: data.email,
