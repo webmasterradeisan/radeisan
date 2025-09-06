@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con integración real de Supabase + Sistema de Fotos COMPLETO
+// UserProfileSettings con integración real de Supabase + Sistema de Fotos (preparado para build)
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,13 +9,91 @@ import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import ProfileHeader from './components/ProfileHeader';
 import ProfileTabs from './components/ProfileTabs';
 import VideoGrid from './components/VideoGrid';
-import PhotoGrid from './components/PhotoGrid'; // NUEVO: Sistema de fotos
+// import PhotoGrid from './components/PhotoGrid'; // TODO: Crear este componente
 import PointsHistory from './components/PointsHistory';
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
-import useUserPhotos from './hooks/useUserPhotos'; // NUEVO: Hook de fotos
+// import useUserPhotos from './hooks/useUserPhotos'; // TODO: Crear este hook
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
+
+// ===============================
+// TEMPORARY PHOTO MOCK HOOK
+// ===============================
+// TODO: Reemplazar con el hook real useUserPhotos cuando esté creado
+const useUserPhotosMock = (userId, options = {}) => {
+  return {
+    photos: [],
+    loading: false,
+    error: null,
+    totalCount: 0,
+    likePhoto: async () => ({ success: true }),
+    deletePhoto: async () => ({ success: true }),
+    updatePhoto: async () => ({ success: true }),
+    refresh: async () => {}
+  };
+};
+
+// ===============================
+// TEMPORARY PHOTO GRID COMPONENT
+// ===============================
+// TODO: Reemplazar con el componente real PhotoGrid cuando esté creado
+const PhotoGridMock = ({ 
+  photos = [], 
+  loading = false, 
+  onUploadClick,
+  isOwner = false,
+  showUploadButton = true 
+}) => {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (photos.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="ImageOff" size={32} className="text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">
+          {isOwner ? 'Aún no has subido fotos' : 'No hay fotos publicadas'}
+        </h3>
+        <p className="text-muted-foreground mb-6">
+          {isOwner 
+            ? 'Comparte tus mejores momentos con la comunidad'
+            : 'Este usuario no ha compartido fotos aún'
+          }
+        </p>
+        {isOwner && showUploadButton && (
+          <Button onClick={onUploadClick}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Subir tu primera foto
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {photos.map((photo) => (
+        <div key={photo.id} className="aspect-square bg-muted rounded-lg">
+          <img
+            src={photo.thumbnail_url || photo.image_url}
+            alt={photo.caption || 'Foto'}
+            className="w-full h-full object-cover rounded-lg"
+          />
+        </div>
+      ))}
+    </div>
+  );
+};
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -550,7 +628,7 @@ const UserProfileSettings = () => {
   const { transactions, summary, loading: pointsLoading } = usePointsHistory();
   const { purchases, loading: purchasesLoading } = usePurchaseHistory();
   
-  // NUEVO: Hook del sistema de fotos
+  // Sistema de fotos (mock temporal)
   const {
     photos,
     loading: photosLoading,
@@ -560,7 +638,7 @@ const UserProfileSettings = () => {
     deletePhoto,
     updatePhoto,
     refresh: refreshPhotos
-  } = useUserPhotos(user?.id, {
+  } = useUserPhotosMock(user?.id, {
     autoLoad: true,
     includePrivate: true
   });
@@ -592,7 +670,7 @@ const UserProfileSettings = () => {
       website: profileData.website,
       phoneNumber: profileData.phone_number,
       
-      // NUEVO: Contador de fotos
+      // Contador de fotos
       photosCount: photosCount || profileData.photos_count || 0,
       
       // Estadísticas calculadas
@@ -609,10 +687,10 @@ const UserProfileSettings = () => {
     };
   }, [profileData, stats, summary, photosCount]);
 
-  // Contadores para tabs (ACTUALIZADO con fotos)
+  // Contadores para tabs (incluye fotos)
   const tabCounts = useMemo(() => ({
     videos: videos.length,
-    photos: photosCount || 0, // NUEVO: Contador de fotos
+    photos: photosCount || 0, // Contador de fotos
     liked: 0, // TODO: Implementar videos liked
     playlists: 0, // TODO: Implementar playlists
     purchases: purchases.length,
@@ -668,7 +746,7 @@ const UserProfileSettings = () => {
     }
   }, [refreshProfile]);
 
-  // NUEVO: Manejar acciones de fotos
+  // Manejar acciones de fotos (mock temporal)
   const handlePhotoAction = useCallback(async (action, photo, data = {}) => {
     switch (action) {
       case 'like':
@@ -746,10 +824,10 @@ const UserProfileSettings = () => {
           />
         );
       
-      // NUEVO: Tab de fotos
+      // Tab de fotos (con componente mock)
       case 'photos':
         return (
-          <PhotoGrid
+          <PhotoGridMock
             photos={photos}
             loading={photosLoading}
             onPhotoSelect={(photo) => console.log('Photo selected:', photo)}
@@ -775,7 +853,7 @@ const UserProfileSettings = () => {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Fotos que te gustaron</h3>
-              <PhotoGrid
+              <PhotoGridMock
                 photos={[]} // TODO: Implementar fotos liked
                 loading={false}
                 showUploadButton={false}
@@ -917,7 +995,7 @@ const UserProfileSettings = () => {
               onUploadCover={handleCoverUpload}
               stats={{
                 videos: stats.totalVideos,
-                photos: photosCount, // NUEVO: Estadística de fotos
+                photos: photosCount, // Estadística de fotos
                 views: stats.totalViews,
                 likes: stats.totalLikes,
                 comments: stats.totalComments
@@ -930,7 +1008,7 @@ const UserProfileSettings = () => {
               onTabChange={setActiveTab}
               tabCounts={tabCounts}
               user={userData}
-              showPhotosTab={true} // NUEVO: Mostrar tab de fotos
+              showPhotosTab={true} // Mostrar tab de fotos
             />
 
             {/* Tab Content */}
@@ -954,7 +1032,7 @@ const UserProfileSettings = () => {
           </div>
         )}
 
-        {/* NUEVO: Floating Action Button - Upload Photos */}
+        {/* Floating Action Button - Upload Photos */}
         {activeTab === 'photos' && (
           <div className="fixed bottom-20 lg:bottom-6 right-4 z-40">
             <Button
@@ -968,7 +1046,7 @@ const UserProfileSettings = () => {
           </div>
         )}
 
-        {/* Profile Stats Summary - ACTUALIZADO con fotos */}
+        {/* Profile Stats Summary */}
         {(activeTab === 'videos' || activeTab === 'photos') && userData && (
           <div className="fixed bottom-4 left-4 max-w-sm bg-card border rounded-lg p-4 shadow-lg z-50 hidden lg:block">
             <div className="flex items-start space-x-3">
