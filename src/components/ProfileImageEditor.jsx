@@ -1,5 +1,6 @@
 // src/components/ProfileImageEditor.jsx
 // Editor completo de imágenes de perfil y portada para RADEISAN
+// VERSIÓN CORREGIDA - Soluciona problema del recorte
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop } from 'react-image-crop';
 import imageCompression from 'browser-image-compression';
@@ -37,6 +38,98 @@ const IMAGE_CONFIGS = {
 };
 
 // ===============================
+// UTILIDADES DE CANVAS
+// ===============================
+
+// Validar que el crop tenga valores válidos
+const validateCrop = (crop) => {
+  return crop && 
+         typeof crop.x === 'number' && 
+         typeof crop.y === 'number' && 
+         typeof crop.width === 'number' && 
+         typeof crop.height === 'number' &&
+         crop.width > 0 && 
+         crop.height > 0;
+};
+
+// Generar canvas con la imagen recortada (MEJORADO)
+const getCroppedCanvas = (image, pixelCrop, targetWidth, targetHeight) => {
+  console.log('🎨 Procesando recorte:', { pixelCrop, targetWidth, targetHeight });
+  
+  if (!validateCrop(pixelCrop)) {
+    throw new Error('Coordenadas de recorte inválidas');
+  }
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    throw new Error('No se pudo crear el contexto del canvas');
+  }
+
+  // Establecer dimensiones del canvas final
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  // Aplicar suavizado para mejor calidad
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  console.log('🖼️ Dimensiones imagen:', { 
+    natural: { width: image.naturalWidth, height: image.naturalHeight },
+    displayed: { width: image.width, height: image.height }
+  });
+
+  // Dibujar imagen recortada y redimensionada
+  ctx.drawImage(
+    image,
+    // Coordenadas de origen (en imagen original)
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    // Coordenadas de destino (en canvas)
+    0,
+    0,
+    targetWidth,
+    targetHeight
+  );
+
+  console.log('✅ Canvas generado exitosamente');
+  return canvas;
+};
+
+// Crear canvas de preview optimizado
+const createPreviewCanvas = (image, pixelCrop, previewSize) => {
+  if (!validateCrop(pixelCrop)) return null;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  if (!ctx) return null;
+
+  canvas.width = previewSize.width;
+  canvas.height = previewSize.height;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    previewSize.width,
+    previewSize.height
+  );
+
+  return canvas;
+};
+
+// ===============================
 // HOOK PERSONALIZADO
 // ===============================
 
@@ -62,69 +155,64 @@ const useImageEditor = () => {
     return true;
   };
 
-  // Generar canvas con la imagen recortada
-  const getCroppedCanvas = (image, crop, targetWidth, targetHeight) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) throw new Error('No se pudo crear el canvas');
-
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-
-    // Calcular escala
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
-
-    // Dibujar imagen recortada
-    ctx.drawImage(
-      image,
-      crop.x * scaleX,
-      crop.y * scaleY,
-      crop.width * scaleX,
-      crop.height * scaleY,
-      0,
-      0,
-      targetWidth,
-      targetHeight
-    );
-
-    return canvas;
-  };
-
-  // Subir imagen procesada
-  const uploadProcessedImage = async (file, crop, config, imageType) => {
+  // Subir imagen procesada (CORREGIDO)
+  const uploadProcessedImage = async (file, pixelCrop, config, imageType) => {
     try {
       setIsUploading(true);
       setError(null);
       setUploadProgress(0);
 
+      console.log('🚀 Iniciando upload de imagen:', { imageType, pixelCrop });
+
       // Validar archivo
       validateImageFile(file, config);
       setUploadProgress(10);
 
+      // Validar crop
+      if (!validateCrop(pixelCrop)) {
+        throw new Error('Coordenadas de recorte inválidas. Por favor ajusta el recorte.');
+      }
+
       // Crear imagen temporal para procesar
       const image = new Image();
-      image.src = URL.createObjectURL(file);
+      const imageUrl = URL.createObjectURL(file);
+      image.src = imageUrl;
       
       await new Promise((resolve, reject) => {
-        image.onload = resolve;
-        image.onerror = reject;
+        image.onload = () => {
+          console.log('🖼️ Imagen cargada:', { 
+            naturalWidth: image.naturalWidth, 
+            naturalHeight: image.naturalHeight 
+          });
+          resolve();
+        };
+        image.onerror = () => reject(new Error('Error al cargar la imagen'));
       });
       setUploadProgress(25);
 
       // Generar canvas recortado
       const canvas = getCroppedCanvas(
         image, 
-        crop, 
+        pixelCrop, 
         config.dimensions.width, 
         config.dimensions.height
       );
       setUploadProgress(40);
 
       // Convertir a blob
-      const blob = await new Promise(resolve => {
-        canvas.toBlob(resolve, 'image/jpeg', config.quality);
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (result) => {
+            if (result) {
+              console.log('💾 Blob generado:', { size: result.size, type: result.type });
+              resolve(result);
+            } else {
+              reject(new Error('Error al generar blob de imagen'));
+            }
+          },
+          'image/jpeg', 
+          config.quality
+        );
       });
       setUploadProgress(55);
 
@@ -132,13 +220,21 @@ const useImageEditor = () => {
       const compressedFile = await imageCompression(blob, {
         maxSizeMB: config.maxSizeMB,
         maxWidthOrHeight: Math.max(config.dimensions.width, config.dimensions.height),
-        useWebWorker: true
+        useWebWorker: true,
+        preserveExif: false
+      });
+      
+      console.log('🗜️ Imagen comprimida:', { 
+        originalSize: blob.size, 
+        compressedSize: compressedFile.size,
+        compressionRatio: ((blob.size - compressedFile.size) / blob.size * 100).toFixed(1) + '%'
       });
       setUploadProgress(70);
 
       // Generar nombre único
       const timestamp = Date.now();
-      const fileName = `${user.id}/${imageType}_${timestamp}.jpg`;
+      const random = Math.random().toString(36).substring(2, 8);
+      const fileName = `${user.id}/${imageType}_${timestamp}_${random}.jpg`;
 
       // Subir a Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -148,7 +244,12 @@ const useImageEditor = () => {
           upsert: true
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('❌ Error uploading to Supabase:', uploadError);
+        throw new Error(`Error al subir imagen: ${uploadError.message}`);
+      }
+      
+      console.log('☁️ Imagen subida a Storage:', uploadData);
       setUploadProgress(85);
 
       // Obtener URL pública
@@ -156,20 +257,33 @@ const useImageEditor = () => {
         .from(config.bucketName)
         .getPublicUrl(fileName);
 
+      if (!urlData.publicUrl) {
+        throw new Error('Error al obtener URL pública de la imagen');
+      }
+
+      console.log('🔗 URL pública generada:', urlData.publicUrl);
       setUploadProgress(95);
 
       // Actualizar perfil de usuario
       const updateField = imageType === 'avatar' ? 'avatar_url' : 'cover_image_url';
       const { error: updateError } = await supabase
         .from('user_profiles')
-        .update({ [updateField]: urlData.publicUrl })
+        .update({ 
+          [updateField]: urlData.publicUrl,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', user.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('❌ Error updating profile:', updateError);
+        throw new Error(`Error al actualizar perfil: ${updateError.message}`);
+      }
+
+      console.log('✅ Perfil actualizado exitosamente');
       setUploadProgress(100);
 
-      // Limpiar
-      URL.revokeObjectURL(image.src);
+      // Limpiar recursos
+      URL.revokeObjectURL(imageUrl);
 
       return {
         success: true,
@@ -178,11 +292,13 @@ const useImageEditor = () => {
       };
 
     } catch (err) {
-      console.error('Error uploading image:', err);
-      setError(err.message);
+      console.error('💥 Error en upload:', err);
+      setError(err.message || 'Error desconocido al procesar la imagen');
       return { success: false, error: err.message };
     } finally {
       setIsUploading(false);
+      // Reset progress after a delay
+      setTimeout(() => setUploadProgress(0), 2000);
     }
   };
 
@@ -209,8 +325,9 @@ const CropEditor = ({
   const { uploadProcessedImage, isUploading, uploadProgress, error, setError } = useImageEditor();
   
   const [imageSrc, setImageSrc] = useState('');
-  const [crop, setCrop] = useState();
-  const [completedCrop, setCompletedCrop] = useState();
+  const [crop, setCrop] = useState(); // Porcentajes
+  const [completedCrop, setCompletedCrop] = useState(); // Píxeles
+  const [previewCanvases, setPreviewCanvases] = useState({});
   const imgRef = useRef(null);
 
   // Inicializar imagen
@@ -226,7 +343,9 @@ const CropEditor = ({
   const onImageLoad = useCallback((e) => {
     const { width, height } = e.currentTarget;
     
-    const crop = centerCrop(
+    console.log('📐 Imagen cargada para crop:', { width, height });
+    
+    const initialCrop = centerCrop(
       makeAspectCrop(
         {
           unit: '%',
@@ -240,34 +359,58 @@ const CropEditor = ({
       height,
     );
     
-    setCrop(crop);
-    setCompletedCrop(convertToPixelCrop(crop, width, height));
+    setCrop(initialCrop);
+    
+    // Convertir a píxeles inmediatamente
+    const pixelCrop = convertToPixelCrop(initialCrop, width, height);
+    setCompletedCrop(pixelCrop);
+    
+    console.log('🎯 Crop inicial establecido:', { initialCrop, pixelCrop });
   }, [config.aspect]);
 
   // Manejar cambio de crop
-  const onCropChange = useCallback((crop, percentCrop) => {
+  const onCropChange = useCallback((pixelCrop, percentCrop) => {
     setCrop(percentCrop);
   }, []);
 
-  const onCropComplete = useCallback((crop) => {
-    setCompletedCrop(crop);
+  // Manejar crop completado (CORREGIDO)
+  const onCropComplete = useCallback((pixelCrop, percentCrop) => {
+    console.log('✂️ Crop completado:', { pixelCrop, percentCrop });
+    
+    if (pixelCrop && validateCrop(pixelCrop)) {
+      setCompletedCrop(pixelCrop);
+      
+      // Actualizar previews
+      if (imgRef.current) {
+        const avatarCanvas = createPreviewCanvas(imgRef.current, pixelCrop, { width: 128, height: 128 });
+        const coverCanvas = createPreviewCanvas(imgRef.current, pixelCrop, { width: 320, height: 137 });
+        
+        setPreviewCanvases({
+          avatar: avatarCanvas,
+          cover: coverCanvas
+        });
+      }
+    }
   }, []);
 
-  // Procesar y subir
+  // Procesar y subir (CORREGIDO)
   const handleSave = async () => {
-    if (!completedCrop || !imgRef.current) {
-      setError('Por favor ajusta el recorte de la imagen');
+    if (!completedCrop || !imgRef.current || !validateCrop(completedCrop)) {
+      setError('Por favor ajusta el recorte de la imagen correctamente');
       return;
     }
 
+    console.log('💾 Iniciando guardado con crop:', completedCrop);
+
     const result = await uploadProcessedImage(
       imageFile, 
-      completedCrop, 
+      completedCrop, // Ya está en píxeles
       config, 
       imageType
     );
 
     if (result.success) {
+      console.log('🎉 Upload exitoso:', result.url);
       onSuccess?.(result.url);
     }
   };
@@ -316,6 +459,8 @@ const CropEditor = ({
                     aspect={config.aspect}
                     circularCrop={config.shape === 'circle'}
                     className="max-w-full"
+                    minWidth={50}
+                    minHeight={50}
                   >
                     <img
                       ref={imgRef}
@@ -340,30 +485,18 @@ const CropEditor = ({
                 <div className="space-y-4">
                   
                   {/* Preview Avatar */}
-                  {imageType === 'avatar' && completedCrop && imgRef.current && (
+                  {imageType === 'avatar' && previewCanvases.avatar && (
                     <div className="text-center">
                       <div className="relative inline-block">
                         <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-primary/20 mx-auto">
                           <canvas
                             ref={(canvas) => {
-                              if (canvas && completedCrop && imgRef.current) {
+                              if (canvas && previewCanvases.avatar) {
                                 const ctx = canvas.getContext('2d');
                                 if (ctx) {
                                   canvas.width = 128;
                                   canvas.height = 128;
-                                  const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
-                                  const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
-                                  ctx.drawImage(
-                                    imgRef.current,
-                                    completedCrop.x * scaleX,
-                                    completedCrop.y * scaleY,
-                                    completedCrop.width * scaleX,
-                                    completedCrop.height * scaleY,
-                                    0,
-                                    0,
-                                    128,
-                                    128
-                                  );
+                                  ctx.drawImage(previewCanvases.avatar, 0, 0);
                                 }
                               }
                             }}
@@ -378,29 +511,17 @@ const CropEditor = ({
                   )}
 
                   {/* Preview Cover */}
-                  {imageType === 'cover' && completedCrop && imgRef.current && (
+                  {imageType === 'cover' && previewCanvases.cover && (
                     <div>
                       <div className="w-full aspect-[21/9] rounded-lg overflow-hidden border">
                         <canvas
                           ref={(canvas) => {
-                            if (canvas && completedCrop && imgRef.current) {
+                            if (canvas && previewCanvases.cover) {
                               const ctx = canvas.getContext('2d');
                               if (ctx) {
                                 canvas.width = 320;
-                                canvas.height = 137; // 320 * (9/21)
-                                const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
-                                const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
-                                ctx.drawImage(
-                                  imgRef.current,
-                                  completedCrop.x * scaleX,
-                                  completedCrop.y * scaleY,
-                                  completedCrop.width * scaleX,
-                                  completedCrop.height * scaleY,
-                                  0,
-                                  0,
-                                  320,
-                                  137
-                                );
+                                canvas.height = 137;
+                                ctx.drawImage(previewCanvases.cover, 0, 0);
                               }
                             }
                           }}
@@ -430,8 +551,26 @@ const CropEditor = ({
                         <span className="text-muted-foreground">Calidad:</span>
                         <span className="font-medium">{Math.round(config.quality * 100)}%</span>
                       </div>
+                      {completedCrop && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Recorte:</span>
+                          <span className="font-medium text-xs">
+                            {Math.round(completedCrop.width)}×{Math.round(completedCrop.height)}px
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Debug Info (Solo en desarrollo) */}
+                  {process.env.NODE_ENV === 'development' && completedCrop && (
+                    <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                      <p className="text-xs font-mono text-blue-600 dark:text-blue-400">
+                        DEBUG: x:{Math.round(completedCrop.x)}, y:{Math.round(completedCrop.y)}, 
+                        w:{Math.round(completedCrop.width)}, h:{Math.round(completedCrop.height)}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -481,7 +620,7 @@ const CropEditor = ({
               </Button>
               <Button 
                 onClick={handleSave}
-                disabled={isUploading || !completedCrop}
+                disabled={isUploading || !completedCrop || !validateCrop(completedCrop)}
               >
                 {isUploading ? (
                   <>
@@ -522,13 +661,23 @@ const ProfileImageEditor = ({
   // Manejar selección de archivo
   const handleFileSelect = (file, type) => {
     if (file && file.type.startsWith('image/')) {
+      console.log('📁 Archivo seleccionado:', { 
+        name: file.name, 
+        size: file.size, 
+        type: file.type,
+        imageType: type 
+      });
       setSelectedFile(file);
       setEditingType(type);
+    } else {
+      console.error('❌ Archivo inválido:', file);
     }
   };
 
   // Éxito en la subida
   const handleUploadSuccess = (url) => {
+    console.log('🎉 Upload completado exitosamente:', { url, type: editingType });
+    
     if (editingType === 'avatar') {
       onAvatarChange?.(url);
     } else if (editingType === 'cover') {
@@ -542,8 +691,16 @@ const ProfileImageEditor = ({
 
   // Cancelar edición
   const handleCancel = () => {
+    console.log('❌ Edición cancelada');
     setEditingType(null);
     setSelectedFile(null);
+  };
+
+  // Eliminar imagen de portada
+  const handleRemoveCover = async () => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar la imagen de portada?')) {
+      onCoverChange?.(null);
+    }
   };
 
   return (
@@ -559,6 +716,9 @@ const ProfileImageEditor = ({
                 src={currentAvatar} 
                 alt="Avatar actual"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -583,7 +743,7 @@ const ProfileImageEditor = ({
           <input
             ref={avatarInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/jpg,image/png,image/webp"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handleFileSelect(file, 'avatar');
@@ -601,6 +761,9 @@ const ProfileImageEditor = ({
                 src={currentCover} 
                 alt="Portada actual"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -623,7 +786,8 @@ const ProfileImageEditor = ({
                 <Button 
                   variant="ghost" 
                   size="sm"
-                  onClick={() => onCoverChange?.(null)}
+                  onClick={handleRemoveCover}
+                  title="Eliminar imagen de portada"
                 >
                   <Icon name="Trash2" size={16} />
                 </Button>
@@ -641,7 +805,7 @@ const ProfileImageEditor = ({
           <input
             ref={coverInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/jpg,image/png,image/webp"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handleFileSelect(file, 'cover');
