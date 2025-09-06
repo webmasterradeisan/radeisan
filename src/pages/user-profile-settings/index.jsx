@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con integración real de Supabase + Sistema de Fotos
+// UserProfileSettings con integración real de Supabase + Sistema de Fotos COMPLETO
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,9 +9,11 @@ import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import ProfileHeader from './components/ProfileHeader';
 import ProfileTabs from './components/ProfileTabs';
 import VideoGrid from './components/VideoGrid';
+import PhotoGrid from './components/PhotoGrid'; // NUEVO: Sistema de fotos
 import PointsHistory from './components/PointsHistory';
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
+import useUserPhotos from './hooks/useUserPhotos'; // NUEVO: Hook de fotos
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
@@ -27,7 +29,7 @@ const useUserProfile = () => {
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
   
-  // 🆕 Estados específicos para cover image
+  // Estados específicos para cover image
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverError, setCoverError] = useState(null);
 
@@ -56,8 +58,8 @@ const useUserProfile = () => {
               username: generateUsername(user.email),
               email: user.email,
               avatar_url: user.user_metadata?.avatar_url,
-              cover_image_url: null, // 🆕 Inicializar cover image
-              photos_count: 0,       // 🆕 Inicializar contador de fotos
+              cover_image_url: null, // Inicializar cover image
+              photos_count: 0,       // Inicializar contador de fotos
               created_at: new Date().toISOString()
             })
             .select()
@@ -109,7 +111,7 @@ const useUserProfile = () => {
     }
   }, [user?.id]);
 
-  // Upload de avatar (MANTENER EXACTAMENTE IGUAL)
+  // Upload de avatar
   const uploadAvatar = useCallback(async (file) => {
     if (!user?.id || !file) return { success: false, error: 'Invalid parameters' };
 
@@ -157,7 +159,7 @@ const useUserProfile = () => {
     }
   }, [user?.id, updateUserProfile]);
 
-  // 🆕 Upload de cover image
+  // Upload de cover image
   const uploadCover = useCallback(async (file) => {
     if (!user?.id || !file) return { success: false, error: 'Invalid parameters' };
 
@@ -170,7 +172,7 @@ const useUserProfile = () => {
         throw new Error('El archivo debe ser una imagen');
       }
 
-      if (file.size > 10 * 1024 * 1024) { // 10MB max para covers (mayor que avatars)
+      if (file.size > 10 * 1024 * 1024) { // 10MB max para covers
         throw new Error('La imagen debe ser menor a 10MB');
       }
 
@@ -220,14 +222,14 @@ const useUserProfile = () => {
     uploadAvatar,
     refreshProfile: fetchProfile,
     
-    // 🆕 Cover image functionality
+    // Cover image functionality
     coverUploading,
     coverError,
     uploadCover
   };
 };
 
-// Hook para videos del usuario (MANTENER EXACTAMENTE IGUAL)
+// Hook para videos del usuario
 const useUserVideos = () => {
   const { user } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -352,7 +354,7 @@ const useUserVideos = () => {
   };
 };
 
-// Hook para historial de puntos (MANTENER EXACTAMENTE IGUAL)
+// Hook para historial de puntos
 const usePointsHistory = () => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState([]);
@@ -441,7 +443,7 @@ const usePointsHistory = () => {
   };
 };
 
-// Hook para historial de compras/canjes (MANTENER EXACTAMENTE IGUAL)
+// Hook para historial de compras/canjes
 const usePurchaseHistory = () => {
   const { user } = useAuth();
   const [purchases, setPurchases] = useState([]);
@@ -484,7 +486,7 @@ const usePurchaseHistory = () => {
 };
 
 // ===============================
-// UTILIDADES (MANTENER EXACTAMENTE IGUAL)
+// UTILIDADES
 // ===============================
 
 // Generar username único
@@ -536,22 +538,38 @@ const UserProfileSettings = () => {
     uploading,
     updateProfile,
     uploadAvatar,
-    refreshProfile, // 🆕 Función para refresh
+    refreshProfile,
     
-    // 🆕 Cover image states
+    // Cover image states
     coverUploading,
     coverError,
     uploadCover
   } = useUserProfile();
+  
   const { videos, stats, loading: videosLoading, deleteVideo, updateVideo } = useUserVideos();
   const { transactions, summary, loading: pointsLoading } = usePointsHistory();
   const { purchases, loading: purchasesLoading } = usePurchaseHistory();
+  
+  // NUEVO: Hook del sistema de fotos
+  const {
+    photos,
+    loading: photosLoading,
+    error: photosError,
+    totalCount: photosCount,
+    likePhoto,
+    deletePhoto,
+    updatePhoto,
+    refresh: refreshPhotos
+  } = useUserPhotos(user?.id, {
+    autoLoad: true,
+    includePrivate: true
+  });
 
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
 
   // ===============================
-  // COMPUTED VALUES (EXTENDER LIGERAMENTE)
+  // COMPUTED VALUES
   // ===============================
 
   // Combinar datos del auth y perfil
@@ -565,7 +583,7 @@ const UserProfileSettings = () => {
       email: profileData.email,
       bio: profileData.bio,
       avatar: profileData.avatar_url,
-      coverImage: profileData.cover_image_url, // ✅ Ya existía
+      coverImage: profileData.cover_image_url,
       isVerified: profileData.is_verified || false,
       isBusinessAccount: !!profileData.business_name,
       businessName: profileData.business_name,
@@ -574,8 +592,8 @@ const UserProfileSettings = () => {
       website: profileData.website,
       phoneNumber: profileData.phone_number,
       
-      // 🆕 Añadir contador de fotos
-      photosCount: profileData.photos_count || 0,
+      // NUEVO: Contador de fotos
+      photosCount: photosCount || profileData.photos_count || 0,
       
       // Estadísticas calculadas
       followersCount: 0, // TODO: Implementar sistema de follows
@@ -589,19 +607,20 @@ const UserProfileSettings = () => {
       createdAt: profileData.created_at,
       updatedAt: profileData.updated_at
     };
-  }, [profileData, stats, summary]);
+  }, [profileData, stats, summary, photosCount]);
 
-  // Contadores para tabs (MANTENER IGUAL)
+  // Contadores para tabs (ACTUALIZADO con fotos)
   const tabCounts = useMemo(() => ({
     videos: videos.length,
+    photos: photosCount || 0, // NUEVO: Contador de fotos
     liked: 0, // TODO: Implementar videos liked
     playlists: 0, // TODO: Implementar playlists
     purchases: purchases.length,
     points: transactions.length
-  }), [videos.length, purchases.length, transactions.length]);
+  }), [videos.length, photosCount, purchases.length, transactions.length]);
 
   // ===============================
-  // EVENT HANDLERS (CORREGIDOS PARA REFRESH)
+  // EVENT HANDLERS
   // ===============================
 
   const handleEditProfile = useCallback(() => {
@@ -630,7 +649,7 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile]);
 
-  // 🔧 HANDLERS CORREGIDOS - Usa callbacks del ProfileImageEditor
+  // Handlers corregidos para usar callbacks del ProfileImageEditor
   const handleAvatarUpload = useCallback(async (url) => {
     // El ProfileImageEditor ya subió y actualizó la BD
     // Solo necesitamos refrescar el perfil para ver los cambios
@@ -648,6 +667,39 @@ const UserProfileSettings = () => {
       console.log('Cover updated, profile refreshed');
     }
   }, [refreshProfile]);
+
+  // NUEVO: Manejar acciones de fotos
+  const handlePhotoAction = useCallback(async (action, photo, data = {}) => {
+    switch (action) {
+      case 'like':
+        await likePhoto(photo.id, photo.isLiked);
+        break;
+      case 'edit':
+        // TODO: Implementar edición de foto
+        console.log('Edit photo:', photo);
+        break;
+      case 'delete':
+        if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
+          const result = await deletePhoto(photo.id);
+          if (result.success) {
+            console.log('Photo deleted successfully');
+            // Actualizar contador en el perfil
+            await refreshProfile();
+          } else {
+            console.error('Error deleting photo:', result.error);
+          }
+        }
+        break;
+      case 'privacy':
+        await updatePhoto(photo.id, { privacy: data.privacy });
+        break;
+      case 'publish':
+        await updatePhoto(photo.id, { is_published: !photo.is_published });
+        break;
+      default:
+        console.log('Unknown photo action:', action);
+    }
+  }, [likePhoto, deletePhoto, updatePhoto, refreshProfile]);
 
   const handleVideoAction = useCallback(async (action, videoId, data = {}) => {
     switch (action) {
@@ -693,14 +745,45 @@ const UserProfileSettings = () => {
             showActions={true}
           />
         );
-      case 'liked':
+      
+      // NUEVO: Tab de fotos
+      case 'photos':
         return (
-          <VideoGrid 
-            videos={[]} // TODO: Implementar videos liked
-            loading={false}
-            emptyMessage="No has dado like a ningún video aún"
+          <PhotoGrid
+            photos={photos}
+            loading={photosLoading}
+            onPhotoSelect={(photo) => console.log('Photo selected:', photo)}
+            onPhotoLike={(photo) => handlePhotoAction('like', photo)}
+            onPhotoEdit={(photo) => handlePhotoAction('edit', photo)}
+            onPhotoDelete={(photo) => handlePhotoAction('delete', photo)}
+            isOwner={true}
+            showUploadButton={true}
+            onUploadClick={() => window.location.href = '/photo-upload'}
           />
         );
+      
+      case 'liked':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-4">Videos que te gustaron</h3>
+              <VideoGrid 
+                videos={[]} // TODO: Implementar videos liked
+                loading={false}
+                emptyMessage="No has dado like a ningún video aún"
+              />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-4">Fotos que te gustaron</h3>
+              <PhotoGrid
+                photos={[]} // TODO: Implementar fotos liked
+                loading={false}
+                showUploadButton={false}
+              />
+            </div>
+          </div>
+        );
+      
       case 'playlists':
         return (
           <VideoGrid 
@@ -709,6 +792,7 @@ const UserProfileSettings = () => {
             emptyMessage="No has creado playlists aún"
           />
         );
+      
       case 'purchases':
         return (
           <PurchaseHistory 
@@ -716,6 +800,7 @@ const UserProfileSettings = () => {
             loading={purchasesLoading} 
           />
         );
+      
       case 'points':
         return (
           <PointsHistory 
@@ -724,6 +809,7 @@ const UserProfileSettings = () => {
             loading={pointsLoading}
           />
         );
+      
       case 'settings':
         return (
           <SettingsPanel 
@@ -737,6 +823,7 @@ const UserProfileSettings = () => {
             onCancelEdit={() => setEditingProfile(false)}
           />
         );
+      
       default:
         return (
           <VideoGrid 
@@ -749,7 +836,7 @@ const UserProfileSettings = () => {
     }
   };
 
-  // Loading state (MANTENER IGUAL)
+  // Loading state
   if (profileLoading && !profileData) {
     return (
       <div className="min-h-screen bg-background">
@@ -769,7 +856,7 @@ const UserProfileSettings = () => {
     );
   }
 
-  // Error state (MANTENER IGUAL)
+  // Error state
   if (profileError) {
     return (
       <div className="min-h-screen bg-background">
@@ -803,14 +890,14 @@ const UserProfileSettings = () => {
   }
 
   // ===============================
-  // RENDER (MANTENER EXACTAMENTE IGUAL)
+  // RENDER PRINCIPAL
   // ===============================
   return (
     <>
       <Helmet>
         <title>{userData.name} - Mi Perfil | RADEISAN</title>
-        <meta name="description" content={`Perfil de ${userData.name}${userData.bio ? ` - ${userData.bio}` : ''}. ${userData.videosCount} videos, ${userData.totalViews} visualizaciones.`} />
-        <meta name="keywords" content={`perfil, usuario, videos, ${userData.name}, creador de contenido`} />
+        <meta name="description" content={`Perfil de ${userData.name}${userData.bio ? ` - ${userData.bio}` : ''}. ${userData.videosCount} videos, ${userData.photosCount} fotos, ${userData.totalViews} visualizaciones.`} />
+        <meta name="keywords" content={`perfil, usuario, videos, fotos, ${userData.name}, creador de contenido`} />
       </Helmet>
 
       <div className="min-h-screen bg-background">
@@ -830,6 +917,7 @@ const UserProfileSettings = () => {
               onUploadCover={handleCoverUpload}
               stats={{
                 videos: stats.totalVideos,
+                photos: photosCount, // NUEVO: Estadística de fotos
                 views: stats.totalViews,
                 likes: stats.totalLikes,
                 comments: stats.totalComments
@@ -842,6 +930,7 @@ const UserProfileSettings = () => {
               onTabChange={setActiveTab}
               tabCounts={tabCounts}
               user={userData}
+              showPhotosTab={true} // NUEVO: Mostrar tab de fotos
             />
 
             {/* Tab Content */}
@@ -865,8 +954,22 @@ const UserProfileSettings = () => {
           </div>
         )}
 
-        {/* Profile Stats Summary */}
-        {activeTab === 'videos' && userData && (
+        {/* NUEVO: Floating Action Button - Upload Photos */}
+        {activeTab === 'photos' && (
+          <div className="fixed bottom-20 lg:bottom-6 right-4 z-40">
+            <Button
+              size="lg"
+              className="rounded-full shadow-lg"
+              onClick={() => window.location.href = '/photo-upload'}
+            >
+              <Icon name="Plus" size={16} className="mr-2" />
+              Subir Fotos
+            </Button>
+          </div>
+        )}
+
+        {/* Profile Stats Summary - ACTUALIZADO con fotos */}
+        {(activeTab === 'videos' || activeTab === 'photos') && userData && (
           <div className="fixed bottom-4 left-4 max-w-sm bg-card border rounded-lg p-4 shadow-lg z-50 hidden lg:block">
             <div className="flex items-start space-x-3">
               <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
@@ -875,8 +978,8 @@ const UserProfileSettings = () => {
               <div>
                 <h4 className="font-medium text-foreground mb-1">Estadísticas del perfil</h4>
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <div>{stats.totalVideos} videos • {stats.totalViews.toLocaleString()} views</div>
-                  <div>{stats.totalLikes.toLocaleString()} likes • {summary.currentBalance.toLocaleString()} puntos</div>
+                  <div>{stats.totalVideos} videos • {photosCount} fotos</div>
+                  <div>{stats.totalViews.toLocaleString()} views • {summary.currentBalance.toLocaleString()} puntos</div>
                 </div>
               </div>
             </div>
