@@ -3,8 +3,6 @@
 import React, { useState, useCallback } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
-import Input from '../../../components/ui/Input';
-import { Textarea } from '../../../components/ui/Textarea';
 
 // ===============================
 // CONFIGURACIONES Y CONSTANTES
@@ -146,13 +144,13 @@ const PhotoMetadataForm = ({
             <label className="text-sm font-medium text-foreground mb-2 block">
               Descripción
             </label>
-            <Textarea
+            <textarea
               placeholder="Cuenta la historia detrás de tus fotos..."
               value={formData.caption}
               onChange={(e) => handleInputChange('caption', e.target.value)}
               rows={4}
               maxLength={1000}
-              className="resize-none"
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground resize-none"
             />
             <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-muted-foreground">
@@ -218,12 +216,13 @@ const PhotoMetadataForm = ({
             
             {/* Input de Tags */}
             <div className="flex items-center space-x-2 mb-3">
-              <Input
+              <input
+                type="text"
                 placeholder="Añadir tag..."
                 value={currentTag}
                 onChange={(e) => setCurrentTag(e.target.value)}
                 onKeyPress={handleTagKeyPress}
-                className="flex-1"
+                className="flex-1 px-3 py-2 border border-border rounded-md bg-background text-foreground"
                 maxLength={30}
               />
               <Button 
@@ -300,11 +299,12 @@ const PhotoMetadataForm = ({
             </div>
             
             {formData.showLocation && (
-              <Input
+              <input
+                type="text"
                 placeholder="¿Dónde tomaste estas fotos?"
                 value={formData.location}
                 onChange={(e) => handleInputChange('location', e.target.value)}
-                className="mt-2"
+                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground mt-2"
               />
             )}
           </div>
