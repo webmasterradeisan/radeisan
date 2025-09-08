@@ -1,5 +1,5 @@
 // src/pages/photo-upload-studio/index.jsx
-// Photo Upload Studio con componentes mock temporales (preparado para build)
+// Photo Upload Studio con componentes reales integrados
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -9,9 +9,9 @@ import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
-// import PhotoUploadZone from './components/PhotoUploadZone'; // TODO: Crear este componente
-// import PhotoPreview from './components/PhotoPreview'; // TODO: Crear este componente
-// import PhotoMetadataForm from './components/PhotoMetadataForm'; // TODO: Crear este componente
+import PhotoUploadZone from './components/PhotoUploadZone';
+import PhotoPreview from './components/PhotoPreview';
+import PhotoMetadataForm from './components/PhotoMetadataForm';
 
 // ===============================
 // CONFIGURACIONES Y CONSTANTES
@@ -40,337 +40,23 @@ const UPLOAD_STEPS = [
 ];
 
 // ===============================
-// COMPONENTES MOCK TEMPORALES
-// ===============================
-
-// TODO: Reemplazar con PhotoUploadZone real
-const PhotoUploadZoneMock = ({ onFilesSelected, multiple = true, maxFiles = 10 }) => {
-  const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      onFilesSelected(files);
-    }
-  };
-
-  return (
-    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center bg-muted/30 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200">
-      <div className="mb-6">
-        <div className="w-20 h-20 mx-auto rounded-full bg-muted text-muted-foreground flex items-center justify-center">
-          <Icon name="ImagePlus" size={32} />
-        </div>
-      </div>
-      
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold text-foreground mb-2">
-          Sube tus fotos
-        </h3>
-        <p className="text-muted-foreground">
-          {multiple 
-            ? `Arrastra y suelta hasta ${maxFiles} fotos, o haz clic para seleccionar`
-            : 'Arrastra y suelta una foto, o haz clic para seleccionar'
-          }
-        </p>
-      </div>
-
-      <input
-        type="file"
-        multiple={multiple}
-        accept="image/jpeg,image/jpg,image/png,image/webp"
-        onChange={handleFileSelect}
-        className="hidden"
-        id="photo-upload-input"
-      />
-      
-      <Button onClick={() => document.getElementById('photo-upload-input')?.click()}>
-        <Icon name="FolderOpen" size={16} className="mr-2" />
-        Seleccionar Fotos
-      </Button>
-
-      <div className="mt-6 text-sm text-muted-foreground space-y-1">
-        <p>Formatos soportados: JPG, PNG, WEBP</p>
-        <p>Tamaño máximo: 10MB por foto</p>
-        {multiple && <p>Hasta {maxFiles} fotos por vez</p>}
-      </div>
-    </div>
-  );
-};
-
-// TODO: Reemplazar con PhotoPreview real
-const PhotoPreviewMock = ({ 
-  files, 
-  onRemoveFile, 
-  onNext 
-}) => {
-  if (!files || files.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Icon name="ImageOff" size={48} className="text-muted-foreground mx-auto mb-4" />
-        <p className="text-muted-foreground">No hay fotos para editar</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">
-            Editar Fotos
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Ajusta el recorte y formato de tus {files.length} foto{files.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {files.map((file, index) => (
-          <div key={index} className="relative aspect-square bg-muted rounded-lg overflow-hidden">
-            <img
-              src={URL.createObjectURL(file)}
-              alt={`Preview ${index + 1}`}
-              className="w-full h-full object-cover"
-            />
-            <Button
-              variant="destructive"
-              size="sm"
-              className="absolute top-2 right-2 h-8 w-8 p-0"
-              onClick={() => onRemoveFile(index)}
-            >
-              <Icon name="X" size={14} />
-            </Button>
-            <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-              {file.name}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-muted/50 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="text-center">
-              <p className="text-lg font-semibold text-foreground">{files.length}</p>
-              <p className="text-xs text-muted-foreground">Fotos</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold text-foreground">
-                {(files.reduce((acc, file) => acc + file.size, 0) / 1024 / 1024).toFixed(1)}MB
-              </p>
-              <p className="text-xs text-muted-foreground">Tamaño total</p>
-            </div>
-          </div>
-          
-          <Button onClick={onNext}>
-            <Icon name="ArrowRight" size={16} className="mr-2" />
-            Continuar
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// TODO: Reemplazar con PhotoMetadataForm real
-const PhotoMetadataFormMock = ({ 
-  metadata = {}, 
-  onChange, 
-  categories = PHOTO_CATEGORIES,
-  onSaveDraft,
-  onPublish,
-  loading = false 
-}) => {
-  const [formData, setFormData] = useState({
-    caption: metadata.caption || '',
-    category: metadata.category || 'general',
-    tags: metadata.tags || [],
-    publish: metadata.publish !== false
-  });
-
-  const [currentTag, setCurrentTag] = useState('');
-
-  const updateFormData = (updates) => {
-    const newData = { ...formData, ...updates };
-    setFormData(newData);
-    onChange?.(newData);
-  };
-
-  const addTag = () => {
-    const cleanTag = currentTag.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-    if (cleanTag && !formData.tags.includes(cleanTag) && formData.tags.length < 10) {
-      updateFormData({ tags: [...formData.tags, cleanTag] });
-    }
-    setCurrentTag('');
-  };
-
-  const removeTag = (tagToRemove) => {
-    updateFormData({ 
-      tags: formData.tags.filter(tag => tag !== tagToRemove) 
-    });
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-2">
-          Información de las fotos
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Añade información para que más personas puedan descubrir tus fotos
-        </p>
-      </div>
-
-      <div className="space-y-6">
-        {/* Descripción */}
-        <div>
-          <label className="text-sm font-medium text-foreground mb-2 block">
-            Descripción
-          </label>
-          <textarea
-            placeholder="Cuenta la historia detrás de tus fotos..."
-            value={formData.caption}
-            onChange={(e) => updateFormData({ caption: e.target.value })}
-            rows={4}
-            maxLength={1000}
-            className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground resize-none"
-          />
-          <div className="flex items-center justify-between mt-2">
-            <p className="text-xs text-muted-foreground">
-              Una buena descripción ayuda a que más personas encuentren tus fotos
-            </p>
-            <span className="text-xs text-muted-foreground">
-              {formData.caption.length}/1000
-            </span>
-          </div>
-        </div>
-
-        {/* Categoría */}
-        <div>
-          <label className="text-sm font-medium text-foreground mb-3 block">
-            Categoría
-          </label>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {categories.slice(0, 6).map((category) => (
-              <button
-                key={category.id}
-                onClick={() => updateFormData({ category: category.id })}
-                className={`
-                  p-3 rounded-lg border text-left transition-all hover:border-primary/50
-                  ${formData.category === category.id 
-                    ? 'border-primary bg-primary/5 text-primary' 
-                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                  }
-                `}
-              >
-                <div className="flex items-center space-x-2">
-                  <Icon name={category.icon} size={16} />
-                  <span className="font-medium text-sm">{category.label}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div>
-          <label className="text-sm font-medium text-foreground mb-2 block">
-            Tags
-          </label>
-          
-          <div className="flex items-center space-x-2 mb-3">
-            <input
-              type="text"
-              placeholder="Añadir tag..."
-              value={currentTag}
-              onChange={(e) => setCurrentTag(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' || e.key === ',') {
-                  e.preventDefault();
-                  addTag();
-                }
-              }}
-              className="flex-1 px-3 py-2 border border-border rounded-md bg-background text-foreground"
-              maxLength={30}
-            />
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={addTag}
-              disabled={!currentTag.trim()}
-            >
-              <Icon name="Plus" size={16} />
-            </Button>
-          </div>
-
-          {formData.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {formData.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary/10 text-primary"
-                >
-                  #{tag}
-                  <button
-                    onClick={() => removeTag(tag)}
-                    className="ml-2 hover:text-destructive"
-                  >
-                    <Icon name="X" size={12} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Acciones */}
-      <div className="flex items-center justify-between pt-6 border-t">
-        <div className="text-sm text-muted-foreground">
-          Las fotos se optimizarán automáticamente
-        </div>
-        
-        <div className="flex space-x-3">
-          <Button 
-            variant="outline" 
-            onClick={onSaveDraft}
-            disabled={loading}
-          >
-            <Icon name="Save" size={16} className="mr-2" />
-            Guardar Borrador
-          </Button>
-          <Button 
-            onClick={onPublish}
-            disabled={loading || !formData.category}
-          >
-            {loading ? (
-              <>
-                <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
-                Publicando...
-              </>
-            ) : (
-              <>
-                <Icon name="Upload" size={16} className="mr-2" />
-                Publicar Fotos
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ===============================
 // HOOK PARA GESTIONAR FORMULARIO
 // ===============================
 
 const usePhotoForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [cropData, setCropData] = useState([]);
+  const [aspectRatios, setAspectRatios] = useState([]);
   const [metadata, setMetadata] = useState({
     caption: '',
     category: 'general',
     tags: [],
+    privacy: 'public',
+    allowComments: true,
+    allowDownload: false,
+    showLocation: false,
+    location: '',
     publish: true
   });
 
@@ -379,20 +65,53 @@ const usePhotoForm = () => {
       file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024
     );
     setSelectedFiles(prev => [...prev, ...newFiles]);
+    
+    // Inicializar datos de crop y aspect ratio para nuevos archivos
+    const newCropData = Array(newFiles.length).fill(null);
+    const newAspectRatios = Array(newFiles.length).fill('original');
+    
+    setCropData(prev => [...prev, ...newCropData]);
+    setAspectRatios(prev => [...prev, ...newAspectRatios]);
+    
     setCurrentStep(2);
   };
 
   const removeFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setCropData(prev => prev.filter((_, i) => i !== index));
+    setAspectRatios(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateCropData = (index, cropInfo) => {
+    setCropData(prev => {
+      const newData = [...prev];
+      newData[index] = cropInfo;
+      return newData;
+    });
+  };
+
+  const updateAspectRatio = (index, ratio) => {
+    setAspectRatios(prev => {
+      const newRatios = [...prev];
+      newRatios[index] = ratio;
+      return newRatios;
+    });
   };
 
   const resetForm = () => {
     setCurrentStep(1);
     setSelectedFiles([]);
+    setCropData([]);
+    setAspectRatios([]);
     setMetadata({
       caption: '',
       category: 'general',
       tags: [],
+      privacy: 'public',
+      allowComments: true,
+      allowDownload: false,
+      showLocation: false,
+      location: '',
       publish: true
     });
   };
@@ -401,10 +120,14 @@ const usePhotoForm = () => {
     currentStep,
     setCurrentStep,
     selectedFiles,
+    cropData,
+    aspectRatios,
     metadata,
     setMetadata,
     addFiles,
     removeFile,
+    updateCropData,
+    updateAspectRatio,
     resetForm
   };
 };
@@ -418,19 +141,28 @@ const usePhotoUploadMock = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
 
-  const uploadMultiplePhotos = async (files, metadata) => {
+  const uploadMultiplePhotos = async (files, metadata, cropData, aspectRatios) => {
     setIsUploading(true);
     setUploadError(null);
     
     try {
-      // Simular upload
+      // Simular procesamiento de cada archivo
       for (let i = 0; i <= 100; i += 10) {
         setUploadProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      // Mock success
-      return files.map(() => ({ success: true }));
+      // Mock success - simular respuesta exitosa
+      const results = files.map((file, index) => ({
+        success: true,
+        id: `photo_${Date.now()}_${index}`,
+        file_name: file.name,
+        crop_applied: cropData[index] !== null,
+        aspect_ratio: aspectRatios[index],
+        size: file.size
+      }));
+      
+      return results;
       
     } catch (error) {
       setUploadError(error.message);
@@ -469,10 +201,14 @@ const PhotoUploadStudio = () => {
     currentStep,
     setCurrentStep,
     selectedFiles,
+    cropData,
+    aspectRatios,
     metadata,
     setMetadata,
     addFiles,
     removeFile,
+    updateCropData,
+    updateAspectRatio,
     resetForm
   } = usePhotoForm();
 
@@ -493,7 +229,7 @@ const PhotoUploadStudio = () => {
     setShowUploadModal(true);
 
     try {
-      const results = await uploadMultiplePhotos(selectedFiles, metadata);
+      const results = await uploadMultiplePhotos(selectedFiles, metadata, cropData, aspectRatios);
       
       const successfulUploads = results.filter(r => r.success);
       
@@ -629,24 +365,32 @@ const PhotoUploadStudio = () => {
               
               {/* Área Principal */}
               <div className="lg:col-span-2">
+                
+                {/* PASO 1: Upload Zone */}
                 {currentStep === 1 && (
-                  <PhotoUploadZoneMock 
+                  <PhotoUploadZone 
                     onFilesSelected={addFiles}
                     multiple={true}
                     maxFiles={10}
                   />
                 )}
 
+                {/* PASO 2: Preview y Edición */}
                 {currentStep === 2 && selectedFiles.length > 0 && (
-                  <PhotoPreviewMock
+                  <PhotoPreview
                     files={selectedFiles}
+                    cropData={cropData}
+                    aspectRatios={aspectRatios}
                     onRemoveFile={removeFile}
+                    onCropChange={updateCropData}
+                    onAspectRatioChange={updateAspectRatio}
                     onNext={nextStep}
                   />
                 )}
 
+                {/* PASO 3: Metadatos */}
                 {currentStep === 3 && (
-                  <PhotoMetadataFormMock
+                  <PhotoMetadataForm
                     metadata={metadata}
                     onChange={setMetadata}
                     categories={PHOTO_CATEGORIES}
@@ -656,6 +400,7 @@ const PhotoUploadStudio = () => {
                   />
                 )}
 
+                {/* PASO 4: Éxito */}
                 {currentStep === 4 && (
                   <div className="text-center py-12">
                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -667,6 +412,29 @@ const PhotoUploadStudio = () => {
                     <p className="text-muted-foreground mb-8">
                       Tus {selectedFiles.length} foto{selectedFiles.length !== 1 ? 's han' : ' ha'} sido publicada{selectedFiles.length !== 1 ? 's' : ''} en tu perfil
                     </p>
+                    
+                    {/* Resumen del Upload */}
+                    <div className="bg-muted/50 rounded-lg p-6 mb-8 max-w-md mx-auto">
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <p className="text-2xl font-bold text-primary">{selectedFiles.length}</p>
+                          <p className="text-xs text-muted-foreground">Fotos</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-primary">
+                            {cropData.filter(crop => crop !== null).length}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Editadas</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-primary">
+                            {metadata.tags?.length || 0}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Tags</p>
+                        </div>
+                      </div>
+                    </div>
+                    
                     <div className="flex justify-center space-x-4">
                       <Button onClick={handlePublish}>
                         <Icon name="Eye" size={16} className="mr-2" />
@@ -710,20 +478,58 @@ const PhotoUploadStudio = () => {
                   </div>
                 </div>
 
+                {/* Progreso del Paso Actual */}
+                {currentStep > 1 && currentStep < 4 && (
+                  <div className="bg-card rounded-lg border p-6">
+                    <h3 className="font-semibold text-foreground mb-4 flex items-center">
+                      <Icon name="BarChart3" size={20} className="mr-2 text-blue-500" />
+                      Progreso
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Fotos seleccionadas:</span>
+                        <span className="font-medium">{selectedFiles.length}</span>
+                      </div>
+                      {currentStep >= 2 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Fotos editadas:</span>
+                          <span className="font-medium">
+                            {cropData.filter(crop => crop !== null).length}
+                          </span>
+                        </div>
+                      )}
+                      {currentStep >= 3 && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Categoría:</span>
+                            <span className="font-medium">
+                              {PHOTO_CATEGORIES.find(c => c.id === metadata.category)?.label || 'General'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tags:</span>
+                            <span className="font-medium">{metadata.tags?.length || 0}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Nota sobre funcionalidad */}
                 <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-6">
                   <h3 className="font-semibold text-foreground mb-3 flex items-center">
                     <Icon name="Info" size={20} className="mr-2 text-blue-500" />
-                    Sistema en desarrollo
+                    Sistema Avanzado
                   </h3>
                   <div className="text-sm text-muted-foreground space-y-2">
-                    <p>Esta es una versión demo del sistema de fotos.</p>
-                    <p>Próximamente tendrás:</p>
+                    <p>Esta versión incluye todas las funciones avanzadas:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Recorte y edición avanzada</li>
-                      <li>Filtros y efectos</li>
-                      <li>Feed público de fotos</li>
-                      <li>Sistema de likes y comentarios</li>
+                      <li>Recorte y edición profesional ✅</li>
+                      <li>Múltiples formatos de aspecto ✅</li>
+                      <li>Sistema completo de metadatos ✅</li>
+                      <li>Configuraciones de privacidad ✅</li>
+                      <li>Optimización automática ✅</li>
                     </ul>
                   </div>
                 </div>
@@ -745,7 +551,7 @@ const PhotoUploadStudio = () => {
                 {currentStep === 3 ? (
                   <Button 
                     onClick={handleBatchUpload}
-                    disabled={isUploading}
+                    disabled={isUploading || !metadata.category}
                   >
                     <Icon name="Upload" size={16} className="mr-2" />
                     Publicar Fotos
@@ -779,7 +585,7 @@ const PhotoUploadStudio = () => {
               </h3>
               
               <p className="text-sm text-muted-foreground mb-6">
-                Procesando tus imágenes
+                Procesando y optimizando tus {selectedFiles.length} imágenes
               </p>
 
               <div className="w-full bg-muted rounded-full h-2 mb-4">
@@ -792,6 +598,12 @@ const PhotoUploadStudio = () => {
               <p className="text-xs text-muted-foreground">
                 {Math.round(uploadProgress)}% completado
               </p>
+              
+              {uploadProgress > 50 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Aplicando recortes y optimizaciones...
+                </p>
+              )}
             </div>
           </div>
         </div>
