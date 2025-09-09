@@ -1145,15 +1145,41 @@ const UserProfileSettings = () => {
         onSuccess={handleQuickUploadSuccess}
       />
 
-      {/* NUEVO: Profile Image Editor Modal */}
+      {/* NUEVO: Profile Image Editor Modal - MODAL APROPIADO */}
       {showImageEditor && (
-        <ProfileImageEditor
-          currentAvatar={userData?.avatar}
-          currentCover={userData?.coverImage}
-          onAvatarChange={handleAvatarUpload}
-          onCoverChange={handleCoverUpload}
-          onClose={() => setShowImageEditor(false)}
-        />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-lg border max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="p-6">
+              {/* Header del Modal */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">
+                    Editar Imágenes de Perfil
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Cambia tu imagen de perfil o portada
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowImageEditor(false)}
+                >
+                  <Icon name="X" size={20} />
+                </Button>
+              </div>
+
+              {/* Profile Image Editor dentro del Modal */}
+              <ProfileImageEditor
+                currentAvatar={userData?.avatar}
+                currentCover={userData?.coverImage}
+                onAvatarChange={handleAvatarUpload}
+                onCoverChange={handleCoverUpload}
+                onClose={() => setShowImageEditor(false)}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
