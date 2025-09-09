@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - VERSIÓN COMPLETA con separación de REELS y VIDEOS
+// UserProfileSettings - VERSIÓN COMPLETA con detección mejorada de Reels vs Videos
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +22,158 @@ import Button from '../../components/ui/Button';
 const VIDEO_ORIENTATIONS = {
   VERTICAL: 'vertical',
   HORIZONTAL: 'horizontal'
+};
+
+// Configuración para detección de orientación
+const DETECTION_CONFIG = {
+  // Duración típica de reels (en segundos)
+  REEL_MAX_DURATION: 90,
+  // Keywords que indican video vertical
+  VERTICAL_KEYWORDS: [
+    'reel', 'reels', 'vertical', 'móvil', 'movil', 'mobile', 'short', 'shorts',
+    'tiktok', 'instagram', 'story', 'stories', 'portrait', 'phone', 'celular',
+    'smartphone', 'snap', 'quick', 'rapido', 'rápido', 'vertical', 'meme',
+    'trend', 'trending', 'viral', 'dance', 'baile', 'challenge', 'desafio',
+    'desafío', 'mini', 'clip'
+  ],
+  // Keywords que indican video horizontal
+  HORIZONTAL_KEYWORDS: [
+    'landscape', 'widescreen', 'cinema', 'movie', 'película', 'pelicula',
+    'horizontal', 'desktop', 'tv', 'television', 'film', 'documentary',
+    'documental', 'tutorial', 'clase', 'conferencia', 'presentacion',
+    'presentación', 'webinar', 'stream', 'streaming', 'gameplay', 'review'
+  ],
+  // Categorías típicas de cada orientación
+  VERTICAL_CATEGORIES: [
+    'reels', 'shorts', 'mobile', 'quick', 'viral', 'meme', 'dance', 'trend'
+  ],
+  HORIZONTAL_CATEGORIES: [
+    'tutorial', 'documentary', 'gaming', 'education', 'business', 'tech',
+    'review', 'vlog', 'movie', 'film', 'presentation'
+  ]
+};
+
+// ===============================
+// FUNCIONES DE UTILIDAD
+// ===============================
+
+// Función mejorada para detectar orientación del video
+const detectVideoOrientation = (video) => {
+  console.log(`🔍 Detectando orientación para video: "${video.title}" (ID: ${video.id})`);
+  
+  let score = 0; // Puntuación: positivo = vertical, negativo = horizontal
+  const reasons = []; // Para debugging
+
+  // 1. ANÁLISIS DE DURACIÓN
+  if (video.duration_seconds) {
+    if (video.duration_seconds <= DETECTION_CONFIG.REEL_MAX_DURATION) {
+      score += 3;
+      reasons.push(`Duración corta: ${video.duration_seconds}s (+3 vertical)`);
+    } else {
+      score -= 2;
+      reasons.push(`Duración larga: ${video.duration_seconds}s (-2 horizontal)`);
+    }
+  }
+
+  // 2. ANÁLISIS DE TEXTO (título, descripción, tags)
+  const title = (video.title || '').toLowerCase();
+  const description = (video.description || '').toLowerCase();
+  const tags = Array.isArray(video.tags) ? video.tags.join(' ').toLowerCase() : '';
+  const fullText = `${title} ${description} ${tags}`;
+
+  // Buscar keywords verticales
+  const verticalMatches = DETECTION_CONFIG.VERTICAL_KEYWORDS.filter(keyword => 
+    fullText.includes(keyword)
+  );
+  if (verticalMatches.length > 0) {
+    score += verticalMatches.length * 2;
+    reasons.push(`Keywords verticales encontradas: [${verticalMatches.join(', ')}] (+${verticalMatches.length * 2})`);
+  }
+
+  // Buscar keywords horizontales
+  const horizontalMatches = DETECTION_CONFIG.HORIZONTAL_KEYWORDS.filter(keyword => 
+    fullText.includes(keyword)
+  );
+  if (horizontalMatches.length > 0) {
+    score -= horizontalMatches.length * 2;
+    reasons.push(`Keywords horizontales encontradas: [${horizontalMatches.join(', ')}] (-${horizontalMatches.length * 2})`);
+  }
+
+  // 3. ANÁLISIS DE CATEGORÍA
+  const category = (video.category || '').toLowerCase();
+  if (DETECTION_CONFIG.VERTICAL_CATEGORIES.includes(category)) {
+    score += 4;
+    reasons.push(`Categoría vertical: "${category}" (+4)`);
+  } else if (DETECTION_CONFIG.HORIZONTAL_CATEGORIES.includes(category)) {
+    score -= 4;
+    reasons.push(`Categoría horizontal: "${category}" (-4)`);
+  }
+
+  // 4. ANÁLISIS DE PATRONES EN EL TÍTULO
+  // Títulos típicos de reels suelen ser más cortos y usar emojis
+  if (title.length > 0) {
+    if (title.length <= 30) {
+      score += 1;
+      reasons.push(`Título corto: ${title.length} chars (+1 vertical)`);
+    } else if (title.length > 80) {
+      score -= 1;
+      reasons.push(`Título largo: ${title.length} chars (-1 horizontal)`);
+    }
+
+    // Detectar emojis o caracteres especiales (común en reels)
+    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    if (emojiRegex.test(title)) {
+      score += 1;
+      reasons.push(`Título con emojis (+1 vertical)`);
+    }
+  }
+
+  // 5. ANÁLISIS DE FILE SIZE (si está disponible)
+  // Videos verticales tienden a ser más pequeños en resolución
+  if (video.file_size_bytes) {
+    const sizeMB = video.file_size_bytes / (1024 * 1024);
+    if (sizeMB < 50) {
+      score += 1;
+      reasons.push(`Archivo pequeño: ${sizeMB.toFixed(1)}MB (+1 vertical)`);
+    } else if (sizeMB > 200) {
+      score -= 1;
+      reasons.push(`Archivo grande: ${sizeMB.toFixed(1)}MB (-1 horizontal)`);
+    }
+  }
+
+  // 6. ANÁLISIS POR FECHA DE CREACIÓN
+  // Videos más recientes tienen más probabilidad de ser reels
+  if (video.created_at) {
+    const createdDate = new Date(video.created_at);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    if (createdDate > oneYearAgo) {
+      score += 0.5;
+      reasons.push(`Video reciente: ${createdDate.toLocaleDateString()} (+0.5 vertical)`);
+    }
+  }
+
+  // 7. DETERMINACIÓN FINAL
+  let orientation;
+  if (score > 2) {
+    orientation = VIDEO_ORIENTATIONS.VERTICAL;
+  } else if (score < -2) {
+    orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+  } else {
+    // En casos ambiguos, usar duración como criterio final
+    orientation = (video.duration_seconds && video.duration_seconds <= 60) 
+      ? VIDEO_ORIENTATIONS.VERTICAL 
+      : VIDEO_ORIENTATIONS.HORIZONTAL;
+    reasons.push(`Decisión ambigua (score: ${score}), usando duración como criterio final`);
+  }
+
+  console.log(`📊 Video "${video.title}": ${orientation.toUpperCase()}`);
+  console.log(`   Score final: ${score}`);
+  console.log(`   Razones:`, reasons);
+  console.log('---');
+
+  return orientation;
 };
 
 // ===============================
@@ -115,44 +267,6 @@ const useUserProfile = () => {
   };
 };
 
-// Función para detectar orientación del video
-const detectVideoOrientation = (video) => {
-  const title = (video.title || '').toLowerCase();
-  const description = (video.description || '').toLowerCase();
-  const tags = Array.isArray(video.tags) ? video.tags.join(' ').toLowerCase() : '';
-  const text = title + ' ' + description + ' ' + tags;
-
-  // Palabras clave que indican video vertical (Reel)
-  const verticalKeywords = [
-    'reel', 'reels', 'vertical', 'móvil', 'movil', 'short', 'shorts',
-    'tiktok', 'instagram', 'story', 'stories', 'portrait', 'phone'
-  ];
-
-  // Palabras clave que indican video horizontal
-  const horizontalKeywords = [
-    'landscape', 'widescreen', 'cinema', 'movie', 'película', 'pelicula',
-    'horizontal', 'desktop', 'tv', 'television'
-  ];
-
-  // Verificar palabras clave verticales
-  if (verticalKeywords.some(keyword => text.includes(keyword))) {
-    return VIDEO_ORIENTATIONS.VERTICAL;
-  }
-
-  // Verificar palabras clave horizontales
-  if (horizontalKeywords.some(keyword => text.includes(keyword))) {
-    return VIDEO_ORIENTATIONS.HORIZONTAL;
-  }
-
-  // Heurística por duración - reels suelen ser más cortos
-  if (video.duration_seconds && video.duration_seconds <= 60) {
-    return VIDEO_ORIENTATIONS.VERTICAL;
-  }
-
-  // Por defecto, asumir horizontal
-  return VIDEO_ORIENTATIONS.HORIZONTAL;
-};
-
 // Hook para videos horizontales (Videos tradicionales)
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
@@ -178,7 +292,7 @@ const useUserVideos = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('🎬 Fetching videos for user ID:', userId);
+      console.log('🎬 Fetching horizontal videos for user ID:', userId);
 
       const { data, error: fetchError } = await supabase
         .from('videos')
@@ -205,23 +319,35 @@ const useUserVideos = (userId) => {
         .eq('user_id', userId)
         .eq('is_published', true)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100); // Aumentado para mejor análisis
 
       if (fetchError) {
         console.error('❌ Error fetching videos:', fetchError);
         throw fetchError;
       }
 
-      // Filtrar solo videos horizontales
+      console.log('🔍 Analizando orientación de videos...');
+      
+      // Filtrar solo videos horizontales con análisis mejorado
       const allVideos = data || [];
-      const horizontalVideos = allVideos.filter(video => 
-        detectVideoOrientation(video) === VIDEO_ORIENTATIONS.HORIZONTAL
-      );
+      const horizontalVideos = [];
+      const verticalVideos = [];
 
-      console.log('✅ Videos fetched successfully:', {
+      allVideos.forEach(video => {
+        const orientation = detectVideoOrientation(video);
+        if (orientation === VIDEO_ORIENTATIONS.HORIZONTAL) {
+          horizontalVideos.push(video);
+        } else {
+          verticalVideos.push(video);
+        }
+      });
+
+      console.log('✅ Análisis de videos completado:', {
         total: allVideos.length,
         horizontal: horizontalVideos.length,
-        vertical: allVideos.length - horizontalVideos.length
+        vertical: verticalVideos.length,
+        horizontalTitles: horizontalVideos.slice(0, 3).map(v => v.title),
+        verticalTitles: verticalVideos.slice(0, 3).map(v => v.title)
       });
 
       setVideos(horizontalVideos);
@@ -269,7 +395,7 @@ const useUserVideos = (userId) => {
   };
 };
 
-// Hook para reels (videos verticales)
+// Hook para reels (videos verticales) con lógica mejorada
 const useUserReels = (userId) => {
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -294,7 +420,7 @@ const useUserReels = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('📱 Fetching reels for user ID:', userId);
+      console.log('📱 Fetching vertical videos (reels) for user ID:', userId);
 
       const { data, error: fetchError } = await supabase
         .from('videos')
@@ -321,23 +447,35 @@ const useUserReels = (userId) => {
         .eq('user_id', userId)
         .eq('is_published', true)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100); // Aumentado para mejor análisis
 
       if (fetchError) {
         console.error('❌ Error fetching reels:', fetchError);
         throw fetchError;
       }
 
-      // Filtrar solo videos verticales (reels)
-      const allVideos = data || [];
-      const verticalVideos = allVideos.filter(video => 
-        detectVideoOrientation(video) === VIDEO_ORIENTATIONS.VERTICAL
-      );
+      console.log('🔍 Analizando orientación para reels...');
 
-      console.log('✅ Reels fetched successfully:', {
+      // Filtrar solo videos verticales (reels) con análisis mejorado
+      const allVideos = data || [];
+      const verticalVideos = [];
+      const horizontalVideos = [];
+
+      allVideos.forEach(video => {
+        const orientation = detectVideoOrientation(video);
+        if (orientation === VIDEO_ORIENTATIONS.VERTICAL) {
+          verticalVideos.push(video);
+        } else {
+          horizontalVideos.push(video);
+        }
+      });
+
+      console.log('✅ Análisis de reels completado:', {
         total: allVideos.length,
         vertical: verticalVideos.length,
-        horizontal: allVideos.length - verticalVideos.length
+        horizontal: horizontalVideos.length,
+        verticalTitles: verticalVideos.slice(0, 3).map(v => v.title),
+        horizontalTitles: horizontalVideos.slice(0, 3).map(v => v.title)
       });
 
       setReels(verticalVideos);
@@ -614,7 +752,8 @@ const VideoGridComponent = ({
       title: videos[0].title,
       views: videos[0].views_count,
       likes: videos[0].likes_count,
-      duration: videos[0].duration_seconds
+      duration: videos[0].duration_seconds,
+      detectedAs: 'HORIZONTAL'
     } : null
   });
 
@@ -645,7 +784,7 @@ const VideoGridComponent = ({
         {isOwner && onUploadClick && (
           <Button onClick={onUploadClick} size="lg">
             <Icon name="Plus" size={20} className="mr-2" />
-            Subir video
+            Subir video horizontal
           </Button>
         )}
       </div>
@@ -668,7 +807,7 @@ const VideoGridComponent = ({
           <div 
             key={video.id} 
             className="group cursor-pointer"
-            onClick={() => console.log('Click en video:', video.id)}
+            onClick={() => console.log('Click en video horizontal:', video.id)}
           >
             <div className="relative">
               {/* Thumbnail */}
@@ -703,6 +842,11 @@ const VideoGridComponent = ({
                   {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}
                 </div>
               )}
+
+              {/* Horizontal Badge */}
+              <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+                VIDEO
+              </div>
             </div>
 
             {/* Video Info */}
@@ -784,7 +928,8 @@ const ReelsGridComponent = ({
       title: reels[0].title,
       views: reels[0].views_count,
       likes: reels[0].likes_count,
-      duration: reels[0].duration_seconds
+      duration: reels[0].duration_seconds,
+      detectedAs: 'VERTICAL'
     } : null
   });
 
@@ -815,7 +960,7 @@ const ReelsGridComponent = ({
         {isOwner && onUploadClick && (
           <Button onClick={onUploadClick} size="lg">
             <Icon name="Plus" size={20} className="mr-2" />
-            Crear reel
+            Crear reel vertical
           </Button>
         )}
       </div>
@@ -838,7 +983,7 @@ const ReelsGridComponent = ({
           <div 
             key={reel.id} 
             className="group cursor-pointer"
-            onClick={() => console.log('Click en reel:', reel.id)}
+            onClick={() => console.log('Click en reel vertical:', reel.id)}
           >
             <div className="relative">
               {/* Thumbnail - Aspecto vertical 9:16 */}
@@ -1105,7 +1250,7 @@ const UserProfileSettings = () => {
               .eq('id', video.id);
             
             if (!error) {
-              await refreshVideos();
+              await Promise.all([refreshVideos(), refreshReels()]);
             }
           }
           break;
@@ -1115,7 +1260,7 @@ const UserProfileSettings = () => {
     } catch (error) {
       console.error('Error with video action:', error);
     }
-  }, [refreshVideos]);
+  }, [refreshVideos, refreshReels]);
 
   const handleReelAction = useCallback(async (action, reel) => {
     try {
@@ -1134,7 +1279,7 @@ const UserProfileSettings = () => {
               .eq('id', reel.id);
             
             if (!error) {
-              await refreshReels();
+              await Promise.all([refreshVideos(), refreshReels()]);
             }
           }
           break;
@@ -1144,7 +1289,7 @@ const UserProfileSettings = () => {
     } catch (error) {
       console.error('Error with reel action:', error);
     }
-  }, [refreshReels]);
+  }, [refreshVideos, refreshReels]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -1165,7 +1310,7 @@ const UserProfileSettings = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'videos':
-        console.log('🎬 Rendering videos tab with:', { 
+        console.log('🎬 Rendering HORIZONTAL videos tab with:', { 
           videosCount: videos.length, 
           loading: videosLoading,
           error: videosError,
@@ -1198,12 +1343,12 @@ const UserProfileSettings = () => {
             isOwner={true}
             onUploadClick={() => window.location.href = '/upload'}
             emptyMessage="No tienes videos horizontales aún"
-            emptyDescription="Los videos en formato horizontal que subas aparecerán aquí. ¡Comienza a crear contenido!"
+            emptyDescription="Los videos en formato horizontal (16:9) que subas aparecerán aquí. Ideal para tutoriales, vlogs y contenido de escritorio."
           />
         );
 
       case 'reels':
-        console.log('📱 Rendering reels tab with:', { 
+        console.log('📱 Rendering VERTICAL reels tab with:', { 
           reelsCount: reels.length, 
           loading: reelsLoading,
           error: reelsError,
@@ -1236,7 +1381,7 @@ const UserProfileSettings = () => {
             isOwner={true}
             onUploadClick={() => window.location.href = '/upload'}
             emptyMessage="No tienes reels aún"
-            emptyDescription="Los videos en formato vertical (reels) que subas aparecerán aquí. ¡Crea contenido para móvil!"
+            emptyDescription="Los videos en formato vertical (9:16) que subas aparecerán aquí. Ideal para contenido móvil, stories y videos virales."
           />
         );
       
@@ -1477,17 +1622,17 @@ const UserProfileSettings = () => {
                         {/* Stats */}
                         <div className="flex flex-wrap gap-6 text-sm">
                           <div className="flex items-center space-x-1">
-                            <Icon name="Video" size={16} className="text-muted-foreground" />
+                            <Icon name="Video" size={16} className="text-blue-600" />
                             <span className="font-semibold">{userData?.videosCount || 0}</span>
                             <span className="text-muted-foreground">videos</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Icon name="Smartphone" size={16} className="text-muted-foreground" />
+                            <Icon name="Smartphone" size={16} className="text-pink-600" />
                             <span className="font-semibold">{userData?.reelsCount || 0}</span>
                             <span className="text-muted-foreground">reels</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Icon name="Image" size={16} className="text-muted-foreground" />
+                            <Icon name="Image" size={16} className="text-green-600" />
                             <span className="font-semibold">{userData?.photosCount || 0}</span>
                             <span className="text-muted-foreground">fotos</span>
                           </div>
@@ -1497,7 +1642,7 @@ const UserProfileSettings = () => {
                             <span className="text-muted-foreground">views</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Icon name="Heart" size={16} className="text-muted-foreground" />
+                            <Icon name="Heart" size={16} className="text-red-500" />
                             <span className="font-semibold">{userData?.totalLikes || 0}</span>
                             <span className="text-muted-foreground">likes</span>
                           </div>
@@ -1526,14 +1671,14 @@ const UserProfileSettings = () => {
               <div className="border-b border-border">
                 <nav className="flex space-x-8">
                   {[
-                    { id: 'videos', label: 'Videos', icon: 'Video', count: tabCounts.videos },
-                    { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels },
-                    { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos },
-                    { id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked },
-                    { id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists },
-                    { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases },
-                    { id: 'points', label: 'Puntos', icon: 'Star', count: null },
-                    { id: 'settings', label: 'Configuración', icon: 'Settings', count: null }
+                    { id: 'videos', label: 'Videos', icon: 'Video', count: tabCounts.videos, color: 'text-blue-600' },
+                    { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
+                    { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
+                    { id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' },
+                    { id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists, color: 'text-purple-600' },
+                    { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' },
+                    { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
+                    { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -1547,7 +1692,11 @@ const UserProfileSettings = () => {
                         }
                       `}
                     >
-                      <Icon name={tab.icon} size={16} />
+                      <Icon 
+                        name={tab.icon} 
+                        size={16} 
+                        className={activeTab === tab.id ? 'text-primary' : tab.color}
+                      />
                       <span>{tab.label}</span>
                       {tab.count !== null && (
                         <span className={`
