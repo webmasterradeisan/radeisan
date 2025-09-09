@@ -57,82 +57,85 @@ const DETECTION_CONFIG = {
 // FUNCIONES DE UTILIDAD
 // ===============================
 
-// Función CORREGIDA para detectar orientación - Por defecto HORIZONTAL
+// Función ULTRA-CONSERVADORA para detectar orientación - SOLO reels con evidencia EXPLÍCITA
 const detectVideoOrientation = (video) => {
-  console.log(`🔍 Analizando video: "${video.title}" (Duración: ${video.duration_seconds}s)`);
+  console.log(`🔍 Analizando video: "${video.title}" (Duración: ${video.duration_seconds || 'N/A'}s)`);
   
+  // POR DEFECTO: TODO ES HORIZONTAL (VIDEO TRADICIONAL)
+  let isReel = false;
   const reasons = [];
-  let isVertical = false; // Por defecto: HORIZONTAL
   
-  // CRITERIO 1: Keywords EXPLÍCITAS que indican REEL/VERTICAL
-  const title = (video.title || '').toLowerCase();
-  const description = (video.description || '').toLowerCase();
+  const title = (video.title || '').toLowerCase().trim();
+  const description = (video.description || '').toLowerCase().trim();
+  const category = (video.category || '').toLowerCase().trim();
   const tags = Array.isArray(video.tags) ? video.tags.join(' ').toLowerCase() : '';
-  const fullText = `${title} ${description} ${tags}`;
-
-  const EXPLICIT_VERTICAL_WORDS = [
-    'reel', 'reels', 'short', 'shorts', 'tiktok', 'vertical',
-    'story', 'stories', 'snap', 'mobile', 'móvil', 'movil'
-  ];
-
-  const foundVerticalWords = EXPLICIT_VERTICAL_WORDS.filter(word => 
-    fullText.includes(word)
-  );
-
-  if (foundVerticalWords.length > 0) {
-    isVertical = true;
-    reasons.push(`Keywords verticales explícitas: [${foundVerticalWords.join(', ')}]`);
-  }
-
-  // CRITERIO 2: Categoría ESPECÍFICA de reels
-  const category = (video.category || '').toLowerCase();
-  const VERTICAL_CATEGORIES = ['reels', 'shorts', 'vertical', 'mobile', 'story'];
   
-  if (VERTICAL_CATEGORIES.includes(category)) {
-    isVertical = true;
-    reasons.push(`Categoría vertical: "${category}"`);
-  }
-
-  // CRITERIO 3: Duración MUY CORTA (típico de reels)
-  if (video.duration_seconds && video.duration_seconds <= 30) {
-    isVertical = true;
-    reasons.push(`Duración muy corta: ${video.duration_seconds}s (típico de reel)`);
-  }
-
-  // CRITERIO 4: Título muy corto + duración corta
-  if (title.length <= 20 && video.duration_seconds && video.duration_seconds <= 60) {
-    isVertical = true;
-    reasons.push(`Título corto (${title.length} chars) + duración corta (${video.duration_seconds}s)`);
-  }
-
-  // CRITERIOS QUE FUERZAN HORIZONTAL
-  const HORIZONTAL_WORDS = [
-    'tutorial', 'documental', 'documentary', 'review', 'análisis', 
-    'analisis', 'conferencia', 'presentacion', 'presentación', 
-    'webinar', 'clase', 'curso', 'gameplay', 'streaming'
-  ];
-
-  const foundHorizontalWords = HORIZONTAL_WORDS.filter(word => 
-    fullText.includes(word)
-  );
-
-  if (foundHorizontalWords.length > 0) {
-    isVertical = false; // Forzar horizontal
-    reasons.push(`Keywords horizontales fuertes: [${foundHorizontalWords.join(', ')}]`);
-  }
-
-  // CRITERIO FUERTE: Duración larga = definitivamente horizontal
-  if (video.duration_seconds && video.duration_seconds > 120) {
-    isVertical = false; // Forzar horizontal
-    reasons.push(`Duración larga: ${video.duration_seconds}s (definitivamente horizontal)`);
-  }
-
-  const orientation = isVertical ? VIDEO_ORIENTATIONS.VERTICAL : VIDEO_ORIENTATIONS.HORIZONTAL;
+  // CRITERIO 1: Solo palabras MUY ESPECÍFICAS de reels
+  const REEL_WORDS = ['reel', 'reels'];
+  const SHORTS_WORDS = ['short', 'shorts'];
+  const STORY_WORDS = ['story', 'stories'];
   
-  console.log(`📊 RESULTADO: "${video.title}" = ${orientation.toUpperCase()}`);
-  console.log(`   Razones: ${reasons.length > 0 ? reasons.join('; ') : 'Clasificación por defecto (horizontal)'}`);
+  const hasReelWord = REEL_WORDS.some(word => title.includes(word) || description.includes(word) || tags.includes(word));
+  const hasShortsWord = SHORTS_WORDS.some(word => title.includes(word) || description.includes(word) || tags.includes(word));
+  const hasStoryWord = STORY_WORDS.some(word => title.includes(word) || description.includes(word) || tags.includes(word));
+  
+  if (hasReelWord) {
+    isReel = true;
+    reasons.push('Contiene palabra "reel/reels"');
+  }
+  
+  if (hasShortsWord) {
+    isReel = true;
+    reasons.push('Contiene palabra "short/shorts"');
+  }
+  
+  if (hasStoryWord) {
+    isReel = true;
+    reasons.push('Contiene palabra "story/stories"');
+  }
+  
+  // CRITERIO 2: Categoría EXPLÍCITA de reels
+  if (category === 'reels' || category === 'reel' || category === 'shorts' || category === 'short') {
+    isReel = true;
+    reasons.push(`Categoría explícita: "${category}"`);
+  }
+  
+  // CRITERIO 3: Solo duración EXTREMADAMENTE corta (≤15 segundos)
+  if (video.duration_seconds && video.duration_seconds <= 15) {
+    isReel = true;
+    reasons.push(`Duración extremadamente corta: ${video.duration_seconds}s`);
+  }
+  
+  // ANULAR SI HAY INDICADORES CLAROS DE VIDEO HORIZONTAL
+  const HORIZONTAL_INDICATORS = [
+    'tutorial', 'curso', 'clase', 'conferencia', 'presentacion', 'presentación',
+    'documental', 'documentary', 'review', 'análisis', 'analisis',
+    'webinar', 'gameplay', 'streaming', 'live', 'directo',
+    'explicación', 'explicacion', 'guía', 'guia', 'demo'
+  ];
+  
+  const hasHorizontalIndicator = HORIZONTAL_INDICATORS.some(word => 
+    title.includes(word) || description.includes(word) || tags.includes(word)
+  );
+  
+  if (hasHorizontalIndicator) {
+    isReel = false; // FORZAR HORIZONTAL
+    reasons.push(`Indicador horizontal detectado`);
+  }
+  
+  // ANULAR SI DURACIÓN ES MAYOR A 60 SEGUNDOS
+  if (video.duration_seconds && video.duration_seconds > 60) {
+    isReel = false; // FORZAR HORIZONTAL
+    reasons.push(`Duración larga: ${video.duration_seconds}s (forzar horizontal)`);
+  }
+  
+  const orientation = isReel ? VIDEO_ORIENTATIONS.VERTICAL : VIDEO_ORIENTATIONS.HORIZONTAL;
+  
+  console.log(`📊 "${video.title}" → ${orientation.toUpperCase()}`);
+  console.log(`   Clasificado como: ${isReel ? 'REEL' : 'VIDEO'}`);
+  console.log(`   Razones: ${reasons.length > 0 ? reasons.join('; ') : 'Por defecto: video horizontal'}`);
   console.log('---');
-
+  
   return orientation;
 };
 
