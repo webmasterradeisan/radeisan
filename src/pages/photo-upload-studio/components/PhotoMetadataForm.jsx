@@ -150,7 +150,7 @@ const PhotoMetadataForm = ({
               onChange={(e) => handleInputChange('caption', e.target.value)}
               rows={4}
               maxLength={1000}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground resize-none"
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
             <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-muted-foreground">
@@ -175,16 +175,16 @@ const PhotoMetadataForm = ({
                   className={`
                     p-3 rounded-lg border text-left transition-all hover:border-primary/50
                     ${formData.category === category.id 
-                      ? 'border-primary bg-primary/5 text-primary' 
-                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                      ? 'border-primary bg-primary/5' 
+                      : 'border-border hover:border-primary/50'
                     }
                   `}
                 >
                   <div className="flex items-center space-x-2 mb-1">
                     <Icon name={category.icon} size={16} />
-                    <span className="font-medium text-sm">{category.label}</span>
+                    <span className="text-sm font-medium">{category.label}</span>
                   </div>
-                  <p className="text-xs opacity-75 line-clamp-2">
+                  <p className="text-xs text-muted-foreground">
                     {category.description}
                   </p>
                 </button>
@@ -192,13 +192,14 @@ const PhotoMetadataForm = ({
             </div>
             
             {categories.length > 8 && (
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => setShowAllCategories(!showAllCategories)}
                 className="mt-3"
               >
-                {showAllCategories ? 'Ver menos' : `Ver todas (${categories.length})`}
+                {showAllCategories 
+                  ? 'Ver menos' : `Ver todas (${categories.length})`}
                 <Icon 
                   name={showAllCategories ? "ChevronUp" : "ChevronDown"} 
                   size={16} 
@@ -222,7 +223,7 @@ const PhotoMetadataForm = ({
                 value={currentTag}
                 onChange={(e) => setCurrentTag(e.target.value)}
                 onKeyPress={handleTagKeyPress}
-                className="flex-1 px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                className="flex-1 px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                 maxLength={30}
               />
               <Button 
@@ -304,7 +305,7 @@ const PhotoMetadataForm = ({
                 placeholder="¿Dónde tomaste estas fotos?"
                 value={formData.location}
                 onChange={(e) => handleInputChange('location', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground mt-2"
+                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground mt-2 focus:ring-2 focus:ring-primary focus:border-transparent"
               />
             )}
           </div>
@@ -384,34 +385,15 @@ const PhotoMetadataForm = ({
           </div>
 
           {/* Estadísticas Previstas */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg p-4">
+          <div className="bg-muted/50 rounded-lg p-4">
             <h3 className="font-medium text-foreground mb-3 flex items-center">
-              <Icon name="TrendingUp" size={16} className="mr-2 text-blue-500" />
-              Potencial de alcance
+              <Icon name="TrendingUp" size={16} className="mr-2" />
+              Estimación de alcance
             </h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Categoría:</span>
-                <span className="font-medium">
-                  {categories.find(c => c.id === formData.category)?.label || 'General'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Tags:</span>
-                <span className="font-medium">{formData.tags.length}/20</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Descripción:</span>
-                <span className="font-medium">
-                  {formData.caption.length > 0 ? 'Sí' : 'No'}
-                </span>
-              </div>
-            </div>
             
-            {/* Score Visual */}
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-muted-foreground">Optimización SEO</span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Completitud del perfil:</span>
                 <span className="font-medium">
                   {Math.round(
                     (formData.caption.length > 0 ? 25 : 0) +
