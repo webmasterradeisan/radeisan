@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - VERSIÓN CORREGIDA con videos funcionales y botones que funcionan
+// UserProfileSettings - VERSIÓN COMPLETAMENTE CORREGIDA sin columna duration
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -106,7 +106,7 @@ const useUserProfile = () => {
   };
 };
 
-// Hook para videos del usuario - CORREGIDO
+// Hook para videos del usuario - COMPLETAMENTE CORREGIDO SIN DURATION
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -133,7 +133,7 @@ const useUserVideos = (userId) => {
 
       console.log('🎬 Fetching videos for user:', userId);
 
-      // CONSULTA CORREGIDA - Sin join para simplificar y evitar problemas de foreign key
+      // CONSULTA COMPLETAMENTE CORREGIDA - SIN DURATION
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -142,7 +142,6 @@ const useUserVideos = (userId) => {
           description,
           video_url,
           thumbnail_url,
-          duration,
           views,
           likes,
           comments_count,
@@ -426,7 +425,7 @@ const PhotoGrid = ({
 };
 
 // ===============================
-// COMPONENTE MEJORADO DE VIDEO GRID - CORREGIDO
+// COMPONENTE DE VIDEO GRID - SIN DURATION
 // ===============================
 
 const VideoGridComponent = ({ 
@@ -529,10 +528,10 @@ const VideoGridComponent = ({
                 </div>
               </div>
 
-              {/* Duration */}
-              {video.duration && (
+              {/* Views count - SIN DURATION */}
+              {video.views && video.views > 0 && (
                 <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                  {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}
+                  {video.views} views
                 </div>
               )}
             </div>
@@ -544,16 +543,16 @@ const VideoGridComponent = ({
               </h4>
               
               <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                {video.views !== null && (
+                {video.views && (
                   <div className="flex items-center space-x-1">
                     <Icon name="Eye" size={14} />
-                    <span>{video.views || 0}</span>
+                    <span>{video.views}</span>
                   </div>
                 )}
-                {video.likes !== null && (
+                {video.likes && (
                   <div className="flex items-center space-x-1">
                     <Icon name="Heart" size={14} />
-                    <span>{video.likes || 0}</span>
+                    <span>{video.likes}</span>
                   </div>
                 )}
                 <span>{new Date(video.created_at).toLocaleDateString()}</span>
@@ -602,7 +601,7 @@ const UserProfileSettings = () => {
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
-  const [showImageEditor, setShowImageEditor] = useState(false); // NUEVO: Estado para modal de imágenes
+  const [showImageEditor, setShowImageEditor] = useState(false);
 
   // Hooks de datos
   const {
@@ -698,7 +697,7 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile, refreshProfile]);
 
-  // NUEVO: Handlers para cambiar avatar y cover
+  // Handlers para cambiar avatar y cover
   const handleEditAvatar = useCallback(() => {
     setShowImageEditor(true);
   }, []);
@@ -948,7 +947,7 @@ const UserProfileSettings = () => {
                     <div className="w-full h-full bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400" />
                   )}
                   
-                  {/* Botón cambiar cover - FUNCIONAL AHORA */}
+                  {/* Botón cambiar cover - FUNCIONAL */}
                   <Button
                     variant="secondary"
                     size="sm"
@@ -981,7 +980,7 @@ const UserProfileSettings = () => {
                       )}
                     </div>
                     
-                    {/* Botón cambiar avatar - FUNCIONAL AHORA CON ÍCONO MÁS GRANDE */}
+                    {/* Botón cambiar avatar - FUNCIONAL CON ÍCONO MÁS GRANDE */}
                     <Button
                       variant="secondary"
                       size="sm"
@@ -1145,7 +1144,7 @@ const UserProfileSettings = () => {
         onSuccess={handleQuickUploadSuccess}
       />
 
-      {/* NUEVO: Profile Image Editor Modal - MODAL APROPIADO */}
+      {/* Profile Image Editor Modal - MODAL APROPIADO */}
       {showImageEditor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-lg border max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
