@@ -46,60 +46,14 @@ const PhotoEditor = ({
     }
   }, [file]);
 
-  // Configurar crop inicial cuando la imagen carga
-  const onImageLoad = useCallback((e) => {
-    const { width, height } = e.currentTarget;
-    
-    const selectedAspectRatio = ASPECT_RATIOS.find(r => r.id === selectedRatio);
-    
-    if (selectedAspectRatio && selectedAspectRatio.aspect) {
-      const initialCrop = centerCrop(
-        makeAspectCrop(
-          {
-            unit: '%',
-            width: 90,
-          },
-          selectedAspectRatio.aspect,
-          width,
-          height,
-        ),
-        width,
-        height,
-      );
-      
-      setCrop(initialCrop);
-      const pixelCrop = convertToPixelCrop(initialCrop, width, height);
-      setCompletedCrop(pixelCrop);
-      onCropChange(index, pixelCrop);
-    } else {
-      // No crop para original
-      setCrop(undefined);
-      setCompletedCrop(undefined);
-      onCropChange(index, null);
-    }
-  }, [selectedRatio, index, onCropChange]);
-
-  // Manejar cambio de crop
-  const onCropChangeHandler = useCallback((pixelCrop, percentCrop) => {
-    setCrop(percentCrop);
-  }, []);
-
-  // Manejar crop completado
-  const onCropComplete = useCallback((pixelCrop) => {
-    if (pixelCrop && pixelCrop.width > 0 && pixelCrop.height > 0) {
-      setCompletedCrop(pixelCrop);
-      onCropChange(index, pixelCrop);
-    }
-  }, [index, onCropChange]);
-
-  // Cambiar aspect ratio
-  const handleAspectRatioChange = (ratioId) => {
+  // Manejar cambio de aspecto
+  const handleAspectRatioChange = useCallback((ratioId) => {
     setSelectedRatio(ratioId);
     onAspectRatioChange(index, ratioId);
     
     const ratioData = ASPECT_RATIOS.find(r => r.id === ratioId);
     
-    if (imgRef.current && ratioData && ratioData.aspect) {
+    if (imgRef.current && ratioData.aspect) {
       const { width, height } = imgRef.current;
       const initialCrop = centerCrop(
         makeAspectCrop(
@@ -120,7 +74,47 @@ const PhotoEditor = ({
       setCompletedCrop(pixelCrop);
       onCropChange(index, pixelCrop);
     }
-  };
+  }, [index, onAspectRatioChange, onCropChange]);
+
+  // Manejar crop
+  const onCropChangeHandler = useCallback((crop, percentCrop) => {
+    setCrop(percentCrop);
+  }, []);
+
+  const onCropCompleteHandler = useCallback((crop, percentCrop) => {
+    if (imgRef.current && crop.width && crop.height) {
+      const pixelCrop = convertToPixelCrop(percentCrop, imgRef.current.width, imgRef.current.height);
+      setCompletedCrop(pixelCrop);
+      onCropChange(index, pixelCrop);
+    }
+  }, [index, onCropChange]);
+
+  // Configurar crop inicial
+  const onImageLoad = useCallback((e) => {
+    const { width, height } = e.currentTarget;
+    const ratioData = ASPECT_RATIOS.find(r => r.id === selectedRatio);
+    
+    if (ratioData?.aspect) {
+      const initialCrop = centerCrop(
+        makeAspectCrop(
+          {
+            unit: '%',
+            width: 90,
+          },
+          ratioData.aspect,
+          width,
+          height,
+        ),
+        width,
+        height,
+      );
+      
+      setCrop(initialCrop);
+      const pixelCrop = convertToPixelCrop(initialCrop, width, height);
+      setCompletedCrop(pixelCrop);
+      onCropChange(index, pixelCrop);
+    }
+  }, [selectedRatio, index, onCropChange]);
 
   return (
     <div className="bg-card rounded-lg border p-4">
@@ -181,7 +175,7 @@ const PhotoEditor = ({
               <ReactCrop
                 crop={crop}
                 onChange={onCropChangeHandler}
-                onComplete={onCropComplete}
+                onComplete={onCropCompleteHandler}
                 aspect={ASPECT_RATIOS.find(r => r.id === selectedRatio)?.aspect}
                 className="max-w-full"
               >
@@ -269,103 +263,134 @@ const PhotoPreview = ({
             Ajusta el recorte y formato de tus {files.length} foto{files.length !== 1 ? 's' : ''}
           </p>
         </div>
-        
+
         {/* Acciones Globales */}
         <div className="flex items-center space-x-2">
-          <select
-            className="text-sm border rounded px-3 py-1 bg-background"
-            onChange={(e) => applyToAll('aspectRatio', e.target.value)}
-            defaultValue=""
-          >
-            <option value="" disabled>Aplicar formato a todas</option>
+          <div className="text-sm text-muted-foreground">
+            Aplicar a todas:
+          </div>
+          <div className="flex items-center space-x-1">
             {ASPECT_RATIOS.map((ratio) => (
-              <option key={ratio.id} value={ratio.id}>
-                {ratio.label}
-              </option>
+              <Button
+                key={ratio.id}
+                variant="outline"
+                size="sm"
+                onClick={() => applyToAll('aspectRatio', ratio.id)}
+                className="flex items-center space-x-1"
+              >
+                <Icon name={ratio.icon} size={12} />
+                <span className="text-xs hidden sm:inline">{ratio.label}</span>
+              </Button>
             ))}
-          </select>
+          </div>
         </div>
       </div>
 
-      {/* Vista Desktop - Grid */}
-      <div className="hidden lg:block">
-        <div className="grid grid-cols-2 gap-6">
-          {files.map((file, index) => (
-            <PhotoEditor
-              key={`${file.name}-${index}`}
-              file={file}
-              index={index}
-              cropData={cropData[index]}
-              aspectRatio={aspectRatios[index]}
-              onCropChange={onCropChange}
-              onAspectRatioChange={onAspectRatioChange}
-              onRemove={onRemoveFile}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Vista Mobile - Carousel */}
-      <div className="lg:hidden">
+      {/* Editor Principal */}
+      <div className="grid lg:grid-cols-2 gap-6">
         
-        {/* Navegación */}
-        <div className="flex items-center justify-between mb-4">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={prevPhoto}
-            disabled={selectedPhoto === 0}
-          >
-            <Icon name="ChevronLeft" size={16} />
-          </Button>
-          
-          <span className="text-sm text-muted-foreground">
-            {selectedPhoto + 1} de {files.length}
-          </span>
-          
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={nextPhoto}
-            disabled={selectedPhoto === files.length - 1}
-          >
-            <Icon name="ChevronRight" size={16} />
-          </Button>
+        {/* Panel de Edición */}
+        <div className="order-2 lg:order-1">
+          {files.map((file, index) => (
+            <div key={index} className={index === selectedPhoto ? 'block' : 'hidden'}>
+              <PhotoEditor
+                file={file}
+                index={index}
+                cropData={cropData[index]}
+                aspectRatio={aspectRatios[index]}
+                onCropChange={onCropChange}
+                onAspectRatioChange={onAspectRatioChange}
+                onRemove={onRemoveFile}
+              />
+            </div>
+          ))}
         </div>
 
-        {/* Editor Actual */}
-        <PhotoEditor
-          file={files[selectedPhoto]}
-          index={selectedPhoto}
-          cropData={cropData[selectedPhoto]}
-          aspectRatio={aspectRatios[selectedPhoto]}
-          onCropChange={onCropChange}
-          onAspectRatioChange={onAspectRatioChange}
-          onRemove={onRemoveFile}
-        />
+        {/* Panel de Navegación */}
+        <div className="order-1 lg:order-2">
+          <div className="bg-card rounded-lg border p-4 sticky top-4">
+            
+            {/* Navegación entre fotos */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-foreground">
+                Foto {selectedPhoto + 1} de {files.length}
+              </h3>
+              
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={prevPhoto}
+                  disabled={selectedPhoto === 0}
+                >
+                  <Icon name="ChevronLeft" size={16} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={nextPhoto}
+                  disabled={selectedPhoto === files.length - 1}
+                >
+                  <Icon name="ChevronRight" size={16} />
+                </Button>
+              </div>
+            </div>
 
-        {/* Thumbnails */}
-        <div className="flex space-x-2 mt-4 overflow-x-auto pb-2">
-          {files.map((file, index) => (
-            <button
-              key={`thumb-${index}`}
-              onClick={() => setSelectedPhoto(index)}
-              className={`
-                flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors
-                ${selectedPhoto === index ? 'border-primary' : 'border-transparent'}
-              `}
-            >
-              <img
-                src={URL.createObjectURL(file)}
-                alt={`Thumbnail ${index + 1}`}
-                className="w-full h-full object-cover"
-              />
-            </button>
-          ))}
+            {/* Thumbnails Grid */}
+            <div className="grid grid-cols-3 gap-2 mb-6">
+              {files.map((file, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedPhoto(index)}
+                  className={`
+                    aspect-square rounded-lg overflow-hidden border-2 transition-colors
+                    ${selectedPhoto === index 
+                      ? 'border-primary' 
+                      : 'border-transparent hover:border-muted-foreground/50'
+                    }
+                  `}
+                >
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={`Thumbnail ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+
+            {/* Información de la foto actual */}
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Nombre:</span>
+                <span className="text-foreground font-medium truncate ml-2">
+                  {files[selectedPhoto]?.name}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tamaño:</span>
+                <span className="text-foreground">
+                  {(files[selectedPhoto]?.size / 1024 / 1024).toFixed(1)}MB
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Formato:</span>
+                <span className="text-foreground">
+                  {ASPECT_RATIOS.find(r => r.id === aspectRatios[selectedPhoto])?.label || 'Original'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Recorte:</span>
+                <span className="text-foreground">
+                  {cropData[selectedPhoto] ? 'Aplicado' : 'Sin recorte'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Resumen */}
+      {/* Resumen y Navegación */}
       <div className="bg-muted/50 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -389,7 +414,7 @@ const PhotoPreview = ({
           
           <Button onClick={onNext}>
             <Icon name="ArrowRight" size={16} className="mr-2" />
-            Continuar
+            Continuar con metadatos
           </Button>
         </div>
       </div>
