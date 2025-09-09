@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - VERSIÓN COMPLETAMENTE LIMPIA con nombres correctos de columnas
+// UserProfileSettings - VERSIÓN COMPLETA con separación de REELS y VIDEOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,6 +14,15 @@ import PhotoQuickUpload from '../../components/PhotoQuickUpload';
 import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
+
+// ===============================
+// CONSTANTES
+// ===============================
+
+const VIDEO_ORIENTATIONS = {
+  VERTICAL: 'vertical',
+  HORIZONTAL: 'horizontal'
+};
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -106,7 +115,45 @@ const useUserProfile = () => {
   };
 };
 
-// Hook para videos del usuario - COMPLETAMENTE LIMPIO CON NOMBRES CORRECTOS
+// Función para detectar orientación del video
+const detectVideoOrientation = (video) => {
+  const title = (video.title || '').toLowerCase();
+  const description = (video.description || '').toLowerCase();
+  const tags = Array.isArray(video.tags) ? video.tags.join(' ').toLowerCase() : '';
+  const text = title + ' ' + description + ' ' + tags;
+
+  // Palabras clave que indican video vertical (Reel)
+  const verticalKeywords = [
+    'reel', 'reels', 'vertical', 'móvil', 'movil', 'short', 'shorts',
+    'tiktok', 'instagram', 'story', 'stories', 'portrait', 'phone'
+  ];
+
+  // Palabras clave que indican video horizontal
+  const horizontalKeywords = [
+    'landscape', 'widescreen', 'cinema', 'movie', 'película', 'pelicula',
+    'horizontal', 'desktop', 'tv', 'television'
+  ];
+
+  // Verificar palabras clave verticales
+  if (verticalKeywords.some(keyword => text.includes(keyword))) {
+    return VIDEO_ORIENTATIONS.VERTICAL;
+  }
+
+  // Verificar palabras clave horizontales
+  if (horizontalKeywords.some(keyword => text.includes(keyword))) {
+    return VIDEO_ORIENTATIONS.HORIZONTAL;
+  }
+
+  // Heurística por duración - reels suelen ser más cortos
+  if (video.duration_seconds && video.duration_seconds <= 60) {
+    return VIDEO_ORIENTATIONS.VERTICAL;
+  }
+
+  // Por defecto, asumir horizontal
+  return VIDEO_ORIENTATIONS.HORIZONTAL;
+};
+
+// Hook para videos horizontales (Videos tradicionales)
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -133,7 +180,6 @@ const useUserVideos = (userId) => {
 
       console.log('🎬 Fetching videos for user ID:', userId);
 
-      // CONSULTA CON NOMBRES EXACTOS DE LA BASE DE DATOS
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -166,22 +212,22 @@ const useUserVideos = (userId) => {
         throw fetchError;
       }
 
-      console.log('✅ Raw videos data from DB:', {
-        count: data?.length || 0,
-        sample: data?.[0] ? {
-          id: data[0].id,
-          title: data[0].title,
-          views_count: data[0].views_count,
-          likes_count: data[0].likes_count,
-          duration_seconds: data[0].duration_seconds
-        } : null
+      // Filtrar solo videos horizontales
+      const allVideos = data || [];
+      const horizontalVideos = allVideos.filter(video => 
+        detectVideoOrientation(video) === VIDEO_ORIENTATIONS.HORIZONTAL
+      );
+
+      console.log('✅ Videos fetched successfully:', {
+        total: allVideos.length,
+        horizontal: horizontalVideos.length,
+        vertical: allVideos.length - horizontalVideos.length
       });
 
-      const videoData = data || [];
-      setVideos(videoData);
+      setVideos(horizontalVideos);
 
-      // Calcular estadísticas usando los nombres correctos de columnas
-      const videoStats = videoData.reduce(
+      // Calcular estadísticas usando solo videos horizontales
+      const videoStats = horizontalVideos.reduce(
         (acc, video) => ({
           totalVideos: acc.totalVideos + 1,
           totalViews: acc.totalViews + (video.views_count || 0),
@@ -220,6 +266,122 @@ const useUserVideos = (userId) => {
     error,
     totalCount: videos.length,
     refresh: fetchVideos
+  };
+};
+
+// Hook para reels (videos verticales)
+const useUserReels = (userId) => {
+  const [reels, setReels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalReels: 0,
+    totalViews: 0,
+    totalLikes: 0,
+    totalComments: 0
+  });
+
+  const fetchReels = useCallback(async () => {
+    if (!userId) {
+      console.log('📱 No userId provided, setting empty state');
+      setReels([]);
+      setStats({ totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('📱 Fetching reels for user ID:', userId);
+
+      const { data, error: fetchError } = await supabase
+        .from('videos')
+        .select(`
+          id,
+          user_id,
+          title,
+          description,
+          video_url,
+          thumbnail_url,
+          category,
+          tags,
+          duration_seconds,
+          file_size_bytes,
+          views_count,
+          likes_count,
+          comments_count,
+          points_earned,
+          is_published,
+          featured_until,
+          created_at,
+          updated_at
+        `)
+        .eq('user_id', userId)
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (fetchError) {
+        console.error('❌ Error fetching reels:', fetchError);
+        throw fetchError;
+      }
+
+      // Filtrar solo videos verticales (reels)
+      const allVideos = data || [];
+      const verticalVideos = allVideos.filter(video => 
+        detectVideoOrientation(video) === VIDEO_ORIENTATIONS.VERTICAL
+      );
+
+      console.log('✅ Reels fetched successfully:', {
+        total: allVideos.length,
+        vertical: verticalVideos.length,
+        horizontal: allVideos.length - verticalVideos.length
+      });
+
+      setReels(verticalVideos);
+
+      // Calcular estadísticas usando solo reels
+      const reelStats = verticalVideos.reduce(
+        (acc, reel) => ({
+          totalReels: acc.totalReels + 1,
+          totalViews: acc.totalViews + (reel.views_count || 0),
+          totalLikes: acc.totalLikes + (reel.likes_count || 0),
+          totalComments: acc.totalComments + (reel.comments_count || 0)
+        }),
+        { totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
+      );
+
+      setStats(reelStats);
+      console.log('📊 Reel stats calculated:', reelStats);
+
+    } catch (err) {
+      console.error('💥 Error in fetchReels:', {
+        message: err.message,
+        details: err.details,
+        hint: err.hint,
+        code: err.code
+      });
+      setError(err.message);
+      setReels([]);
+      setStats({ totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchReels();
+  }, [fetchReels]);
+
+  return {
+    reels,
+    stats,
+    loading,
+    error,
+    totalCount: reels.length,
+    refresh: fetchReels
   };
 };
 
@@ -430,7 +592,7 @@ const PhotoGrid = ({
 };
 
 // ===============================
-// COMPONENTE DE VIDEO GRID - CON NOMBRES CORRECTOS DE COLUMNAS
+// COMPONENTE DE VIDEO GRID HORIZONTAL
 // ===============================
 
 const VideoGridComponent = ({ 
@@ -483,7 +645,7 @@ const VideoGridComponent = ({
         {isOwner && onUploadClick && (
           <Button onClick={onUploadClick} size="lg">
             <Icon name="Plus" size={20} className="mr-2" />
-            Subir tu primer video
+            Subir video
           </Button>
         )}
       </div>
@@ -535,7 +697,7 @@ const VideoGridComponent = ({
                 </div>
               </div>
 
-              {/* Duration usando duration_seconds */}
+              {/* Duration */}
               {video.duration_seconds && video.duration_seconds > 0 && (
                 <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
                   {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}
@@ -600,6 +762,184 @@ const VideoGridComponent = ({
 };
 
 // ===============================
+// COMPONENTE DE REELS GRID
+// ===============================
+
+const ReelsGridComponent = ({ 
+  reels = [], 
+  loading = false,
+  onReelAction,
+  showActions = true,
+  isOwner = false,
+  onUploadClick,
+  emptyMessage = "No hay reels",
+  emptyDescription = "Los reels que subas aparecerán aquí"
+}) => {
+  console.log('📱 ReelsGridComponent render:', { 
+    reelsCount: reels.length, 
+    loading,
+    hasReels: reels.length > 0,
+    firstReelSample: reels[0] ? {
+      id: reels[0].id,
+      title: reels[0].title,
+      views: reels[0].views_count,
+      likes: reels[0].likes_count,
+      duration: reels[0].duration_seconds
+    } : null
+  });
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {[...Array(10)].map((_, i) => (
+          <div key={i} className="space-y-3">
+            <div className="aspect-[9/16] bg-muted rounded-lg animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-3 bg-muted rounded animate-pulse" />
+              <div className="h-2 bg-muted rounded w-3/4 animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (reels.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="Smartphone" size={32} className="text-primary" />
+        </div>
+        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
+        {isOwner && onUploadClick && (
+          <Button onClick={onUploadClick} size="lg">
+            <Icon name="Plus" size={20} className="mr-2" />
+            Crear reel
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {isOwner && onUploadClick && (
+        <div className="flex justify-end">
+          <Button onClick={onUploadClick}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Crear reel
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {reels.map((reel) => (
+          <div 
+            key={reel.id} 
+            className="group cursor-pointer"
+            onClick={() => console.log('Click en reel:', reel.id)}
+          >
+            <div className="relative">
+              {/* Thumbnail - Aspecto vertical 9:16 */}
+              <div className="aspect-[9/16] bg-muted rounded-lg overflow-hidden">
+                {reel.thumbnail_url ? (
+                  <img
+                    src={reel.thumbnail_url}
+                    alt={reel.title}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      console.log('Error loading thumbnail for reel:', reel.id);
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+                    <Icon name="Play" size={24} className="text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              {/* Play Button Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-12 h-12 bg-black/70 rounded-full flex items-center justify-center">
+                  <Icon name="Play" size={16} className="text-white ml-1" />
+                </div>
+              </div>
+
+              {/* Duration */}
+              {reel.duration_seconds && reel.duration_seconds > 0 && (
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded text-center">
+                  {reel.duration_seconds < 60 ? `${reel.duration_seconds}s` : 
+                   `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}`}
+                </div>
+              )}
+
+              {/* Reel Badge */}
+              <div className="absolute top-2 left-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+                REEL
+              </div>
+            </div>
+
+            {/* Reel Info */}
+            <div className="mt-2 space-y-1">
+              <h4 className="font-medium text-foreground text-sm line-clamp-2 group-hover:text-primary transition-colors">
+                {reel.title || 'Reel sin título'}
+              </h4>
+              
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center space-x-2">
+                  {reel.views_count !== null && reel.views_count !== undefined && (
+                    <div className="flex items-center space-x-1">
+                      <Icon name="Eye" size={12} />
+                      <span>{reel.views_count}</span>
+                    </div>
+                  )}
+                  {reel.likes_count !== null && reel.likes_count !== undefined && (
+                    <div className="flex items-center space-x-1">
+                      <Icon name="Heart" size={12} />
+                      <span>{reel.likes_count}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              {showActions && isOwner && onReelAction && (
+                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReelAction('edit', reel);
+                    }}
+                  >
+                    <Icon name="Edit" size={12} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReelAction('delete', reel);
+                    }}
+                  >
+                    <Icon name="Trash2" size={12} />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
 
@@ -621,11 +961,19 @@ const UserProfileSettings = () => {
 
   const {
     videos,
-    stats,
+    stats: videoStats,
     loading: videosLoading,
     error: videosError,
     refresh: refreshVideos
   } = useUserVideos(user?.id);
+
+  const {
+    reels,
+    stats: reelStats,
+    loading: reelsLoading,
+    error: reelsError,
+    refresh: refreshReels
+  } = useUserReels(user?.id);
 
   const {
     photos,
@@ -639,6 +987,11 @@ const UserProfileSettings = () => {
   // Formatear datos del usuario
   const userData = useMemo(() => {
     if (!profileData) return null;
+
+    const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
+    const totalLikes = (videoStats.totalLikes || 0) + (reelStats.totalLikes || 0) + 
+                      photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
+    const totalComments = (videoStats.totalComments || 0) + (reelStats.totalComments || 0);
 
     return {
       id: profileData.id,
@@ -657,28 +1010,30 @@ const UserProfileSettings = () => {
       
       // Contadores
       videosCount: videos.length,
+      reelsCount: reels.length,
       photosCount: photos.length,
       followersCount: profileData.followers_count || 0,
       followingCount: profileData.following_count || 0,
       
       // Stats calculadas
-      totalViews: stats.totalViews,
-      totalLikes: stats.totalLikes + photos.reduce((acc, photo) => acc + (photo.likes || 0), 0),
-      totalComments: stats.totalComments,
+      totalViews,
+      totalLikes,
+      totalComments,
       
       achievements: []
     };
-  }, [profileData, videos, photos, stats]);
+  }, [profileData, videos, reels, photos, videoStats, reelStats]);
 
   // Calcular contadores para tabs
   const tabCounts = useMemo(() => ({
     videos: videos.length,
+    reels: reels.length,
     photos: photos.length,
     purchases: purchases.length,
     points: transactions.length,
     liked: 0,
     playlists: 0
-  }), [videos.length, photos.length, purchases.length, transactions.length]);
+  }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
 
   // ===============================
   // EVENT HANDLERS
@@ -762,6 +1117,35 @@ const UserProfileSettings = () => {
     }
   }, [refreshVideos]);
 
+  const handleReelAction = useCallback(async (action, reel) => {
+    try {
+      switch (action) {
+        case 'like':
+          console.log('Like reel:', reel.id);
+          break;
+        case 'edit':
+          window.location.href = `/video-edit/${reel.id}`;
+          break;
+        case 'delete':
+          if (window.confirm('¿Estás seguro de que quieres eliminar este reel?')) {
+            const { error } = await supabase
+              .from('videos')
+              .delete()
+              .eq('id', reel.id);
+            
+            if (!error) {
+              await refreshReels();
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error with reel action:', error);
+    }
+  }, [refreshReels]);
+
   const handleSignOut = useCallback(async () => {
     await signOut();
     window.location.href = '/';
@@ -813,8 +1197,46 @@ const UserProfileSettings = () => {
             showActions={true}
             isOwner={true}
             onUploadClick={() => window.location.href = '/upload'}
-            emptyMessage="No tienes videos aún"
-            emptyDescription="Los videos que subas aparecerán aquí. ¡Comienza a crear contenido!"
+            emptyMessage="No tienes videos horizontales aún"
+            emptyDescription="Los videos en formato horizontal que subas aparecerán aquí. ¡Comienza a crear contenido!"
+          />
+        );
+
+      case 'reels':
+        console.log('📱 Rendering reels tab with:', { 
+          reelsCount: reels.length, 
+          loading: reelsLoading,
+          error: reelsError,
+          hasData: reels.length > 0,
+          sampleReel: reels[0]
+        });
+        
+        if (reelsError) {
+          return (
+            <div className="text-center py-16">
+              <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar reels</h3>
+              <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded">
+                {reelsError}
+              </p>
+              <Button onClick={refreshReels}>
+                <Icon name="RefreshCw" size={16} className="mr-2" />
+                Reintentar
+              </Button>
+            </div>
+          );
+        }
+        
+        return (
+          <ReelsGridComponent
+            reels={reels} 
+            loading={reelsLoading}
+            onReelAction={handleReelAction}
+            showActions={true}
+            isOwner={true}
+            onUploadClick={() => window.location.href = '/upload'}
+            emptyMessage="No tienes reels aún"
+            emptyDescription="Los videos en formato vertical (reels) que subas aparecerán aquí. ¡Crea contenido para móvil!"
           />
         );
       
@@ -929,8 +1351,8 @@ const UserProfileSettings = () => {
     <>
       <Helmet>
         <title>Mi Perfil - {userData?.name || 'Usuario'} | RADEISAN</title>
-        <meta name="description" content={`Perfil de ${userData?.name || 'Usuario'}${userData?.bio ? ` - ${userData.bio}` : ''}. ${userData?.videosCount || 0} videos, ${userData?.photosCount || 0} fotos.`} />
-        <meta name="keywords" content="perfil, usuario, configuración, contenido, videos, fotos, RADEISAN" />
+        <meta name="description" content={`Perfil de ${userData?.name || 'Usuario'}${userData?.bio ? ` - ${userData.bio}` : ''}. ${userData?.videosCount || 0} videos, ${userData?.reelsCount || 0} reels, ${userData?.photosCount || 0} fotos.`} />
+        <meta name="keywords" content="perfil, usuario, configuración, contenido, videos, reels, fotos, RADEISAN" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
@@ -1060,6 +1482,11 @@ const UserProfileSettings = () => {
                             <span className="text-muted-foreground">videos</span>
                           </div>
                           <div className="flex items-center space-x-1">
+                            <Icon name="Smartphone" size={16} className="text-muted-foreground" />
+                            <span className="font-semibold">{userData?.reelsCount || 0}</span>
+                            <span className="text-muted-foreground">reels</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
                             <Icon name="Image" size={16} className="text-muted-foreground" />
                             <span className="font-semibold">{userData?.photosCount || 0}</span>
                             <span className="text-muted-foreground">fotos</span>
@@ -1100,6 +1527,7 @@ const UserProfileSettings = () => {
                 <nav className="flex space-x-8">
                   {[
                     { id: 'videos', label: 'Videos', icon: 'Video', count: tabCounts.videos },
+                    { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels },
                     { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos },
                     { id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked },
                     { id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists },
