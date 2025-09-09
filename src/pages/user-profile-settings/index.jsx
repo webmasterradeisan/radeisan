@@ -1,18 +1,17 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con diseño mejorado y videos funcionales
+// UserProfileSettings - VERSIÓN CORREGIDA con videos funcionales y botones que funcionan
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
-import ProfileHeader from './components/ProfileHeader';
 import ProfileTabs from './components/ProfileTabs';
-import VideoGrid from './components/VideoGrid';
 import PointsHistory from './components/PointsHistory';
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
 import PhotoQuickUpload from '../../components/PhotoQuickUpload';
+import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
@@ -26,9 +25,6 @@ const useUserProfile = () => {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [coverUploading, setCoverUploading] = useState(false);
-  const [coverError, setCoverError] = useState(null);
 
   const generateUsername = (email) => {
     if (!email) return `user${Date.now()}`;
@@ -105,15 +101,12 @@ const useUserProfile = () => {
     profileData,
     loading,
     error,
-    uploading,
-    coverUploading,
-    coverError,
     refreshProfile,
     updateProfile
   };
 };
 
-// Hook para videos del usuario - MEJORADO
+// Hook para videos del usuario - CORREGIDO
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +122,7 @@ const useUserVideos = (userId) => {
     if (!userId) {
       console.log('🎬 No userId provided, skipping video fetch');
       setVideos([]);
+      setStats({ totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
       setLoading(false);
       return;
     }
@@ -139,6 +133,7 @@ const useUserVideos = (userId) => {
 
       console.log('🎬 Fetching videos for user:', userId);
 
+      // CONSULTA CORREGIDA - Sin join para simplificar y evitar problemas de foreign key
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -156,13 +151,7 @@ const useUserVideos = (userId) => {
           is_published,
           created_at,
           updated_at,
-          user_id,
-          user_profiles!videos_user_id_fkey (
-            id,
-            full_name,
-            username,
-            avatar_url
-          )
+          user_id
         `)
         .eq('user_id', userId)
         .eq('is_published', true)
@@ -176,7 +165,12 @@ const useUserVideos = (userId) => {
 
       console.log('✅ Videos fetched successfully:', {
         count: data?.length || 0,
-        videos: data?.map(v => ({ id: v.id, title: v.title })) || []
+        videos: data?.slice(0, 3).map(v => ({ 
+          id: v.id, 
+          title: v.title,
+          views: v.views,
+          likes: v.likes 
+        })) || []
       });
 
       const videoData = data || [];
@@ -220,7 +214,7 @@ const useUserVideos = (userId) => {
   };
 };
 
-// Hook para fotos del usuario - MEJORADO
+// Hook para fotos del usuario - CORREGIDO
 const useUserPhotos = (userId) => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -240,6 +234,7 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 Fetching photos for user:', userId);
 
+      // CONSULTA SIMPLIFICADA - Sin join para evitar problemas
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -254,13 +249,7 @@ const useUserPhotos = (userId) => {
           aspect_ratio,
           file_size,
           created_at,
-          user_id,
-          user_profiles!photos_user_id_fkey (
-            id,
-            full_name,
-            username,
-            avatar_url
-          )
+          user_id
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -273,7 +262,7 @@ const useUserPhotos = (userId) => {
 
       console.log('✅ Photos fetched successfully:', {
         count: data?.length || 0,
-        photos: data?.map(p => ({ id: p.id, caption: p.caption })) || []
+        photos: data?.slice(0, 3).map(p => ({ id: p.id, caption: p.caption })) || []
       });
 
       setPhotos(data || []);
@@ -437,7 +426,7 @@ const PhotoGrid = ({
 };
 
 // ===============================
-// COMPONENTE MEJORADO DE VIDEO GRID
+// COMPONENTE MEJORADO DE VIDEO GRID - CORREGIDO
 // ===============================
 
 const VideoGridComponent = ({ 
@@ -453,7 +442,12 @@ const VideoGridComponent = ({
   console.log('🎬 VideoGridComponent render:', { 
     videosCount: videos.length, 
     loading,
-    videos: videos.map(v => ({ id: v.id, title: v.title }))
+    hasVideos: videos.length > 0,
+    firstVideo: videos[0] ? { 
+      id: videos[0].id, 
+      title: videos[0].title, 
+      thumbnail: videos[0].thumbnail_url 
+    } : null
   });
 
   if (loading) {
@@ -503,7 +497,11 @@ const VideoGridComponent = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {videos.map((video) => (
-          <div key={video.id} className="group cursor-pointer">
+          <div 
+            key={video.id} 
+            className="group cursor-pointer"
+            onClick={() => console.log('Click en video:', video.id)}
+          >
             <div className="relative">
               {/* Thumbnail */}
               <div className="aspect-video bg-muted rounded-lg overflow-hidden">
@@ -512,9 +510,13 @@ const VideoGridComponent = ({
                     src={video.thumbnail_url}
                     alt={video.title}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      console.log('Error loading thumbnail for video:', video.id);
+                      e.target.style.display = 'none';
+                    }}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
                     <Icon name="Play" size={48} className="text-muted-foreground" />
                   </div>
                 )}
@@ -545,7 +547,7 @@ const VideoGridComponent = ({
                 {video.views !== null && (
                   <div className="flex items-center space-x-1">
                     <Icon name="Eye" size={14} />
-                    <span>{video.views || 0} views</span>
+                    <span>{video.views || 0}</span>
                   </div>
                 )}
                 {video.likes !== null && (
@@ -600,6 +602,7 @@ const UserProfileSettings = () => {
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
+  const [showImageEditor, setShowImageEditor] = useState(false); // NUEVO: Estado para modal de imágenes
 
   // Hooks de datos
   const {
@@ -614,6 +617,7 @@ const UserProfileSettings = () => {
     videos,
     stats,
     loading: videosLoading,
+    error: videosError,
     refresh: refreshVideos
   } = useUserVideos(user?.id);
 
@@ -671,7 +675,7 @@ const UserProfileSettings = () => {
   }), [videos.length, photos.length, purchases.length, transactions.length]);
 
   // ===============================
-  // EVENT HANDLERS
+  // EVENT HANDLERS - CORREGIDOS
   // ===============================
 
   const handleEditProfile = useCallback(() => {
@@ -694,18 +698,25 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile, refreshProfile]);
 
+  // NUEVO: Handlers para cambiar avatar y cover
+  const handleEditAvatar = useCallback(() => {
+    setShowImageEditor(true);
+  }, []);
+
+  const handleEditCover = useCallback(() => {
+    setShowImageEditor(true);
+  }, []);
+
   const handleAvatarUpload = useCallback(async (url) => {
-    if (url) {
-      await refreshProfile();
-      console.log('✅ Avatar updated, profile refreshed');
-    }
+    console.log('✅ Avatar updated to:', url);
+    await refreshProfile();
+    setShowImageEditor(false);
   }, [refreshProfile]);
 
   const handleCoverUpload = useCallback(async (url) => {
-    if (url) {
-      await refreshProfile();
-      console.log('✅ Cover updated, profile refreshed');
-    }
+    console.log('✅ Cover updated to:', url);
+    await refreshProfile();
+    setShowImageEditor(false);
   }, [refreshProfile]);
 
   const handleQuickUploadOpen = useCallback(() => {
@@ -768,8 +779,24 @@ const UserProfileSettings = () => {
         console.log('🎬 Rendering videos tab with:', { 
           videosCount: videos.length, 
           loading: videosLoading,
-          videosData: videos.map(v => ({ id: v.id, title: v.title }))
+          error: videosError,
+          hasData: videos.length > 0
         });
+        
+        if (videosError) {
+          return (
+            <div className="text-center py-16">
+              <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar videos</h3>
+              <p className="text-muted-foreground mb-6">{videosError}</p>
+              <Button onClick={refreshVideos}>
+                <Icon name="RefreshCw" size={16} className="mr-2" />
+                Reintentar
+              </Button>
+            </div>
+          );
+        }
+        
         return (
           <VideoGridComponent
             videos={videos} 
@@ -777,8 +804,8 @@ const UserProfileSettings = () => {
             onVideoAction={handleVideoAction}
             showActions={true}
             isOwner={true}
-            onUploadClick={() => window.location.href = '/video-upload'}
-            emptyMessage="No hay videos"
+            onUploadClick={() => window.location.href = '/upload'}
+            emptyMessage="No tienes videos aún"
             emptyDescription="Los videos que subas aparecerán aquí. ¡Comienza a crear contenido!"
           />
         );
@@ -905,7 +932,7 @@ const UserProfileSettings = () => {
         <main className="pt-32 pb-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             
-            {/* Profile Header - DISEÑO LIMPIO Y ORGANIZADO */}
+            {/* Profile Header - DISEÑO LIMPIO Y ORGANIZADO CON BOTONES FUNCIONALES */}
             <div className="bg-card border border-border rounded-lg overflow-hidden mb-8 shadow-sm">
               {/* Cover Image Container */}
               <div className="relative">
@@ -921,12 +948,12 @@ const UserProfileSettings = () => {
                     <div className="w-full h-full bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400" />
                   )}
                   
-                  {/* Botón cambiar cover - EN LA PARTE SUPERIOR */}
+                  {/* Botón cambiar cover - FUNCIONAL AHORA */}
                   <Button
                     variant="secondary"
                     size="sm"
                     className="absolute top-4 right-4 bg-white/90 hover:bg-white text-gray-800 border-0 shadow-md"
-                    onClick={() => {/* TODO: Implementar */}}
+                    onClick={handleEditCover}
                   >
                     <Icon name="Camera" size={16} className="mr-2" />
                     Cambiar portada
@@ -938,7 +965,7 @@ const UserProfileSettings = () => {
               <div className="px-6 py-6">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:space-x-6">
                   
-                  {/* Avatar - MEJOR POSICIONADO */}
+                  {/* Avatar - MEJOR POSICIONADO CON BOTÓN FUNCIONAL */}
                   <div className="relative flex-shrink-0 -mt-20 mb-4 sm:mb-0">
                     <div className="w-40 h-40 rounded-full border-4 border-card bg-background overflow-hidden shadow-lg">
                       {userData?.avatar ? (
@@ -954,12 +981,12 @@ const UserProfileSettings = () => {
                       )}
                     </div>
                     
-                    {/* Botón cambiar avatar - ÍCONO MÁS GRANDE */}
+                    {/* Botón cambiar avatar - FUNCIONAL AHORA CON ÍCONO MÁS GRANDE */}
                     <Button
                       variant="secondary"
                       size="sm"
                       className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-white hover:bg-gray-50 text-gray-800 border-0 shadow-md p-0"
-                      onClick={() => {/* TODO: Implementar */}}
+                      onClick={handleEditAvatar}
                     >
                       <Icon name="Camera" size={20} />
                     </Button>
@@ -970,7 +997,7 @@ const UserProfileSettings = () => {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
                       <div className="flex-1 min-w-0">
                         {/* Nombre y username */}
-                        <h1 className="text-3xl font-bold text-foreground mb-2">
+                        <h1 className="text-3xl font-bold text-foreground mb-2 break-words">
                           {userData?.name}
                         </h1>
                         <div className="flex items-center space-x-3 mb-3">
@@ -1111,12 +1138,23 @@ const UserProfileSettings = () => {
         </main>
       </div>
 
-      {/* Quick Upload Modal */}
+      {/* Photo Quick Upload Modal */}
       <PhotoQuickUpload
         isOpen={showQuickUpload}
         onClose={() => setShowQuickUpload(false)}
         onSuccess={handleQuickUploadSuccess}
       />
+
+      {/* NUEVO: Profile Image Editor Modal */}
+      {showImageEditor && (
+        <ProfileImageEditor
+          currentAvatar={userData?.avatar}
+          currentCover={userData?.coverImage}
+          onAvatarChange={handleAvatarUpload}
+          onCoverChange={handleCoverUpload}
+          onClose={() => setShowImageEditor(false)}
+        />
+      )}
     </>
   );
 };
