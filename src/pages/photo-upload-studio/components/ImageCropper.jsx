@@ -92,9 +92,13 @@ const ImageCropper = ({
   const [crop, setCrop] = useState();
   const [completedCrop, setCompletedCrop] = useState();
   const [selectedPreset, setSelectedPreset] = useState(
-    aspectRatio ? Object.keys(CROP_PRESETS).find(key => CROP_PRESETS[key].aspect === aspectRatio) || 'original' : 'original'
+    aspectRatio ? 
+      Object.keys(CROP_PRESETS).find(key => CROP_PRESETS[key].aspect === aspectRatio) || 'original' 
+      : 'original'
   );
-  const [previewCanvas, setPreviewCanvas] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
+
   const imgRef = useRef(null);
 
   // Inicializar imagen
@@ -106,275 +110,280 @@ const ImageCropper = ({
     }
   }, [imageFile]);
 
-  // Configurar crop inicial cuando la imagen carga
+  // Limpiar preview al desmontar
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  // Configurar crop inicial cuando se carga la imagen
   const onImageLoad = useCallback((e) => {
     const { width, height } = e.currentTarget;
-    
-    const preset = CROP_PRESETS[selectedPreset];
-    
-    if (preset && preset.aspect) {
-      const initialCrop = centerCrop(
-        makeAspectCrop(
-          {
-            unit: '%',
-            width: 90,
-          },
-          preset.aspect,
-          width,
-          height,
-        ),
+    const targetAspect = CROP_PRESETS[selectedPreset]?.aspect;
+
+    let initialCrop;
+    if (targetAspect) {
+      initialCrop = makeAspectCrop(
+        { unit: '%', width: 90 },
+        targetAspect,
         width,
-        height,
+        height
       );
-      
-      setCrop(initialCrop);
-      const pixelCrop = convertToPixelCrop(initialCrop, width, height);
-      setCompletedCrop(pixelCrop);
     } else {
-      // Sin recorte para original
-      setCrop(undefined);
-      setCompletedCrop(null);
+      // Para aspecto original, usar toda la imagen
+      initialCrop = {
+        unit: '%',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      };
     }
+
+    const centeredCrop = centerCrop(initialCrop, width, height);
+    setCrop(centeredCrop);
+    setCompletedCrop(convertToPixelCrop(centeredCrop, width, height));
   }, [selectedPreset]);
 
-  // Manejar cambio de crop
-  const onCropChange = useCallback((pixelCrop, percentCrop) => {
-    setCrop(percentCrop);
+  // Cambiar preset de aspecto
+  const handlePresetChange = useCallback((preset) => {
+    setSelectedPreset(preset);
+    
+    if (imgRef.current) {
+      const { width, height } = imgRef.current;
+      const targetAspect = CROP_PRESETS[preset]?.aspect;
+
+      let newCrop;
+      if (targetAspect) {
+        newCrop = makeAspectCrop(
+          { unit: '%', width: 90 },
+          targetAspect,
+          width,
+          height
+        );
+      } else {
+        newCrop = {
+          unit: '%',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100
+        };
+      }
+
+      const centeredCrop = centerCrop(newCrop, width, height);
+      setCrop(centeredCrop);
+      setCompletedCrop(convertToPixelCrop(centeredCrop, width, height));
+    }
   }, []);
 
-  // Manejar crop completado
-  const onCropCompleteHandler = useCallback((pixelCrop) => {
-    if (validateCrop(pixelCrop)) {
-      setCompletedCrop(pixelCrop);
-      
-      // Generar preview
-      if (imgRef.current) {
-        try {
-          const canvas = getCroppedCanvas(imgRef.current, pixelCrop, previewSize);
-          setPreviewCanvas(canvas);
-        } catch (error) {
-          console.error('Error generating preview:', error);
+  // Actualizar preview cuando cambia el crop
+  useEffect(() => {
+    if (!completedCrop || !imgRef.current) return;
+
+    try {
+      const canvas = getCroppedCanvas(imgRef.current, completedCrop, previewSize);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          // Limpiar URL anterior
+          if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+          }
+          
+          const newPreviewUrl = URL.createObjectURL(blob);
+          setPreviewUrl(newPreviewUrl);
         }
-      }
+      }, 'image/jpeg', 0.95);
+    } catch (error) {
+      console.error('Error generando preview:', error);
     }
-  }, [previewSize]);
+  }, [completedCrop, previewSize, previewUrl]);
 
-  // Cambiar preset
-  const handlePresetChange = (presetKey) => {
-    setSelectedPreset(presetKey);
-    const preset = CROP_PRESETS[presetKey];
-    
-    if (imgRef.current && preset && preset.aspect) {
-      const { width, height } = imgRef.current;
-      const initialCrop = centerCrop(
-        makeAspectCrop(
-          {
-            unit: '%',
-            width: 90,
-          },
-          preset.aspect,
-          width,
-          height,
-        ),
-        width,
-        height,
-      );
+  // Confirmar recorte
+  const handleConfirm = useCallback(async () => {
+    if (!completedCrop || !imgRef.current || !onCropComplete) return;
+
+    setIsProcessing(true);
+
+    try {
+      const canvas = getCroppedCanvas(imgRef.current, completedCrop);
       
-      setCrop(initialCrop);
-      const pixelCrop = convertToPixelCrop(initialCrop, width, height);
-      setCompletedCrop(pixelCrop);
-    } else if (presetKey === 'original') {
-      setCrop(undefined);
-      setCompletedCrop(null);
-      setPreviewCanvas(null);
-    }
-  };
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const croppedFile = new File([blob], imageFile.name, {
+            type: imageFile.type,
+            lastModified: Date.now()
+          });
 
-  // Aplicar recorte
-  const handleApply = () => {
-    if (selectedPreset === 'original') {
-      onCropComplete?.(null, selectedPreset);
-    } else if (validateCrop(completedCrop)) {
-      onCropComplete?.(completedCrop, selectedPreset);
+          onCropComplete({
+            file: croppedFile,
+            cropData: completedCrop,
+            aspectRatio: CROP_PRESETS[selectedPreset]?.aspect || null,
+            preview: previewUrl
+          });
+        } else {
+          throw new Error('Error al procesar la imagen recortada');
+        }
+        setIsProcessing(false);
+      }, imageFile.type, 0.95);
+
+    } catch (error) {
+      console.error('Error al recortar:', error);
+      setIsProcessing(false);
     }
-  };
+  }, [completedCrop, imageFile, onCropComplete, previewUrl, selectedPreset]);
+
+  // Resetear recorte
+  const handleReset = useCallback(() => {
+    if (imgRef.current) {
+      onImageLoad({ currentTarget: imgRef.current });
+    }
+  }, [onImageLoad]);
+
+  if (!imageFile) {
+    return (
+      <div className="flex items-center justify-center p-8 text-muted-foreground">
+        <Icon name="ImageOff" size={48} />
+        <span className="ml-2">No hay imagen para recortar</span>
+      </div>
+    );
+  }
 
   return (
-    <div className={`bg-background ${className}`}>
-      <div className="space-y-6">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-foreground">
-            {title}
-          </h3>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={onCancel}
-          >
-            <Icon name="X" size={16} />
+    <div className={`w-full max-w-4xl mx-auto ${className}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-foreground">{title}</h2>
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" onClick={onCancel}>
+            <Icon name="X" size={16} className="mr-2" />
+            Cancelar
+          </Button>
+          <Button onClick={handleConfirm} disabled={isProcessing}>
+            {isProcessing ? (
+              <>
+                <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                <Icon name="Check" size={16} className="mr-2" />
+                Confirmar
+              </>
+            )}
           </Button>
         </div>
+      </div>
 
-        {/* Presets */}
-        {showPresets && (
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Formato
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(CROP_PRESETS).map(([key, preset]) => (
-                <Button
-                  key={key}
-                  variant={selectedPreset === key ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handlePresetChange(key)}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Panel de edición */}
+        <div className="lg:col-span-3">
+          <div className="bg-card rounded-lg border p-4">
+            <div className="flex justify-center">
+              {imageSrc && (
+                <ReactCrop
+                  crop={crop}
+                  onChange={(_, percentCrop) => setCrop(percentCrop)}
+                  onComplete={(c) => setCompletedCrop(convertToPixelCrop(c, imgRef.current?.width || 0, imgRef.current?.height || 0))}
+                  aspect={CROP_PRESETS[selectedPreset]?.aspect}
+                  className="max-w-full"
                 >
-                  {preset.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Editor y Preview */}
-        <div className="grid md:grid-cols-2 gap-6">
-          
-          {/* Área de Crop */}
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Ajustar recorte
-            </label>
-            {imageSrc && (
-              <div className="border rounded-lg overflow-hidden bg-muted">
-                {selectedPreset === 'original' ? (
                   <img
                     ref={imgRef}
                     src={imageSrc}
-                    alt="Original"
+                    alt="Imagen a recortar"
                     onLoad={onImageLoad}
-                    className="w-full h-auto max-h-96 object-contain"
+                    className="max-w-full max-h-96 object-contain"
                   />
-                ) : (
-                  <ReactCrop
-                    crop={crop}
-                    onChange={onCropChange}
-                    onComplete={onCropCompleteHandler}
-                    aspect={CROP_PRESETS[selectedPreset]?.aspect}
-                    className="max-w-full"
-                    minWidth={50}
-                    minHeight={50}
-                  >
-                    <img
-                      ref={imgRef}
-                      src={imageSrc}
-                      alt="Crop preview"
-                      onLoad={onImageLoad}
-                      className="w-full h-auto max-h-96 object-contain"
-                    />
-                  </ReactCrop>
-                )}
-              </div>
-            )}
-            {selectedPreset !== 'original' && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Arrastra las esquinas para ajustar el recorte
-              </p>
-            )}
-          </div>
-
-          {/* Preview */}
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              Vista previa
-            </label>
-            <div className="border rounded-lg overflow-hidden bg-muted p-4">
-              {selectedPreset === 'original' ? (
-                <div className="text-center py-8">
-                  <Icon name="Image" size={32} className="text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Imagen original sin recortar
-                  </p>
-                </div>
-              ) : previewCanvas ? (
-                <div className="text-center">
-                  <canvas
-                    ref={(canvas) => {
-                      if (canvas && previewCanvas) {
-                        const ctx = canvas.getContext('2d');
-                        if (ctx) {
-                          canvas.width = previewSize.width;
-                          canvas.height = previewSize.height;
-                          ctx.drawImage(previewCanvas, 0, 0);
-                        }
-                      }
-                    }}
-                    className="max-w-full border rounded"
-                    style={{ 
-                      width: `${previewSize.width}px`, 
-                      height: `${previewSize.height}px` 
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Resultado final
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Icon name="Crop" size={32} className="text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Ajusta el recorte para ver el preview
-                  </p>
-                </div>
+                </ReactCrop>
               )}
             </div>
-
-            {/* Info adicional */}
-            {completedCrop && (
-              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                <div className="text-sm space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Área seleccionada:</span>
-                    <span className="font-medium">
-                      {Math.round(completedCrop.width)}×{Math.round(completedCrop.height)}px
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Posición:</span>
-                    <span className="font-medium">
-                      x:{Math.round(completedCrop.x)}, y:{Math.round(completedCrop.y)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Acciones */}
-        <div className="flex items-center justify-between pt-4 border-t">
-          <div className="text-sm text-muted-foreground">
-            {selectedPreset === 'original' 
-              ? 'La imagen se mantendrá en su formato original'
-              : 'El recorte se aplicará al guardar la imagen'
-            }
+        {/* Panel lateral */}
+        <div className="space-y-6">
+          {/* Presets de aspecto */}
+          {showPresets && (
+            <div className="bg-card rounded-lg border p-4">
+              <h3 className="font-medium text-foreground mb-3">Proporción</h3>
+              <div className="space-y-2">
+                {Object.entries(CROP_PRESETS).map(([key, preset]) => (
+                  <Button
+                    key={key}
+                    variant={selectedPreset === key ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePresetChange(key)}
+                    className="w-full justify-start"
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview */}
+          <div className="bg-card rounded-lg border p-4">
+            <h3 className="font-medium text-foreground mb-3">Vista previa</h3>
+            <div className="flex justify-center">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Preview"
+                  className="border rounded-lg shadow-sm"
+                  style={{
+                    width: previewSize.width,
+                    height: previewSize.height,
+                    objectFit: 'cover'
+                  }}
+                />
+              ) : (
+                <div 
+                  className="border-2 border-dashed border-muted-foreground/25 rounded-lg flex items-center justify-center"
+                  style={{
+                    width: previewSize.width,
+                    height: previewSize.height
+                  }}
+                >
+                  <Icon name="Image" size={32} className="text-muted-foreground" />
+                </div>
+              )}
+            </div>
           </div>
-          
-          <div className="flex space-x-3">
-            <Button 
-              variant="outline" 
-              onClick={onCancel}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              onClick={handleApply}
-              disabled={selectedPreset !== 'original' && !validateCrop(completedCrop)}
-            >
-              <Icon name="Check" size={16} className="mr-2" />
-              Aplicar
-            </Button>
+
+          {/* Acciones adicionales */}
+          <div className="bg-card rounded-lg border p-4">
+            <h3 className="font-medium text-foreground mb-3">Acciones</h3>
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReset}
+                className="w-full justify-start"
+              >
+                <Icon name="RotateCcw" size={16} className="mr-2" />
+                Resetear recorte
+              </Button>
+            </div>
+          </div>
+
+          {/* Información */}
+          <div className="bg-muted/50 rounded-lg p-4">
+            <div className="flex items-start space-x-2">
+              <Icon name="Info" size={16} className="text-primary mt-0.5" />
+              <div className="text-xs text-muted-foreground">
+                <p className="font-medium mb-1">Consejos:</p>
+                <ul className="space-y-1">
+                  <li>• Arrastra las esquinas para ajustar</li>
+                  <li>• Mueve el área seleccionada</li>
+                  <li>• Usa los presets para proporciones comunes</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </div>
