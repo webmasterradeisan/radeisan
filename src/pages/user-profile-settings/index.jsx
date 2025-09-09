@@ -543,12 +543,19 @@ const VideoGridComponent = ({
               </h4>
               
               <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                <span>{new Date(video.created_at).toLocaleDateString()}</span>
-                {video.category && video.category !== 'general' && (
-                  <span className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs capitalize">
-                    {video.category}
-                  </span>
+                {video.views_count !== null && (
+                  <div className="flex items-center space-x-1">
+                    <Icon name="Eye" size={14} />
+                    <span>{video.views_count || 0}</span>
+                  </div>
                 )}
+                {video.likes_count !== null && (
+                  <div className="flex items-center space-x-1">
+                    <Icon name="Heart" size={14} />
+                    <span>{video.likes_count || 0}</span>
+                  </div>
+                )}
+                <span>{new Date(video.created_at).toLocaleDateString()}</span>
               </div>
 
               {/* Actions */}
