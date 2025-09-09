@@ -46,75 +46,86 @@ const UPLOAD_STEPS = [
 const usePhotoForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [cropData, setCropData] = useState([]);
-  const [aspectRatios, setAspectRatios] = useState([]);
+  const [cropData, setCropData] = useState({});
+  const [aspectRatios, setAspectRatios] = useState({});
   const [metadata, setMetadata] = useState({
     caption: '',
-    category: 'general',
     tags: [],
+    category: 'general',
     privacy: 'public',
-    allowComments: true,
-    allowDownload: false,
-    showLocation: false,
     location: '',
-    publish: true
+    allowComments: true,
+    allowDownloads: false
   });
 
-  const addFiles = (files) => {
-    const newFiles = Array.from(files).filter(file => 
-      file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024
-    );
-    setSelectedFiles(prev => [...prev, ...newFiles]);
+  // Añadir archivos
+  const addFiles = useCallback((files) => {
+    const newFiles = [...selectedFiles, ...files];
+    setSelectedFiles(newFiles);
     
-    // Inicializar datos de crop y aspect ratio para nuevos archivos
-    const newCropData = Array(newFiles.length).fill(null);
-    const newAspectRatios = Array(newFiles.length).fill('original');
+    // Inicializar crop data para nuevos archivos
+    const newCropData = { ...cropData };
+    const newAspectRatios = { ...aspectRatios };
     
-    setCropData(prev => [...prev, ...newCropData]);
-    setAspectRatios(prev => [...prev, ...newAspectRatios]);
-    
-    setCurrentStep(2);
-  };
-
-  const removeFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-    setCropData(prev => prev.filter((_, i) => i !== index));
-    setAspectRatios(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const updateCropData = (index, cropInfo) => {
-    setCropData(prev => {
-      const newData = [...prev];
-      newData[index] = cropInfo;
-      return newData;
+    files.forEach((_, index) => {
+      const fileIndex = selectedFiles.length + index;
+      newCropData[fileIndex] = null;
+      newAspectRatios[fileIndex] = 'original';
     });
-  };
+    
+    setCropData(newCropData);
+    setAspectRatios(newAspectRatios);
+  }, [selectedFiles, cropData, aspectRatios]);
 
-  const updateAspectRatio = (index, ratio) => {
-    setAspectRatios(prev => {
-      const newRatios = [...prev];
-      newRatios[index] = ratio;
-      return newRatios;
+  // Remover archivo
+  const removeFile = useCallback((index) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+    
+    // Actualizar índices de crop data
+    const newCropData = {};
+    const newAspectRatios = {};
+    
+    newFiles.forEach((_, i) => {
+      const oldIndex = selectedFiles.findIndex((file, originalIndex) => 
+        originalIndex < index ? originalIndex === i : originalIndex === i + 1
+      );
+      if (cropData[oldIndex] !== undefined) {
+        newCropData[i] = cropData[oldIndex];
+        newAspectRatios[i] = aspectRatios[oldIndex];
+      }
     });
-  };
+    
+    setCropData(newCropData);
+    setAspectRatios(newAspectRatios);
+  }, [selectedFiles, cropData, aspectRatios]);
 
-  const resetForm = () => {
+  // Actualizar crop data
+  const updateCropData = useCallback((index, data) => {
+    setCropData(prev => ({ ...prev, [index]: data }));
+  }, []);
+
+  // Actualizar aspect ratio
+  const updateAspectRatio = useCallback((index, ratio) => {
+    setAspectRatios(prev => ({ ...prev, [index]: ratio }));
+  }, []);
+
+  // Resetear formulario
+  const resetForm = useCallback(() => {
     setCurrentStep(1);
     setSelectedFiles([]);
-    setCropData([]);
-    setAspectRatios([]);
+    setCropData({});
+    setAspectRatios({});
     setMetadata({
       caption: '',
-      category: 'general',
       tags: [],
+      category: 'general',
       privacy: 'public',
-      allowComments: true,
-      allowDownload: false,
-      showLocation: false,
       location: '',
-      publish: true
+      allowComments: true,
+      allowDownloads: false
     });
-  };
+  }, []);
 
   return {
     currentStep,
@@ -133,7 +144,7 @@ const usePhotoForm = () => {
 };
 
 // ===============================
-// HOOK PARA UPLOAD (MOCK)
+// MOCK HOOK PARA UPLOAD (TEMPORAL)
 // ===============================
 
 const usePhotoUploadMock = () => {
@@ -307,274 +318,159 @@ const PhotoUploadStudio = () => {
                       size="sm"
                       onClick={resetForm}
                     >
-                      <Icon name="X" size={16} className="mr-2" />
-                      Limpiar
+                      <Icon name="RotateCcw" size={16} className="mr-2" />
+                      Reiniciar
                     </Button>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Indicador de Pasos */}
+            {/* Progress Steps */}
             <div className="mb-8">
-              <div className="flex items-center space-x-4 overflow-x-auto pb-2">
+              <div className="flex items-center justify-between">
                 {UPLOAD_STEPS.map((step, index) => (
-                  <div 
-                    key={step.number}
-                    className={`flex items-center space-x-3 min-w-0 ${
-                      index < UPLOAD_STEPS.length - 1 ? 'flex-shrink-0' : ''
-                    }`}
-                  >
-                    <div className={`
-                      flex items-center justify-center w-10 h-10 rounded-full text-sm font-medium
-                      ${currentStep >= step.number 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-muted text-muted-foreground'
-                      }
-                    `}>
-                      {currentStep > step.number ? (
-                        <Icon name="Check" size={16} />
-                      ) : (
-                        step.number
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className={`text-sm font-medium ${
-                        currentStep >= step.number ? 'text-foreground' : 'text-muted-foreground'
-                      }`}>
-                        {step.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {step.description}
-                      </p>
+                  <React.Fragment key={step.number}>
+                    <div className={`flex items-center ${
+                      currentStep >= step.number ? 'text-primary' : 'text-muted-foreground'
+                    }`}>
+                      <div className={`
+                        w-10 h-10 rounded-full flex items-center justify-center mr-3 transition-all
+                        ${currentStep > step.number 
+                          ? 'bg-primary text-primary-foreground' 
+                          : currentStep === step.number 
+                            ? 'bg-primary/10 text-primary border-2 border-primary' 
+                            : 'bg-muted text-muted-foreground'
+                        }
+                      `}>
+                        <Icon 
+                          name={currentStep > step.number ? 'Check' : 'Circle'} 
+                          size={20} 
+                        />
+                      </div>
+                      <div className="hidden sm:block">
+                        <p className="font-medium">{step.title}</p>
+                        <p className="text-sm text-muted-foreground">{step.description}</p>
+                      </div>
                     </div>
                     {index < UPLOAD_STEPS.length - 1 && (
-                      <Icon 
-                        name="ChevronRight" 
-                        size={16} 
-                        className="text-muted-foreground flex-shrink-0 mx-2" 
-                      />
+                      <div className={`flex-1 h-0.5 mx-4 ${
+                        currentStep > step.number ? 'bg-primary' : 'bg-muted'
+                      }`} />
                     )}
-                  </div>
+                  </React.Fragment>
                 ))}
               </div>
             </div>
 
             {/* Contenido Principal */}
-            <div className="grid lg:grid-cols-3 gap-8">
-              
-              {/* Área Principal */}
-              <div className="lg:col-span-2">
+            <div className="bg-card rounded-lg border shadow-sm">
+              <div className="p-6">
                 
-                {/* PASO 1: Upload Zone */}
+                {/* PASO 1: Upload de Fotos */}
                 {currentStep === 1 && (
-                  <PhotoUploadZone 
-                    onFilesSelected={addFiles}
-                    multiple={true}
-                    maxFiles={10}
-                  />
+                  <div className="space-y-6">
+                    <PhotoUploadZone
+                      onFilesSelected={addFiles}
+                      multiple={true}
+                      maxFiles={10}
+                    />
+                    
+                    {selectedFiles.length > 0 && (
+                      <div className="flex justify-end space-x-3">
+                        <Button onClick={nextStep}>
+                          <Icon name="ArrowRight" size={16} className="mr-2" />
+                          Continuar ({selectedFiles.length} fotos)
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
-                {/* PASO 2: Preview y Edición */}
-                {currentStep === 2 && selectedFiles.length > 0 && (
-                  <PhotoPreview
-                    files={selectedFiles}
-                    cropData={cropData}
-                    aspectRatios={aspectRatios}
-                    onRemoveFile={removeFile}
-                    onCropChange={updateCropData}
-                    onAspectRatioChange={updateAspectRatio}
-                    onNext={nextStep}
-                  />
+                {/* PASO 2: Edición de Fotos */}
+                {currentStep === 2 && (
+                  <div className="space-y-6">
+                    <PhotoPreview
+                      files={selectedFiles}
+                      cropData={cropData}
+                      aspectRatios={aspectRatios}
+                      onCropChange={updateCropData}
+                      onAspectRatioChange={updateAspectRatio}
+                      onRemoveFile={removeFile}
+                    />
+                    
+                    <div className="flex justify-between">
+                      <Button variant="outline" onClick={prevStep}>
+                        <Icon name="ArrowLeft" size={16} className="mr-2" />
+                        Anterior
+                      </Button>
+                      <Button onClick={nextStep}>
+                        <Icon name="ArrowRight" size={16} className="mr-2" />
+                        Configurar metadatos
+                      </Button>
+                    </div>
+                  </div>
                 )}
 
                 {/* PASO 3: Metadatos */}
                 {currentStep === 3 && (
-                  <PhotoMetadataForm
-                    metadata={metadata}
-                    onChange={setMetadata}
-                    categories={PHOTO_CATEGORIES}
-                    onSaveDraft={() => handleBatchUpload()}
-                    onPublish={handleBatchUpload}
-                    loading={isUploading}
-                  />
+                  <div className="space-y-6">
+                    <PhotoMetadataForm
+                      metadata={metadata}
+                      onChange={setMetadata}
+                      categories={PHOTO_CATEGORIES}
+                      onSaveDraft={() => console.log('Guardar borrador')}
+                      onPublish={handleBatchUpload}
+                      loading={isUploading}
+                    />
+                    
+                    <div className="flex justify-between">
+                      <Button variant="outline" onClick={prevStep}>
+                        <Icon name="ArrowLeft" size={16} className="mr-2" />
+                        Anterior
+                      </Button>
+                    </div>
+                  </div>
                 )}
 
-                {/* PASO 4: Éxito */}
+                {/* PASO 4: Confirmación */}
                 {currentStep === 4 && (
-                  <div className="text-center py-12">
-                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Icon name="Check" size={32} className="text-green-600" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-foreground mb-4">
-                      ¡Fotos publicadas exitosamente!
-                    </h2>
-                    <p className="text-muted-foreground mb-8">
-                      Tus {selectedFiles.length} foto{selectedFiles.length !== 1 ? 's han' : ' ha'} sido publicada{selectedFiles.length !== 1 ? 's' : ''} en tu perfil
-                    </p>
-                    
-                    {/* Resumen del Upload */}
-                    <div className="bg-muted/50 rounded-lg p-6 mb-8 max-w-md mx-auto">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-2xl font-bold text-primary">{selectedFiles.length}</p>
-                          <p className="text-xs text-muted-foreground">Fotos</p>
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-primary">
-                            {cropData.filter(crop => crop !== null).length}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Editadas</p>
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-primary">
-                            {metadata.tags?.length || 0}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Tags</p>
-                        </div>
-                      </div>
+                  <div className="text-center space-y-6">
+                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
+                      <Icon name="CheckCircle" size={40} className="text-green-500" />
                     </div>
                     
+                    <div>
+                      <h2 className="text-2xl font-bold text-foreground mb-2">
+                        ¡Fotos publicadas exitosamente!
+                      </h2>
+                      <p className="text-muted-foreground">
+                        Tus {selectedFiles.length} fotos han sido subidas y están disponibles en tu perfil
+                      </p>
+                    </div>
+
                     <div className="flex justify-center space-x-4">
                       <Button onClick={handlePublish}>
-                        <Icon name="Eye" size={16} className="mr-2" />
-                        Ver en Perfil
+                        <Icon name="User" size={16} className="mr-2" />
+                        Ver en mi perfil
                       </Button>
                       <Button variant="outline" onClick={resetForm}>
                         <Icon name="Plus" size={16} className="mr-2" />
-                        Subir Más Fotos
+                        Subir más fotos
                       </Button>
                     </div>
                   </div>
                 )}
               </div>
-
-              {/* Panel Lateral */}
-              <div className="space-y-6">
-                
-                {/* Tips de Upload */}
-                <div className="bg-card rounded-lg border p-6">
-                  <h3 className="font-semibold text-foreground mb-4 flex items-center">
-                    <Icon name="Lightbulb" size={20} className="mr-2 text-yellow-500" />
-                    Tips para mejores fotos
-                  </h3>
-                  <div className="space-y-3 text-sm text-muted-foreground">
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Camera" size={16} className="mt-0.5 flex-shrink-0" />
-                      <span>Usa buena iluminación natural siempre que sea posible</span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Crop" size={16} className="mt-0.5 flex-shrink-0" />
-                      <span>Experimenta con diferentes encuadres y composiciones</span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Hash" size={16} className="mt-0.5 flex-shrink-0" />
-                      <span>Añade tags relevantes para mayor alcance</span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Icon name="FileImage" size={16} className="mt-0.5 flex-shrink-0" />
-                      <span>Formatos soportados: JPG, PNG, WEBP</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Progreso del Paso Actual */}
-                {currentStep > 1 && currentStep < 4 && (
-                  <div className="bg-card rounded-lg border p-6">
-                    <h3 className="font-semibold text-foreground mb-4 flex items-center">
-                      <Icon name="BarChart3" size={20} className="mr-2 text-blue-500" />
-                      Progreso
-                    </h3>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Fotos seleccionadas:</span>
-                        <span className="font-medium">{selectedFiles.length}</span>
-                      </div>
-                      {currentStep >= 2 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Fotos editadas:</span>
-                          <span className="font-medium">
-                            {cropData.filter(crop => crop !== null).length}
-                          </span>
-                        </div>
-                      )}
-                      {currentStep >= 3 && (
-                        <>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Categoría:</span>
-                            <span className="font-medium">
-                              {PHOTO_CATEGORIES.find(c => c.id === metadata.category)?.label || 'General'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tags:</span>
-                            <span className="font-medium">{metadata.tags?.length || 0}</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Nota sobre funcionalidad */}
-                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-6">
-                  <h3 className="font-semibold text-foreground mb-3 flex items-center">
-                    <Icon name="Info" size={20} className="mr-2 text-blue-500" />
-                    Sistema Avanzado
-                  </h3>
-                  <div className="text-sm text-muted-foreground space-y-2">
-                    <p>Esta versión incluye todas las funciones avanzadas:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Recorte y edición profesional ✅</li>
-                      <li>Múltiples formatos de aspecto ✅</li>
-                      <li>Sistema completo de metadatos ✅</li>
-                      <li>Configuraciones de privacidad ✅</li>
-                      <li>Optimización automática ✅</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
             </div>
-
-            {/* Navigation Footer */}
-            {currentStep > 1 && currentStep < 4 && (
-              <div className="flex items-center justify-between py-8 border-t mt-8">
-                <Button 
-                  variant="outline" 
-                  onClick={prevStep}
-                  disabled={isUploading}
-                >
-                  <Icon name="ChevronLeft" size={16} className="mr-2" />
-                  Anterior
-                </Button>
-                
-                {currentStep === 3 ? (
-                  <Button 
-                    onClick={handleBatchUpload}
-                    disabled={isUploading || !metadata.category}
-                  >
-                    <Icon name="Upload" size={16} className="mr-2" />
-                    Publicar Fotos
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={nextStep}
-                    disabled={isUploading || (currentStep === 2 && selectedFiles.length === 0)}
-                  >
-                    Siguiente
-                    <Icon name="ChevronRight" size={16} className="ml-2" />
-                  </Button>
-                )}
-              </div>
-            )}
           </div>
         </main>
       </div>
 
       {/* Modal de Upload */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg border shadow-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg border p-8 max-w-md w-full mx-4">
             <div className="text-center">
               <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Icon name="Upload" size={32} className="text-primary" />
