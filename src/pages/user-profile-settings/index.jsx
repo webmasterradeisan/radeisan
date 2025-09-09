@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con PhotoQuickUpload integrado para UX simple
+// Página de perfil perfeccionada con todas las funcionalidades integradas
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,18 +12,215 @@ import VideoGrid from './components/VideoGrid';
 import PointsHistory from './components/PointsHistory';
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
-import PhotoQuickUpload from '../../components/PhotoQuickUpload'; // NUEVO: Sistema simple
+import PhotoQuickUpload from '../../components/PhotoQuickUpload';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
 // ===============================
-// PHOTO GRID CON QUICK UPLOAD
+// HOOKS PERSONALIZADOS
+// ===============================
+
+// Hook para datos del perfil del usuario
+const useUserProfile = () => {
+  const { user, updateProfile } = useAuth();
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverError, setCoverError] = useState(null);
+
+  const generateUsername = (email) => {
+    const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const random = Math.floor(Math.random() * 1000);
+    return `${base}${random}`;
+  };
+
+  const fetchProfile = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (fetchError) {
+        if (fetchError.code === 'PGRST116') {
+          // Crear perfil si no existe
+          const { data: newProfile, error: createError } = await supabase
+            .from('user_profiles')
+            .insert({
+              id: user.id,
+              full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
+              username: generateUsername(user.email),
+              email: user.email,
+              avatar_url: user.user_metadata?.avatar_url,
+              cover_image_url: null,
+              photos_count: 0,
+              videos_count: 0,
+              bio: '',
+              website: '',
+              location: '',
+              points: 0,
+              is_business_account: false,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (createError) throw createError;
+          setProfileData(newProfile);
+        } else {
+          throw fetchError;
+        }
+      } else {
+        setProfileData(data);
+      }
+
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const refreshProfile = useCallback(() => {
+    return fetchProfile();
+  }, [fetchProfile]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  return {
+    profileData,
+    loading,
+    error,
+    uploading,
+    coverUploading,
+    coverError,
+    refreshProfile,
+    updateProfile
+  };
+};
+
+// Hook para videos del usuario
+const useUserVideos = (userId) => {
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchVideos = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
+        .from('videos')
+        .select(`
+          *,
+          user_profiles!videos_user_id_fkey (
+            id,
+            full_name,
+            username,
+            avatar_url
+          )
+        `)
+        .eq('user_id', userId)
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+
+      if (fetchError) throw fetchError;
+      setVideos(data || []);
+
+    } catch (err) {
+      console.error('Error fetching videos:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchVideos();
+  }, [fetchVideos]);
+
+  return {
+    videos,
+    loading,
+    error,
+    totalCount: videos.length,
+    refresh: fetchVideos
+  };
+};
+
+// Hook para fotos del usuario
+const useUserPhotos = (userId) => {
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchPhotos = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
+        .from('photos')
+        .select(`
+          *,
+          user_profiles!photos_user_id_fkey (
+            id,
+            full_name,
+            username,
+            avatar_url
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (fetchError) throw fetchError;
+      setPhotos(data || []);
+
+    } catch (err) {
+      console.error('Error fetching photos:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchPhotos();
+  }, [fetchPhotos]);
+
+  return {
+    photos,
+    loading,
+    error,
+    totalCount: photos.length,
+    refresh: fetchPhotos
+  };
+};
+
+// ===============================
+// COMPONENTE DE GRID DE FOTOS
 // ===============================
 
 const PhotoGrid = ({ 
   photos = [], 
   loading = false, 
-  onQuickUpload, // Cambio: usar modal en lugar de navegación
+  onQuickUpload,
   isOwner = false,
   showUploadButton = true 
 }) => {
@@ -73,7 +270,7 @@ const PhotoGrid = ({
 
   return (
     <div className="space-y-4">
-      {/* Botón de subida rápida cuando hay fotos */}
+      {/* Botón de subida cuando hay fotos */}
       {isOwner && showUploadButton && (
         <div className="flex justify-end space-x-2">
           <Button size="sm" onClick={onQuickUpload}>
@@ -100,18 +297,26 @@ const PhotoGrid = ({
                 src={photo.thumbnail_url || photo.image_url}
                 alt={photo.caption || 'Foto'}
                 className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                loading="lazy"
               />
             </div>
             
-            {/* Overlay con info */}
+            {/* Overlay con información */}
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-end">
               <div className="p-3 text-white opacity-0 group-hover:opacity-100 transition-opacity">
                 {photo.caption && (
                   <p className="text-sm font-medium truncate">{photo.caption}</p>
                 )}
-                <p className="text-xs opacity-75">
-                  {new Date(photo.created_at).toLocaleDateString()}
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs opacity-75">
+                    {new Date(photo.created_at).toLocaleDateString()}
+                  </p>
+                  {photo.category && (
+                    <span className="text-xs bg-black/50 px-2 py-1 rounded-full">
+                      {photo.category}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -122,138 +327,6 @@ const PhotoGrid = ({
 };
 
 // ===============================
-// HOOK PARA FOTOS DE USUARIO
-// ===============================
-
-const useUserPhotos = (userId) => {
-  const [photos, setPhotos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const fetchPhotos = useCallback(async () => {
-    if (!userId) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('photos')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (fetchError) throw fetchError;
-
-      setPhotos(data || []);
-    } catch (err) {
-      console.error('Error fetching photos:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    fetchPhotos();
-  }, [fetchPhotos]);
-
-  return {
-    photos,
-    loading,
-    error,
-    totalCount: photos.length,
-    refresh: fetchPhotos
-  };
-};
-
-// ===============================
-// HOOK PARA PERFIL DE USUARIO
-// ===============================
-
-const useUserProfile = () => {
-  const { user, updateProfile } = useAuth();
-  const [profileData, setProfileData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [coverUploading, setCoverUploading] = useState(false);
-  const [coverError, setCoverError] = useState(null);
-
-  const generateUsername = (email) => {
-    const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-    const random = Math.floor(Math.random() * 1000);
-    return `${base}${random}`;
-  };
-
-  const fetchProfile = useCallback(async () => {
-    if (!user?.id) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          const { data: newProfile, error: createError } = await supabase
-            .from('user_profiles')
-            .insert({
-              id: user.id,
-              full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
-              username: generateUsername(user.email),
-              email: user.email,
-              avatar_url: user.user_metadata?.avatar_url,
-              cover_image_url: null,
-              photos_count: 0,
-              created_at: new Date().toISOString()
-            })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-          setProfileData(newProfile);
-        } else {
-          throw fetchError;
-        }
-      } else {
-        setProfileData(data);
-      }
-
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const refreshProfile = useCallback(() => {
-    return fetchProfile();
-  }, [fetchProfile]);
-
-  useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
-
-  return {
-    profileData,
-    loading,
-    error,
-    uploading,
-    coverUploading,
-    coverError,
-    refreshProfile,
-    updateProfile
-  };
-};
-
-// ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
 
@@ -261,8 +334,6 @@ const UserProfileSettings = () => {
   const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
-  
-  // NUEVO: Estado para Quick Upload
   const [showQuickUpload, setShowQuickUpload] = useState(false);
 
   // Hooks de datos
@@ -270,28 +341,64 @@ const UserProfileSettings = () => {
     profileData,
     loading: profileLoading,
     error: profileError,
-    refreshProfile
+    refreshProfile,
+    updateProfile
   } = useUserProfile();
+
+  const {
+    videos,
+    loading: videosLoading,
+    refresh: refreshVideos
+  } = useUserVideos(user?.id);
 
   const {
     photos,
     loading: photosLoading,
-    totalCount: photosCount,
     refresh: refreshPhotos
   } = useUserPhotos(user?.id);
 
-  // Datos simulados para otros tabs
-  const [videos] = useState([]);
+  // Mock data para otros tabs
   const [purchases] = useState([]);
   const [transactions] = useState([]);
 
   // Calcular contadores para tabs
   const tabCounts = useMemo(() => ({
     videos: videos.length,
-    photos: photosCount,
+    photos: photos.length,
     purchases: purchases.length,
     points: transactions.length
-  }), [videos.length, photosCount, purchases.length, transactions.length]);
+  }), [videos.length, photos.length, purchases.length, transactions.length]);
+
+  // Formatear datos del usuario para ProfileHeader
+  const userData = useMemo(() => {
+    if (!profileData) return null;
+
+    return {
+      id: profileData.id,
+      name: profileData.full_name || profileData.username || 'Usuario',
+      username: profileData.username || '',
+      email: profileData.email || '',
+      bio: profileData.bio || '',
+      avatar: profileData.avatar_url,
+      coverImage: profileData.cover_image_url,
+      website: profileData.website || '',
+      location: profileData.location || '',
+      points: profileData.points || 0,
+      isBusinessAccount: profileData.is_business_account || false,
+      joinedAt: profileData.created_at,
+      
+      // Contadores
+      videosCount: videos.length,
+      photosCount: photos.length,
+      followersCount: profileData.followers_count || 0,
+      followingCount: profileData.following_count || 0,
+      
+      // Stats calculadas
+      totalViews: videos.reduce((acc, video) => acc + (video.views || 0), 0),
+      totalLikes: videos.reduce((acc, video) => acc + (video.likes || 0), 0) + 
+                  photos.reduce((acc, photo) => acc + (photo.likes || 0), 0),
+    };
+  }, [profileData, videos, photos]);
 
   // ===============================
   // EVENT HANDLERS
@@ -305,16 +412,17 @@ const UserProfileSettings = () => {
   const handleUpdateSettings = useCallback(async (newSettings) => {
     try {
       const result = await updateProfile(newSettings);
-      if (result.success) {
+      if (result?.success) {
         setEditingProfile(false);
+        await refreshProfile();
         console.log('Profile updated successfully');
       } else {
-        console.error('Failed to update profile:', result.error);
+        console.error('Failed to update profile:', result?.error);
       }
     } catch (error) {
       console.error('Error updating settings:', error);
     }
-  }, []);
+  }, [updateProfile, refreshProfile]);
 
   const handleAvatarUpload = useCallback(async (url) => {
     if (url) {
@@ -330,16 +438,45 @@ const UserProfileSettings = () => {
     }
   }, [refreshProfile]);
 
-  // NUEVO: Handlers para Quick Upload
   const handleQuickUploadOpen = useCallback(() => {
     setShowQuickUpload(true);
   }, []);
 
   const handleQuickUploadSuccess = useCallback(async () => {
-    // Refrescar fotos y perfil
     await Promise.all([refreshPhotos(), refreshProfile()]);
     console.log('Photos uploaded successfully');
   }, [refreshPhotos, refreshProfile]);
+
+  const handleVideoAction = useCallback(async (action, video, data = {}) => {
+    try {
+      switch (action) {
+        case 'like':
+          // Implementar like/unlike
+          console.log('Like video:', video.id);
+          break;
+        case 'edit':
+          // Navegar a editor
+          window.location.href = `/video-edit/${video.id}`;
+          break;
+        case 'delete':
+          if (window.confirm('¿Estás seguro de que quieres eliminar este video?')) {
+            const { error } = await supabase
+              .from('videos')
+              .delete()
+              .eq('id', video.id);
+            
+            if (!error) {
+              await refreshVideos();
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error with video action:', error);
+    }
+  }, [refreshVideos]);
 
   // Verificar autenticación
   useEffect(() => {
@@ -348,6 +485,11 @@ const UserProfileSettings = () => {
     }
   }, [isAuthenticated]);
 
+  // ===============================
+  // RENDER
+  // ===============================
+
+  // Loading state
   if (!isAuthenticated || profileLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -359,6 +501,7 @@ const UserProfileSettings = () => {
     );
   }
 
+  // Error state
   if (profileError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -378,8 +521,9 @@ const UserProfileSettings = () => {
   return (
     <>
       <Helmet>
-        <title>Mi Perfil - {profileData?.full_name || 'Usuario'} | RADEISAN</title>
+        <title>Mi Perfil - {userData?.name || 'Usuario'} | RADEISAN</title>
         <meta name="description" content="Gestiona tu perfil, contenido y configuración en RADEISAN" />
+        <meta name="keywords" content="perfil, usuario, configuración, contenido, videos, fotos" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
@@ -391,28 +535,43 @@ const UserProfileSettings = () => {
             
             {/* Profile Header */}
             <ProfileHeader 
-              user={profileData}
-              isOwner={true}
+              user={userData}
+              loading={false}
               onEditProfile={handleEditProfile}
-              onAvatarChange={handleAvatarUpload}
-              onCoverChange={handleCoverUpload}
+              onUpgradeAccount={() => window.location.href = '/business'}
+              onUploadAvatar={handleAvatarUpload}
+              onUploadCover={handleCoverUpload}
+              stats={{
+                videos: videos.length,
+                photos: photos.length,
+                views: userData?.totalViews || 0,
+                likes: userData?.totalLikes || 0,
+                followers: userData?.followersCount || 0,
+                following: userData?.followingCount || 0
+              }}
             />
 
-            {/* Profile Tabs */}
-            <ProfileTabs
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              counts={tabCounts}
-            />
+            {/* Profile Tabs - SIN SCROLL HORIZONTAL */}
+            <div className="bg-card border-b border-border sticky top-16 z-20 mb-8">
+              <ProfileTabs 
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                tabCounts={tabCounts}
+                user={userData}
+                showPhotosTab={true}
+              />
+            </div>
 
             {/* Tab Content */}
-            <div className="mt-8">
+            <div>
               {activeTab === 'videos' && (
                 <VideoGrid
                   videos={videos}
-                  loading={false}
-                  onUploadClick={() => window.location.href = '/video-upload'}
+                  loading={videosLoading}
+                  onVideoAction={handleVideoAction}
+                  showActions={true}
                   isOwner={true}
+                  onUploadClick={() => window.location.href = '/video-upload'}
                 />
               )}
 
@@ -420,9 +579,43 @@ const UserProfileSettings = () => {
                 <PhotoGrid
                   photos={photos}
                   loading={photosLoading}
-                  onQuickUpload={handleQuickUploadOpen} // CAMBIO: usar modal
+                  onQuickUpload={handleQuickUploadOpen}
                   isOwner={true}
                 />
+              )}
+
+              {activeTab === 'liked' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Videos que te gustaron</h3>
+                    <VideoGrid 
+                      videos={[]} // TODO: Implementar videos liked
+                      loading={false}
+                      emptyMessage="No has dado like a ningún video aún"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Fotos que te gustaron</h3>
+                    <PhotoGrid
+                      photos={[]} // TODO: Implementar fotos liked
+                      loading={false}
+                      showUploadButton={false}
+                      isOwner={false}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'playlists' && (
+                <div className="text-center py-12">
+                  <Icon name="List" size={48} className="text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No has creado listas aún</h3>
+                  <p className="text-muted-foreground mb-6">Organiza tus videos favoritos en listas de reproducción</p>
+                  <Button variant="outline">
+                    <Icon name="Plus" size={16} className="mr-2" />
+                    Crear primera lista
+                  </Button>
+                </div>
               )}
 
               {activeTab === 'purchases' && (
@@ -430,17 +623,25 @@ const UserProfileSettings = () => {
               )}
 
               {activeTab === 'points' && (
-                <PointsHistory transactions={transactions} />
+                <PointsHistory 
+                  transactions={transactions}
+                  summary={{
+                    total: userData?.points || 0,
+                    pending: 0,
+                    redeemed: 0
+                  }}
+                />
               )}
 
               {activeTab === 'settings' && (
                 <SettingsPanel
-                  user={profileData}
-                  isEditing={editingProfile}
-                  onSave={handleUpdateSettings}
-                  onCancel={() => setEditingProfile(false)}
-                  onAvatarChange={handleAvatarUpload}
-                  onCoverChange={handleCoverUpload}
+                  user={userData}
+                  loading={false}
+                  onUpdateSettings={handleUpdateSettings}
+                  onUploadAvatar={handleAvatarUpload}
+                  onUploadCover={handleCoverUpload}
+                  editing={editingProfile}
+                  onCancelEdit={() => setEditingProfile(false)}
                 />
               )}
             </div>
@@ -448,7 +649,7 @@ const UserProfileSettings = () => {
         </main>
       </div>
 
-      {/* NUEVO: Quick Upload Modal */}
+      {/* Quick Upload Modal */}
       <PhotoQuickUpload
         isOpen={showQuickUpload}
         onClose={() => setShowQuickUpload(false)}
