@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con layout estilo Facebook y funcionalidad completa
+// UserProfileSettings con diseño mejorado y videos funcionales
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -437,6 +437,161 @@ const PhotoGrid = ({
 };
 
 // ===============================
+// COMPONENTE MEJORADO DE VIDEO GRID
+// ===============================
+
+const VideoGridComponent = ({ 
+  videos = [], 
+  loading = false,
+  onVideoAction,
+  showActions = true,
+  isOwner = false,
+  onUploadClick,
+  emptyMessage = "No hay videos",
+  emptyDescription = "Los videos que subas aparecerán aquí"
+}) => {
+  console.log('🎬 VideoGridComponent render:', { 
+    videosCount: videos.length, 
+    loading,
+    videos: videos.map(v => ({ id: v.id, title: v.title }))
+  });
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="space-y-3">
+            <div className="aspect-video bg-muted rounded-lg animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded animate-pulse" />
+              <div className="h-3 bg-muted rounded w-3/4 animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (videos.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="Video" size={32} className="text-primary" />
+        </div>
+        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
+        {isOwner && onUploadClick && (
+          <Button onClick={onUploadClick} size="lg">
+            <Icon name="Plus" size={20} className="mr-2" />
+            Subir tu primer video
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {isOwner && onUploadClick && (
+        <div className="flex justify-end">
+          <Button onClick={onUploadClick}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Subir video
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {videos.map((video) => (
+          <div key={video.id} className="group cursor-pointer">
+            <div className="relative">
+              {/* Thumbnail */}
+              <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                {video.thumbnail_url ? (
+                  <img
+                    src={video.thumbnail_url}
+                    alt={video.title}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Icon name="Play" size={48} className="text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              {/* Play Button Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-16 h-16 bg-black/70 rounded-full flex items-center justify-center">
+                  <Icon name="Play" size={24} className="text-white ml-1" />
+                </div>
+              </div>
+
+              {/* Duration */}
+              {video.duration && (
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                  {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}
+                </div>
+              )}
+            </div>
+
+            {/* Video Info */}
+            <div className="mt-3 space-y-2">
+              <h4 className="font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+                {video.title || 'Video sin título'}
+              </h4>
+              
+              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                {video.views !== null && (
+                  <div className="flex items-center space-x-1">
+                    <Icon name="Eye" size={14} />
+                    <span>{video.views || 0} views</span>
+                  </div>
+                )}
+                {video.likes !== null && (
+                  <div className="flex items-center space-x-1">
+                    <Icon name="Heart" size={14} />
+                    <span>{video.likes || 0}</span>
+                  </div>
+                )}
+                <span>{new Date(video.created_at).toLocaleDateString()}</span>
+              </div>
+
+              {/* Actions */}
+              {showActions && isOwner && onVideoAction && (
+                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVideoAction('edit', video);
+                    }}
+                  >
+                    <Icon name="Edit" size={14} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVideoAction('delete', video);
+                    }}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Icon name="Trash2" size={14} />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
 
@@ -616,7 +771,7 @@ const UserProfileSettings = () => {
           videosData: videos.map(v => ({ id: v.id, title: v.title }))
         });
         return (
-          <VideoGrid 
+          <VideoGridComponent
             videos={videos} 
             loading={videosLoading}
             onVideoAction={handleVideoAction}
@@ -750,12 +905,12 @@ const UserProfileSettings = () => {
         <main className="pt-32 pb-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             
-            {/* Profile Header - DISEÑO ESTILO FACEBOOK */}
+            {/* Profile Header - DISEÑO LIMPIO Y ORGANIZADO */}
             <div className="bg-card border border-border rounded-lg overflow-hidden mb-8 shadow-sm">
               {/* Cover Image Container */}
               <div className="relative">
                 {/* Cover Image */}
-                <div className="h-64 sm:h-80 md:h-96 bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 overflow-hidden">
+                <div className="h-60 sm:h-72 md:h-80 bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 overflow-hidden">
                   {userData?.coverImage ? (
                     <img 
                       src={userData.coverImage} 
@@ -766,22 +921,26 @@ const UserProfileSettings = () => {
                     <div className="w-full h-full bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400" />
                   )}
                   
-                  {/* Botón cambiar cover */}
+                  {/* Botón cambiar cover - EN LA PARTE SUPERIOR */}
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    className="absolute bottom-4 right-4 bg-black/20 backdrop-blur-sm text-white hover:bg-black/30 border border-white/20"
+                    className="absolute top-4 right-4 bg-white/90 hover:bg-white text-gray-800 border-0 shadow-md"
                     onClick={() => {/* TODO: Implementar */}}
                   >
                     <Icon name="Camera" size={16} className="mr-2" />
                     Cambiar portada
                   </Button>
                 </div>
+              </div>
 
-                {/* Avatar superpuesto */}
-                <div className="absolute -bottom-16 left-6">
-                  <div className="relative">
-                    <div className="w-32 h-32 rounded-full border-4 border-card bg-background overflow-hidden shadow-lg">
+              {/* Profile Info Section - MEJOR ORGANIZADO */}
+              <div className="px-6 py-6">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:space-x-6">
+                  
+                  {/* Avatar - MEJOR POSICIONADO */}
+                  <div className="relative flex-shrink-0 -mt-20 mb-4 sm:mb-0">
+                    <div className="w-40 h-40 rounded-full border-4 border-card bg-background overflow-hidden shadow-lg">
                       {userData?.avatar ? (
                         <img 
                           src={userData.avatar} 
@@ -790,76 +949,106 @@ const UserProfileSettings = () => {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-muted">
-                          <Icon name="User" size={48} className="text-muted-foreground" />
+                          <Icon name="User" size={60} className="text-muted-foreground" />
                         </div>
                       )}
                     </div>
                     
-                    {/* Botón cambiar avatar */}
+                    {/* Botón cambiar avatar - ÍCONO MÁS GRANDE */}
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
-                      className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 border border-white/20"
+                      className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-white hover:bg-gray-50 text-gray-800 border-0 shadow-md p-0"
                       onClick={() => {/* TODO: Implementar */}}
                     >
-                      <Icon name="Camera" size={14} />
+                      <Icon name="Camera" size={20} />
                     </Button>
                   </div>
-                </div>
 
-                {/* Información del usuario superpuesta - ESTILO FACEBOOK */}
-                <div className="absolute bottom-6 left-44 right-6">
-                  <div className="bg-gradient-to-r from-black/60 to-transparent p-4 rounded-lg backdrop-blur-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between">
+                  {/* User Info - MEJOR DISTRIBUIDO */}
+                  <div className="flex-1 min-w-0 pt-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
                       <div className="flex-1 min-w-0">
                         {/* Nombre y username */}
-                        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 break-words">
+                        <h1 className="text-3xl font-bold text-foreground mb-2">
                           {userData?.name}
                         </h1>
-                        <div className="flex items-center space-x-2 mb-2">
-                          <p className="text-white/80">@{userData?.username}</p>
+                        <div className="flex items-center space-x-3 mb-3">
+                          <p className="text-muted-foreground">@{userData?.username}</p>
                           {userData?.isVerified && (
-                            <Icon name="BadgeCheck" size={16} className="text-blue-400" />
+                            <Icon name="BadgeCheck" size={18} className="text-primary" />
                           )}
                           {userData?.isBusinessAccount && (
-                            <span className="text-xs bg-white/20 text-white px-2 py-1 rounded-full">
+                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
                               Negocio
                             </span>
                           )}
                         </div>
 
-                        {/* Stats en una línea */}
-                        <div className="flex flex-wrap gap-4 text-sm text-white/90">
+                        {/* Bio */}
+                        {userData?.bio && (
+                          <p className="text-foreground mb-4 max-w-2xl">
+                            {userData.bio}
+                          </p>
+                        )}
+
+                        {/* Información adicional */}
+                        {(userData?.location || userData?.website) && (
+                          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
+                            {userData?.location && (
+                              <div className="flex items-center space-x-1">
+                                <Icon name="MapPin" size={14} />
+                                <span>{userData.location}</span>
+                              </div>
+                            )}
+                            {userData?.website && (
+                              <div className="flex items-center space-x-1">
+                                <Icon name="Link" size={14} />
+                                <a 
+                                  href={userData.website} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  {userData.website.replace(/^https?:\/\//, '')}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Stats */}
+                        <div className="flex flex-wrap gap-6 text-sm">
                           <div className="flex items-center space-x-1">
-                            <Icon name="Video" size={14} />
-                            <span className="font-medium">{userData?.videosCount || 0}</span>
-                            <span>videos</span>
+                            <Icon name="Video" size={16} className="text-muted-foreground" />
+                            <span className="font-semibold">{userData?.videosCount || 0}</span>
+                            <span className="text-muted-foreground">videos</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Icon name="Image" size={14} />
-                            <span className="font-medium">{userData?.photosCount || 0}</span>
-                            <span>fotos</span>
+                            <Icon name="Image" size={16} className="text-muted-foreground" />
+                            <span className="font-semibold">{userData?.photosCount || 0}</span>
+                            <span className="text-muted-foreground">fotos</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Icon name="Eye" size={14} />
-                            <span className="font-medium">{userData?.totalViews || 0}</span>
-                            <span>views</span>
+                            <Icon name="Eye" size={16} className="text-muted-foreground" />
+                            <span className="font-semibold">{userData?.totalViews || 0}</span>
+                            <span className="text-muted-foreground">views</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Icon name="Heart" size={14} />
-                            <span className="font-medium">{userData?.totalLikes || 0}</span>
-                            <span>likes</span>
+                            <Icon name="Heart" size={16} className="text-muted-foreground" />
+                            <span className="font-semibold">{userData?.totalLikes || 0}</span>
+                            <span className="text-muted-foreground">likes</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Botones de acción */}
-                      <div className="flex items-center space-x-3 mt-4 sm:mt-0 flex-shrink-0">
-                        <Button onClick={handleEditProfile} variant="secondary">
+                      {/* Botones de acción - MEJOR POSICIONADOS */}
+                      <div className="flex items-center space-x-3 mt-6 sm:mt-0 flex-shrink-0">
+                        <Button onClick={handleEditProfile}>
                           <Icon name="Edit" size={16} className="mr-2" />
                           Editar Perfil
                         </Button>
-                        <Button variant="outline" className="text-white border-white/20 hover:bg-white/10">
+                        <Button variant="outline">
                           <Icon name="Crown" size={16} className="mr-2" />
                           Upgrade
                         </Button>
@@ -867,39 +1056,6 @@ const UserProfileSettings = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Información adicional debajo */}
-              <div className="pt-20 px-6 pb-6">
-                {userData?.bio && (
-                  <p className="text-foreground mb-4 max-w-2xl">
-                    {userData.bio}
-                  </p>
-                )}
-                
-                {(userData?.location || userData?.website) && (
-                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                    {userData?.location && (
-                      <div className="flex items-center space-x-1">
-                        <Icon name="MapPin" size={14} />
-                        <span>{userData.location}</span>
-                      </div>
-                    )}
-                    {userData?.website && (
-                      <div className="flex items-center space-x-1">
-                        <Icon name="Link" size={14} />
-                        <a 
-                          href={userData.website} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          {userData.website.replace(/^https?:\/\//, '')}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
 
