@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings con integración completa y problemas corregidos
+// UserProfileSettings con layout estilo Facebook y funcionalidad completa
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,7 +17,7 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
 // ===============================
-// HOOKS PERSONALIZADOS CORREGIDOS
+// HOOKS PERSONALIZADOS
 // ===============================
 
 // Hook para datos del perfil del usuario
@@ -52,7 +52,6 @@ const useUserProfile = () => {
 
       if (fetchError) {
         if (fetchError.code === 'PGRST116') {
-          // Crear perfil si no existe
           const { data: newProfile, error: createError } = await supabase
             .from('user_profiles')
             .insert({
@@ -114,7 +113,7 @@ const useUserProfile = () => {
   };
 };
 
-// Hook para videos del usuario - CORREGIDO
+// Hook para videos del usuario - MEJORADO
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +127,8 @@ const useUserVideos = (userId) => {
 
   const fetchVideos = useCallback(async () => {
     if (!userId) {
+      console.log('🎬 No userId provided, skipping video fetch');
+      setVideos([]);
       setLoading(false);
       return;
     }
@@ -136,12 +137,26 @@ const useUserVideos = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('🎬 Cargando videos para usuario:', userId);
+      console.log('🎬 Fetching videos for user:', userId);
 
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
-          *,
+          id,
+          title,
+          description,
+          video_url,
+          thumbnail_url,
+          duration,
+          views,
+          likes,
+          comments_count,
+          category,
+          tags,
+          is_published,
+          created_at,
+          updated_at,
+          user_id,
           user_profiles!videos_user_id_fkey (
             id,
             full_name,
@@ -150,18 +165,25 @@ const useUserVideos = (userId) => {
           )
         `)
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (fetchError) {
-        console.error('❌ Error cargando videos:', fetchError);
+        console.error('❌ Error fetching videos:', fetchError);
         throw fetchError;
       }
 
-      console.log('✅ Videos cargados:', data?.length || 0);
-      setVideos(data || []);
+      console.log('✅ Videos fetched successfully:', {
+        count: data?.length || 0,
+        videos: data?.map(v => ({ id: v.id, title: v.title })) || []
+      });
+
+      const videoData = data || [];
+      setVideos(videoData);
 
       // Calcular estadísticas
-      const videoStats = (data || []).reduce(
+      const videoStats = videoData.reduce(
         (acc, video) => ({
           totalVideos: acc.totalVideos + 1,
           totalViews: acc.totalViews + (video.views || 0),
@@ -172,11 +194,13 @@ const useUserVideos = (userId) => {
       );
 
       setStats(videoStats);
+      console.log('📊 Video stats calculated:', videoStats);
 
     } catch (err) {
-      console.error('Error fetching videos:', err);
+      console.error('💥 Error in fetchVideos:', err);
       setError(err.message);
       setVideos([]);
+      setStats({ totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
     } finally {
       setLoading(false);
     }
@@ -196,7 +220,7 @@ const useUserVideos = (userId) => {
   };
 };
 
-// Hook para fotos del usuario - CORREGIDO
+// Hook para fotos del usuario - MEJORADO
 const useUserPhotos = (userId) => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -204,6 +228,8 @@ const useUserPhotos = (userId) => {
 
   const fetchPhotos = useCallback(async () => {
     if (!userId) {
+      console.log('📸 No userId provided, skipping photos fetch');
+      setPhotos([]);
       setLoading(false);
       return;
     }
@@ -212,12 +238,23 @@ const useUserPhotos = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('📸 Cargando fotos para usuario:', userId);
+      console.log('📸 Fetching photos for user:', userId);
 
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
-          *,
+          id,
+          image_url,
+          thumbnail_url,
+          caption,
+          category,
+          tags,
+          likes,
+          comments_count,
+          aspect_ratio,
+          file_size,
+          created_at,
+          user_id,
           user_profiles!photos_user_id_fkey (
             id,
             full_name,
@@ -226,18 +263,23 @@ const useUserPhotos = (userId) => {
           )
         `)
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (fetchError) {
-        console.error('❌ Error cargando fotos:', fetchError);
+        console.error('❌ Error fetching photos:', fetchError);
         throw fetchError;
       }
 
-      console.log('✅ Fotos cargadas:', data?.length || 0);
+      console.log('✅ Photos fetched successfully:', {
+        count: data?.length || 0,
+        photos: data?.map(p => ({ id: p.id, caption: p.caption })) || []
+      });
+
       setPhotos(data || []);
 
     } catch (err) {
-      console.error('Error fetching photos:', err);
+      console.error('💥 Error in fetchPhotos:', err);
       setError(err.message);
       setPhotos([]);
     } finally {
@@ -287,7 +329,7 @@ const usePurchaseHistory = () => {
 };
 
 // ===============================
-// COMPONENTE DE GRID DE FOTOS MEJORADO
+// COMPONENTE DE GRID DE FOTOS
 // ===============================
 
 const PhotoGrid = ({ 
@@ -344,7 +386,6 @@ const PhotoGrid = ({
 
   return (
     <div className="space-y-6">
-      {/* Botón de subida cuando hay fotos */}
       {isOwner && showUploadButton && (
         <div className="flex justify-end gap-3">
           <Button onClick={onQuickUpload}>
@@ -361,7 +402,6 @@ const PhotoGrid = ({
         </div>
       )}
 
-      {/* Grid de fotos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {photos.map((photo) => (
           <div key={photo.id} className="group relative aspect-square">
@@ -374,7 +414,6 @@ const PhotoGrid = ({
               />
             </div>
             
-            {/* Overlay con información */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex flex-col justify-end p-4">
               <div className="text-white">
                 {photo.caption && (
@@ -432,7 +471,7 @@ const UserProfileSettings = () => {
   const { transactions, summary } = usePointsHistory();
   const { purchases } = usePurchaseHistory();
 
-  // Formatear datos del usuario para ProfileHeader
+  // Formatear datos del usuario
   const userData = useMemo(() => {
     if (!profileData) return null;
 
@@ -462,8 +501,7 @@ const UserProfileSettings = () => {
       totalLikes: stats.totalLikes + photos.reduce((acc, photo) => acc + (photo.likes || 0), 0),
       totalComments: stats.totalComments,
       
-      // Para mostrar estadísticas
-      achievements: [] // TODO: Implementar sistema de logros
+      achievements: []
     };
   }, [profileData, videos, photos, stats]);
 
@@ -473,8 +511,8 @@ const UserProfileSettings = () => {
     photos: photos.length,
     purchases: purchases.length,
     points: transactions.length,
-    liked: 0, // TODO: Implementar
-    playlists: 0 // TODO: Implementar
+    liked: 0,
+    playlists: 0
   }), [videos.length, photos.length, purchases.length, transactions.length]);
 
   // ===============================
@@ -572,6 +610,11 @@ const UserProfileSettings = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'videos':
+        console.log('🎬 Rendering videos tab with:', { 
+          videosCount: videos.length, 
+          loading: videosLoading,
+          videosData: videos.map(v => ({ id: v.id, title: v.title }))
+        });
         return (
           <VideoGrid 
             videos={videos} 
@@ -580,6 +623,8 @@ const UserProfileSettings = () => {
             showActions={true}
             isOwner={true}
             onUploadClick={() => window.location.href = '/video-upload'}
+            emptyMessage="No hay videos"
+            emptyDescription="Los videos que subas aparecerán aquí. ¡Comienza a crear contenido!"
           />
         );
       
@@ -705,135 +750,163 @@ const UserProfileSettings = () => {
         <main className="pt-32 pb-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             
-            {/* Profile Header - CORREGIDO: Cover image más alta y nombre sin cortar */}
-            <div className="bg-card border-b border-border mb-8">
-              {/* Cover Image - ASPECT RATIO CORREGIDO */}
-              <div className="relative h-48 sm:h-64 md:h-72 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
-                {userData?.coverImage ? (
-                  <img 
-                    src={userData.coverImage} 
-                    alt="Portada del perfil"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
-                )}
-                
-                {/* Botón de cambiar cover */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute top-4 right-4 bg-black/20 backdrop-blur-sm text-white hover:bg-black/30"
-                  onClick={() => {/* TODO: Implementar cambio de cover */}}
-                >
-                  <Icon name="Camera" size={16} className="mr-2" />
-                  Cambiar portada
-                </Button>
-              </div>
+            {/* Profile Header - DISEÑO ESTILO FACEBOOK */}
+            <div className="bg-card border border-border rounded-lg overflow-hidden mb-8 shadow-sm">
+              {/* Cover Image Container */}
+              <div className="relative">
+                {/* Cover Image */}
+                <div className="h-64 sm:h-80 md:h-96 bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 overflow-hidden">
+                  {userData?.coverImage ? (
+                    <img 
+                      src={userData.coverImage} 
+                      alt="Portada del perfil"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400" />
+                  )}
+                  
+                  {/* Botón cambiar cover */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute bottom-4 right-4 bg-black/20 backdrop-blur-sm text-white hover:bg-black/30 border border-white/20"
+                    onClick={() => {/* TODO: Implementar */}}
+                  >
+                    <Icon name="Camera" size={16} className="mr-2" />
+                    Cambiar portada
+                  </Button>
+                </div>
 
-              {/* Profile Info - LAYOUT MEJORADO PARA EVITAR CORTE DEL NOMBRE */}
-              <div className="px-4 sm:px-6 pb-6">
-                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between -mt-16 sm:-mt-20">
-                  {/* Avatar and Basic Info */}
-                  <div className="flex flex-col sm:flex-row sm:items-end space-y-4 sm:space-y-0 sm:space-x-6">
-                    {/* Avatar */}
-                    <div className="relative">
-                      <div className="w-32 h-32 rounded-full border-4 border-card bg-muted overflow-hidden">
-                        {userData?.avatar ? (
-                          <img 
-                            src={userData.avatar} 
-                            alt={userData?.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Icon name="User" size={48} className="text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={() => {/* TODO: Implementar cambio de avatar */}}
-                      >
-                        <Icon name="Camera" size={14} />
-                      </Button>
-                    </div>
-
-                    {/* User Info - SIN RESTRICCIÓN DE ANCHO PARA EVITAR CORTE */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mb-3">
-                        <div className="min-w-0 flex-1">
-                          <h1 className="text-2xl sm:text-3xl font-bold text-foreground break-words">
-                            {userData?.name}
-                          </h1>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <p className="text-muted-foreground">@{userData?.username}</p>
-                            {userData?.isVerified && (
-                              <Icon name="BadgeCheck" size={16} className="text-primary" />
-                            )}
-                            {userData?.isBusinessAccount && (
-                              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                                Negocio
-                              </span>
-                            )}
-                          </div>
+                {/* Avatar superpuesto */}
+                <div className="absolute -bottom-16 left-6">
+                  <div className="relative">
+                    <div className="w-32 h-32 rounded-full border-4 border-card bg-background overflow-hidden shadow-lg">
+                      {userData?.avatar ? (
+                        <img 
+                          src={userData.avatar} 
+                          alt={userData?.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-muted">
+                          <Icon name="User" size={48} className="text-muted-foreground" />
                         </div>
-                      </div>
-
-                      {/* Bio */}
-                      {userData?.bio && (
-                        <p className="text-foreground mb-3 max-w-lg break-words">
-                          {userData.bio}
-                        </p>
                       )}
-
-                      {/* Stats */}
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Video" size={14} className="text-muted-foreground" />
-                          <span className="font-medium">{userData?.videosCount || 0}</span>
-                          <span className="text-muted-foreground">videos</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Image" size={14} className="text-muted-foreground" />
-                          <span className="font-medium">{userData?.photosCount || 0}</span>
-                          <span className="text-muted-foreground">fotos</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Eye" size={14} className="text-muted-foreground" />
-                          <span className="font-medium">{userData?.totalViews || 0}</span>
-                          <span className="text-muted-foreground">views</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Heart" size={14} className="text-muted-foreground" />
-                          <span className="font-medium">{userData?.totalLikes || 0}</span>
-                          <span className="text-muted-foreground">likes</span>
-                        </div>
-                      </div>
                     </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center space-x-3 mt-4 sm:mt-0 flex-shrink-0">
-                    <Button onClick={handleEditProfile}>
-                      <Icon name="Edit" size={16} className="mr-2" />
-                      Editar Perfil
-                    </Button>
-                    <Button variant="outline">
-                      <Icon name="Crown" size={16} className="mr-2" />
-                      Upgrade
+                    
+                    {/* Botón cambiar avatar */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 border border-white/20"
+                      onClick={() => {/* TODO: Implementar */}}
+                    >
+                      <Icon name="Camera" size={14} />
                     </Button>
                   </div>
                 </div>
+
+                {/* Información del usuario superpuesta - ESTILO FACEBOOK */}
+                <div className="absolute bottom-6 left-44 right-6">
+                  <div className="bg-gradient-to-r from-black/60 to-transparent p-4 rounded-lg backdrop-blur-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between">
+                      <div className="flex-1 min-w-0">
+                        {/* Nombre y username */}
+                        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 break-words">
+                          {userData?.name}
+                        </h1>
+                        <div className="flex items-center space-x-2 mb-2">
+                          <p className="text-white/80">@{userData?.username}</p>
+                          {userData?.isVerified && (
+                            <Icon name="BadgeCheck" size={16} className="text-blue-400" />
+                          )}
+                          {userData?.isBusinessAccount && (
+                            <span className="text-xs bg-white/20 text-white px-2 py-1 rounded-full">
+                              Negocio
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Stats en una línea */}
+                        <div className="flex flex-wrap gap-4 text-sm text-white/90">
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Video" size={14} />
+                            <span className="font-medium">{userData?.videosCount || 0}</span>
+                            <span>videos</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Image" size={14} />
+                            <span className="font-medium">{userData?.photosCount || 0}</span>
+                            <span>fotos</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Eye" size={14} />
+                            <span className="font-medium">{userData?.totalViews || 0}</span>
+                            <span>views</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Heart" size={14} />
+                            <span className="font-medium">{userData?.totalLikes || 0}</span>
+                            <span>likes</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botones de acción */}
+                      <div className="flex items-center space-x-3 mt-4 sm:mt-0 flex-shrink-0">
+                        <Button onClick={handleEditProfile} variant="secondary">
+                          <Icon name="Edit" size={16} className="mr-2" />
+                          Editar Perfil
+                        </Button>
+                        <Button variant="outline" className="text-white border-white/20 hover:bg-white/10">
+                          <Icon name="Crown" size={16} className="mr-2" />
+                          Upgrade
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Información adicional debajo */}
+              <div className="pt-20 px-6 pb-6">
+                {userData?.bio && (
+                  <p className="text-foreground mb-4 max-w-2xl">
+                    {userData.bio}
+                  </p>
+                )}
+                
+                {(userData?.location || userData?.website) && (
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                    {userData?.location && (
+                      <div className="flex items-center space-x-1">
+                        <Icon name="MapPin" size={14} />
+                        <span>{userData.location}</span>
+                      </div>
+                    )}
+                    {userData?.website && (
+                      <div className="flex items-center space-x-1">
+                        <Icon name="Link" size={14} />
+                        <a 
+                          href={userData.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {userData.website.replace(/^https?:\/\//, '')}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Profile Tabs - SIN SCROLL HORIZONTAL */}
+            {/* Profile Tabs - SIN SCROLL */}
             <div className="mb-8">
               <div className="border-b border-border">
-                <div className="flex space-x-6 overflow-x-auto scrollbar-hide">
+                <nav className="flex space-x-8">
                   {[
                     { id: 'videos', label: 'Videos', icon: 'Video', count: tabCounts.videos },
                     { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos },
@@ -847,11 +920,11 @@ const UserProfileSettings = () => {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`
-                        group relative flex items-center space-x-2 px-4 py-3 text-sm font-medium whitespace-nowrap
-                        border-b-2 transition-all duration-200 flex-shrink-0
+                        group relative flex items-center space-x-2 px-1 py-4 text-sm font-medium
+                        border-b-2 transition-all duration-200 whitespace-nowrap
                         ${activeTab === tab.id
                           ? 'border-primary text-primary'
-                          : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                          : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50'
                         }
                       `}
                     >
@@ -859,10 +932,10 @@ const UserProfileSettings = () => {
                       <span>{tab.label}</span>
                       {tab.count !== null && (
                         <span className={`
-                          ml-2 px-2 py-1 rounded-full text-xs
+                          px-2 py-1 rounded-full text-xs
                           ${activeTab === tab.id 
                             ? 'bg-primary/10 text-primary' 
-                            : 'bg-muted text-muted-foreground group-hover:bg-muted-foreground/10'
+                            : 'bg-muted text-muted-foreground'
                           }
                         `}>
                           {tab.count}
@@ -870,12 +943,12 @@ const UserProfileSettings = () => {
                       )}
                     </button>
                   ))}
-                </div>
+                </nav>
               </div>
             </div>
 
             {/* Tab Content */}
-            <div className="min-h-[400px]">
+            <div className="min-h-[500px]">
               {renderTabContent()}
             </div>
           </div>
