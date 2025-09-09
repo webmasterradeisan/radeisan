@@ -57,120 +57,80 @@ const DETECTION_CONFIG = {
 // FUNCIONES DE UTILIDAD
 // ===============================
 
-// Función mejorada para detectar orientación del video
+// Función CORREGIDA para detectar orientación - Por defecto HORIZONTAL
 const detectVideoOrientation = (video) => {
-  console.log(`🔍 Detectando orientación para video: "${video.title}" (ID: ${video.id})`);
+  console.log(`🔍 Analizando video: "${video.title}" (Duración: ${video.duration_seconds}s)`);
   
-  let score = 0; // Puntuación: positivo = vertical, negativo = horizontal
-  const reasons = []; // Para debugging
-
-  // 1. ANÁLISIS DE DURACIÓN
-  if (video.duration_seconds) {
-    if (video.duration_seconds <= DETECTION_CONFIG.REEL_MAX_DURATION) {
-      score += 3;
-      reasons.push(`Duración corta: ${video.duration_seconds}s (+3 vertical)`);
-    } else {
-      score -= 2;
-      reasons.push(`Duración larga: ${video.duration_seconds}s (-2 horizontal)`);
-    }
-  }
-
-  // 2. ANÁLISIS DE TEXTO (título, descripción, tags)
+  const reasons = [];
+  let isVertical = false; // Por defecto: HORIZONTAL
+  
+  // CRITERIO 1: Keywords EXPLÍCITAS que indican REEL/VERTICAL
   const title = (video.title || '').toLowerCase();
   const description = (video.description || '').toLowerCase();
   const tags = Array.isArray(video.tags) ? video.tags.join(' ').toLowerCase() : '';
   const fullText = `${title} ${description} ${tags}`;
 
-  // Buscar keywords verticales
-  const verticalMatches = DETECTION_CONFIG.VERTICAL_KEYWORDS.filter(keyword => 
-    fullText.includes(keyword)
+  const EXPLICIT_VERTICAL_WORDS = [
+    'reel', 'reels', 'short', 'shorts', 'tiktok', 'vertical',
+    'story', 'stories', 'snap', 'mobile', 'móvil', 'movil'
+  ];
+
+  const foundVerticalWords = EXPLICIT_VERTICAL_WORDS.filter(word => 
+    fullText.includes(word)
   );
-  if (verticalMatches.length > 0) {
-    score += verticalMatches.length * 2;
-    reasons.push(`Keywords verticales encontradas: [${verticalMatches.join(', ')}] (+${verticalMatches.length * 2})`);
+
+  if (foundVerticalWords.length > 0) {
+    isVertical = true;
+    reasons.push(`Keywords verticales explícitas: [${foundVerticalWords.join(', ')}]`);
   }
 
-  // Buscar keywords horizontales
-  const horizontalMatches = DETECTION_CONFIG.HORIZONTAL_KEYWORDS.filter(keyword => 
-    fullText.includes(keyword)
-  );
-  if (horizontalMatches.length > 0) {
-    score -= horizontalMatches.length * 2;
-    reasons.push(`Keywords horizontales encontradas: [${horizontalMatches.join(', ')}] (-${horizontalMatches.length * 2})`);
-  }
-
-  // 3. ANÁLISIS DE CATEGORÍA
+  // CRITERIO 2: Categoría ESPECÍFICA de reels
   const category = (video.category || '').toLowerCase();
-  if (DETECTION_CONFIG.VERTICAL_CATEGORIES.includes(category)) {
-    score += 4;
-    reasons.push(`Categoría vertical: "${category}" (+4)`);
-  } else if (DETECTION_CONFIG.HORIZONTAL_CATEGORIES.includes(category)) {
-    score -= 4;
-    reasons.push(`Categoría horizontal: "${category}" (-4)`);
+  const VERTICAL_CATEGORIES = ['reels', 'shorts', 'vertical', 'mobile', 'story'];
+  
+  if (VERTICAL_CATEGORIES.includes(category)) {
+    isVertical = true;
+    reasons.push(`Categoría vertical: "${category}"`);
   }
 
-  // 4. ANÁLISIS DE PATRONES EN EL TÍTULO
-  // Títulos típicos de reels suelen ser más cortos y usar emojis
-  if (title.length > 0) {
-    if (title.length <= 30) {
-      score += 1;
-      reasons.push(`Título corto: ${title.length} chars (+1 vertical)`);
-    } else if (title.length > 80) {
-      score -= 1;
-      reasons.push(`Título largo: ${title.length} chars (-1 horizontal)`);
-    }
-
-    // Detectar emojis o caracteres especiales (común en reels)
-    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
-    if (emojiRegex.test(title)) {
-      score += 1;
-      reasons.push(`Título con emojis (+1 vertical)`);
-    }
+  // CRITERIO 3: Duración MUY CORTA (típico de reels)
+  if (video.duration_seconds && video.duration_seconds <= 30) {
+    isVertical = true;
+    reasons.push(`Duración muy corta: ${video.duration_seconds}s (típico de reel)`);
   }
 
-  // 5. ANÁLISIS DE FILE SIZE (si está disponible)
-  // Videos verticales tienden a ser más pequeños en resolución
-  if (video.file_size_bytes) {
-    const sizeMB = video.file_size_bytes / (1024 * 1024);
-    if (sizeMB < 50) {
-      score += 1;
-      reasons.push(`Archivo pequeño: ${sizeMB.toFixed(1)}MB (+1 vertical)`);
-    } else if (sizeMB > 200) {
-      score -= 1;
-      reasons.push(`Archivo grande: ${sizeMB.toFixed(1)}MB (-1 horizontal)`);
-    }
+  // CRITERIO 4: Título muy corto + duración corta
+  if (title.length <= 20 && video.duration_seconds && video.duration_seconds <= 60) {
+    isVertical = true;
+    reasons.push(`Título corto (${title.length} chars) + duración corta (${video.duration_seconds}s)`);
   }
 
-  // 6. ANÁLISIS POR FECHA DE CREACIÓN
-  // Videos más recientes tienen más probabilidad de ser reels
-  if (video.created_at) {
-    const createdDate = new Date(video.created_at);
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    
-    if (createdDate > oneYearAgo) {
-      score += 0.5;
-      reasons.push(`Video reciente: ${createdDate.toLocaleDateString()} (+0.5 vertical)`);
-    }
+  // CRITERIOS QUE FUERZAN HORIZONTAL
+  const HORIZONTAL_WORDS = [
+    'tutorial', 'documental', 'documentary', 'review', 'análisis', 
+    'analisis', 'conferencia', 'presentacion', 'presentación', 
+    'webinar', 'clase', 'curso', 'gameplay', 'streaming'
+  ];
+
+  const foundHorizontalWords = HORIZONTAL_WORDS.filter(word => 
+    fullText.includes(word)
+  );
+
+  if (foundHorizontalWords.length > 0) {
+    isVertical = false; // Forzar horizontal
+    reasons.push(`Keywords horizontales fuertes: [${foundHorizontalWords.join(', ')}]`);
   }
 
-  // 7. DETERMINACIÓN FINAL
-  let orientation;
-  if (score > 2) {
-    orientation = VIDEO_ORIENTATIONS.VERTICAL;
-  } else if (score < -2) {
-    orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-  } else {
-    // En casos ambiguos, usar duración como criterio final
-    orientation = (video.duration_seconds && video.duration_seconds <= 60) 
-      ? VIDEO_ORIENTATIONS.VERTICAL 
-      : VIDEO_ORIENTATIONS.HORIZONTAL;
-    reasons.push(`Decisión ambigua (score: ${score}), usando duración como criterio final`);
+  // CRITERIO FUERTE: Duración larga = definitivamente horizontal
+  if (video.duration_seconds && video.duration_seconds > 120) {
+    isVertical = false; // Forzar horizontal
+    reasons.push(`Duración larga: ${video.duration_seconds}s (definitivamente horizontal)`);
   }
 
-  console.log(`📊 Video "${video.title}": ${orientation.toUpperCase()}`);
-  console.log(`   Score final: ${score}`);
-  console.log(`   Razones:`, reasons);
+  const orientation = isVertical ? VIDEO_ORIENTATIONS.VERTICAL : VIDEO_ORIENTATIONS.HORIZONTAL;
+  
+  console.log(`📊 RESULTADO: "${video.title}" = ${orientation.toUpperCase()}`);
+  console.log(`   Razones: ${reasons.length > 0 ? reasons.join('; ') : 'Clasificación por defecto (horizontal)'}`);
   console.log('---');
 
   return orientation;
