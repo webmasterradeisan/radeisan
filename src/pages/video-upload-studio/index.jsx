@@ -1,10 +1,11 @@
 // src/pages/video-upload-studio/index.jsx
-// VideoUploadStudio con integración real de Supabase - BUG #6 CORREGIDO
+// VideoUploadStudio con detección automática de orientación - INTEGRADO
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { uploadVideoWithOrientationDetection, detectVideoFileOrientation } from '../../services/videoDetection';
 import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import Icon from '../../components/AppIcon';
@@ -16,7 +17,7 @@ import Select from '../../components/ui/Select';
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para subir videos a Supabase Storage
+// Hook para subir videos con detección automática de orientación
 const useVideoUpload = () => {
   const { user } = useAuth();
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -24,6 +25,7 @@ const useVideoUpload = () => {
   const [uploadError, setUploadError] = useState(null);
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [estimatedTime, setEstimatedTime] = useState(0);
+  const [detectionResult, setDetectionResult] = useState(null);
 
   // Validar archivo de video
   const validateVideoFile = (file) => {
@@ -42,7 +44,7 @@ const useVideoUpload = () => {
     return true;
   };
 
-  // Generar thumbnail del video
+  // Generar thumbnail del video (mantenido del original)
   const generateThumbnail = (videoFile) => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
@@ -87,14 +89,17 @@ const useVideoUpload = () => {
     });
   };
 
-  // Subir video a Supabase Storage - CORREGIDO
+  // NUEVA FUNCIÓN: Subir video con detección automática
   const uploadVideo = async (file, metadata) => {
     try {
       setIsUploading(true);
       setUploadProgress(0);
       setUploadError(null);
+      setDetectionResult(null);
 
-      // PASO 1: OBTENER USUARIO AUTENTICADO PRIMERO
+      console.log('🎬 Iniciando upload con detección automática');
+
+      // PASO 1: OBTENER USUARIO AUTENTICADO
       const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
       if (userError || !currentUser) {
         throw new Error('Usuario no autenticado correctamente');
@@ -103,110 +108,100 @@ const useVideoUpload = () => {
       // PASO 2: VALIDAR ARCHIVO
       validateVideoFile(file);
 
-      // PASO 3: GENERAR NOMBRE ÚNICO PARA EL ARCHIVO (AHORA currentUser YA EXISTE)
-      const timestamp = Date.now();
-      const fileExtension = file.name.split('.').pop();
-      const sanitizedTitle = metadata.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
-      const fileName = `${currentUser.id}/${timestamp}_${sanitizedTitle}.${fileExtension}`;
-
-      setUploadProgress(10);
-
-      // PASO 4: SUBIR ARCHIVO A STORAGE
-      let uploadData;
+      // PASO 3: DETECTAR ORIENTACIÓN PRIMERO (NUEVO)
+      setUploadProgress(5);
+      console.log('🔍 Detectando orientación del video...');
+      
+      let orientationData = null;
       try {
-        const { data, error: uploadError } = await supabase.storage
-          .from('videos')
-          .upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
+        orientationData = await detectVideoFileOrientation(file);
+        setDetectionResult(orientationData);
+        console.log('✅ Orientación detectada:', orientationData);
         
-        if (uploadError) throw uploadError;
-        uploadData = data;
-      } catch (uploadError) {
-        console.warn('Bucket error, using fallback:', uploadError);
-        throw new Error('Error de configuración de almacenamiento. Contacta al administrador.');
+        // Mostrar información de detección al usuario
+        console.log(`📊 Video detectado como: ${orientationData.orientation.toUpperCase()}`);
+        console.log(`📐 Dimensiones: ${orientationData.width}x${orientationData.height}`);
+        console.log(`📏 Aspect Ratio: ${orientationData.aspectRatio}`);
+        
+      } catch (detectionError) {
+        console.warn('⚠️ Error en detección, continuando con fallback:', detectionError);
+        orientationData = {
+          orientation: 'horizontal',
+          aspectRatio: 'unknown',
+          width: null,
+          height: null,
+          duration: 0,
+          detectionMethod: 'fallback'
+        };
       }
 
-      setUploadProgress(50);
+      setUploadProgress(15);
 
-      // PASO 5: OBTENER URL PÚBLICA DEL VIDEO
-      const { data: urlData } = supabase.storage
-        .from('videos')
-        .getPublicUrl(fileName);
-
-      setUploadProgress(65);
-
-      // PASO 6: GENERAR Y SUBIR THUMBNAIL
-      let thumbnailUrl = null;
-      try {
-        const thumbnails = await generateThumbnail(file);
-        if (thumbnails.length > 0) {
-          const selectedThumbnail = thumbnails[Math.floor(thumbnails.length / 2)]; // Usar el del medio
-          const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
-          
-          const { error: thumbError } = await supabase.storage
-            .from('thumbnails')
-            .upload(thumbnailFileName, selectedThumbnail.blob);
-
-          if (!thumbError) {
-            const { data: thumbUrlData } = supabase.storage
-              .from('thumbnails')
-              .getPublicUrl(thumbnailFileName);
-            thumbnailUrl = thumbUrlData.publicUrl;
-          }
+      // PASO 4: USAR EL SERVICIO DE DETECCIÓN PARA UPLOAD COMPLETO
+      const progressCallback = ({ stage, progress, error }) => {
+        console.log(`📈 Upload stage: ${stage}, progress: ${progress}%`);
+        
+        // Mapear stages a porcentajes
+        const stageProgress = {
+          'analyzing': 15,
+          'preparing': 25,
+          'uploading': 30 + (progress * 0.4), // 30-70%
+          'processing': 70,
+          'saving': 85,
+          'completing': 95,
+          'completed': 100,
+          'error': progress
+        };
+        
+        setUploadProgress(stageProgress[stage] || progress);
+        
+        if (error) {
+          setUploadError(error);
         }
-      } catch (thumbError) {
-        console.warn('Error generating thumbnail:', thumbError);
-        // Continuar sin thumbnail si hay error
+      };
+
+      // Calcular puntos con bonus por orientación
+      const basePoints = calculateUploadPoints(orientationData.duration || 0, metadata.category);
+      const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0; // Bonus para Reels
+      const totalPoints = basePoints + orientationBonus;
+
+      const enrichedMetadata = {
+        ...metadata,
+        points_earned: totalPoints,
+        orientation_detected: orientationData.orientation,
+        detection_method: orientationData.detectionMethod
+      };
+
+      // USAR EL NUEVO SERVICIO DE UPLOAD CON DETECCIÓN
+      const result = await uploadVideoWithOrientationDetection(
+        file, 
+        enrichedMetadata, 
+        currentUser.id, 
+        progressCallback
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Error en el upload');
       }
 
-      setUploadProgress(75);
+      console.log('🎉 Upload completado exitosamente:', result);
 
-      // PASO 7: OBTENER DURACIÓN DEL VIDEO
-      const videoDuration = await getVideoDuration(file);
-
-      setUploadProgress(85);
-
-      // PASO 8: INSERTAR METADATA EN LA BASE DE DATOS
-      const { data: videoData, error: insertError } = await supabase
-        .from('videos')
-        .insert({
-          user_id: currentUser.id,
-          title: metadata.title,
-          description: metadata.description || '',
-          video_url: urlData.publicUrl,
-          thumbnail_url: thumbnailUrl,
-          category: metadata.category,
-          tags: metadata.tags || [],
-          duration_seconds: Math.round(videoDuration || 0),
-          file_size_bytes: file.size,
-          is_published: metadata.visibility === 'public',
-          points_earned: 0 // Se calculará cuando tenga views
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      setUploadProgress(95);
-
-      // PASO 9: OTORGAR PUNTOS POR SUBIR VIDEO
-      const uploadPoints = calculateUploadPoints(videoDuration || 0, metadata.category);
-      await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
-
-      setUploadProgress(100);
+      // PASO 5: OTORGAR PUNTOS (ya manejado en el servicio, pero mantenemos para compatibilidad)
+      await addPointsTransaction(totalPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
 
       return {
         success: true,
-        videoId: videoData.id,
-        videoUrl: urlData.publicUrl,
-        thumbnailUrl,
-        pointsEarned: uploadPoints
+        videoId: result.video.id,
+        videoUrl: result.video.video_url,
+        thumbnailUrl: result.video.thumbnail_url,
+        pointsEarned: totalPoints,
+        orientation: result.detection.orientation,
+        aspectRatio: result.detection.aspectRatio,
+        detectionData: result.detection
       };
 
     } catch (error) {
-      console.error('Error uploading video:', error);
+      console.error('❌ Error uploading video:', error);
       setUploadError(error.message);
       return { success: false, error: error.message };
     } finally {
@@ -220,11 +215,12 @@ const useVideoUpload = () => {
     isUploading,
     uploadError,
     uploadSpeed,
-    estimatedTime
+    estimatedTime,
+    detectionResult
   };
 };
 
-// Hook para obtener videos recientes del usuario
+// Hook para obtener videos recientes del usuario (sin cambios)
 const useUserVideos = () => {
   const { user } = useAuth();
   const [recentVideos, setRecentVideos] = useState([]);
@@ -243,7 +239,8 @@ const useUserVideos = () => {
           duration_seconds,
           views_count,
           is_published,
-          created_at
+          created_at,
+          orientation
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
@@ -258,7 +255,8 @@ const useUserVideos = () => {
         duration: formatDuration(video.duration_seconds),
         status: video.is_published ? 'published' : 'draft',
         views: video.views_count,
-        uploadDate: formatDate(video.created_at)
+        uploadDate: formatDate(video.created_at),
+        orientation: video.orientation || 'horizontal' // NUEVO: mostrar orientación
       }));
 
       setRecentVideos(transformedVideos);
@@ -277,7 +275,7 @@ const useUserVideos = () => {
 };
 
 // ===============================
-// UTILIDADES
+// UTILIDADES (mantenidas del original)
 // ===============================
 
 // Obtener duración del video
@@ -293,7 +291,7 @@ const getVideoDuration = (file) => {
   });
 };
 
-// Calcular puntos por subir video
+// Calcular puntos por subir video (mejorado con bonus de orientación)
 const calculateUploadPoints = (durationSeconds, category) => {
   let basePoints = 50; // Base por subir
   let durationPoints = Math.floor(durationSeconds / 60) * 10; // 10 puntos por minuto
@@ -317,8 +315,6 @@ const calculateUploadPoints = (durationSeconds, category) => {
 
 // Agregar transacción de puntos
 const addPointsTransaction = async (points, type, description) => {
-  // Esta función se implementaría en el backend o con permisos service_role
-  // Por ahora es un placeholder
   console.log(`Points transaction: +${points} for ${type}: ${description}`);
 };
 
@@ -352,8 +348,8 @@ const formatTime = (seconds) => {
 // COMPONENTES INTERNOS
 // ===============================
 
-// Componente VideoUploadZone
-const VideoUploadZone = ({ onFileSelect, uploadProgress, isUploading }) => {
+// Componente VideoUploadZone (modificado para mostrar detección)
+const VideoUploadZone = ({ onFileSelect, uploadProgress, isUploading, detectionResult }) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDrop = (e) => {
@@ -415,6 +411,29 @@ const VideoUploadZone = ({ onFileSelect, uploadProgress, isUploading }) => {
       <p className="text-xs text-muted-foreground mt-4">
         MP4, MOV, AVI, MKV, WebM • Max 2GB • Max 60 minutos
       </p>
+
+      {/* NUEVO: Mostrar información de detección */}
+      {detectionResult && (
+        <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+          <div className="flex items-center justify-center space-x-2 mb-2">
+            <Icon 
+              name={detectionResult.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
+              size={16} 
+              color="var(--color-primary)" 
+            />
+            <span className="text-sm font-medium text-primary">
+              {detectionResult.orientation === 'vertical' ? 'Reel Detectado' : 
+               detectionResult.orientation === 'square' ? 'Video Cuadrado' : 'Video Detectado'}
+            </span>
+          </div>
+          <p className="text-xs text-primary/80">
+            {detectionResult.width && detectionResult.height ? 
+              `${detectionResult.width}x${detectionResult.height} • ${detectionResult.aspectRatio}` :
+              'Orientación detectada automáticamente'
+            }
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -425,7 +444,7 @@ const VideoUploadZone = ({ onFileSelect, uploadProgress, isUploading }) => {
 const VideoUploadStudio = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime } = useVideoUpload();
+  const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime, detectionResult } = useVideoUpload();
   const { recentVideos, loading: recentLoading } = useUserVideos();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -446,7 +465,7 @@ const VideoUploadStudio = () => {
     scheduledDate: ''
   });
 
-  // Opciones de categorías
+  // Opciones de categorías (sin cambios)
   const categories = [
     { value: '', label: 'Selecciona una categoría' },
     { value: 'entertainment', label: 'Entretenimiento' },
@@ -710,6 +729,7 @@ const VideoUploadStudio = () => {
                       onFileSelect={handleFileSelect}
                       uploadProgress={uploadProgress}
                       isUploading={isUploading}
+                      detectionResult={detectionResult}
                     />
                     {uploadError && (
                       <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -743,6 +763,31 @@ const VideoUploadStudio = () => {
                           <p className="text-sm text-muted-foreground">
                             {selectedFile.name} • {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
                           </p>
+                          
+                          {/* NUEVO: Mostrar información de detección en preview */}
+                          {detectionResult && (
+                            <div className="mt-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <Icon 
+                                  name={detectionResult.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
+                                  size={16} 
+                                  color="var(--color-primary)" 
+                                />
+                                <span className="text-sm font-medium text-primary">
+                                  {detectionResult.orientation === 'vertical' ? 'Reel' : 
+                                   detectionResult.orientation === 'square' ? 'Video Cuadrado' : 'Video'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-primary/80">
+                                {detectionResult.width && detectionResult.height && (
+                                  `${detectionResult.width}x${detectionResult.height} • ${detectionResult.aspectRatio}`
+                                )}
+                              </p>
+                              {detectionResult.orientation === 'vertical' && (
+                                <p className="text-xs text-success mt-1">+10 puntos bonus por Reel</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                         
                         {/* Thumbnails */}
@@ -773,7 +818,7 @@ const VideoUploadStudio = () => {
                       </div>
                     </div>
 
-                    {/* Metadata Form - IMPLEMENTADO DIRECTAMENTE */}
+                    {/* Metadata Form */}
                     <div className="bg-card rounded-lg border p-6">
                       <h2 className="text-xl font-medium text-foreground mb-6">
                         Información del video
@@ -874,7 +919,7 @@ const VideoUploadStudio = () => {
                           </label>
                         </div>
 
-                        {/* Botón de envío - CORREGIDO */}
+                        {/* Botón de envío */}
                         <div className="flex gap-4 pt-4">
                           <Button
                             type="button"
@@ -915,10 +960,10 @@ const VideoUploadStudio = () => {
                       <Icon name="CheckCircle" size={32} color="var(--color-success)" />
                     </div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      ¡Video publicado exitosamente!
+                      {uploadSuccess.orientation === 'vertical' ? '¡Reel publicado exitosamente!' : '¡Video publicado exitosamente!'}
                     </h2>
                     <p className="text-muted-foreground mb-6">
-                      Tu video está ahora disponible para la comunidad
+                      Tu {uploadSuccess.orientation === 'vertical' ? 'reel' : 'video'} está ahora disponible para la comunidad
                     </p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -928,13 +973,24 @@ const VideoUploadStudio = () => {
                           <span className="font-medium">Puntos ganados</span>
                         </div>
                         <p className="text-2xl font-bold text-primary">+{uploadSuccess.pointsEarned}</p>
+                        {uploadSuccess.orientation === 'vertical' && (
+                          <p className="text-xs text-success">Incluye +10 bonus por Reel</p>
+                        )}
                       </div>
                       <div className="p-4 bg-muted/50 rounded-lg">
                         <div className="flex items-center space-x-2 mb-2">
-                          <Icon name="Eye" size={20} color="var(--color-muted-foreground)" />
-                          <span className="font-medium">Visualizaciones</span>
+                          <Icon 
+                            name={uploadSuccess.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
+                            size={20} 
+                            color="var(--color-muted-foreground)" 
+                          />
+                          <span className="font-medium">Tipo detectado</span>
                         </div>
-                        <p className="text-2xl font-bold text-foreground">0</p>
+                        <p className="text-lg font-bold text-foreground">
+                          {uploadSuccess.orientation === 'vertical' ? 'Reel' : 
+                           uploadSuccess.orientation === 'square' ? 'Cuadrado' : 'Video'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{uploadSuccess.aspectRatio}</p>
                       </div>
                     </div>
 
@@ -1012,12 +1068,21 @@ const VideoUploadStudio = () => {
                     <div className="space-y-3">
                       {recentVideos.map((video) => (
                         <div key={video.id} className="flex items-center space-x-3">
-                          <div className="w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                          <div className="w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0 relative">
                             <img 
                               src={video.thumbnail} 
                               alt={video.title}
                               className="w-full h-full object-cover"
                             />
+                            {/* NUEVO: Indicador de orientación */}
+                            <div className="absolute top-1 right-1">
+                              <Icon 
+                                name={video.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
+                                size={12} 
+                                color="white"
+                                className="bg-black/50 rounded p-0.5"
+                              />
+                            </div>
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-medium text-foreground text-sm truncate">
@@ -1054,6 +1119,12 @@ const VideoUploadStudio = () => {
                       <Icon name="Lightbulb" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
                         Los videos educativos y de negocios ganan más puntos
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Smartphone" size={16} color="var(--color-success)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Los Reels (videos verticales) reciben +10 puntos bonus
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
