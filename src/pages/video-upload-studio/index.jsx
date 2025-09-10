@@ -137,67 +137,116 @@ const useVideoUpload = () => {
 
       setUploadProgress(15);
 
-      // PASO 4: USAR EL SERVICIO DE DETECCIÓN PARA UPLOAD COMPLETO
-      const progressCallback = ({ stage, progress, error }) => {
-        console.log(`📈 Upload stage: ${stage}, progress: ${progress}%`);
+      // PASO 4: GENERAR NOMBRE ÚNICO PARA EL ARCHIVO (CÓDIGO ORIGINAL)
+      const timestamp = Date.now();
+      const fileExtension = file.name.split('.').pop();
+      const sanitizedTitle = metadata.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+      const fileName = `${currentUser.id}/${timestamp}_${sanitizedTitle}.${fileExtension}`;
+
+      setUploadProgress(25);
+
+      // PASO 5: SUBIR ARCHIVO A STORAGE (CÓDIGO ORIGINAL)
+      let uploadData;
+      try {
+        const { data, error: uploadError } = await supabase.storage
+          .from('videos')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
         
-        // Mapear stages a porcentajes
-        const stageProgress = {
-          'analyzing': 15,
-          'preparing': 25,
-          'uploading': 30 + (progress * 0.4), // 30-70%
-          'processing': 70,
-          'saving': 85,
-          'completing': 95,
-          'completed': 100,
-          'error': progress
-        };
-        
-        setUploadProgress(stageProgress[stage] || progress);
-        
-        if (error) {
-          setUploadError(error);
-        }
-      };
-
-      // Calcular puntos con bonus por orientación
-      const basePoints = calculateUploadPoints(orientationData.duration || 0, metadata.category);
-      const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0; // Bonus para Reels
-      const totalPoints = basePoints + orientationBonus;
-
-      const enrichedMetadata = {
-        ...metadata,
-        points_earned: totalPoints,
-        orientation_detected: orientationData.orientation,
-        detection_method: orientationData.detectionMethod
-      };
-
-      // USAR EL NUEVO SERVICIO DE UPLOAD CON DETECCIÓN
-      const result = await uploadVideoWithOrientationDetection(
-        file, 
-        enrichedMetadata, 
-        currentUser.id, 
-        progressCallback
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || 'Error en el upload');
+        if (uploadError) throw uploadError;
+        uploadData = data;
+      } catch (uploadError) {
+        console.warn('Bucket error, using fallback:', uploadError);
+        throw new Error('Error de configuración de almacenamiento. Contacta al administrador.');
       }
 
-      console.log('🎉 Upload completado exitosamente:', result);
+      setUploadProgress(50);
 
-      // PASO 5: OTORGAR PUNTOS (ya manejado en el servicio, pero mantenemos para compatibilidad)
-      await addPointsTransaction(totalPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
+      // PASO 6: OBTENER URL PÚBLICA DEL VIDEO (CÓDIGO ORIGINAL)
+      const { data: urlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(fileName);
+
+      setUploadProgress(65);
+
+      // PASO 7: GENERAR Y SUBIR THUMBNAIL (CÓDIGO ORIGINAL)
+      let thumbnailUrl = null;
+      try {
+        const thumbnails = await generateThumbnail(file);
+        if (thumbnails.length > 0) {
+          const selectedThumbnail = thumbnails[Math.floor(thumbnails.length / 2)]; // Usar el del medio
+          const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
+          
+          const { error: thumbError } = await supabase.storage
+            .from('thumbnails')
+            .upload(thumbnailFileName, selectedThumbnail.blob);
+
+          if (!thumbError) {
+            const { data: thumbUrlData } = supabase.storage
+              .from('thumbnails')
+              .getPublicUrl(thumbnailFileName);
+            thumbnailUrl = thumbUrlData.publicUrl;
+          }
+        }
+      } catch (thumbError) {
+        console.warn('Error generating thumbnail:', thumbError);
+        // Continuar sin thumbnail si hay error
+      }
+
+      setUploadProgress(75);
+
+      // PASO 8: OBTENER DURACIÓN DEL VIDEO (CÓDIGO ORIGINAL)
+      const videoDuration = await getVideoDuration(file);
+
+      setUploadProgress(85);
+
+      // PASO 9: INSERTAR METADATA EN LA BASE DE DATOS (CÓDIGO ORIGINAL + CAMPOS DE ORIENTACIÓN)
+      const { data: videoData, error: insertError } = await supabase
+        .from('videos')
+        .insert({
+          user_id: currentUser.id,
+          title: metadata.title,
+          description: metadata.description || '',
+          video_url: urlData.publicUrl,
+          thumbnail_url: thumbnailUrl,
+          category: metadata.category,
+          tags: metadata.tags || [],
+          duration_seconds: Math.round(videoDuration || 0),
+          file_size_bytes: file.size,
+          is_published: metadata.visibility === 'public',
+          points_earned: 0, // Se calculará cuando tenga views
+          // NUEVOS CAMPOS DE ORIENTACIÓN
+          orientation: orientationData.orientation,
+          aspect_ratio: orientationData.aspectRatio,
+          video_width: orientationData.width,
+          video_height: orientationData.height
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      setUploadProgress(95);
+
+      // PASO 10: OTORGAR PUNTOS POR SUBIR VIDEO (CÓDIGO ORIGINAL + BONUS)
+      const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
+      const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0; // Bonus para Reels
+      const uploadPoints = basePoints + orientationBonus;
+      await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
+
+      setUploadProgress(100);
 
       return {
         success: true,
-        videoId: result.video.id,
-        videoUrl: result.video.video_url,
-        thumbnailUrl: result.video.thumbnail_url,
-        pointsEarned: totalPoints,
-        orientation: result.detection.orientation,
-        aspectRatio: result.detection.aspectRatio,
-        detectionData: result.detection
+        videoId: videoData.id,
+        videoUrl: urlData.publicUrl,
+        thumbnailUrl,
+        pointsEarned: uploadPoints,
+        orientation: orientationData.orientation,
+        aspectRatio: orientationData.aspectRatio,
+        detectionData: orientationData
       };
 
     } catch (error) {
