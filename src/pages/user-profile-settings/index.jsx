@@ -57,83 +57,127 @@ const DETECTION_CONFIG = {
 // FUNCIONES DE UTILIDAD
 // ===============================
 
-// Función ULTRA-CONSERVADORA para detectar orientación - SOLO reels con evidencia EXPLÍCITA
+// Función para detectar orientación basada en DATOS REALES del video
 const detectVideoOrientation = (video) => {
-  console.log(`🔍 Analizando video: "${video.title}" (Duración: ${video.duration_seconds || 'N/A'}s)`);
+  console.log(`🔍 Analizando orientación real de: "${video.title}"`);
   
-  // POR DEFECTO: TODO ES HORIZONTAL (VIDEO TRADICIONAL)
-  let isReel = false;
   const reasons = [];
+  let orientation = VIDEO_ORIENTATIONS.HORIZONTAL; // Por defecto
   
-  const title = (video.title || '').toLowerCase().trim();
-  const description = (video.description || '').toLowerCase().trim();
-  const category = (video.category || '').toLowerCase().trim();
-  const tags = Array.isArray(video.tags) ? video.tags.join(' ').toLowerCase() : '';
-  
-  // CRITERIO 1: Solo palabras MUY ESPECÍFICAS de reels
-  const REEL_WORDS = ['reel', 'reels'];
-  const SHORTS_WORDS = ['short', 'shorts'];
-  const STORY_WORDS = ['story', 'stories'];
-  
-  const hasReelWord = REEL_WORDS.some(word => title.includes(word) || description.includes(word) || tags.includes(word));
-  const hasShortsWord = SHORTS_WORDS.some(word => title.includes(word) || description.includes(word) || tags.includes(word));
-  const hasStoryWord = STORY_WORDS.some(word => title.includes(word) || description.includes(word) || tags.includes(word));
-  
-  if (hasReelWord) {
-    isReel = true;
-    reasons.push('Contiene palabra "reel/reels"');
+  // MÉTODO 1: Usar aspect_ratio si está disponible (más confiable)
+  if (video.aspect_ratio) {
+    console.log(`📐 Aspect ratio encontrado: ${video.aspect_ratio}`);
+    
+    // Parsear aspect ratio (ej: "9:16", "16:9", "1:1")
+    if (typeof video.aspect_ratio === 'string' && video.aspect_ratio.includes(':')) {
+      const [width, height] = video.aspect_ratio.split(':').map(Number);
+      if (width && height) {
+        const ratio = width / height;
+        
+        if (ratio < 1) {
+          // Más alto que ancho = vertical (reel)
+          orientation = VIDEO_ORIENTATIONS.VERTICAL;
+          reasons.push(`Aspect ratio ${video.aspect_ratio} indica video vertical`);
+        } else {
+          // Más ancho que alto = horizontal (video)
+          orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+          reasons.push(`Aspect ratio ${video.aspect_ratio} indica video horizontal`);
+        }
+      }
+    } else if (typeof video.aspect_ratio === 'number') {
+      // Si aspect_ratio es un número decimal
+      if (video.aspect_ratio < 1) {
+        orientation = VIDEO_ORIENTATIONS.VERTICAL;
+        reasons.push(`Aspect ratio ${video.aspect_ratio} indica video vertical`);
+      } else {
+        orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+        reasons.push(`Aspect ratio ${video.aspect_ratio} indica video horizontal`);
+      }
+    }
   }
   
-  if (hasShortsWord) {
-    isReel = true;
-    reasons.push('Contiene palabra "short/shorts"');
+  // MÉTODO 2: Usar width/height si están disponibles
+  else if (video.width && video.height) {
+    console.log(`📏 Dimensiones encontradas: ${video.width}x${video.height}`);
+    
+    const ratio = video.width / video.height;
+    if (ratio < 1) {
+      orientation = VIDEO_ORIENTATIONS.VERTICAL;
+      reasons.push(`Dimensiones ${video.width}x${video.height} indican video vertical`);
+    } else {
+      orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+      reasons.push(`Dimensiones ${video.width}x${video.height} indican video horizontal`);
+    }
   }
   
-  if (hasStoryWord) {
-    isReel = true;
-    reasons.push('Contiene palabra "story/stories"');
+  // MÉTODO 3: Buscar en metadatos del archivo de video
+  else if (video.metadata) {
+    console.log(`📋 Revisando metadata...`);
+    
+    const metadata = typeof video.metadata === 'string' ? 
+      JSON.parse(video.metadata) : video.metadata;
+    
+    if (metadata.width && metadata.height) {
+      const ratio = metadata.width / metadata.height;
+      if (ratio < 1) {
+        orientation = VIDEO_ORIENTATIONS.VERTICAL;
+        reasons.push(`Metadata indica dimensiones verticales`);
+      } else {
+        orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+        reasons.push(`Metadata indica dimensiones horizontales`);
+      }
+    }
   }
   
-  // CRITERIO 2: Categoría EXPLÍCITA de reels
-  if (category === 'reels' || category === 'reel' || category === 'shorts' || category === 'short') {
-    isReel = true;
-    reasons.push(`Categoría explícita: "${category}"`);
+  // MÉTODO 4: Usar tags específicos SOLO como último recurso
+  else {
+    console.log(`⚠️ No hay datos de dimensiones, usando heurísticas`);
+    
+    const title = (video.title || '').toLowerCase();
+    const description = (video.description || '').toLowerCase();
+    const category = (video.category || '').toLowerCase();
+    const tags = Array.isArray(video.tags) ? 
+      video.tags.join(' ').toLowerCase() : '';
+    
+    const allText = `${title} ${description} ${category} ${tags}`;
+    
+    // SOLO palabras MUY específicas que indiquen formato
+    const verticalIndicators = [
+      'reel', 'reels', 'vertical', 'portrait', '9:16', '9-16'
+    ];
+    
+    const horizontalIndicators = [
+      'horizontal', 'landscape', '16:9', '16-9', 'widescreen'
+    ];
+    
+    const hasVertical = verticalIndicators.some(word => allText.includes(word));
+    const hasHorizontal = horizontalIndicators.some(word => allText.includes(word));
+    
+    if (hasVertical && !hasHorizontal) {
+      orientation = VIDEO_ORIENTATIONS.VERTICAL;
+      reasons.push('Indicadores de formato vertical en texto');
+    } else if (hasHorizontal && !hasVertical) {
+      orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+      reasons.push('Indicadores de formato horizontal en texto');
+    } else {
+      // Último recurso: usar duración como aproximación
+      if (video.duration_seconds && video.duration_seconds <= 30) {
+        orientation = VIDEO_ORIENTATIONS.VERTICAL;
+        reasons.push('Duración corta sugiere reel (≤30s)');
+      } else {
+        orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
+        reasons.push('Por defecto: video horizontal');
+      }
+    }
   }
   
-  // CRITERIO 3: Solo duración EXTREMADAMENTE corta (≤15 segundos)
-  if (video.duration_seconds && video.duration_seconds <= 15) {
-    isReel = true;
-    reasons.push(`Duración extremadamente corta: ${video.duration_seconds}s`);
-  }
+  const isReel = orientation === VIDEO_ORIENTATIONS.VERTICAL;
   
-  // ANULAR SI HAY INDICADORES CLAROS DE VIDEO HORIZONTAL
-  const HORIZONTAL_INDICATORS = [
-    'tutorial', 'curso', 'clase', 'conferencia', 'presentacion', 'presentación',
-    'documental', 'documentary', 'review', 'análisis', 'analisis',
-    'webinar', 'gameplay', 'streaming', 'live', 'directo',
-    'explicación', 'explicacion', 'guía', 'guia', 'demo'
-  ];
-  
-  const hasHorizontalIndicator = HORIZONTAL_INDICATORS.some(word => 
-    title.includes(word) || description.includes(word) || tags.includes(word)
-  );
-  
-  if (hasHorizontalIndicator) {
-    isReel = false; // FORZAR HORIZONTAL
-    reasons.push(`Indicador horizontal detectado`);
-  }
-  
-  // ANULAR SI DURACIÓN ES MAYOR A 60 SEGUNDOS
-  if (video.duration_seconds && video.duration_seconds > 60) {
-    isReel = false; // FORZAR HORIZONTAL
-    reasons.push(`Duración larga: ${video.duration_seconds}s (forzar horizontal)`);
-  }
-  
-  const orientation = isReel ? VIDEO_ORIENTATIONS.VERTICAL : VIDEO_ORIENTATIONS.HORIZONTAL;
-  
-  console.log(`📊 "${video.title}" → ${orientation.toUpperCase()}`);
-  console.log(`   Clasificado como: ${isReel ? 'REEL' : 'VIDEO'}`);
-  console.log(`   Razones: ${reasons.length > 0 ? reasons.join('; ') : 'Por defecto: video horizontal'}`);
+  console.log(`📊 DETECCIÓN FINAL: "${video.title}"`);
+  console.log(`   Formato: ${orientation.toUpperCase()}`);
+  console.log(`   Clasificación: ${isReel ? 'REEL' : 'VIDEO'}`);
+  console.log(`   Método usado: ${reasons[0] || 'Fallback'}`);
+  console.log(`   Razones: ${reasons.join('; ')}`);
   console.log('---');
   
   return orientation;
