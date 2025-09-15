@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - VERSIÓN COMPLETA con detección mejorada de Reels vs Videos
+// UserProfileSettings - CORREGIDO para leer orientación REAL de BD
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,166 +21,8 @@ import Button from '../../components/ui/Button';
 
 const VIDEO_ORIENTATIONS = {
   VERTICAL: 'vertical',
-  HORIZONTAL: 'horizontal'
-};
-
-// Configuración para detección de orientación
-const DETECTION_CONFIG = {
-  // Duración típica de reels (en segundos)
-  REEL_MAX_DURATION: 90,
-  // Keywords que indican video vertical
-  VERTICAL_KEYWORDS: [
-    'reel', 'reels', 'vertical', 'móvil', 'movil', 'mobile', 'short', 'shorts',
-    'tiktok', 'instagram', 'story', 'stories', 'portrait', 'phone', 'celular',
-    'smartphone', 'snap', 'quick', 'rapido', 'rápido', 'vertical', 'meme',
-    'trend', 'trending', 'viral', 'dance', 'baile', 'challenge', 'desafio',
-    'desafío', 'mini', 'clip'
-  ],
-  // Keywords que indican video horizontal
-  HORIZONTAL_KEYWORDS: [
-    'landscape', 'widescreen', 'cinema', 'movie', 'película', 'pelicula',
-    'horizontal', 'desktop', 'tv', 'television', 'film', 'documentary',
-    'documental', 'tutorial', 'clase', 'conferencia', 'presentacion',
-    'presentación', 'webinar', 'stream', 'streaming', 'gameplay', 'review'
-  ],
-  // Categorías típicas de cada orientación
-  VERTICAL_CATEGORIES: [
-    'reels', 'shorts', 'mobile', 'quick', 'viral', 'meme', 'dance', 'trend'
-  ],
-  HORIZONTAL_CATEGORIES: [
-    'tutorial', 'documentary', 'gaming', 'education', 'business', 'tech',
-    'review', 'vlog', 'movie', 'film', 'presentation'
-  ]
-};
-
-// ===============================
-// FUNCIONES DE UTILIDAD
-// ===============================
-
-// Función para detectar orientación basada en DATOS REALES del video
-const detectVideoOrientation = (video) => {
-  console.log(`🔍 Analizando orientación real de: "${video.title}"`);
-  
-  const reasons = [];
-  let orientation = VIDEO_ORIENTATIONS.HORIZONTAL; // Por defecto
-  
-  // MÉTODO 1: Usar aspect_ratio si está disponible (más confiable)
-  if (video.aspect_ratio) {
-    console.log(`📐 Aspect ratio encontrado: ${video.aspect_ratio}`);
-    
-    // Parsear aspect ratio (ej: "9:16", "16:9", "1:1")
-    if (typeof video.aspect_ratio === 'string' && video.aspect_ratio.includes(':')) {
-      const [width, height] = video.aspect_ratio.split(':').map(Number);
-      if (width && height) {
-        const ratio = width / height;
-        
-        if (ratio < 1) {
-          // Más alto que ancho = vertical (reel)
-          orientation = VIDEO_ORIENTATIONS.VERTICAL;
-          reasons.push(`Aspect ratio ${video.aspect_ratio} indica video vertical`);
-        } else {
-          // Más ancho que alto = horizontal (video)
-          orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-          reasons.push(`Aspect ratio ${video.aspect_ratio} indica video horizontal`);
-        }
-      }
-    } else if (typeof video.aspect_ratio === 'number') {
-      // Si aspect_ratio es un número decimal
-      if (video.aspect_ratio < 1) {
-        orientation = VIDEO_ORIENTATIONS.VERTICAL;
-        reasons.push(`Aspect ratio ${video.aspect_ratio} indica video vertical`);
-      } else {
-        orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-        reasons.push(`Aspect ratio ${video.aspect_ratio} indica video horizontal`);
-      }
-    }
-  }
-  
-  // MÉTODO 2: Usar width/height si están disponibles
-  else if (video.width && video.height) {
-    console.log(`📏 Dimensiones encontradas: ${video.width}x${video.height}`);
-    
-    const ratio = video.width / video.height;
-    if (ratio < 1) {
-      orientation = VIDEO_ORIENTATIONS.VERTICAL;
-      reasons.push(`Dimensiones ${video.width}x${video.height} indican video vertical`);
-    } else {
-      orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-      reasons.push(`Dimensiones ${video.width}x${video.height} indican video horizontal`);
-    }
-  }
-  
-  // MÉTODO 3: Buscar en metadatos del archivo de video
-  else if (video.metadata) {
-    console.log(`📋 Revisando metadata...`);
-    
-    const metadata = typeof video.metadata === 'string' ? 
-      JSON.parse(video.metadata) : video.metadata;
-    
-    if (metadata.width && metadata.height) {
-      const ratio = metadata.width / metadata.height;
-      if (ratio < 1) {
-        orientation = VIDEO_ORIENTATIONS.VERTICAL;
-        reasons.push(`Metadata indica dimensiones verticales`);
-      } else {
-        orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-        reasons.push(`Metadata indica dimensiones horizontales`);
-      }
-    }
-  }
-  
-  // MÉTODO 4: Usar tags específicos SOLO como último recurso
-  else {
-    console.log(`⚠️ No hay datos de dimensiones, usando heurísticas`);
-    
-    const title = (video.title || '').toLowerCase();
-    const description = (video.description || '').toLowerCase();
-    const category = (video.category || '').toLowerCase();
-    const tags = Array.isArray(video.tags) ? 
-      video.tags.join(' ').toLowerCase() : '';
-    
-    const allText = `${title} ${description} ${category} ${tags}`;
-    
-    // SOLO palabras MUY específicas que indiquen formato
-    const verticalIndicators = [
-      'reel', 'reels', 'vertical', 'portrait', '9:16', '9-16'
-    ];
-    
-    const horizontalIndicators = [
-      'horizontal', 'landscape', '16:9', '16-9', 'widescreen'
-    ];
-    
-    const hasVertical = verticalIndicators.some(word => allText.includes(word));
-    const hasHorizontal = horizontalIndicators.some(word => allText.includes(word));
-    
-    if (hasVertical && !hasHorizontal) {
-      orientation = VIDEO_ORIENTATIONS.VERTICAL;
-      reasons.push('Indicadores de formato vertical en texto');
-    } else if (hasHorizontal && !hasVertical) {
-      orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-      reasons.push('Indicadores de formato horizontal en texto');
-    } else {
-      // Último recurso: usar duración como aproximación
-      if (video.duration_seconds && video.duration_seconds <= 30) {
-        orientation = VIDEO_ORIENTATIONS.VERTICAL;
-        reasons.push('Duración corta sugiere reel (≤30s)');
-      } else {
-        orientation = VIDEO_ORIENTATIONS.HORIZONTAL;
-        reasons.push('Por defecto: video horizontal');
-      }
-    }
-  }
-  
-  const isReel = orientation === VIDEO_ORIENTATIONS.VERTICAL;
-  
-  console.log(`📊 DETECCIÓN FINAL: "${video.title}"`);
-  console.log(`   Formato: ${orientation.toUpperCase()}`);
-  console.log(`   Clasificación: ${isReel ? 'REEL' : 'VIDEO'}`);
-  console.log(`   Método usado: ${reasons[0] || 'Fallback'}`);
-  console.log(`   Razones: ${reasons.join('; ')}`);
-  console.log('---');
-  
-  return orientation;
+  HORIZONTAL: 'horizontal',
+  SQUARE: 'square'
 };
 
 // ===============================
@@ -274,7 +116,7 @@ const useUserProfile = () => {
   };
 };
 
-// Hook para videos horizontales (Videos tradicionales)
+// Hook para videos horizontales - CORREGIDO para usar orientación real de BD
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -299,8 +141,9 @@ const useUserVideos = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('🎬 Fetching horizontal videos for user ID:', userId);
+      console.log('🎬 Fetching HORIZONTAL videos for user ID:', userId);
 
+      // CORREGIDO: Consulta que incluye campos de orientación REAL
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -321,40 +164,39 @@ const useUserVideos = (userId) => {
           is_published,
           featured_until,
           created_at,
-          updated_at
+          updated_at,
+          orientation,
+          aspect_ratio,
+          video_width,
+          video_height
         `)
         .eq('user_id', userId)
         .eq('is_published', true)
         .order('created_at', { ascending: false })
-        .limit(100); // Aumentado para mejor análisis
+        .limit(100);
 
       if (fetchError) {
         console.error('❌ Error fetching videos:', fetchError);
         throw fetchError;
       }
 
-      console.log('🔍 Analizando orientación de videos...');
+      console.log('🔍 Filtrando videos por orientación REAL de BD...');
       
-      // Filtrar solo videos horizontales con análisis mejorado
+      // CORREGIDO: Filtrar usando orientación REAL de BD
       const allVideos = data || [];
-      const horizontalVideos = [];
-      const verticalVideos = [];
-
-      allVideos.forEach(video => {
-        const orientation = detectVideoOrientation(video);
-        if (orientation === VIDEO_ORIENTATIONS.HORIZONTAL) {
-          horizontalVideos.push(video);
-        } else {
-          verticalVideos.push(video);
-        }
+      const horizontalVideos = allVideos.filter(video => {
+        const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
+        const isHorizontal = realOrientation === VIDEO_ORIENTATIONS.HORIZONTAL;
+        
+        console.log(`📹 "${video.title}": orientación BD="${realOrientation}" → ${isHorizontal ? 'INCLUIR' : 'FILTRAR'}`);
+        
+        return isHorizontal;
       });
 
-      console.log('✅ Análisis de videos completado:', {
+      console.log('✅ Filtrado de videos horizontales completado:', {
         total: allVideos.length,
         horizontal: horizontalVideos.length,
-        vertical: verticalVideos.length,
-        horizontalTitles: horizontalVideos.slice(0, 3).map(v => v.title),
-        verticalTitles: verticalVideos.slice(0, 3).map(v => v.title)
+        filtered_out: allVideos.length - horizontalVideos.length
       });
 
       setVideos(horizontalVideos);
@@ -402,7 +244,7 @@ const useUserVideos = (userId) => {
   };
 };
 
-// Hook para reels (videos verticales) con lógica mejorada
+// Hook para reels (videos verticales) - CORREGIDO para usar orientación real de BD
 const useUserReels = (userId) => {
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -427,8 +269,9 @@ const useUserReels = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('📱 Fetching vertical videos (reels) for user ID:', userId);
+      console.log('📱 Fetching VERTICAL videos (reels) for user ID:', userId);
 
+      // CORREGIDO: Consulta que incluye campos de orientación REAL
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -449,40 +292,39 @@ const useUserReels = (userId) => {
           is_published,
           featured_until,
           created_at,
-          updated_at
+          updated_at,
+          orientation,
+          aspect_ratio,
+          video_width,
+          video_height
         `)
         .eq('user_id', userId)
         .eq('is_published', true)
         .order('created_at', { ascending: false })
-        .limit(100); // Aumentado para mejor análisis
+        .limit(100);
 
       if (fetchError) {
         console.error('❌ Error fetching reels:', fetchError);
         throw fetchError;
       }
 
-      console.log('🔍 Analizando orientación para reels...');
+      console.log('🔍 Filtrando reels por orientación REAL de BD...');
 
-      // Filtrar solo videos verticales (reels) con análisis mejorado
+      // CORREGIDO: Filtrar usando orientación REAL de BD
       const allVideos = data || [];
-      const verticalVideos = [];
-      const horizontalVideos = [];
-
-      allVideos.forEach(video => {
-        const orientation = detectVideoOrientation(video);
-        if (orientation === VIDEO_ORIENTATIONS.VERTICAL) {
-          verticalVideos.push(video);
-        } else {
-          horizontalVideos.push(video);
-        }
+      const verticalVideos = allVideos.filter(video => {
+        const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
+        const isVertical = realOrientation === VIDEO_ORIENTATIONS.VERTICAL;
+        
+        console.log(`📱 "${video.title}": orientación BD="${realOrientation}" → ${isVertical ? 'INCLUIR' : 'FILTRAR'}`);
+        
+        return isVertical;
       });
 
-      console.log('✅ Análisis de reels completado:', {
+      console.log('✅ Filtrado de reels completado:', {
         total: allVideos.length,
         vertical: verticalVideos.length,
-        horizontal: horizontalVideos.length,
-        verticalTitles: verticalVideos.slice(0, 3).map(v => v.title),
-        horizontalTitles: horizontalVideos.slice(0, 3).map(v => v.title)
+        filtered_out: allVideos.length - verticalVideos.length
       });
 
       setReels(verticalVideos);
@@ -760,7 +602,9 @@ const VideoGridComponent = ({
       views: videos[0].views_count,
       likes: videos[0].likes_count,
       duration: videos[0].duration_seconds,
-      detectedAs: 'HORIZONTAL'
+      orientation: videos[0].orientation,
+      aspect_ratio: videos[0].aspect_ratio,
+      classified_as: 'HORIZONTAL VIDEO'
     } : null
   });
 
@@ -784,7 +628,7 @@ const VideoGridComponent = ({
     return (
       <div className="text-center py-16">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Icon name="Video" size={32} className="text-primary" />
+          <Icon name="Monitor" size={32} className="text-blue-600" />
         </div>
         <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
         <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
@@ -854,6 +698,13 @@ const VideoGridComponent = ({
               <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium">
                 VIDEO
               </div>
+
+              {/* Debug Info - Solo en development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-1 py-0.5 rounded">
+                  {video.orientation || 'no-orient'}
+                </div>
+              )}
             </div>
 
             {/* Video Info */}
@@ -936,7 +787,9 @@ const ReelsGridComponent = ({
       views: reels[0].views_count,
       likes: reels[0].likes_count,
       duration: reels[0].duration_seconds,
-      detectedAs: 'VERTICAL'
+      orientation: reels[0].orientation,
+      aspect_ratio: reels[0].aspect_ratio,
+      classified_as: 'VERTICAL REEL'
     } : null
   });
 
@@ -960,7 +813,7 @@ const ReelsGridComponent = ({
     return (
       <div className="text-center py-16">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Icon name="Smartphone" size={32} className="text-primary" />
+          <Icon name="Smartphone" size={32} className="text-pink-600" />
         </div>
         <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
         <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
@@ -1031,6 +884,13 @@ const ReelsGridComponent = ({
               <div className="absolute top-2 left-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs px-2 py-1 rounded-full font-medium">
                 REEL
               </div>
+
+              {/* Debug Info - Solo en development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="absolute top-2 right-2 bg-pink-600 text-white text-xs px-1 py-0.5 rounded">
+                  {reel.orientation || 'no-orient'}
+                </div>
+              )}
             </div>
 
             {/* Reel Info */}
@@ -1160,7 +1020,7 @@ const UserProfileSettings = () => {
       isVerified: profileData.is_verified || false,
       joinedAt: profileData.created_at,
       
-      // Contadores
+      // Contadores CORREGIDOS
       videosCount: videos.length,
       reelsCount: reels.length,
       photosCount: photos.length,
@@ -1322,7 +1182,11 @@ const UserProfileSettings = () => {
           loading: videosLoading,
           error: videosError,
           hasData: videos.length > 0,
-          sampleVideo: videos[0]
+          sampleVideo: videos[0] ? {
+            title: videos[0].title,
+            orientation: videos[0].orientation,
+            aspect_ratio: videos[0].aspect_ratio
+          } : null
         });
         
         if (videosError) {
@@ -1360,7 +1224,11 @@ const UserProfileSettings = () => {
           loading: reelsLoading,
           error: reelsError,
           hasData: reels.length > 0,
-          sampleReel: reels[0]
+          sampleReel: reels[0] ? {
+            title: reels[0].title,
+            orientation: reels[0].orientation,
+            aspect_ratio: reels[0].aspect_ratio
+          } : null
         });
         
         if (reelsError) {
@@ -1626,10 +1494,10 @@ const UserProfileSettings = () => {
                           </div>
                         )}
 
-                        {/* Stats */}
+                        {/* Stats CORREGIDAS */}
                         <div className="flex flex-wrap gap-6 text-sm">
                           <div className="flex items-center space-x-1">
-                            <Icon name="Video" size={16} className="text-blue-600" />
+                            <Icon name="Monitor" size={16} className="text-blue-600" />
                             <span className="font-semibold">{userData?.videosCount || 0}</span>
                             <span className="text-muted-foreground">videos</span>
                           </div>
@@ -1678,7 +1546,7 @@ const UserProfileSettings = () => {
               <div className="border-b border-border">
                 <nav className="flex space-x-8">
                   {[
-                    { id: 'videos', label: 'Videos', icon: 'Video', count: tabCounts.videos, color: 'text-blue-600' },
+                    { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
                     { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
                     { id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' },
@@ -1770,6 +1638,18 @@ const UserProfileSettings = () => {
                 onClose={() => setShowImageEditor(false)}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Debug Info - Solo en development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs">
+          <div className="space-y-1">
+            <div>Videos H: {videos.length}</div>
+            <div>Reels V: {reels.length}</div>
+            <div>Fotos: {photos.length}</div>
+            <div>Tab: {activeTab}</div>
           </div>
         </div>
       )}
