@@ -1,5 +1,5 @@
 // src/pages/auth/Login.jsx
-// Login CORREGIDO - Elimina bucles de redirección y simplifica autenticación
+// LOGIN COMPLETO Y FUNCIONAL - Versión simplificada sin bucles
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -13,6 +13,7 @@ const Login = () => {
   const location = useLocation();
   const { signIn, user, loading: authLoading } = useAuth();
   
+  // Estados del formulario
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -22,95 +23,77 @@ const Login = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
-  const [loginAttempts, setLoginAttempts] = useState(0);
 
-  // Obtener ruta de redirección o usar dashboard por defecto
+  // Ruta de redirección (dashboard por defecto)
   const redirectTo = location.state?.from || '/dashboard';
 
-  // Si ya está autenticado, redirigir inmediatamente
+  // Auto-llenar credenciales de prueba en desarrollo
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      setFormData({
+        email: 'admin@radeisan.com',
+        password: '123456',
+        rememberMe: false
+      });
+    }
+  }, []);
+
+  // Redirigir si ya está autenticado
   useEffect(() => {
     if (user && !authLoading) {
       console.log('✅ Usuario ya autenticado, redirigiendo a:', redirectTo);
       navigate(redirectTo, { replace: true });
     }
-  }, [user, authLoading, redirectTo, navigate]);
+  }, [user, authLoading, navigate, redirectTo]);
 
-  // Auto-completar email si se recordó
-  useEffect(() => {
-    const rememberedUser = localStorage.getItem('rememberUser');
-    if (rememberedUser) {
-      try {
-        const userData = JSON.parse(rememberedUser);
-        if (userData.email && userData.rememberMe) {
-          setFormData(prev => ({
-            ...prev,
-            email: userData.email,
-            rememberMe: true
-          }));
-        }
-      } catch (error) {
-        console.log('Error parsing remembered user:', error);
-        localStorage.removeItem('rememberUser');
-      }
-    }
-  }, []);
-
+  // Validar formulario
   const validateForm = () => {
     const newErrors = {};
 
-    // Validación de email
     if (!formData.email.trim()) {
       newErrors.email = 'El email es requerido';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-      newErrors.email = 'Por favor ingresa un email válido';
+      newErrors.email = 'Ingresa un email válido';
     }
 
-    // Validación de contraseña
     if (!formData.password) {
       newErrors.password = 'La contraseña es requerida';
     } else if (formData.password.length < 6) {
-      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
+      newErrors.password = 'Mínimo 6 caracteres';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  // Manejar cambios en inputs
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-
-    // Limpiar error cuando el usuario empieza a escribir
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Limpiar errores
     if (errors[field]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: ''
-      }));
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
-
-    // Limpiar error general
     if (errors.general) {
-      setErrors(prev => ({
-        ...prev,
-        general: ''
-      }));
+      setErrors(prev => ({ ...prev, general: '' }));
     }
   };
 
+  // Manejar envío del formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    console.log('🔐 Iniciando proceso de login...');
-
+    console.log('🚀 INICIANDO LOGIN PROCESS');
+    
+    // Validar formulario
     if (!validateForm()) {
       console.log('❌ Formulario inválido');
       return;
     }
 
+    // Prevenir doble envío
     if (isSubmitting) {
-      console.log('⚠️ Ya hay un submit en proceso');
+      console.log('⚠️ Ya está enviándose');
       return;
     }
 
@@ -118,16 +101,17 @@ const Login = () => {
     setErrors({});
 
     try {
-      console.log('📡 Llamando a signIn con:', formData.email);
+      console.log('📡 Llamando a signIn con:', formData.email.trim());
       
+      // Llamar a la función de login del contexto
       const result = await signIn(formData.email.trim(), formData.password);
       
-      console.log('📄 Resultado de signIn:', result);
+      console.log('📋 Resultado del login:', result);
 
       if (result?.success) {
-        console.log('✅ Login exitoso, procesando...');
+        console.log('✅ LOGIN EXITOSO - Usuario:', result.user?.email);
         
-        // Guardar preferencia de recordar usuario
+        // Guardar preferencia de recordar
         if (formData.rememberMe) {
           localStorage.setItem('rememberUser', JSON.stringify({
             email: formData.email.trim(),
@@ -137,71 +121,40 @@ const Login = () => {
           localStorage.removeItem('rememberUser');
         }
 
-        // Limpiar intentos de login
-        setLoginAttempts(0);
+        // El AuthContext ya setea el usuario, así que la redirección
+        // se maneja en el useEffect de arriba
+        console.log('🎯 Esperando redirección automática a:', redirectTo);
         
-        console.log('🎯 Redirigiendo a:', redirectTo);
-        
-        // Redirigir después de un pequeño delay para asegurar que el estado se actualice
-        setTimeout(() => {
-          navigate(redirectTo, { replace: true });
-        }, 100);
-
       } else {
-        console.error('❌ Login falló:', result?.error);
-        
-        const newAttempts = loginAttempts + 1;
-        setLoginAttempts(newAttempts);
-        
-        let errorMessage = result?.error || 'Error de autenticación';
-        
-        // Personalizar mensajes de error comunes
-        if (errorMessage.includes('Invalid login credentials') || 
-            errorMessage.includes('Email o contraseña incorrectos')) {
-          errorMessage = 'Email o contraseña incorrectos';
-        } else if (errorMessage.includes('Email not confirmed')) {
-          errorMessage = 'Por favor verifica tu email antes de iniciar sesión';
-        } else if (errorMessage.includes('Too many requests')) {
-          errorMessage = 'Demasiados intentos. Espera unos minutos e intenta de nuevo';
-        }
+        console.error('❌ LOGIN FALLÓ:', result?.error);
         
         setErrors({
-          general: errorMessage
+          general: result?.error || 'Error de autenticación'
         });
-
-        // Si hay muchos intentos fallidos, sugerir reset de contraseña
-        if (newAttempts >= 3) {
-          setErrors({
-            general: `${errorMessage}. Después de ${newAttempts} intentos, ¿necesitas recuperar tu contraseña?`
-          });
-        }
       }
 
     } catch (error) {
-      console.error('💥 Error crítico en handleSubmit:', error);
+      console.error('💥 ERROR CRÍTICO EN LOGIN:', error);
       
       setErrors({
-        general: 'Error de conexión. Verifica tu internet e intenta de nuevo.'
+        general: 'Error de conexión. Verifica tu internet.'
       });
-      
-      setLoginAttempts(prev => prev + 1);
-
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleForgotPassword = () => {
-    if (formData.email.trim()) {
-      navigate('/auth/forgot-password', { 
-        state: { email: formData.email.trim() } 
-      });
-    } else {
-      alert('Por favor ingresa tu email primero');
-    }
+  // Función para autocompletar con credenciales de prueba
+  const fillTestCredentials = () => {
+    setFormData({
+      email: 'admin@radeisan.com',
+      password: '123456',
+      rememberMe: false
+    });
+    setErrors({});
   };
 
-  // Mostrar loading si está verificando autenticación
+  // Mostrar loading si está verificando auth
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -213,26 +166,14 @@ const Login = () => {
     );
   }
 
-  // Si ya está autenticado, no mostrar el form (evita flash)
-  if (user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Redirigiendo...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <Helmet>
         <title>Iniciar Sesión | RADEISAN</title>
-        <meta name="description" content="Inicia sesión en RADEISAN y conecta con la comunidad de creadores de contenido" />
+        <meta name="description" content="Accede a tu cuenta de RADEISAN" />
       </Helmet>
 
-      <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
         <div className="w-full max-w-md">
           
           {/* Header */}
@@ -248,20 +189,11 @@ const Login = () => {
               Iniciar Sesión
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Accede a tu cuenta y continúa creando
+              Accede a tu cuenta y continúa creando contenido
             </p>
-            
-            {/* Mostrar ruta de redirección si existe */}
-            {location.state?.from && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-sm text-blue-800">
-                  📍 Serás redirigido a: <span className="font-mono">{location.state.from}</span>
-                </p>
-              </div>
-            )}
           </div>
 
-          {/* Login Form */}
+          {/* Login Form Card */}
           <div className="bg-card rounded-lg shadow-sm border border-border p-8">
             
             {/* Error General */}
@@ -269,21 +201,30 @@ const Login = () => {
               <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                 <div className="flex items-center space-x-2">
                   <Icon name="AlertCircle" size={20} className="text-destructive flex-shrink-0" />
-                  <p className="text-sm text-destructive font-medium">{errors.general}</p>
+                  <p className="text-sm text-destructive">{errors.general}</p>
                 </div>
-                
-                {/* Link de ayuda si hay muchos intentos fallidos */}
-                {loginAttempts >= 3 && (
-                  <div className="mt-3 pt-3 border-t border-destructive/20">
-                    <button
-                      type="button"
-                      onClick={handleForgotPassword}
-                      className="text-sm text-destructive hover:underline"
-                    >
-                      🔑 Recuperar contraseña
-                    </button>
-                  </div>
-                )}
+              </div>
+            )}
+
+            {/* Credenciales de Prueba - Visible siempre en desarrollo */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-blue-800">🧪 Credenciales de Prueba</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={fillTestCredentials}
+                    disabled={isSubmitting}
+                  >
+                    Auto-llenar
+                  </Button>
+                </div>
+                <div className="text-xs text-blue-700 space-y-1">
+                  <p>Email: <span className="font-mono">admin@radeisan.com</span></p>
+                  <p>Password: <span className="font-mono">123456</span></p>
+                </div>
               </div>
             )}
 
@@ -301,7 +242,6 @@ const Login = () => {
                   required
                   disabled={isSubmitting}
                   autoComplete="email"
-                  autoFocus
                 />
               </div>
 
@@ -340,75 +280,44 @@ const Login = () => {
                     checked={formData.rememberMe}
                     onChange={(e) => handleInputChange('rememberMe', e.target.checked)}
                     disabled={isSubmitting}
-                    className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2 cursor-pointer"
+                    className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
                   />
-                  <label 
-                    htmlFor="remember" 
-                    className="text-sm text-muted-foreground cursor-pointer select-none"
-                  >
+                  <label htmlFor="remember" className="text-sm text-muted-foreground">
                     Recordarme
                   </label>
                 </div>
                 <button
                   type="button"
-                  onClick={handleForgotPassword}
                   className="text-sm text-primary hover:underline transition-colors"
                   disabled={isSubmitting}
+                  onClick={() => alert('Función próximamente')}
                 >
                   ¿Olvidaste tu contraseña?
                 </button>
               </div>
 
-              {/* Login Button */}
+              {/* Submit Button */}
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isSubmitting || (!formData.email.trim() || !formData.password)}
+                disabled={isSubmitting || !formData.email.trim() || !formData.password}
+                size="lg"
               >
                 {isSubmitting ? (
                   <>
-                    <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                    <Icon name="Loader2" size={20} className="mr-2 animate-spin" />
                     Iniciando sesión...
                   </>
                 ) : (
                   <>
-                    <Icon name="LogIn" size={16} className="mr-2" />
+                    <Icon name="LogIn" size={20} className="mr-2" />
                     Iniciar Sesión
                   </>
                 )}
               </Button>
             </form>
 
-            {/* Demo Credentials */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-                <p className="text-xs font-semibold text-gray-700 mb-2">🔧 Credenciales de prueba:</p>
-                <div className="grid grid-cols-1 gap-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Email:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange('email', 'admin@radeisan.com')}
-                      className="text-blue-600 hover:underline font-mono"
-                    >
-                      admin@radeisan.com
-                    </button>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Contraseña:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange('password', '123456')}
-                      className="text-blue-600 hover:underline font-mono"
-                    >
-                      123456
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Social Login - Opcional */}
+            {/* Divider */}
             <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -419,13 +328,13 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-3">
+              {/* Social Login */}
+              <div className="mt-4">
                 <Button
                   variant="outline"
-                  onClick={() => alert('Login social próximamente')}
-                  disabled={isSubmitting}
                   className="w-full"
-                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => alert('Login social próximamente')}
                 >
                   <Icon name="Mail" size={16} className="mr-2" />
                   Google (Próximamente)
@@ -437,7 +346,7 @@ const Login = () => {
           {/* Register Link */}
           <div className="text-center mt-6">
             <p className="text-sm text-muted-foreground">
-              ¿No tienes una cuenta?{' '}
+              ¿No tienes cuenta?{' '}
               <Link
                 to="/register"
                 className="text-primary font-medium hover:underline transition-colors"
@@ -447,19 +356,38 @@ const Login = () => {
             </p>
           </div>
 
-          {/* Debug Info - Solo en desarrollo */}
+          {/* Debug Panel - Solo en desarrollo */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 p-3 bg-gray-100 rounded text-xs font-mono">
-              <p><strong>🔍 Debug Info:</strong></p>
-              <p>AuthLoading: {authLoading ? 'Sí' : 'No'}</p>
-              <p>User: {user ? 'Autenticado' : 'No autenticado'}</p>
-              <p>Submitting: {isSubmitting ? 'Sí' : 'No'}</p>
-              <p>Attempts: {loginAttempts}</p>
-              <p>Redirect: {redirectTo}</p>
-              {location.state?.from && <p>From: {location.state.from}</p>}
+            <div className="mt-6 p-4 bg-gray-900 text-gray-100 rounded-lg font-mono text-xs">
+              <div className="font-bold mb-2">🔍 DEBUG INFO:</div>
+              <div className="space-y-1">
+                <div>AuthLoading: <span className="text-yellow-400">{authLoading ? 'true' : 'false'}</span></div>
+                <div>User: <span className="text-green-400">{user ? user.email : 'null'}</span></div>
+                <div>Submitting: <span className="text-blue-400">{isSubmitting ? 'true' : 'false'}</span></div>
+                <div>RedirectTo: <span className="text-purple-400">{redirectTo}</span></div>
+                <div>FormValid: <span className="text-orange-400">{formData.email && formData.password ? 'true' : 'false'}</span></div>
+                {location.state?.from && (
+                  <div>From: <span className="text-cyan-400">{location.state.from}</span></div>
+                )}
+                {errors.general && (
+                  <div>Error: <span className="text-red-400">{errors.general}</span></div>
+                )}
+              </div>
             </div>
           )}
 
+          {/* Instrucciones de Testing - Solo en desarrollo */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="text-sm font-medium text-yellow-800 mb-2">📝 Instrucciones de Testing:</div>
+              <ol className="text-xs text-yellow-700 space-y-1 list-decimal list-inside">
+                <li>Haz clic en "Auto-llenar" arriba</li>
+                <li>Haz clic en "Iniciar Sesión"</li>
+                <li>Revisa la consola del navegador (F12)</li>
+                <li>Deberías ser redirigido a /dashboard</li>
+              </ol>
+            </div>
+          )}
         </div>
       </div>
     </>
