@@ -1,9 +1,11 @@
+// src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
+// Grid de videos actualizado con lógica móvil para reels
+
 import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
+import ReelsGridMobile from './ReelsGridMobile'; // ← NUEVO IMPORT
 import HorizontalVideoGrid from './HorizontalVideoGrid';
-// NUEVOS IMPORTS PARA COMPONENTES MÓVILES
-import ReelsFeedMobile from './ReelsFeedMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
@@ -23,12 +25,24 @@ const VideoFeedGrid = ({
     setDisplayVideos(videos);
   }, [videos]);
 
-  // HELPER: Detectar dispositivo móvil CON DEBUG
+  // ===============================
+  // DETECCIÓN DE DISPOSITIVO MÓVIL
+  // ===============================
+
   const isMobile = useCallback(() => {
-    const result = window.innerWidth < 768;
-    console.log('🔍 isMobile check:', result, 'width:', window.innerWidth);
-    return result;
+    // Detectar móvil por ancho de pantalla y user agent
+    const isMobileWidth = window.innerWidth <= 768;
+    const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    return isMobileWidth || (isMobileUserAgent && isTouchDevice);
   }, []);
+
+  // ===============================
+  // SCROLL HANDLING
+  // ===============================
 
   const handleScroll = useCallback(() => {
     // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
@@ -57,6 +71,10 @@ const VideoFeedGrid = ({
       setIsLoadingMore(false);
     }
   }, [loading]);
+
+  // ===============================
+  // EVENT HANDLERS
+  // ===============================
 
   const handleVideoLike = (videoId, isLiked) => {
     setDisplayVideos(prev => 
@@ -94,6 +112,10 @@ const VideoFeedGrid = ({
       navigator.clipboard?.writeText(shareUrl);
     }
   };
+
+  // ===============================
+  // GRID CLASSES HELPER
+  // ===============================
 
   const getGridClasses = () => {
     switch (layout) {
@@ -165,54 +187,32 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER REELS - ARQUITECTURA SEPARADA MÓVIL/DESKTOP CON DEBUG
+  // RENDER REELS - LÓGICA ACTUALIZADA CON MÓVIL
   // ===============================
   if (layout === 'reels') {
-    console.log('🎬 Rendering reels mode');
-    console.log('📱 isMobile result:', isMobile());
-    console.log('📺 layout:', layout);
-    console.log('🎞️ videos count:', displayVideos?.length);
-
-    // MÓVIL: Usar componente temporal de prueba
+    // 🔥 NUEVA LÓGICA: Grid móvil vs Fullscreen desktop
     if (isMobile()) {
-      console.log('✅ Should render ReelsFeedMobile for mobile');
-      
-      // COMPONENTE TEMPORAL DE PRUEBA
       return (
-        <div className="bg-green-100 border-4 border-green-500 rounded-lg p-8 text-center">
-          <h2 className="text-2xl font-bold text-green-800 mb-4">
-            🎉 ¡COMPONENTE MÓVIL FUNCIONANDO!
-          </h2>
-          <p className="text-green-700 mb-4">
-            Este es el nuevo ReelsFeedMobile para dispositivos móviles
-          </p>
-          <p className="text-sm text-green-600">
-            Width: {window.innerWidth}px (móvil detectado correctamente)
-          </p>
-          <div className="mt-4">
-            <p className="text-green-800">Videos disponibles: {displayVideos?.length}</p>
-          </div>
-          <div className="mt-4 p-4 bg-green-50 rounded">
-            <p className="text-xs text-green-600">
-              Si ves esta caja verde, significa que la lógica condicional funciona correctamente.
-              El problema es que el archivo ReelsFeedMobile.jsx no existe o tiene errores.
-            </p>
-          </div>
-        </div>
+        <ReelsGridMobile
+          videos={displayVideos}
+          onLoadMore={onLoadMore}
+          onPointsEarned={onPointsEarned}
+          hasMore={hasMore}
+          loading={loading}
+        />
+      );
+    } else {
+      // Desktop: Mantener ReelsContainer fullscreen existente
+      return (
+        <ReelsContainer
+          videos={displayVideos}
+          onLoadMore={onLoadMore}
+          onPointsEarned={onPointsEarned}
+          hasMore={hasMore}
+          loading={loading}
+        />
       );
     }
-    
-    // DESKTOP: Mantener ReelsContainer actual (optimizado)
-    console.log('🖥️ Rendering ReelsContainer for desktop');
-    return (
-      <ReelsContainer
-        videos={displayVideos}
-        onLoadMore={onLoadMore}
-        onPointsEarned={onPointsEarned}
-        hasMore={hasMore}
-        loading={loading}
-      />
-    );
   }
 
   // ===============================
@@ -259,35 +259,15 @@ const VideoFeedGrid = ({
         </div>
       )}
 
-      {/* Load More Button - Solo para grid/list */}
-      {!isLoadingMore && !loading && hasMore && displayVideos?.length > 0 && (
-        <div className="flex justify-center py-6">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setIsLoadingMore(true);
-              onLoadMore && onLoadMore();
-            }}
-            className="px-8"
-          >
-            <Icon name="ChevronDown" size={16} className="mr-2" />
-            Cargar más videos
-          </Button>
-        </div>
-      )}
-
-      {/* End of Feed Message - Solo para grid/list */}
+      {/* End of Feed Indicator */}
       {!hasMore && displayVideos?.length > 0 && (
         <div className="text-center py-8">
-          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
-            <Icon name="Check" size={20} color="var(--color-success)" />
+          <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-muted text-muted-foreground">
+            <Icon name="CheckCircle" size={16} />
+            <span className="text-sm font-medium">
+              Has visto todos los {layout === 'reels' ? 'reels' : 'videos'} disponibles
+            </span>
           </div>
-          <p className="text-muted-foreground">
-            ¡Has visto todos los videos disponibles!
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Vuelve más tarde para ver contenido nuevo
-          </p>
         </div>
       )}
     </div>
