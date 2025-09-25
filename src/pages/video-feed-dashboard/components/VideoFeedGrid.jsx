@@ -23,9 +23,11 @@ const VideoFeedGrid = ({
     setDisplayVideos(videos);
   }, [videos]);
 
-  // HELPER: Detectar dispositivo móvil
+  // HELPER: Detectar dispositivo móvil CON DEBUG
   const isMobile = useCallback(() => {
-    return window.innerWidth < 768;
+    const result = window.innerWidth < 768;
+    console.log('🔍 isMobile check:', result, 'width:', window.innerWidth);
+    return result;
   }, []);
 
   const handleScroll = useCallback(() => {
@@ -163,30 +165,51 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER REELS - ARQUITECTURA SEPARADA MÓVIL/DESKTOP
+  // RENDER REELS - ARQUITECTURA SEPARADA MÓVIL/DESKTOP CON DEBUG
   // ===============================
   if (layout === 'reels') {
-    // TODO: FASE 1 - Implementar componente móvil
-    // MÓVIL: Usar nuevo componente ReelsFeedMobile (PRÓXIMAMENTE)
-    /*
+    console.log('🎬 Rendering reels mode');
+    console.log('📱 isMobile result:', isMobile());
+    console.log('📺 layout:', layout);
+    console.log('🎞️ videos count:', displayVideos?.length);
+
+    // MÓVIL: Usar nuevo componente ReelsFeedMobile
     if (isMobile()) {
-      return (
-        <ReelsFeedMobile
-          videos={displayVideos}
-          onLoadMore={onLoadMore}
-          onPointsEarned={onPointsEarned}
-          onLike={handleVideoLike}
-          onSave={handleVideoSave}
-          onShare={handleVideoShare}
-          hasMore={hasMore}
-          loading={loading}
-        />
-      );
+      console.log('✅ Should render ReelsFeedMobile for mobile');
+      try {
+        return (
+          <ReelsFeedMobile
+            videos={displayVideos}
+            onLoadMore={onLoadMore}
+            onPointsEarned={onPointsEarned}
+            onLike={handleVideoLike}
+            onSave={handleVideoSave}
+            onShare={handleVideoShare}
+            hasMore={hasMore}
+            loading={loading}
+          />
+        );
+      } catch (error) {
+        console.error('❌ Error rendering ReelsFeedMobile:', error);
+        console.log('⚠️ Fallback to ReelsContainer');
+        // Fallback al componente original si hay error
+        return (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <p className="text-red-700">Error loading mobile reels component. Using desktop version...</p>
+            <ReelsContainer
+              videos={displayVideos}
+              onLoadMore={onLoadMore}
+              onPointsEarned={onPointsEarned}
+              hasMore={hasMore}
+              loading={loading}
+            />
+          </div>
+        );
+      }
     }
-    */
     
-    // TEMPORALMENTE: Usar ReelsContainer para todos los dispositivos
     // DESKTOP: Mantener ReelsContainer actual (optimizado)
+    console.log('🖥️ Rendering ReelsContainer for desktop');
     return (
       <ReelsContainer
         videos={displayVideos}
