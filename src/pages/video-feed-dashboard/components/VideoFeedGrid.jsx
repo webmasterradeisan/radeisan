@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
-// NUEVOS IMPORTS PARA COMPONENTES MÓVILES - TEMPORALMENTE COMENTADO
-// import ReelsFeedMobile from './ReelsFeedMobile';
+// NUEVOS IMPORTS PARA COMPONENTES MÓVILES
+import ReelsFeedMobile from './ReelsFeedMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
@@ -166,7 +166,9 @@ const VideoFeedGrid = ({
   // RENDER REELS - ARQUITECTURA SEPARADA MÓVIL/DESKTOP
   // ===============================
   if (layout === 'reels') {
-    // MÓVIL: Usar nuevo componente ReelsFeedMobile
+    // TODO: FASE 1 - Implementar componente móvil
+    // MÓVIL: Usar nuevo componente ReelsFeedMobile (PRÓXIMAMENTE)
+    /*
     if (isMobile()) {
       return (
         <ReelsFeedMobile
@@ -181,7 +183,9 @@ const VideoFeedGrid = ({
         />
       );
     }
+    */
     
+    // TEMPORALMENTE: Usar ReelsContainer para todos los dispositivos
     // DESKTOP: Mantener ReelsContainer actual (optimizado)
     return (
       <ReelsContainer
