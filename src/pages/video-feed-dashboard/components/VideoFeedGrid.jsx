@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
-// NUEVOS IMPORTS PARA COMPONENTES MÓVILES
-import ReelsFeedMobile from './ReelsFeedMobile';
+// NUEVOS IMPORTS PARA COMPONENTES MÓVILES - TEMPORALMENTE COMENTADO
+// import ReelsFeedMobile from './ReelsFeedMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
