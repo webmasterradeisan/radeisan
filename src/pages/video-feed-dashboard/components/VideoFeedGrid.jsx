@@ -173,39 +173,33 @@ const VideoFeedGrid = ({
     console.log('📺 layout:', layout);
     console.log('🎞️ videos count:', displayVideos?.length);
 
-    // MÓVIL: Usar nuevo componente ReelsFeedMobile
+    // MÓVIL: Usar componente temporal de prueba
     if (isMobile()) {
       console.log('✅ Should render ReelsFeedMobile for mobile');
-      try {
-        return (
-          <ReelsFeedMobile
-            videos={displayVideos}
-            onLoadMore={onLoadMore}
-            onPointsEarned={onPointsEarned}
-            onLike={handleVideoLike}
-            onSave={handleVideoSave}
-            onShare={handleVideoShare}
-            hasMore={hasMore}
-            loading={loading}
-          />
-        );
-      } catch (error) {
-        console.error('❌ Error rendering ReelsFeedMobile:', error);
-        console.log('⚠️ Fallback to ReelsContainer');
-        // Fallback al componente original si hay error
-        return (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <p className="text-red-700">Error loading mobile reels component. Using desktop version...</p>
-            <ReelsContainer
-              videos={displayVideos}
-              onLoadMore={onLoadMore}
-              onPointsEarned={onPointsEarned}
-              hasMore={hasMore}
-              loading={loading}
-            />
+      
+      // COMPONENTE TEMPORAL DE PRUEBA
+      return (
+        <div className="bg-green-100 border-4 border-green-500 rounded-lg p-8 text-center">
+          <h2 className="text-2xl font-bold text-green-800 mb-4">
+            🎉 ¡COMPONENTE MÓVIL FUNCIONANDO!
+          </h2>
+          <p className="text-green-700 mb-4">
+            Este es el nuevo ReelsFeedMobile para dispositivos móviles
+          </p>
+          <p className="text-sm text-green-600">
+            Width: {window.innerWidth}px (móvil detectado correctamente)
+          </p>
+          <div className="mt-4">
+            <p className="text-green-800">Videos disponibles: {displayVideos?.length}</p>
           </div>
-        );
-      }
+          <div className="mt-4 p-4 bg-green-50 rounded">
+            <p className="text-xs text-green-600">
+              Si ves esta caja verde, significa que la lógica condicional funciona correctamente.
+              El problema es que el archivo ReelsFeedMobile.jsx no existe o tiene errores.
+            </p>
+          </div>
+        </div>
+      );
     }
     
     // DESKTOP: Mantener ReelsContainer actual (optimizado)
