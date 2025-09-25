@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
+// NUEVOS IMPORTS PARA COMPONENTES MÓVILES
+import ReelsFeedMobile from './ReelsFeedMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
@@ -20,6 +22,11 @@ const VideoFeedGrid = ({
   useEffect(() => {
     setDisplayVideos(videos);
   }, [videos]);
+
+  // HELPER: Detectar dispositivo móvil
+  const isMobile = useCallback(() => {
+    return window.innerWidth < 768;
+  }, []);
 
   const handleScroll = useCallback(() => {
     // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
@@ -156,9 +163,26 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER REELS CONTAINER
+  // RENDER REELS - ARQUITECTURA SEPARADA MÓVIL/DESKTOP
   // ===============================
   if (layout === 'reels') {
+    // MÓVIL: Usar nuevo componente ReelsFeedMobile
+    if (isMobile()) {
+      return (
+        <ReelsFeedMobile
+          videos={displayVideos}
+          onLoadMore={onLoadMore}
+          onPointsEarned={onPointsEarned}
+          onLike={handleVideoLike}
+          onSave={handleVideoSave}
+          onShare={handleVideoShare}
+          hasMore={hasMore}
+          loading={loading}
+        />
+      );
+    }
+    
+    // DESKTOP: Mantener ReelsContainer actual (optimizado)
     return (
       <ReelsContainer
         videos={displayVideos}
