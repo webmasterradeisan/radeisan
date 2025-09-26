@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN COMPLETA CON MOBILELAYOUT
+// src/Routes.jsx - VERSIÓN CORREGIDA SIN ERRORES
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -65,77 +65,6 @@ const PlaceholderPage = ({ title, description }) => (
     </div>
   </div>
 );
-
-// Crear componentes placeholder para páginas faltantes
-const ReelsPageComponent = ReelsPage || (() => (
-  <PlaceholderPage 
-    title="Reels" 
-    description="Explora videos verticales increíbles en formato fullscreen" 
-  />
-));
-
-const ProfilePageComponent = ProfilePage || (() => (
-  <PlaceholderPage 
-    title="Mi Perfil" 
-    description="Gestiona tu perfil y ve tu actividad en RADEISAN" 
-  />
-));
-
-const MarketplacePageComponent = MarketplacePage || (() => (
-  <PlaceholderPage 
-    title="Marketplace" 
-    description="Descubre negocios locales y oportunidades comerciales" 
-  />
-));
-
-const RewardsPageComponent = RewardsPage || (() => (
-  <PlaceholderPage 
-    title="Recompensas" 
-    description="Canjea tus puntos por increíbles premios" 
-  />
-));
-
-const PhotoFeedPageComponent = PhotoFeedPage || (() => (
-  <PlaceholderPage 
-    title="Galería de Fotos" 
-    description="Explora y comparte fotografías con la comunidad" 
-  />
-));
-
-const SavedPageComponent = SavedPage || (() => (
-  <PlaceholderPage 
-    title="Contenido Guardado" 
-    description="Accede a todo el contenido que has guardado" 
-  />
-));
-
-const NotificationsPageComponent = NotificationsPage || (() => (
-  <PlaceholderPage 
-    title="Notificaciones" 
-    description="Mantente al día con toda tu actividad reciente" 
-  />
-));
-
-const AnalyticsPageComponent = AnalyticsPage || (() => (
-  <PlaceholderPage 
-    title="Estadísticas" 
-    description="Analiza el rendimiento de tu contenido" 
-  />
-));
-
-const HelpPageComponent = HelpPage || (() => (
-  <PlaceholderPage 
-    title="Centro de Ayuda" 
-    description="Encuentra respuestas a tus preguntas frecuentes" 
-  />
-));
-
-const SettingsPageComponent = SettingsPage || (() => (
-  <PlaceholderPage 
-    title="Configuración" 
-    description="Personaliza tu experiencia en RADEISAN" 
-  />
-));
 
 // ===============================
 // COMPONENTE DE RUTAS PRINCIPAL
@@ -210,7 +139,10 @@ const Routes = () => {
               path="/reels" 
               element={
                 <MobileProtectedRoute>
-                  <ReelsPageComponent />
+                  <PlaceholderPage 
+                    title="Reels" 
+                    description="Explora videos verticales increíbles en formato fullscreen" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -220,7 +152,10 @@ const Routes = () => {
               path="/reel/:id" 
               element={
                 <MobileProtectedRoute>
-                  <ReelsPageComponent />
+                  <PlaceholderPage 
+                    title="Reels" 
+                    description="Explora videos verticales increíbles en formato fullscreen" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -252,7 +187,10 @@ const Routes = () => {
               path="/profile" 
               element={
                 <MobileProtectedRoute>
-                  <ProfilePageComponent />
+                  <PlaceholderPage 
+                    title="Mi Perfil" 
+                    description="Gestiona tu perfil y ve tu actividad en RADEISAN" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -262,7 +200,10 @@ const Routes = () => {
               path="/user/:username" 
               element={
                 <MobileProtectedRoute>
-                  <ProfilePageComponent />
+                  <PlaceholderPage 
+                    title="Perfil de Usuario" 
+                    description="Explora el perfil y contenido de otros usuarios" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -276,7 +217,10 @@ const Routes = () => {
               path="/marketplace" 
               element={
                 <MobileProtectedRoute>
-                  <MarketplacePageComponent />
+                  <PlaceholderPage 
+                    title="Marketplace" 
+                    description="Descubre negocios locales y oportunidades comerciales" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -286,7 +230,10 @@ const Routes = () => {
               path="/rewards" 
               element={
                 <MobileProtectedRoute>
-                  <RewardsPageComponent />
+                  <PlaceholderPage 
+                    title="Recompensas" 
+                    description="Canjea tus puntos por increíbles premios" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -296,7 +243,10 @@ const Routes = () => {
               path="/photo-feed" 
               element={
                 <MobileProtectedRoute>
-                  <PhotoFeedPageComponent />
+                  <PlaceholderPage 
+                    title="Galería de Fotos" 
+                    description="Explora y comparte fotografías con la comunidad" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -306,7 +256,10 @@ const Routes = () => {
               path="/saved" 
               element={
                 <MobileProtectedRoute>
-                  <SavedPageComponent />
+                  <PlaceholderPage 
+                    title="Contenido Guardado" 
+                    description="Accede a todo el contenido que has guardado" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -320,7 +273,10 @@ const Routes = () => {
               path="/notifications" 
               element={
                 <MobileProtectedRoute>
-                  <NotificationsPageComponent />
+                  <PlaceholderPage 
+                    title="Notificaciones" 
+                    description="Mantente al día con toda tu actividad reciente" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -330,7 +286,10 @@ const Routes = () => {
               path="/analytics" 
               element={
                 <MobileProtectedRoute>
-                  <AnalyticsPageComponent />
+                  <PlaceholderPage 
+                    title="Estadísticas" 
+                    description="Analiza el rendimiento de tu contenido" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -340,7 +299,10 @@ const Routes = () => {
               path="/help" 
               element={
                 <MobileProtectedRoute>
-                  <HelpPageComponent />
+                  <PlaceholderPage 
+                    title="Centro de Ayuda" 
+                    description="Encuentra respuestas a tus preguntas frecuentes" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
@@ -350,7 +312,10 @@ const Routes = () => {
               path="/settings" 
               element={
                 <MobileProtectedRoute>
-                  <SettingsPageComponent />
+                  <PlaceholderPage 
+                    title="Configuración" 
+                    description="Personaliza tu experiencia en RADEISAN" 
+                  />
                 </MobileProtectedRoute>
               } 
             />
