@@ -1,38 +1,100 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA SIN ERRORES
+// src/Routes.jsx
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import { AuthProvider } from "contexts/AuthContext";
+import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
 
 // ===============================
-// COMPONENTES MÓVILES ACTUALIZADOS
-// ===============================
-import { 
-  MobileProtectedRoute, 
-  MobilePublicRoute, 
-  MobileUniversalRoute 
-} from "components/ui/MobileLayout";
-
-// ===============================
-// PÁGINAS DE APLICACIÓN
+// PÁGINAS PÚBLICAS
 // ===============================
 
-// Páginas públicas
+// Landing Page profesional
 import LandingPage from './pages/LandingPage';
+
+// Páginas de información pública
+const AboutPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Sobre Radeisan</h1>
+      <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <p className="text-muted-foreground mb-4">
+          Radeisan es una plataforma social innovadora que conecta creadores de contenido 
+          y empresas a través de videos engaging y un sistema de recompensas.
+        </p>
+        <p className="text-muted-foreground">
+          Nuestra misión es empoderar a los creadores mientras ayudamos a las empresas 
+          a conectar con su audiencia de manera auténtica.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+const FeaturesPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Características</h1>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">🎥 Feed de Videos</h3>
+          <p className="text-muted-foreground">Descubre contenido increíble y gana puntos viendo videos</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">📸 Galería de Fotos</h3>
+          <p className="text-muted-foreground">Comparte y descubre momentos increíbles en imágenes</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">🏪 Marketplace</h3>
+          <p className="text-muted-foreground">Conecta con empresas y descubre productos únicos</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">🎁 Sistema de Recompensas</h3>
+          <p className="text-muted-foreground">Canjea tus puntos por premios y beneficios exclusivos</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">💼 Perfil de Negocio</h3>
+          <p className="text-muted-foreground">Herramientas profesionales para empresas</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const TermsPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Términos y Condiciones</h1>
+      <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <p className="text-muted-foreground">
+          Los términos y condiciones de Radeisan serán implementados próximamente.
+          Por ahora, al usar la plataforma aceptas nuestras políticas de uso responsable.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+const PrivacyPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8">
+      <h1 className="text-3xl font-bold text-foreground mb-6">Política de Privacidad</h1>
+      <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <p className="text-muted-foreground">
+          La política de privacidad de Radeisan será implementada próximamente.
+          Nos comprometemos a proteger tu información personal y datos.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+// ===============================
+// PÁGINAS DE AUTENTICACIÓN  
+// ===============================
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
-
-// Páginas principales
-import VideoFeedDashboard from './pages/video-feed-dashboard';
-import VideoUploadStudio from './pages/video-upload-studio';
-
-// Error y páginas especiales
-import NotFound from "pages/NotFound";
-
-// ===============================
-// COMPONENTES AUXILIARES
-// ===============================
 
 // Auth Callback para OAuth
 const AuthCallback = () => (
@@ -44,32 +106,77 @@ const AuthCallback = () => (
   </div>
 );
 
-// Placeholder para páginas no implementadas
-const PlaceholderPage = ({ title, description }) => (
-  <div className="min-h-screen bg-background">
-    <div className="max-w-2xl mx-auto px-4 pt-32 pb-16">
-      <div className="text-center">
-        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
-          <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+// ===============================
+// HERRAMIENTAS DE DEBUGGING (TEMPORAL)
+// ===============================
+import SupabaseDebugChecker from './components/SupabaseDebugChecker';
+
+// ===============================
+// PÁGINAS PROTEGIDAS (APLICACIÓN)
+// ===============================
+import VideoFeedDashboard from './pages/video-feed-dashboard';
+import VideoUploadStudio from './pages/video-upload-studio';
+// NUEVO: Sistema de Fotos
+import PhotoUploadStudio from './pages/photo-upload-studio';
+// import PhotoFeedDashboard from './pages/photo-feed-dashboard'; // TODO: Crear para Fase 5
+
+import BusinessMarketplace from './pages/business-marketplace';
+import PointsRewardsStore from './pages/points-rewards-store';
+import UserProfileSettings from './pages/user-profile-settings';
+import BusinessProfileManagement from './pages/business-profile-management';
+
+// ===============================
+// PÁGINAS TEMPORALES PARA SISTEMA DE FOTOS
+// ===============================
+
+// Página temporal para Photo Feed (hasta crear la real en Fase 5)
+const PhotoFeedDashboard = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8 text-center">
+      <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+        <svg className="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <h1 className="text-3xl font-bold text-foreground mb-4">Feed de Fotos</h1>
+      <p className="text-lg text-muted-foreground mb-6">
+        El feed de fotos estará disponible próximamente en la Fase 5.
+      </p>
+      <p className="text-sm text-muted-foreground mb-8">
+        Por ahora puedes subir fotos desde el estudio y verlas en tu perfil.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <a 
+          href="/photo-upload" 
+          className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary hover:bg-primary/90 transition-colors"
+        >
+          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-        </div>
-        <h1 className="text-3xl font-bold text-foreground mb-4">{title}</h1>
-        <p className="text-muted-foreground mb-8">{description}</p>
-        <div className="bg-muted/50 rounded-lg p-6">
-          <p className="text-sm text-muted-foreground">
-            Esta página está en desarrollo. Pronto estará disponible con todas las funcionalidades.
-          </p>
-        </div>
+          Subir Fotos
+        </a>
+        <a 
+          href="/profile" 
+          className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Ver Mi Perfil
+        </a>
       </div>
     </div>
   </div>
 );
 
 // ===============================
+// OTRAS PÁGINAS
+// ===============================
+import NotFound from "pages/NotFound";
+
+// ===============================
 // COMPONENTE DE RUTAS PRINCIPAL
 // ===============================
-
 const Routes = () => {
   return (
     <BrowserRouter>
@@ -78,287 +185,227 @@ const Routes = () => {
           <ScrollToTop />
           <RouterRoutes>
             
-            {/* ===============================
-                RUTAS PÚBLICAS
-            =============================== */}
+            {/* =================== PÁGINAS PÚBLICAS =================== */}
             
             {/* Landing Page */}
             <Route 
               path="/" 
               element={
-                <MobileUniversalRoute>
+                <UniversalRoute>
                   <LandingPage />
-                </MobileUniversalRoute>
+                </UniversalRoute>
               } 
             />
             
-            {/* Autenticación */}
+            {/* Páginas de información */}
+            <Route 
+              path="/about" 
+              element={
+                <UniversalRoute>
+                  <AboutPage />
+                </UniversalRoute>
+              } 
+            />
+            <Route 
+              path="/features" 
+              element={
+                <UniversalRoute>
+                  <FeaturesPage />
+                </UniversalRoute>
+              } 
+            />
+            <Route 
+              path="/terms" 
+              element={
+                <UniversalRoute>
+                  <TermsPage />
+                </UniversalRoute>
+              } 
+            />
+            <Route 
+              path="/privacy" 
+              element={
+                <UniversalRoute>
+                  <PrivacyPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== AUTENTICACIÓN =================== */}
+            
             <Route 
               path="/login" 
               element={
-                <MobilePublicRoute>
+                <PublicRoute>
                   <Login />
-                </MobilePublicRoute>
+                </PublicRoute>
               } 
             />
-            
             <Route 
               path="/register" 
               element={
-                <MobilePublicRoute>
+                <PublicRoute>
                   <Register />
-                </MobilePublicRoute>
+                </PublicRoute>
               } 
             />
-            
             <Route 
               path="/auth/callback" 
               element={
-                <MobileUniversalRoute>
+                <UniversalRoute>
                   <AuthCallback />
-                </MobileUniversalRoute>
+                </UniversalRoute>
               } 
             />
 
-            {/* ===============================
-                RUTAS PRINCIPALES PROTEGIDAS
-            =============================== */}
+            {/* =================== HERRAMIENTAS DE DEBUGGING (TEMPORAL) =================== */}
             
-            {/* Dashboard - Página principal con feed */}
+            {/* Herramienta de debugging para Supabase */}
+            <Route 
+              path="/debug" 
+              element={
+                <UniversalRoute>
+                  <SupabaseDebugChecker />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== APLICACIÓN PROTEGIDA =================== */}
+            
+            {/* Dashboard principal */}
             <Route 
               path="/dashboard" 
               element={
-                <MobileProtectedRoute>
+                <ProtectedRoute>
                   <VideoFeedDashboard />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* Reels - Sección fullscreen para videos verticales */}
-            <Route 
-              path="/reels" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Reels" 
-                    description="Explora videos verticales increíbles en formato fullscreen" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* Reel individual - Para enlaces directos */}
-            <Route 
-              path="/reel/:id" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Reels" 
-                    description="Explora videos verticales increíbles en formato fullscreen" 
-                  />
-                </MobileProtectedRoute>
+                </ProtectedRoute>
               } 
             />
             
-            {/* Upload - Estudio de creación */}
+            {/* Estudio de creación de videos */}
             <Route 
               path="/upload" 
               element={
-                <MobileProtectedRoute>
+                <ProtectedRoute>
                   <VideoUploadStudio />
-                </MobileProtectedRoute>
+                </ProtectedRoute>
               } 
             />
 
-            {/* Crear - Alias para upload */}
-            <Route 
-              path="/create" 
-              element={
-                <Navigate to="/upload" replace />
-              } 
-            />
-
-            {/* ===============================
-                RUTAS DE PERFIL Y USUARIO
-            =============================== */}
+            {/* =================== SISTEMA DE FOTOS (NUEVO) =================== */}
             
-            {/* Perfil del usuario */}
+            {/* Estudio de subida de fotos */}
             <Route 
-              path="/profile" 
+              path="/photo-upload" 
               element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Mi Perfil" 
-                    description="Gestiona tu perfil y ve tu actividad en RADEISAN" 
-                  />
-                </MobileProtectedRoute>
+                <ProtectedRoute>
+                  <PhotoUploadStudio />
+                </ProtectedRoute>
               } 
             />
-
-            {/* Perfil de otro usuario */}
-            <Route 
-              path="/user/:username" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Perfil de Usuario" 
-                    description="Explora el perfil y contenido de otros usuarios" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* ===============================
-                RUTAS DE FUNCIONALIDADES
-            =============================== */}
             
-            {/* Marketplace */}
-            <Route 
-              path="/marketplace" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Marketplace" 
-                    description="Descubre negocios locales y oportunidades comerciales" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* Recompensas */}
-            <Route 
-              path="/rewards" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Recompensas" 
-                    description="Canjea tus puntos por increíbles premios" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* Galería de fotos */}
+            {/* Feed de fotos (temporal hasta Fase 5) */}
             <Route 
               path="/photo-feed" 
               element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Galería de Fotos" 
-                    description="Explora y comparte fotografías con la comunidad" 
-                  />
-                </MobileProtectedRoute>
+                <UniversalRoute>
+                  <PhotoFeedDashboard />
+                </UniversalRoute>
               } 
             />
-
-            {/* Contenido guardado */}
-            <Route 
-              path="/saved" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Contenido Guardado" 
-                    description="Accede a todo el contenido que has guardado" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* ===============================
-                RUTAS DE GESTIÓN
-            =============================== */}
             
-            {/* Notificaciones */}
+            {/* Alias para fotos */}
             <Route 
-              path="/notifications" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Notificaciones" 
-                    description="Mantente al día con toda tu actividad reciente" 
-                  />
-                </MobileProtectedRoute>
-              } 
+              path="/photos" 
+              element={<Navigate to="/photo-feed" replace />} 
             />
-
-            {/* Estadísticas */}
-            <Route 
-              path="/analytics" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Estadísticas" 
-                    description="Analiza el rendimiento de tu contenido" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* Centro de ayuda */}
-            <Route 
-              path="/help" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Centro de Ayuda" 
-                    description="Encuentra respuestas a tus preguntas frecuentes" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* Configuración */}
-            <Route 
-              path="/settings" 
-              element={
-                <MobileProtectedRoute>
-                  <PlaceholderPage 
-                    title="Configuración" 
-                    description="Personaliza tu experiencia en RADEISAN" 
-                  />
-                </MobileProtectedRoute>
-              } 
-            />
-
-            {/* ===============================
-                REDIRECTS Y COMPATIBILIDAD
-            =============================== */}
             
-            {/* Redirect de home a dashboard para usuarios autenticados */}
+            {/* Marketplace de negocios */}
             <Route 
-              path="/home" 
+              path="/marketplace" 
               element={
-                <Navigate to="/dashboard" replace />
+                <ProtectedRoute>
+                  <BusinessMarketplace />
+                </ProtectedRoute>
               } 
             />
-
-            {/* Redirect de feed a dashboard */}
-            <Route 
-              path="/feed" 
-              element={
-                <Navigate to="/dashboard" replace />
-              } 
-            />
-
-            {/* Redirect de shorts a reels */}
-            <Route 
-              path="/shorts" 
-              element={
-                <Navigate to="/reels" replace />
-              } 
-            />
-
-            {/* ===============================
-                ERROR HANDLING
-            =============================== */}
             
-            {/* 404 - Página no encontrada */}
+            {/* Tienda de recompensas */}
+            <Route 
+              path="/rewards" 
+              element={
+                <ProtectedRoute>
+                  <PointsRewardsStore />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Perfil de usuario */}
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <UserProfileSettings />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Gestión de negocio */}
+            <Route 
+              path="/business" 
+              element={
+                <ProtectedRoute>
+                  <BusinessProfileManagement />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* =================== REDIRECCIONES DE URLs ANTIGUAS =================== */}
+            
+            {/* Redirigir URLs antiguas a nuevas */}
+            <Route 
+              path="/video-feed-dashboard" 
+              element={<Navigate to="/dashboard" replace />} 
+            />
+            <Route 
+              path="/video-upload-studio" 
+              element={<Navigate to="/upload" replace />} 
+            />
+            {/* NUEVO: Redirecciones del sistema de fotos */}
+            <Route 
+              path="/photo-upload-studio" 
+              element={<Navigate to="/photo-upload" replace />} 
+            />
+            <Route 
+              path="/photo-feed-dashboard" 
+              element={<Navigate to="/photo-feed" replace />} 
+            />
+            
+            <Route 
+              path="/business-marketplace" 
+              element={<Navigate to="/marketplace" replace />} 
+            />
+            <Route 
+              path="/points-rewards-store" 
+              element={<Navigate to="/rewards" replace />} 
+            />
+            <Route 
+              path="/user-profile-settings" 
+              element={<Navigate to="/profile" replace />} 
+            />
+            <Route 
+              path="/business-profile-management" 
+              element={<Navigate to="/business" replace />} 
+            />
+
+            {/* =================== 404 - PÁGINA NO ENCONTRADA =================== */}
+            
             <Route 
               path="*" 
               element={
-                <MobileUniversalRoute>
+                <UniversalRoute>
                   <NotFound />
-                </MobileUniversalRoute>
+                </UniversalRoute>
               } 
             />
             
