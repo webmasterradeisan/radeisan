@@ -27,18 +27,6 @@ import Register from './pages/auth/Register';
 import VideoFeedDashboard from './pages/video-feed-dashboard';
 import VideoUploadStudio from './pages/video-upload-studio';
 
-// Páginas adicionales (crear si no existen)
-import ReelsPage from './pages/ReelsPage';
-import ProfilePage from './pages/ProfilePage';
-import MarketplacePage from './pages/MarketplacePage';
-import RewardsPage from './pages/RewardsPage';
-import PhotoFeedPage from './pages/PhotoFeedPage';
-import SavedPage from './pages/SavedPage';
-import NotificationsPage from './pages/NotificationsPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import HelpPage from './pages/HelpPage';
-import SettingsPage from './pages/SettingsPage';
-
 // Error y páginas especiales
 import NotFound from "pages/NotFound";
 
