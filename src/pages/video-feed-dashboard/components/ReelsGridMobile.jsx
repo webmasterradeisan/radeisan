@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// Grid compacto 2x2 para reels en móvil - Patrón YouTube home móvil
+// Carousel horizontal para reels en móvil - Patrón YouTube home móvil
 
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 
 const ReelsGridMobile = ({ 
@@ -12,7 +12,33 @@ const ReelsGridMobile = ({
   loading = false 
 }) => {
   const navigate = useNavigate();
+  const scrollContainerRef = useRef(null);
   const [loadingThumbnails, setLoadingThumbnails] = useState(new Set());
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  // ===============================
+  // DETECCIÓN DE SCROLL HORIZONTAL
+  // ===============================
+
+  useEffect(() => {
+    const checkScrollability = () => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      setCanScrollLeft(container.scrollLeft > 0);
+      setCanScrollRight(
+        container.scrollLeft < container.scrollWidth - container.clientWidth
+      );
+    };
+
+    const container = scrollContainerRef.current;
+    if (container) {
+      checkScrollability();
+      container.addEventListener('scroll', checkScrollability);
+      return () => container.removeEventListener('scroll', checkScrollability);
+    }
+  }, [videos]);
 
   // ===============================
   // FORMATEO DE NÚMEROS
@@ -66,42 +92,100 @@ const ReelsGridMobile = ({
     });
   };
 
+  const scrollLeft = () => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      const scrollAmount = container.clientWidth * 0.8;
+      container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      const scrollAmount = container.clientWidth * 0.8;
+      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  // ===============================
+  // LOADING STATE - SKELETON
+  // ===============================
+
+  if (loading && videos.length === 0) {
+    return (
+      <div className="w-full">
+        {/* Header skeleton */}
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="h-6 w-16 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+        </div>
+        
+        {/* Carousel skeleton */}
+        <div className="flex space-x-3 px-4 overflow-hidden">
+          {[...Array(3)].map((_, index) => (
+            <div 
+              key={index}
+              className="flex-shrink-0 w-[120px] aspect-[9/16] rounded-xl bg-muted animate-pulse"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // ===============================
   // EMPTY STATE
   // ===============================
 
   if (videos.length === 0) {
     return (
-      <div className="grid grid-cols-2 gap-2 p-2">
-        {/* Placeholder cards para loading state */}
-        {[...Array(4)].map((_, index) => (
-          <div 
-            key={index}
-            className="aspect-[9/16] rounded-xl bg-muted animate-pulse"
-          />
-        ))}
+      <div className="w-full px-4 py-6">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="Smartphone" size={24} color="var(--color-muted-foreground)" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            ¡Crea tu primer reel!
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Sé parte de la comunidad y comparte tu creatividad
+          </p>
+          <button
+            onClick={() => navigate('/upload')}
+            className="
+              inline-flex items-center space-x-2 px-4 py-2
+              bg-primary text-primary-foreground rounded-lg
+              text-sm font-medium hover:bg-primary/90
+              transition-colors duration-200
+            "
+          >
+            <Icon name="Plus" size={16} />
+            <span>Crear Reel</span>
+          </button>
+        </div>
       </div>
     );
   }
 
   // ===============================
-  // COMPONENTE REEL THUMBNAIL CARD
+  // COMPONENTE REEL CARD
   // ===============================
 
-  const ReelThumbnailCard = ({ video, index }) => {
+  const ReelCard = ({ video, index }) => {
     const isLoadingThumbnail = loadingThumbnails.has(video.id);
     
     return (
       <div
         onClick={() => handleReelClick(video, index)}
         className="
-          aspect-[9/16] rounded-xl overflow-hidden relative 
-          bg-black cursor-pointer transform transition-all duration-200
+          flex-shrink-0 w-[120px] aspect-[9/16] rounded-xl overflow-hidden 
+          relative bg-black cursor-pointer transform transition-all duration-200
           hover:scale-[1.02] active:scale-[0.98]
           group
         "
       >
-        {/* THUMBNAIL IMAGE/VIDEO */}
+        {/* THUMBNAIL */}
         <div className="absolute inset-0">
           {video.thumbnailUrl ? (
             <img
@@ -126,98 +210,64 @@ const ReelsGridMobile = ({
           {/* Loading overlay */}
           {isLoadingThumbnail && (
             <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
-              <Icon name="Play" size={24} color="var(--color-muted-foreground)" />
+              <Icon name="Play" size={20} color="var(--color-muted-foreground)" />
             </div>
           )}
         </div>
 
         {/* GRADIENT OVERLAY */}
-        <div className="
-          absolute inset-0 bg-gradient-to-t 
-          from-black/80 via-black/20 to-transparent
-        " />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
         {/* PLAY INDICATOR */}
         <div className="absolute top-2 left-2">
-          <div className="
-            w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm
-            flex items-center justify-center
-          ">
-            <Icon name="Play" size={16} color="white" />
+          <div className="w-6 h-6 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+            <Icon name="Play" size={12} color="white" />
           </div>
         </div>
 
         {/* DURATION */}
         {video.duration && (
           <div className="absolute top-2 right-2">
-            <div className="
-              px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm
-              text-white text-xs font-medium
-            ">
+            <div className="px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
               {formatDuration(video.duration)}
             </div>
           </div>
         )}
 
-        {/* CONTENT INFO OVERLAY */}
-        <div className="absolute bottom-0 left-0 right-0 p-3">
-          
-          {/* CREATOR INFO */}
-          <div className="flex items-center space-x-2 mb-2">
+        {/* CONTENT INFO */}
+        <div className="absolute bottom-0 left-0 right-0 p-2">
+          {/* TITLE */}
+          <h3 className="text-white text-xs font-medium leading-tight mb-1 line-clamp-2">
+            {video.title}
+          </h3>
+
+          {/* CREATOR */}
+          <div className="flex items-center space-x-1 mb-2">
             <img
               src={video.creator?.avatar || `https://api.dicebear.com/7.x/avatars/svg?seed=${video.creator?.username}`}
               alt={video.creator?.name}
-              className="w-6 h-6 rounded-full border border-white/20"
+              className="w-4 h-4 rounded-full border border-white/20"
             />
-            <span className="text-white text-xs font-medium truncate flex-1">
+            <span className="text-white/80 text-xs truncate">
               @{video.creator?.username}
             </span>
           </div>
 
-          {/* TITLE */}
-          <h3 className="
-            text-white text-sm font-medium leading-tight mb-2
-            line-clamp-2 group-hover:line-clamp-none transition-all duration-200
-          ">
-            {video.title}
-          </h3>
-
           {/* STATS */}
-          <div className="flex items-center space-x-3 text-white/80">
-            
-            {/* Likes */}
+          <div className="flex items-center space-x-2 text-white/80">
             <div className="flex items-center space-x-1">
-              <Icon name="Heart" size={12} />
-              <span className="text-xs font-medium">
-                {formatCount(video.likes)}
-              </span>
+              <Icon name="Heart" size={10} />
+              <span className="text-xs">{formatCount(video.likes)}</span>
             </div>
-
-            {/* Views */}
             <div className="flex items-center space-x-1">
-              <Icon name="Eye" size={12} />
-              <span className="text-xs font-medium">
-                {formatCount(video.views)}
-              </span>
+              <Icon name="Eye" size={10} />
+              <span className="text-xs">{formatCount(video.views)}</span>
             </div>
-
-            {/* Comments */}
-            {video.comments > 0 && (
-              <div className="flex items-center space-x-1">
-                <Icon name="MessageCircle" size={12} />
-                <span className="text-xs font-medium">
-                  {formatCount(video.comments)}
-                </span>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* HOVER EFFECTS */}
-        <div className="
-          absolute inset-0 bg-white/0 group-hover:bg-white/5 
-          transition-all duration-200
-        " />
+        {/* HOVER EFFECT */}
+        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-all duration-200" />
       </div>
     );
   };
@@ -229,83 +279,140 @@ const ReelsGridMobile = ({
   return (
     <div className="w-full">
       
-      {/* GRID 2x2 DE REELS */}
-      <div className="grid grid-cols-2 gap-2 p-2">
-        {videos.map((video, index) => (
-          <ReelThumbnailCard
-            key={video.id}
-            video={video}
-            index={index}
-          />
-        ))}
+      {/* HEADER CON TÍTULO Y ACCIÓN */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <h2 className="text-lg font-semibold text-foreground">Reels</h2>
+        <button
+          onClick={() => navigate('/reels')}
+          className="text-sm text-primary font-medium hover:text-primary/80 transition-colors"
+        >
+          Ver todos
+        </button>
       </div>
 
-      {/* LOAD MORE TRIGGER */}
-      {hasMore && videos.length >= 4 && (
-        <div className="p-4">
+      {/* CAROUSEL CONTAINER */}
+      <div className="relative">
+        
+        {/* SCROLL BUTTONS (Solo visible si es necesario) */}
+        {canScrollLeft && (
           <button
-            onClick={onLoadMore}
-            disabled={loading}
+            onClick={scrollLeft}
             className="
-              w-full py-3 px-4 rounded-xl
-              bg-primary/10 hover:bg-primary/20 
-              text-primary font-medium text-sm
-              transition-all duration-200
-              disabled:opacity-50 disabled:cursor-not-allowed
-              flex items-center justify-center space-x-2
+              absolute left-2 top-1/2 transform -translate-y-1/2 z-10
+              w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm
+              flex items-center justify-center text-white
+              hover:bg-black/80 transition-all duration-200
             "
           >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <span>Cargando más reels...</span>
-              </>
-            ) : (
-              <>
-                <Icon name="Plus" size={16} />
-                <span>Ver más reels</span>
-              </>
-            )}
+            <Icon name="ChevronLeft" size={16} />
           </button>
-        </div>
-      )}
+        )}
 
-      {/* CTA PARA CREAR CONTENIDO */}
-      {videos.length < 4 && (
-        <div className="p-4 text-center">
-          <div className="
-            rounded-xl border-2 border-dashed border-muted-foreground/30
-            p-6 bg-muted/20
-          ">
-            <Icon 
-              name="Smartphone" 
-              size={32} 
-              color="var(--color-muted-foreground)" 
-              className="mx-auto mb-3"
-            />
-            <h3 className="text-sm font-medium text-foreground mb-2">
-              ¡Crea tu primer reel!
-            </h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Sé parte de la comunidad y comparte tu creatividad
-            </p>
-            <Link
-              to="/upload"
-              className="
-                inline-flex items-center space-x-2 px-4 py-2
-                bg-primary text-primary-foreground rounded-lg
-                text-sm font-medium hover:bg-primary/90
-                transition-colors duration-200
-              "
-            >
-              <Icon name="Plus" size={14} />
-              <span>Crear Reel</span>
-            </Link>
+        {canScrollRight && (
+          <button
+            onClick={scrollRight}
+            className="
+              absolute right-2 top-1/2 transform -translate-y-1/2 z-10
+              w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm
+              flex items-center justify-center text-white
+              hover:bg-black/80 transition-all duration-200
+            "
+          >
+            <Icon name="ChevronRight" size={16} />
+          </button>
+        )}
+
+        {/* CAROUSEL DE REELS */}
+        <div
+          ref={scrollContainerRef}
+          className="
+            flex space-x-3 px-4 overflow-x-auto scrollbar-hide
+            snap-x snap-mandatory scroll-smooth
+          "
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitScrollbar: { display: 'none' }
+          }}
+        >
+          {videos.map((video, index) => (
+            <div key={video.id} className="snap-start">
+              <ReelCard video={video} index={index} />
+            </div>
+          ))}
+
+          {/* LOAD MORE CARD */}
+          {hasMore && videos.length >= 6 && (
+            <div className="snap-start">
+              <button
+                onClick={onLoadMore}
+                disabled={loading}
+                className="
+                  flex-shrink-0 w-[120px] aspect-[9/16] rounded-xl
+                  border-2 border-dashed border-muted-foreground/30
+                  bg-muted/20 hover:bg-muted/40
+                  flex flex-col items-center justify-center
+                  text-muted-foreground hover:text-foreground
+                  transition-all duration-200 disabled:opacity-50
+                "
+              >
+                {loading ? (
+                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
+                ) : (
+                  <Icon name="Plus" size={24} className="mb-2" />
+                )}
+                <span className="text-xs text-center px-2">
+                  {loading ? 'Cargando...' : 'Ver más'}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* INDICADOR DE SCROLL (Opcional) */}
+      {videos.length > 3 && (
+        <div className="flex justify-center mt-3">
+          <div className="flex space-x-1">
+            {[...Array(Math.ceil(videos.length / 3))].map((_, index) => (
+              <div
+                key={index}
+                className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30"
+              />
+            ))}
           </div>
         </div>
       )}
     </div>
   );
 };
+
+// ===============================
+// ESTILOS CSS ADICIONALES
+// ===============================
+
+const styles = `
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+`;
+
+// Inyectar estilos si no están disponibles
+if (typeof document !== 'undefined' && !document.getElementById('reels-grid-mobile-styles')) {
+  const styleSheet = document.createElement('style');
+  styleSheet.id = 'reels-grid-mobile-styles';
+  styleSheet.textContent = styles;
+  document.head.appendChild(styleSheet);
+}
 
 export default ReelsGridMobile;
