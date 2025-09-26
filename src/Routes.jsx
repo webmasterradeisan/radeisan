@@ -118,12 +118,126 @@ import VideoFeedDashboard from './pages/video-feed-dashboard';
 import VideoUploadStudio from './pages/video-upload-studio';
 // NUEVO: Sistema de Fotos
 import PhotoUploadStudio from './pages/photo-upload-studio';
-// import PhotoFeedDashboard from './pages/photo-feed-dashboard'; // TODO: Crear para Fase 5
 
 import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 import UserProfileSettings from './pages/user-profile-settings';
 import BusinessProfileManagement from './pages/business-profile-management';
+
+// ===============================
+// NUEVA PÁGINA DE REELS FULLSCREEN
+// ===============================
+const ReelsPage = () => {
+  // Esta página será específicamente para la sección de reels fullscreen
+  // Similar a VideoFeedDashboard pero forzando layout='reels' y orientation='vertical'
+  const ReelsPageComponent = () => {
+    return (
+      <VideoFeedDashboard 
+        forceLayout="reels" 
+        forceOrientation="vertical"
+        hideHeader={true}
+        fullscreen={true}
+      />
+    );
+  };
+
+  return (
+    <ProtectedRoute>
+      <ReelsPageComponent />
+    </ProtectedRoute>
+  );
+};
+
+// ===============================
+// PÁGINAS TEMPORALES PARA RUTAS DEL BOTTOM NAVIGATION
+// ===============================
+
+// Página de contenido guardado
+const SavedContentPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8 text-center">
+      <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+        <svg className="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+        </svg>
+      </div>
+      <h1 className="text-3xl font-bold text-foreground mb-4">Contenido Guardado</h1>
+      <p className="text-lg text-muted-foreground mb-6">
+        Aquí encontrarás todos los videos y fotos que has guardado.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Próximamente implementaremos esta funcionalidad.
+      </p>
+    </div>
+  </div>
+);
+
+// Página de notificaciones
+const NotificationsPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8 text-center">
+      <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+        <svg className="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5-5-5h5v-6a4 4 0 118 0v6z" />
+        </svg>
+      </div>
+      <h1 className="text-3xl font-bold text-foreground mb-4">Notificaciones</h1>
+      <p className="text-lg text-muted-foreground mb-6">
+        Mantente al día con toda la actividad de tu cuenta.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Próximamente implementaremos el sistema de notificaciones.
+      </p>
+    </div>
+  </div>
+);
+
+// Página de estadísticas/analytics
+const AnalyticsPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8 text-center">
+      <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+        <svg className="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </div>
+      <h1 className="text-3xl font-bold text-foreground mb-4">Estadísticas</h1>
+      <p className="text-lg text-muted-foreground mb-6">
+        Analiza el rendimiento de tu contenido y perfil.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Dashboard de analytics próximamente disponible.
+      </p>
+    </div>
+  </div>
+);
+
+// Página de ayuda
+const HelpPage = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="max-w-4xl w-full bg-card rounded-lg shadow-elevation-2 p-8 text-center">
+      <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+        <svg className="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h1 className="text-3xl font-bold text-foreground mb-4">Centro de Ayuda</h1>
+      <p className="text-lg text-muted-foreground mb-6">
+        ¿Tienes preguntas? Estamos aquí para ayudarte.
+      </p>
+      <div className="grid md:grid-cols-2 gap-4 mt-8">
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">📧 Contacto</h3>
+          <p className="text-sm text-muted-foreground">support@radeisan.com</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg">
+          <h3 className="font-semibold text-foreground mb-2">💬 FAQ</h3>
+          <p className="text-sm text-muted-foreground">Preguntas frecuentes próximamente</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 // ===============================
 // PÁGINAS TEMPORALES PARA SISTEMA DE FOTOS
@@ -281,6 +395,20 @@ const Routes = () => {
                 </ProtectedRoute>
               } 
             />
+
+            {/* =================== NUEVA SECCIÓN REELS FULLSCREEN =================== */}
+            
+            {/* Página de Reels dedicada */}
+            <Route 
+              path="/reels" 
+              element={<ReelsPage />}
+            />
+            
+            {/* Reel individual con ID */}
+            <Route 
+              path="/reel/:id" 
+              element={<ReelsPage />}
+            />
             
             {/* Estudio de creación de videos */}
             <Route 
@@ -292,7 +420,7 @@ const Routes = () => {
               } 
             />
 
-            {/* =================== SISTEMA DE FOTOS (NUEVO) =================== */}
+            {/* =================== SISTEMA DE FOTOS (EXISTENTE) =================== */}
             
             {/* Estudio de subida de fotos */}
             <Route 
@@ -358,6 +486,54 @@ const Routes = () => {
                   <BusinessProfileManagement />
                 </ProtectedRoute>
               } 
+            />
+
+            {/* =================== RUTAS ADICIONALES PARA BOTTOM NAVIGATION =================== */}
+            
+            {/* Contenido guardado */}
+            <Route 
+              path="/saved" 
+              element={
+                <ProtectedRoute>
+                  <SavedContentPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Notificaciones */}
+            <Route 
+              path="/notifications" 
+              element={
+                <ProtectedRoute>
+                  <NotificationsPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Analytics/Estadísticas */}
+            <Route 
+              path="/analytics" 
+              element={
+                <ProtectedRoute>
+                  <AnalyticsPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Centro de ayuda */}
+            <Route 
+              path="/help" 
+              element={
+                <UniversalRoute>
+                  <HelpPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* Configuración (alias a profile por ahora) */}
+            <Route 
+              path="/settings" 
+              element={<Navigate to="/profile" replace />} 
             />
 
             {/* =================== REDIRECCIONES DE URLs ANTIGUAS =================== */}
