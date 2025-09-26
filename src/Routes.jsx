@@ -4,7 +4,15 @@ import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-ro
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import { AuthProvider } from "contexts/AuthContext";
-import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
+
+// ===============================
+// NUEVOS COMPONENTES CON MOBILE LAYOUT INTEGRADO
+// ===============================
+import { 
+  MobileProtectedRoute as ProtectedRoute,
+  MobilePublicRoute as PublicRoute, 
+  MobileUniversalRoute as UniversalRoute 
+} from "components/ui/MobileLayout";
 
 // ===============================
 // PÁGINAS PÚBLICAS
