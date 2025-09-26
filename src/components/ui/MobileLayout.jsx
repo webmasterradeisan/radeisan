@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import BottomNavigation from './BottomNavigation';
 
 const MobileLayout = ({ children }) => {
@@ -131,16 +132,8 @@ export const withMobileLayout = (Component) => {
 // COMPONENTE PROTECTED ROUTE ACTUALIZADO
 // ===============================
 
-// Este componente reemplaza/mejora el ProtectedRoute existente
 export const MobileProtectedRoute = ({ children, requireAuth = true }) => {
-  // Aquí importarías useAuth desde tu contexto
-  // import { useAuth } from '../../contexts/AuthContext';
-  // const { user, loading } = useAuth();
-
-  // Por ahora, simulo la lógica de autenticación
-  // Reemplaza esto con tu lógica real de autenticación
-  import { useAuth } from '../../contexts/AuthContext';
-const { user, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -171,9 +164,7 @@ const { user, loading } = useAuth();
 // ===============================
 
 export const MobilePublicRoute = ({ children }) => {
-  // const { user, loading } = useAuth();
-  const user = false; // Placeholder
-  const loading = false; // Placeholder
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
