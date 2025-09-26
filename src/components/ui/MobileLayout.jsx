@@ -139,8 +139,8 @@ export const MobileProtectedRoute = ({ children, requireAuth = true }) => {
 
   // Por ahora, simulo la lógica de autenticación
   // Reemplaza esto con tu lógica real de autenticación
-  const user = true; // Placeholder - usar useAuth() real
-  const loading = false; // Placeholder - usar useAuth() real
+  import { useAuth } from '../../contexts/AuthContext';
+const { user, loading } = useAuth();
 
   if (loading) {
     return (
