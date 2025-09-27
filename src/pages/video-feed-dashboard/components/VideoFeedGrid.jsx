@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
-// COMPONENTE MÓVIL INTEGRADO
 import ReelsGridMobile from './ReelsGridMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
@@ -23,48 +22,12 @@ const VideoFeedGrid = ({
     setDisplayVideos(videos);
   }, [videos]);
 
-  // HELPER: Detectar dispositivo móvil con logging
+  // HELPER: Detectar dispositivo móvil
   const isMobile = useCallback(() => {
-    const mobile = window.innerWidth < 768;
-    console.log('🔍 DEBUG - isMobile():', mobile, 'width:', window.innerWidth);
-    return mobile;
+    return window.innerWidth < 768;
   }, []);
 
-  // VIDEOS PARA EL CAROUSEL MÓVIL - CON LOGGING
-  const reelsVideos = useMemo(() => {
-    console.log('🔍 DEBUG - displayVideos:', displayVideos?.length || 0);
-    
-    if (!displayVideos || displayVideos.length === 0) return [];
-    
-    // Priorizar videos verticales, pero mostrar todos si no hay verticales
-    const verticalVideos = displayVideos?.filter(video => {
-      const aspectRatio = video?.width && video?.height ? video.width / video.height : 1;
-      return aspectRatio <= 1 || video?.orientation === 'vertical' || video?.type === 'reel';
-    });
-    
-    // Si hay videos verticales, usarlos. Si no, usar los primeros videos disponibles
-    const selectedVideos = verticalVideos.length > 0 ? verticalVideos : displayVideos;
-    const result = selectedVideos.slice(0, 8) || [];
-    
-    console.log('🔍 DEBUG - reelsVideos length:', result.length);
-    console.log('🔍 DEBUG - verticalVideos found:', verticalVideos.length);
-    
-    return result;
-  }, [displayVideos]);
-
-  // FILTRAR VIDEOS PARA EL FEED PRINCIPAL (excluyendo los ya mostrados en carousel)
-  const feedVideos = useMemo(() => {
-    if (!isMobile() || layout !== 'grid') {
-      return displayVideos;
-    }
-    
-    // En móvil, excluir los primeros reels del feed principal para evitar duplicados
-    const reelsIds = new Set(reelsVideos.map(v => v.id));
-    return displayVideos?.filter(video => !reelsIds.has(video.id)) || [];
-  }, [displayVideos, reelsVideos, layout, isMobile]);
-
   const handleScroll = useCallback(() => {
-    // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
     if (layout === 'reels') return;
 
     if (
@@ -78,9 +41,7 @@ const VideoFeedGrid = ({
   }, [hasMore, isLoadingMore, loading, onLoadMore, layout]);
 
   useEffect(() => {
-    // Solo agregar event listener si NO estamos en modo reels
     if (layout === 'reels') return;
-
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll, layout]);
@@ -123,7 +84,6 @@ const VideoFeedGrid = ({
         url: shareUrl
       });
     } else {
-      // Fallback to clipboard
       navigator.clipboard?.writeText(shareUrl);
     }
   };
@@ -138,9 +98,7 @@ const VideoFeedGrid = ({
     }
   };
 
-  // ===============================
   // LOADING STATE
-  // ===============================
   if (loading && displayVideos?.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -154,9 +112,7 @@ const VideoFeedGrid = ({
     );
   }
 
-  // ===============================
   // EMPTY STATE
-  // ===============================
   if (displayVideos?.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -197,12 +153,8 @@ const VideoFeedGrid = ({
     );
   }
 
-  // ===============================
-  // RENDER REELS FULLSCREEN - ARQUITECTURA SEPARADA MÓVIL/DESKTOP
-  // ===============================
+  // RENDER REELS FULLSCREEN
   if (layout === 'reels') {
-    // USAR REELSCONTAINER PARA TODOS LOS DISPOSITIVOS
-    // (La página de reels fullscreen mantiene el comportamiento actual)
     return (
       <ReelsContainer
         videos={displayVideos}
@@ -214,9 +166,7 @@ const VideoFeedGrid = ({
     );
   }
 
-  // ===============================
   // RENDER HORIZONTAL VIDEO GRID
-  // ===============================
   if (orientation === 'horizontal' && layout !== 'list') {
     return (
       <HorizontalVideoGrid
@@ -230,48 +180,41 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER DASHBOARD MÓVIL CON CAROUSEL + FEED
+  // MÓVIL: MOSTRAR CAROUSEL SIEMPRE
   // ===============================
-  if (layout === 'grid' && isMobile() && reelsVideos.length > 0) {
+  if (isMobile() && displayVideos?.length > 0) {
     return (
       <div className="space-y-6">
         
-        {/* CAROUSEL HORIZONTAL DE REELS - SOLO MÓVIL */}
+        {/* CAROUSEL HORIZONTAL - SIEMPRE EN MÓVIL */}
         <div className="bg-background border-b border-border">
           <ReelsGridMobile
-            videos={reelsVideos}
+            videos={displayVideos.slice(0, 6)}
             onLoadMore={onLoadMore}
             hasMore={hasMore}
             loading={loading}
           />
         </div>
 
-        {/* FEED PRINCIPAL - SIN REELS DUPLICADOS */}
-        {feedVideos.length > 0 && (
-          <>
-            <div className="px-4">
-              <h2 className="text-lg font-semibold text-foreground mb-4">
-                Más videos para ti
-              </h2>
-            </div>
-            
-            <div className="px-4">
-              <div className={getGridClasses()}>
-                {feedVideos?.map((video) => (
-                  <VideoCard
-                    key={video?.id}
-                    video={video}
-                    layout={layout}
-                    onLike={handleVideoLike}
-                    onSave={handleVideoSave}
-                    onShare={handleVideoShare}
-                    onPointsEarned={onPointsEarned}
-                  />
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+        {/* FEED PRINCIPAL */}
+        <div className="px-4">
+          <h2 className="text-lg font-semibold text-foreground mb-4">
+            Todos los videos
+          </h2>
+          <div className="space-y-4">
+            {displayVideos?.map((video) => (
+              <VideoCard
+                key={video?.id}
+                video={video}
+                layout="list"
+                onLike={handleVideoLike}
+                onSave={handleVideoSave}
+                onShare={handleVideoShare}
+                onPointsEarned={onPointsEarned}
+              />
+            ))}
+          </div>
+        </div>
 
         {/* LOADING MORE INDICATOR */}
         {(isLoadingMore || loading) && hasMore && (
@@ -284,7 +227,7 @@ const VideoFeedGrid = ({
         )}
 
         {/* LOAD MORE BUTTON */}
-        {!isLoadingMore && !loading && hasMore && feedVideos?.length > 0 && (
+        {!isLoadingMore && !loading && hasMore && (
           <div className="flex justify-center py-6 px-4">
             <Button
               variant="outline"
@@ -299,27 +242,12 @@ const VideoFeedGrid = ({
             </Button>
           </div>
         )}
-
-        {/* END OF FEED MESSAGE */}
-        {!hasMore && feedVideos?.length > 0 && (
-          <div className="text-center py-8 px-4">
-            <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
-              <Icon name="Check" size={20} color="var(--color-success)" />
-            </div>
-            <p className="text-muted-foreground">
-              ¡Has visto todos los videos disponibles!
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Vuelve más tarde para ver contenido nuevo
-            </p>
-          </div>
-        )}
       </div>
     );
   }
 
   // ===============================
-  // RENDER TRADITIONAL GRID/LIST - DESKTOP Y OTROS LAYOUTS
+  // DESKTOP: GRID/LIST TRADICIONAL
   // ===============================
   return (
     <div className="space-y-6">
@@ -337,7 +265,6 @@ const VideoFeedGrid = ({
         ))}
       </div>
 
-      {/* Loading More Indicator - Solo para grid/list */}
       {(isLoadingMore || loading) && hasMore && (
         <div className="flex items-center justify-center py-8">
           <div className="flex items-center space-x-3 text-muted-foreground">
@@ -347,7 +274,6 @@ const VideoFeedGrid = ({
         </div>
       )}
 
-      {/* Load More Button - Solo para grid/list */}
       {!isLoadingMore && !loading && hasMore && displayVideos?.length > 0 && (
         <div className="flex justify-center py-6">
           <Button
@@ -364,7 +290,6 @@ const VideoFeedGrid = ({
         </div>
       )}
 
-      {/* End of Feed Message - Solo para grid/list */}
       {!hasMore && displayVideos?.length > 0 && (
         <div className="text-center py-8">
           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
