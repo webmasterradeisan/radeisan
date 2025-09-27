@@ -1,385 +1,290 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// Carousel horizontal para reels en móvil - Patrón YouTube home móvil
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
+import Button from '../../../components/ui/Button';
 
+/**
+ * 📱 CAROUSEL HORIZONTAL DE REELS PARA MÓVIL
+ * Muestra 3 reels visibles + scroll horizontal táctil
+ * Navegación a reels específicos con parámetros
+ */
 const ReelsGridMobile = ({ 
   videos = [], 
-  onLoadMore,
-  hasMore = true,
+  onLoadMore, 
+  hasMore = true, 
   loading = false 
 }) => {
   const navigate = useNavigate();
-  const scrollContainerRef = useRef(null);
-  const [loadingThumbnails, setLoadingThumbnails] = useState(new Set());
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
+  const scrollRef = useRef(null);
+  const [showLeftButton, setShowLeftButton] = useState(false);
+  const [showRightButton, setShowRightButton] = useState(false);
 
-  // ===============================
-  // DETECCIÓN DE SCROLL HORIZONTAL
-  // ===============================
+  console.log('🎬 ReelsGridMobile renderizado:', {
+    totalVideos: videos.length,
+    hasMore,
+    loading
+  });
+
+  // Filtrar solo videos verticales para reels (aspect ratio <= 0.8)
+  const reelsVideos = videos.filter(video => {
+    if (!video.width || !video.height) return true; // Asumir vertical si no hay dimensiones
+    const aspectRatio = video.width / video.height;
+    return aspectRatio <= 0.8; // Videos verticales o cuadrados
+  });
+
+  console.log('📱 Videos filtrados para reels:', {
+    original: videos.length,
+    filtered: reelsVideos.length
+  });
+
+  // Verificar posición del scroll para mostrar/ocultar botones de navegación
+  const checkScrollPosition = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const canScrollLeft = container.scrollLeft > 0;
+    const canScrollRight = container.scrollLeft < container.scrollWidth - container.clientWidth;
+
+    setShowLeftButton(canScrollLeft);
+    setShowRightButton(canScrollRight);
+  };
 
   useEffect(() => {
-    const checkScrollability = () => {
-      const container = scrollContainerRef.current;
-      if (!container) return;
-
-      setCanScrollLeft(container.scrollLeft > 0);
-      setCanScrollRight(
-        container.scrollLeft < container.scrollWidth - container.clientWidth
-      );
-    };
-
-    const container = scrollContainerRef.current;
+    checkScrollPosition();
+    
+    const container = scrollRef.current;
     if (container) {
-      checkScrollability();
-      container.addEventListener('scroll', checkScrollability);
-      return () => container.removeEventListener('scroll', checkScrollability);
+      container.addEventListener('scroll', checkScrollPosition);
+      return () => container.removeEventListener('scroll', checkScrollPosition);
     }
-  }, [videos]);
+  }, [reelsVideos]);
 
-  // ===============================
-  // FORMATEO DE NÚMEROS
-  // ===============================
-
-  const formatCount = (count) => {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K`;
-    }
-    return count?.toString() || '0';
-  };
-
-  const formatDuration = (seconds) => {
-    if (!seconds) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // ===============================
-  // MANEJADORES DE EVENTOS
-  // ===============================
-
-  const handleThumbnailLoad = (videoId) => {
-    setLoadingThumbnails(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(videoId);
-      return newSet;
-    });
-  };
-
-  const handleThumbnailError = (videoId) => {
-    setLoadingThumbnails(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(videoId);
-      return newSet;
-    });
-  };
-
-  const handleReelClick = (video, index) => {
-    // Navegar a la sección fullscreen de reels
-    // Pasamos el índice para que empiece en el video correcto
-    navigate(`/reels?start=${index}`, { 
-      state: { 
-        videos,
-        startIndex: index,
-        returnTo: '/dashboard'
-      }
-    });
-  };
-
+  // Navegación con botones (para desktop)
   const scrollLeft = () => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      const scrollAmount = container.clientWidth * 0.8;
-      container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-    }
+    scrollRef.current?.scrollBy({ left: -280, behavior: 'smooth' });
   };
 
   const scrollRight = () => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      const scrollAmount = container.clientWidth * 0.8;
-      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
+    scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
   };
 
-  // ===============================
-  // LOADING STATE - SKELETON
-  // ===============================
+  // Navegar a reel específico con parámetro de índice
+  const handleReelClick = (reelIndex) => {
+    console.log('🎯 Navegando a reel:', reelIndex);
+    navigate(`/reels?start=${reelIndex}`);
+  };
 
-  if (loading && videos.length === 0) {
-    return (
-      <div className="w-full">
-        {/* Header skeleton */}
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="h-6 w-16 bg-muted rounded animate-pulse" />
-          <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+  // Navegar a página completa de reels
+  const handleVerTodos = () => {
+    console.log('🎯 Navegando a página completa de reels');
+    navigate('/reels');
+  };
+
+  // Loading skeleton mientras cargan los reels
+  const renderSkeleton = () => (
+    <div className="flex space-x-3 px-4">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="flex-shrink-0">
+          <div className="w-32 h-56 bg-muted rounded-lg animate-pulse"></div>
         </div>
-        
-        {/* Carousel skeleton */}
-        <div className="flex space-x-3 px-4 overflow-hidden">
-          {[...Array(3)].map((_, index) => (
-            <div 
-              key={index}
-              className="flex-shrink-0 w-[120px] aspect-[9/16] rounded-xl bg-muted animate-pulse"
-            />
-          ))}
+      ))}
+    </div>
+  );
+
+  // Empty state cuando no hay reels
+  if (!loading && reelsVideos.length === 0) {
+    return (
+      <div className="mb-6">
+        <div className="flex items-center justify-between px-4 mb-3">
+          <div className="flex items-center space-x-2">
+            <Icon name="Smartphone" size={20} color="var(--color-primary)" />
+            <h2 className="text-lg font-semibold text-foreground">Reels</h2>
+          </div>
+          <Button variant="ghost" size="sm" onClick={handleVerTodos}>
+            Ver todos
+            <Icon name="ChevronRight" size={16} className="ml-1" />
+          </Button>
+        </div>
+        <div className="flex items-center justify-center py-8 px-4">
+          <div className="text-center">
+            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
+              <Icon name="Smartphone" size={24} color="var(--color-muted-foreground)" />
+            </div>
+            <p className="text-sm text-muted-foreground">No hay reels disponibles</p>
+            <p className="text-xs text-muted-foreground mt-1">Sé el primero en crear contenido vertical</p>
+          </div>
         </div>
       </div>
     );
   }
-
-  // ===============================
-  // EMPTY STATE
-  // ===============================
-
-  if (videos.length === 0) {
-    return (
-      <div className="w-full px-4 py-6">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <Icon name="Smartphone" size={24} color="var(--color-muted-foreground)" />
-          </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">
-            ¡Crea tu primer reel!
-          </h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Sé parte de la comunidad y comparte tu creatividad
-          </p>
-          <button
-            onClick={() => navigate('/upload')}
-            className="
-              inline-flex items-center space-x-2 px-4 py-2
-              bg-primary text-primary-foreground rounded-lg
-              text-sm font-medium hover:bg-primary/90
-              transition-colors duration-200
-            "
-          >
-            <Icon name="Plus" size={16} />
-            <span>Crear Reel</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ===============================
-  // COMPONENTE REEL CARD
-  // ===============================
-
-  const ReelCard = ({ video, index }) => {
-    const isLoadingThumbnail = loadingThumbnails.has(video.id);
-    
-    return (
-      <div
-        onClick={() => handleReelClick(video, index)}
-        className="
-          flex-shrink-0 w-[120px] aspect-[9/16] rounded-xl overflow-hidden 
-          relative bg-black cursor-pointer transform transition-all duration-200
-          hover:scale-[1.02] active:scale-[0.98]
-          group
-        "
-      >
-        {/* THUMBNAIL */}
-        <div className="absolute inset-0">
-          {video.thumbnailUrl ? (
-            <img
-              src={video.thumbnailUrl}
-              alt={video.title}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onLoad={() => handleThumbnailLoad(video.id)}
-              onError={() => handleThumbnailError(video.id)}
-            />
-          ) : (
-            <video
-              src={video.videoUrl}
-              className="w-full h-full object-cover"
-              muted
-              preload="metadata"
-              onLoadedData={() => handleThumbnailLoad(video.id)}
-              onError={() => handleThumbnailError(video.id)}
-            />
-          )}
-
-          {/* Loading overlay */}
-          {isLoadingThumbnail && (
-            <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
-              <Icon name="Play" size={20} color="var(--color-muted-foreground)" />
-            </div>
-          )}
-        </div>
-
-        {/* GRADIENT OVERLAY */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
-
-        {/* PLAY INDICATOR */}
-        <div className="absolute top-2 left-2">
-          <div className="w-6 h-6 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-            <Icon name="Play" size={12} color="white" />
-          </div>
-        </div>
-
-        {/* DURATION */}
-        {video.duration && (
-          <div className="absolute top-2 right-2">
-            <div className="px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
-              {formatDuration(video.duration)}
-            </div>
-          </div>
-        )}
-
-        {/* CONTENT INFO */}
-        <div className="absolute bottom-0 left-0 right-0 p-2">
-          {/* TITLE */}
-          <h3 className="text-white text-xs font-medium leading-tight mb-1 line-clamp-2">
-            {video.title}
-          </h3>
-
-          {/* CREATOR */}
-          <div className="flex items-center space-x-1 mb-2">
-            <img
-              src={video.creator?.avatar || `https://api.dicebear.com/7.x/avatars/svg?seed=${video.creator?.username}`}
-              alt={video.creator?.name}
-              className="w-4 h-4 rounded-full border border-white/20"
-            />
-            <span className="text-white/80 text-xs truncate">
-              @{video.creator?.username}
-            </span>
-          </div>
-
-          {/* STATS */}
-          <div className="flex items-center space-x-2 text-white/80">
-            <div className="flex items-center space-x-1">
-              <Icon name="Heart" size={10} />
-              <span className="text-xs">{formatCount(video.likes)}</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <Icon name="Eye" size={10} />
-              <span className="text-xs">{formatCount(video.views)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* HOVER EFFECT */}
-        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-all duration-200" />
-      </div>
-    );
-  };
-
-  // ===============================
-  // RENDER PRINCIPAL
-  // ===============================
 
   return (
-    <div className="w-full">
-      
-      {/* HEADER CON TÍTULO Y ACCIÓN */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <h2 className="text-lg font-semibold text-foreground">Reels</h2>
-        <button
-          onClick={() => navigate('/reels')}
-          className="text-sm text-primary font-medium hover:text-primary/80 transition-colors"
+    <div className="mb-6">
+      {/* Header con título y botón "Ver todos" */}
+      <div className="flex items-center justify-between px-4 mb-3">
+        <div className="flex items-center space-x-2">
+          <Icon name="Smartphone" size={20} color="var(--color-primary)" />
+          <h2 className="text-lg font-semibold text-foreground">Reels</h2>
+          <span className="text-sm text-muted-foreground">({reelsVideos.length})</span>
+        </div>
+        
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={handleVerTodos}
+          className="text-primary hover:text-primary/80"
         >
           Ver todos
-        </button>
+          <Icon name="ChevronRight" size={16} className="ml-1" />
+        </Button>
       </div>
 
-      {/* CAROUSEL CONTAINER */}
-      <div className="relative">
-        
-        {/* SCROLL BUTTONS (Solo visible si es necesario) */}
-        {canScrollLeft && (
+      {/* Carousel Container */}
+      <div className="relative group">
+        {/* Scroll Container */}
+        <div
+          ref={scrollRef}
+          className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pb-2"
+          style={{
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {loading ? renderSkeleton() : reelsVideos.map((reel, index) => (
+            <div
+              key={reel.id}
+              className="flex-shrink-0 w-32 cursor-pointer group/reel"
+              style={{ scrollSnapAlign: 'start' }}
+              onClick={() => handleReelClick(index)}
+            >
+              {/* Thumbnail Container */}
+              <div className="relative w-32 h-56 bg-black rounded-lg overflow-hidden shadow-md">
+                {/* Video Thumbnail */}
+                <img
+                  src={reel.thumbnail || '/api/placeholder/128/224'}
+                  alt={reel.title || 'Reel sin título'}
+                  className="w-full h-full object-cover transition-transform duration-200 group-hover/reel:scale-105"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.target.src = '/api/placeholder/128/224';
+                  }}
+                />
+
+                {/* Overlay con gradiente */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20">
+                  {/* Duración del video (esquina superior derecha) */}
+                  <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+                    {formatDuration(reel.duration || 30)}
+                  </div>
+
+                  {/* Estadísticas principales (esquina superior izquierda) */}
+                  <div className="absolute top-2 left-2 text-white text-xs">
+                    <div className="flex items-center space-x-1 bg-black/50 px-2 py-1 rounded backdrop-blur-sm">
+                      <Icon name="Eye" size={10} />
+                      <span>{formatNumber(reel.views || 0)}</span>
+                    </div>
+                  </div>
+
+                  {/* Información inferior */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3">
+                    {/* Estadísticas completas */}
+                    <div className="flex items-center justify-between text-white text-xs mb-2">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-1">
+                          <Icon name="Heart" size={11} />
+                          <span>{formatNumber(reel.likes || 0)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icon name="MessageCircle" size={11} />
+                          <span>{formatNumber(reel.comments || 0)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Título truncado */}
+                    <h3 className="text-white text-xs font-medium line-clamp-2 leading-tight mb-1">
+                      {reel.title || 'Sin título'}
+                    </h3>
+
+                    {/* Creador */}
+                    <div className="flex items-center space-x-1">
+                      <div className="w-3 h-3 bg-white/20 rounded-full flex-shrink-0"></div>
+                      <p className="text-white/80 text-xs truncate">
+                        @{reel.creator?.username || 'usuario'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Play Button Overlay - Solo visible en hover */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/20">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30">
+                    <Icon name="Play" size={20} color="white" />
+                  </div>
+                </div>
+
+                {/* Borde de selección */}
+                <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary/50 rounded-lg transition-colors duration-200"></div>
+              </div>
+            </div>
+          ))}
+
+          {/* Load More Indicator */}
+          {hasMore && !loading && reelsVideos.length > 0 && (
+            <div className="flex-shrink-0 w-32 h-56 flex items-center justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onLoadMore}
+                className="h-auto py-4 px-3 flex-col space-y-2 bg-card hover:bg-accent"
+              >
+                <Icon name="Plus" size={20} />
+                <span className="text-xs text-center">Cargar más</span>
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation Buttons - Solo visibles en hover en desktop */}
+        {showLeftButton && (
           <button
             onClick={scrollLeft}
-            className="
-              absolute left-2 top-1/2 transform -translate-y-1/2 z-10
-              w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm
-              flex items-center justify-center text-white
-              hover:bg-black/80 transition-all duration-200
-            "
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 hidden md:flex"
+            aria-label="Scroll hacia la izquierda"
           >
             <Icon name="ChevronLeft" size={16} />
           </button>
         )}
 
-        {canScrollRight && (
+        {showRightButton && (
           <button
             onClick={scrollRight}
-            className="
-              absolute right-2 top-1/2 transform -translate-y-1/2 z-10
-              w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm
-              flex items-center justify-center text-white
-              hover:bg-black/80 transition-all duration-200
-            "
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 hidden md:flex"
+            aria-label="Scroll hacia la derecha"
           >
             <Icon name="ChevronRight" size={16} />
           </button>
         )}
-
-        {/* CAROUSEL DE REELS */}
-        <div
-          ref={scrollContainerRef}
-          className="
-            flex space-x-3 px-4 overflow-x-auto scrollbar-hide
-            snap-x snap-mandatory scroll-smooth
-          "
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            WebkitScrollbar: { display: 'none' }
-          }}
-        >
-          {videos.map((video, index) => (
-            <div key={video.id} className="snap-start">
-              <ReelCard video={video} index={index} />
-            </div>
-          ))}
-
-          {/* LOAD MORE CARD */}
-          {hasMore && videos.length >= 6 && (
-            <div className="snap-start">
-              <button
-                onClick={onLoadMore}
-                disabled={loading}
-                className="
-                  flex-shrink-0 w-[120px] aspect-[9/16] rounded-xl
-                  border-2 border-dashed border-muted-foreground/30
-                  bg-muted/20 hover:bg-muted/40
-                  flex flex-col items-center justify-center
-                  text-muted-foreground hover:text-foreground
-                  transition-all duration-200 disabled:opacity-50
-                "
-              >
-                {loading ? (
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-                ) : (
-                  <Icon name="Plus" size={24} className="mb-2" />
-                )}
-                <span className="text-xs text-center px-2">
-                  {loading ? 'Cargando...' : 'Ver más'}
-                </span>
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* INDICADOR DE SCROLL (Opcional) */}
-      {videos.length > 3 && (
-        <div className="flex justify-center mt-3">
+      {/* Indicador de scroll en móvil */}
+      {reelsVideos.length > 3 && (
+        <div className="flex justify-center mt-3 md:hidden">
           <div className="flex space-x-1">
-            {[...Array(Math.ceil(videos.length / 3))].map((_, index) => (
-              <div
-                key={index}
-                className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30"
-              />
-            ))}
+            <div className="w-1 h-1 bg-primary rounded-full"></div>
+            <div className="w-4 h-1 bg-muted rounded-full"></div>
+            <div className="w-1 h-1 bg-muted rounded-full"></div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading indicator para más contenido */}
+      {loading && reelsVideos.length > 0 && (
+        <div className="flex justify-center mt-3">
+          <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <span>Cargando más reels...</span>
           </div>
         </div>
       )}
@@ -388,31 +293,21 @@ const ReelsGridMobile = ({
 };
 
 // ===============================
-// ESTILOS CSS ADICIONALES
+// FUNCIONES HELPER
 // ===============================
 
-const styles = `
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-`;
+const formatDuration = (seconds) => {
+  if (!seconds || seconds === 0) return '0:30';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
-// Inyectar estilos si no están disponibles
-if (typeof document !== 'undefined' && !document.getElementById('reels-grid-mobile-styles')) {
-  const styleSheet = document.createElement('style');
-  styleSheet.id = 'reels-grid-mobile-styles';
-  styleSheet.textContent = styles;
-  document.head.appendChild(styleSheet);
-}
+const formatNumber = (num) => {
+  if (!num || num === 0) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toString();
+};
 
 export default ReelsGridMobile;
