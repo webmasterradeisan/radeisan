@@ -1,5 +1,5 @@
-// src/pages/video-feed-dashboard/index.jsx
-// VideoFeedDashboard CORREGIDO - Query Supabase arreglada
+// src/pages/video-feed-dashboard/index.jsx  
+// VideoFeedDashboard CORREGIDO - Sin columna status que no existe
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,7 +53,7 @@ const ORIENTATION_TABS = [
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar videos con integración real de Supabase - QUERY CORREGIDA
+// Hook para manejar videos - QUERY SIMPLIFICADA SIN COLUMNAS PROBLEMÁTICAS
 const useVideos = () => {
   const { user: currentUser } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -69,26 +69,40 @@ const useVideos = () => {
   });
 
   const determineOrientation = useCallback((video) => {
-    if (!video.width || !video.height) return 'horizontal';
+    // Si hay dimensiones, usarlas
+    if (video.width && video.height) {
+      const aspectRatio = video.width / video.height;
+      if (aspectRatio <= 0.8) return 'vertical';
+      if (aspectRatio >= 1.3) return 'horizontal'; 
+      return 'square';
+    }
     
-    const aspectRatio = video.width / video.height;
-    
-    if (aspectRatio <= 0.8) return 'vertical';
-    if (aspectRatio >= 1.3) return 'horizontal'; 
-    return 'square';
+    // Si no hay dimensiones, usar heurística de título/descripción
+    const title = (video.title || '').toLowerCase();
+    const description = (video.description || '').toLowerCase();
+    const text = title + ' ' + description;
+
+    if (text.includes('reel') || text.includes('vertical') || text.includes('móvil') || 
+        text.includes('short') || text.includes('tiktok') || text.includes('stories')) {
+      return 'vertical';
+    }
+
+    // Por defecto, horizontal
+    return 'horizontal';
   }, []);
 
   const processVideos = useCallback((rawVideos) => {
     const processed = rawVideos.map(video => ({
       ...video,
       orientation: determineOrientation(video),
-      // Normalizar datos del creador
-      creator: video.user_profile ? {
-        id: video.user_profile.id,
-        username: video.user_profile.username || video.user_profile.email?.split('@')[0] || 'usuario',
-        name: video.user_profile.full_name || video.user_profile.username || 'Usuario',
-        avatar: video.user_profile.avatar_url
-      } : {
+      // Normalizar datos
+      views: video.views_count || video.views || 0,
+      likes: video.likes_count || video.likes || 0,
+      comments: video.comments_count || video.comments || 0,
+      duration: video.duration_seconds || video.duration || 30,
+      thumbnail: video.thumbnail_url || video.thumbnail || '/api/placeholder/320/180',
+      // Datos del creador
+      creator: {
         id: video.user_id,
         username: 'usuario',
         name: 'Usuario',
@@ -118,12 +132,14 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // QUERY CORREGIDA - Sin relación problemática
+      // QUERY BÁSICA - Solo columnas que sabemos que existen
       let query = supabase
         .from('videos')
-        .select('*')
-        .eq('status', 'published')
+        .select('*') // Seleccionar todo para ver qué columnas hay realmente
         .order('created_at', { ascending: false });
+
+      // Solo filtrar por is_published si existe la columna
+      // query = query.eq('is_published', true);
 
       if (category !== 'todos' && category !== 'all') {
         query = query.eq('category', category);
@@ -139,48 +155,13 @@ const useVideos = () => {
         return;
       }
 
-      console.log('✅ Videos base obtenidos:', videoData?.length || 0);
+      console.log('✅ Videos obtenidos:', {
+        count: videoData?.length || 0,
+        firstVideo: videoData?.[0] ? Object.keys(videoData[0]) : [],
+        sample: videoData?.[0]
+      });
 
-      // Obtener perfiles de usuario por separado
-      let videosWithProfiles = videoData || [];
-      
-      if (videoData?.length > 0) {
-        const userIds = [...new Set(videoData.map(v => v.user_id).filter(Boolean))];
-        console.log('👥 Obteniendo perfiles para user_ids:', userIds);
-
-        try {
-          // Intentar obtener perfiles
-          const { data: profiles, error: profilesError } = await supabase
-            .from('user_profiles')
-            .select('id, full_name, username, avatar_url, email')
-            .in('id', userIds);
-
-          if (!profilesError && profiles?.length > 0) {
-            console.log('✅ Perfiles obtenidos:', profiles.length);
-            
-            videosWithProfiles = videoData.map(video => ({
-              ...video,
-              user_profile: profiles.find(p => p.id === video.user_id) || null
-            }));
-          } else {
-            console.warn('⚠️ No se pudieron obtener perfiles:', profilesError);
-            // Continuar sin perfiles
-            videosWithProfiles = videoData.map(video => ({
-              ...video,
-              user_profile: null
-            }));
-          }
-        } catch (profileError) {
-          console.warn('⚠️ Error obteniendo perfiles:', profileError);
-          // Continuar sin perfiles
-          videosWithProfiles = videoData.map(video => ({
-            ...video,
-            user_profile: null
-          }));
-        }
-      }
-
-      const processedVideos = processVideos(videosWithProfiles);
+      const processedVideos = processVideos(videoData || []);
 
       if (reset) {
         setVideos(processedVideos);
@@ -190,11 +171,6 @@ const useVideos = () => {
 
       setHasMore((videoData || []).length === ITEMS_PER_PAGE);
       setPage(pageNum);
-
-      console.log('🎯 Videos procesados:', {
-        total: processedVideos.length,
-        hasMore: (videoData || []).length === ITEMS_PER_PAGE
-      });
 
     } catch (err) {
       console.error('💥 Error en loadVideos:', err);
@@ -365,7 +341,6 @@ const VideoFeedDashboard = () => {
   const handleOrientationChange = useCallback((orientationId) => {
     console.log(`🎬 Cambiando orientación a: ${orientationId}`);
     setActiveOrientation(orientationId);
-    // No necesitamos refresh aquí porque el filtrado es en frontend
   }, []);
 
   const handleLayoutChange = useCallback(() => {
@@ -429,11 +404,6 @@ const VideoFeedDashboard = () => {
            activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Videos - ' : 
            'Dashboard - '}Descubre Contenido | RADEISAN
         </title>
-        <meta name="description" content={`
-          ${activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Explora reels verticales increíbles' : 
-            activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Descubre videos horizontales de calidad' : 
-            'Descubre videos increíbles'}, gana puntos y conecta con creadores en RADEISAN
-        `} />
       </Helmet>
 
       <div className="min-h-screen bg-background">
