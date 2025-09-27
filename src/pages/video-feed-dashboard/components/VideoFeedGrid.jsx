@@ -28,13 +28,20 @@ const VideoFeedGrid = ({
     return window.innerWidth < 768;
   }, []);
 
-  // FILTRAR VIDEOS VERTICALES PARA EL CAROUSEL MÓVIL
+  // VIDEOS PARA EL CAROUSEL MÓVIL - LÓGICA SIMPLIFICADA
   const reelsVideos = useMemo(() => {
-    return displayVideos?.filter(video => {
-      // Filtrar videos verticales (aspect ratio <= 1)
+    if (!displayVideos || displayVideos.length === 0) return [];
+    
+    // Priorizar videos verticales, pero mostrar todos si no hay verticales
+    const verticalVideos = displayVideos?.filter(video => {
       const aspectRatio = video?.width && video?.height ? video.width / video.height : 1;
       return aspectRatio <= 1 || video?.orientation === 'vertical' || video?.type === 'reel';
-    }).slice(0, 12) || []; // Limitar a 12 reels para performance
+    });
+    
+    // Si hay videos verticales, usarlos. Si no, usar los primeros videos disponibles
+    const selectedVideos = verticalVideos.length > 0 ? verticalVideos : displayVideos;
+    
+    return selectedVideos.slice(0, 8) || []; // Limitar a 8 reels para mejor UX
   }, [displayVideos]);
 
   // FILTRAR VIDEOS PARA EL FEED PRINCIPAL (excluyendo los ya mostrados en carousel)
