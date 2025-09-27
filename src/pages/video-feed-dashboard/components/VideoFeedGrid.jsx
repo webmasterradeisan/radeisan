@@ -1,8 +1,10 @@
+// src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
 import ReelsGridMobile from './ReelsGridMobile';
+import useIsMobile from '../../../hooks/useIsMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
@@ -17,17 +19,26 @@ const VideoFeedGrid = ({
 }) => {
   const [displayVideos, setDisplayVideos] = useState(videos);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  // 📱 DETECCIÓN DE DISPOSITIVO MÓVIL
+  const isMobile = useIsMobile();
+  
+  // 🎯 DEBUG: Console.logs para verificar que los cambios se aplican
+  console.log('🚨 VIDEOFEEDGRID CARGADO - NUEVA VERSIÓN CON CAROUSEL MÓVIL');
+  console.log('📱 isMobile:', isMobile);
+  console.log('🎬 layout:', layout);
+  console.log('📐 orientation:', orientation);
+  console.log('📹 videos count:', videos.length);
+  console.log('🔄 loading:', loading);
+  console.log('⚡ hasMore:', hasMore);
 
   useEffect(() => {
     setDisplayVideos(videos);
+    console.log('📺 displayVideos updated:', videos.length);
   }, [videos]);
 
-  // HELPER: Detectar dispositivo móvil
-  const isMobile = useCallback(() => {
-    return window.innerWidth < 768;
-  }, []);
-
   const handleScroll = useCallback(() => {
+    // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
     if (layout === 'reels') return;
 
     if (
@@ -41,7 +52,9 @@ const VideoFeedGrid = ({
   }, [hasMore, isLoadingMore, loading, onLoadMore, layout]);
 
   useEffect(() => {
+    // Solo agregar event listener si NO estamos en modo reels
     if (layout === 'reels') return;
+
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll, layout]);
@@ -84,6 +97,7 @@ const VideoFeedGrid = ({
         url: shareUrl
       });
     } else {
+      // Fallback to clipboard
       navigator.clipboard?.writeText(shareUrl);
     }
   };
@@ -98,8 +112,11 @@ const VideoFeedGrid = ({
     }
   };
 
+  // ===============================
   // LOADING STATE
+  // ===============================
   if (loading && displayVideos?.length === 0) {
+    console.log('🔄 Mostrando loading state inicial');
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
@@ -112,8 +129,11 @@ const VideoFeedGrid = ({
     );
   }
 
+  // ===============================
   // EMPTY STATE
+  // ===============================
   if (displayVideos?.length === 0) {
+    console.log('📭 Mostrando empty state');
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -153,8 +173,11 @@ const VideoFeedGrid = ({
     );
   }
 
-  // RENDER REELS FULLSCREEN
+  // ===============================
+  // RENDER REELS CONTAINER (PANTALLA COMPLETA)
+  // ===============================
   if (layout === 'reels') {
+    console.log('🎬 Renderizando ReelsContainer (pantalla completa)');
     return (
       <ReelsContainer
         videos={displayVideos}
@@ -166,8 +189,11 @@ const VideoFeedGrid = ({
     );
   }
 
+  // ===============================
   // RENDER HORIZONTAL VIDEO GRID
+  // ===============================
   if (orientation === 'horizontal' && layout !== 'list') {
+    console.log('🎬 Renderizando HorizontalVideoGrid');
     return (
       <HorizontalVideoGrid
         videos={displayVideos}
@@ -180,77 +206,34 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // MÓVIL: MOSTRAR CAROUSEL SIEMPRE
+  // 📱 RENDER DASHBOARD PRINCIPAL
   // ===============================
-  if (isMobile() && displayVideos?.length > 0) {
-    return (
-      <div className="space-y-6">
-        
-        {/* CAROUSEL HORIZONTAL - SIEMPRE EN MÓVIL */}
-        <div className="bg-background border-b border-border">
-          <ReelsGridMobile
-            videos={displayVideos.slice(0, 6)}
-            onLoadMore={onLoadMore}
-            hasMore={hasMore}
-            loading={loading}
-          />
-        </div>
-
-        {/* FEED PRINCIPAL */}
-        <div className="px-4">
-          <h2 className="text-lg font-semibold text-foreground mb-4">
-            Todos los videos
-          </h2>
-          <div className="space-y-4">
-            {displayVideos?.map((video) => (
-              <VideoCard
-                key={video?.id}
-                video={video}
-                layout="list"
-                onLike={handleVideoLike}
-                onSave={handleVideoSave}
-                onShare={handleVideoShare}
-                onPointsEarned={onPointsEarned}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* LOADING MORE INDICATOR */}
-        {(isLoadingMore || loading) && hasMore && (
-          <div className="flex items-center justify-center py-8">
-            <div className="flex items-center space-x-3 text-muted-foreground">
-              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-              <span>Cargando más videos...</span>
-            </div>
-          </div>
-        )}
-
-        {/* LOAD MORE BUTTON */}
-        {!isLoadingMore && !loading && hasMore && (
-          <div className="flex justify-center py-6 px-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsLoadingMore(true);
-                onLoadMore && onLoadMore();
-              }}
-              className="px-8 w-full max-w-sm"
-            >
-              <Icon name="ChevronDown" size={16} className="mr-2" />
-              Cargar más videos
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ===============================
-  // DESKTOP: GRID/LIST TRADICIONAL
-  // ===============================
+  console.log('🎬 Renderizando Dashboard Principal:', { 
+    isMobile, 
+    layout, 
+    videosCount: displayVideos.length,
+    showCarousel: isMobile && layout !== 'reels'
+  });
+  
   return (
     <div className="space-y-6">
+      {/* 🚀 CAROUSEL HORIZONTAL DE REELS - SOLO EN MÓVIL */}
+      {isMobile && (
+        <>
+          <div className="block md:hidden">
+            <ReelsGridMobile
+              videos={displayVideos}
+              onLoadMore={onLoadMore}
+              hasMore={hasMore}
+              loading={loading}
+            />
+          </div>
+          {/* Separador visual */}
+          <div className="border-t border-border block md:hidden"></div>
+        </>
+      )}
+
+      {/* 🎥 GRID PRINCIPAL DE VIDEOS */}
       <div className={getGridClasses()}>
         {displayVideos?.map((video) => (
           <VideoCard
@@ -265,6 +248,7 @@ const VideoFeedGrid = ({
         ))}
       </div>
 
+      {/* 🔄 Loading More Indicator - Solo para grid/list */}
       {(isLoadingMore || loading) && hasMore && (
         <div className="flex items-center justify-center py-8">
           <div className="flex items-center space-x-3 text-muted-foreground">
@@ -274,6 +258,7 @@ const VideoFeedGrid = ({
         </div>
       )}
 
+      {/* ⬇️ Load More Button - Solo para grid/list */}
       {!isLoadingMore && !loading && hasMore && displayVideos?.length > 0 && (
         <div className="flex justify-center py-6">
           <Button
@@ -290,6 +275,7 @@ const VideoFeedGrid = ({
         </div>
       )}
 
+      {/* ✅ End of Feed Message - Solo para grid/list */}
       {!hasMore && displayVideos?.length > 0 && (
         <div className="text-center py-8">
           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
@@ -301,6 +287,20 @@ const VideoFeedGrid = ({
           <p className="text-sm text-muted-foreground mt-1">
             Vuelve más tarde para ver contenido nuevo
           </p>
+        </div>
+      )}
+
+      {/* 🐛 DEBUG INFO - Solo en desarrollo */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
+          <div className="text-green-400 font-bold mb-1">🚨 DEBUG VideoFeedGrid</div>
+          <div>📱 isMobile: {isMobile.toString()}</div>
+          <div>🎬 layout: {layout}</div>
+          <div>📹 videos: {displayVideos.length}</div>
+          <div>🔄 loading: {loading.toString()}</div>
+          <div>⚡ hasMore: {hasMore.toString()}</div>
+          <div>📐 orientation: {orientation}</div>
+          <div>🎯 Carousel: {(isMobile && layout !== 'reels').toString()}</div>
         </div>
       )}
     </div>
