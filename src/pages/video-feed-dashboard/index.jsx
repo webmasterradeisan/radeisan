@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/index.jsx
-// VideoFeedDashboard CORREGIDO - Funciona sin columna orientation en BD
+// VideoFeedDashboard CORREGIDO - Query Supabase arreglada
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,7 +53,7 @@ const ORIENTATION_TABS = [
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar videos con integración real de Supabase - VERSIÓN ROBUSTA
+// Hook para manejar videos con integración real de Supabase - QUERY CORREGIDA
 const useVideos = () => {
   const { user: currentUser } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -81,7 +81,19 @@ const useVideos = () => {
   const processVideos = useCallback((rawVideos) => {
     const processed = rawVideos.map(video => ({
       ...video,
-      orientation: determineOrientation(video)
+      orientation: determineOrientation(video),
+      // Normalizar datos del creador
+      creator: video.user_profile ? {
+        id: video.user_profile.id,
+        username: video.user_profile.username || video.user_profile.email?.split('@')[0] || 'usuario',
+        name: video.user_profile.full_name || video.user_profile.username || 'Usuario',
+        avatar: video.user_profile.avatar_url
+      } : {
+        id: video.user_id,
+        username: 'usuario',
+        name: 'Usuario',
+        avatar: null
+      }
     }));
     
     const stats = processed.reduce((acc, video) => {
@@ -101,19 +113,15 @@ const useVideos = () => {
         setVideos([]);
         setPage(0);
         setHasMore(true);
+        setError(null);
       }
 
+      console.log('🎬 Cargando videos:', { pageNum, category, reset });
+
+      // QUERY CORREGIDA - Sin relación problemática
       let query = supabase
         .from('videos')
-        .select(`
-          *,
-          creator:user_id (
-            id,
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('status', 'published')
         .order('created_at', { ascending: false });
 
@@ -122,16 +130,57 @@ const useVideos = () => {
       }
 
       const ITEMS_PER_PAGE = 12;
-      const { data, error: fetchError } = await query
+      const { data: videoData, error: fetchError } = await query
         .range(pageNum * ITEMS_PER_PAGE, (pageNum + 1) * ITEMS_PER_PAGE - 1);
 
       if (fetchError) {
-        console.error('Error fetching videos:', fetchError);
+        console.error('❌ Error fetching videos:', fetchError);
         setError(fetchError.message);
         return;
       }
 
-      const processedVideos = processVideos(data || []);
+      console.log('✅ Videos base obtenidos:', videoData?.length || 0);
+
+      // Obtener perfiles de usuario por separado
+      let videosWithProfiles = videoData || [];
+      
+      if (videoData?.length > 0) {
+        const userIds = [...new Set(videoData.map(v => v.user_id).filter(Boolean))];
+        console.log('👥 Obteniendo perfiles para user_ids:', userIds);
+
+        try {
+          // Intentar obtener perfiles
+          const { data: profiles, error: profilesError } = await supabase
+            .from('user_profiles')
+            .select('id, full_name, username, avatar_url, email')
+            .in('id', userIds);
+
+          if (!profilesError && profiles?.length > 0) {
+            console.log('✅ Perfiles obtenidos:', profiles.length);
+            
+            videosWithProfiles = videoData.map(video => ({
+              ...video,
+              user_profile: profiles.find(p => p.id === video.user_id) || null
+            }));
+          } else {
+            console.warn('⚠️ No se pudieron obtener perfiles:', profilesError);
+            // Continuar sin perfiles
+            videosWithProfiles = videoData.map(video => ({
+              ...video,
+              user_profile: null
+            }));
+          }
+        } catch (profileError) {
+          console.warn('⚠️ Error obteniendo perfiles:', profileError);
+          // Continuar sin perfiles
+          videosWithProfiles = videoData.map(video => ({
+            ...video,
+            user_profile: null
+          }));
+        }
+      }
+
+      const processedVideos = processVideos(videosWithProfiles);
 
       if (reset) {
         setVideos(processedVideos);
@@ -139,11 +188,16 @@ const useVideos = () => {
         setVideos(prev => [...prev, ...processedVideos]);
       }
 
-      setHasMore((data || []).length === ITEMS_PER_PAGE);
+      setHasMore((videoData || []).length === ITEMS_PER_PAGE);
       setPage(pageNum);
 
+      console.log('🎯 Videos procesados:', {
+        total: processedVideos.length,
+        hasMore: (videoData || []).length === ITEMS_PER_PAGE
+      });
+
     } catch (err) {
-      console.error('Error en loadVideos:', err);
+      console.error('💥 Error en loadVideos:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -243,7 +297,8 @@ const VideoFeedDashboard = () => {
     activeOrientation,
     layout,
     videosCount: videos.length,
-    filteredCount: filteredVideos.length
+    filteredCount: filteredVideos.length,
+    error
   });
 
   // Filtrar videos cuando cambian los datos, filtro o orientación
@@ -560,6 +615,7 @@ const VideoFeedDashboard = () => {
             <div>🔍 filtered: {filteredVideos.length}</div>
             <div>🔄 loading: {loading.toString()}</div>
             <div>🎠 Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
+            <div>❌ error: {error || 'none'}</div>
           </div>
         )}
       </div>
