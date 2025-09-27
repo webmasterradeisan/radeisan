@@ -23,13 +23,17 @@ const VideoFeedGrid = ({
     setDisplayVideos(videos);
   }, [videos]);
 
-  // HELPER: Detectar dispositivo móvil
+  // HELPER: Detectar dispositivo móvil con logging
   const isMobile = useCallback(() => {
-    return window.innerWidth < 768;
+    const mobile = window.innerWidth < 768;
+    console.log('🔍 DEBUG - isMobile():', mobile, 'width:', window.innerWidth);
+    return mobile;
   }, []);
 
-  // VIDEOS PARA EL CAROUSEL MÓVIL - LÓGICA SIMPLIFICADA
+  // VIDEOS PARA EL CAROUSEL MÓVIL - CON LOGGING
   const reelsVideos = useMemo(() => {
+    console.log('🔍 DEBUG - displayVideos:', displayVideos?.length || 0);
+    
     if (!displayVideos || displayVideos.length === 0) return [];
     
     // Priorizar videos verticales, pero mostrar todos si no hay verticales
@@ -40,8 +44,12 @@ const VideoFeedGrid = ({
     
     // Si hay videos verticales, usarlos. Si no, usar los primeros videos disponibles
     const selectedVideos = verticalVideos.length > 0 ? verticalVideos : displayVideos;
+    const result = selectedVideos.slice(0, 8) || [];
     
-    return selectedVideos.slice(0, 8) || []; // Limitar a 8 reels para mejor UX
+    console.log('🔍 DEBUG - reelsVideos length:', result.length);
+    console.log('🔍 DEBUG - verticalVideos found:', verticalVideos.length);
+    
+    return result;
   }, [displayVideos]);
 
   // FILTRAR VIDEOS PARA EL FEED PRINCIPAL (excluyendo los ya mostrados en carousel)
