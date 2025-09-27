@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
-// NUEVOS IMPORTS PARA COMPONENTES MÓVILES
-import ReelsFeedMobile from './ReelsFeedMobile';
+// COMPONENTE MÓVIL INTEGRADO
+import ReelsGridMobile from './ReelsGridMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
@@ -27,6 +27,26 @@ const VideoFeedGrid = ({
   const isMobile = useCallback(() => {
     return window.innerWidth < 768;
   }, []);
+
+  // FILTRAR VIDEOS VERTICALES PARA EL CAROUSEL MÓVIL
+  const reelsVideos = useMemo(() => {
+    return displayVideos?.filter(video => {
+      // Filtrar videos verticales (aspect ratio <= 1)
+      const aspectRatio = video?.width && video?.height ? video.width / video.height : 1;
+      return aspectRatio <= 1 || video?.orientation === 'vertical' || video?.type === 'reel';
+    }).slice(0, 12) || []; // Limitar a 12 reels para performance
+  }, [displayVideos]);
+
+  // FILTRAR VIDEOS PARA EL FEED PRINCIPAL (excluyendo los ya mostrados en carousel)
+  const feedVideos = useMemo(() => {
+    if (!isMobile() || layout !== 'grid') {
+      return displayVideos;
+    }
+    
+    // En móvil, excluir los primeros reels del feed principal para evitar duplicados
+    const reelsIds = new Set(reelsVideos.map(v => v.id));
+    return displayVideos?.filter(video => !reelsIds.has(video.id)) || [];
+  }, [displayVideos, reelsVideos, layout, isMobile]);
 
   const handleScroll = useCallback(() => {
     // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
@@ -163,30 +183,11 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER REELS - ARQUITECTURA SEPARADA MÓVIL/DESKTOP
+  // RENDER REELS FULLSCREEN - ARQUITECTURA SEPARADA MÓVIL/DESKTOP
   // ===============================
   if (layout === 'reels') {
-    // TODO: FASE 1 - Implementar componente móvil
-    // MÓVIL: Usar nuevo componente ReelsFeedMobile (PRÓXIMAMENTE)
-    /*
-    if (isMobile()) {
-      return (
-        <ReelsFeedMobile
-          videos={displayVideos}
-          onLoadMore={onLoadMore}
-          onPointsEarned={onPointsEarned}
-          onLike={handleVideoLike}
-          onSave={handleVideoSave}
-          onShare={handleVideoShare}
-          hasMore={hasMore}
-          loading={loading}
-        />
-      );
-    }
-    */
-    
-    // TEMPORALMENTE: Usar ReelsContainer para todos los dispositivos
-    // DESKTOP: Mantener ReelsContainer actual (optimizado)
+    // USAR REELSCONTAINER PARA TODOS LOS DISPOSITIVOS
+    // (La página de reels fullscreen mantiene el comportamiento actual)
     return (
       <ReelsContainer
         videos={displayVideos}
@@ -214,7 +215,96 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER TRADITIONAL GRID/LIST
+  // RENDER DASHBOARD MÓVIL CON CAROUSEL + FEED
+  // ===============================
+  if (layout === 'grid' && isMobile() && reelsVideos.length > 0) {
+    return (
+      <div className="space-y-6">
+        
+        {/* CAROUSEL HORIZONTAL DE REELS - SOLO MÓVIL */}
+        <div className="bg-background border-b border-border">
+          <ReelsGridMobile
+            videos={reelsVideos}
+            onLoadMore={onLoadMore}
+            hasMore={hasMore}
+            loading={loading}
+          />
+        </div>
+
+        {/* FEED PRINCIPAL - SIN REELS DUPLICADOS */}
+        {feedVideos.length > 0 && (
+          <>
+            <div className="px-4">
+              <h2 className="text-lg font-semibold text-foreground mb-4">
+                Más videos para ti
+              </h2>
+            </div>
+            
+            <div className="px-4">
+              <div className={getGridClasses()}>
+                {feedVideos?.map((video) => (
+                  <VideoCard
+                    key={video?.id}
+                    video={video}
+                    layout={layout}
+                    onLike={handleVideoLike}
+                    onSave={handleVideoSave}
+                    onShare={handleVideoShare}
+                    onPointsEarned={onPointsEarned}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* LOADING MORE INDICATOR */}
+        {(isLoadingMore || loading) && hasMore && (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex items-center space-x-3 text-muted-foreground">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <span>Cargando más videos...</span>
+            </div>
+          </div>
+        )}
+
+        {/* LOAD MORE BUTTON */}
+        {!isLoadingMore && !loading && hasMore && feedVideos?.length > 0 && (
+          <div className="flex justify-center py-6 px-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsLoadingMore(true);
+                onLoadMore && onLoadMore();
+              }}
+              className="px-8 w-full max-w-sm"
+            >
+              <Icon name="ChevronDown" size={16} className="mr-2" />
+              Cargar más videos
+            </Button>
+          </div>
+        )}
+
+        {/* END OF FEED MESSAGE */}
+        {!hasMore && feedVideos?.length > 0 && (
+          <div className="text-center py-8 px-4">
+            <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+              <Icon name="Check" size={20} color="var(--color-success)" />
+            </div>
+            <p className="text-muted-foreground">
+              ¡Has visto todos los videos disponibles!
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Vuelve más tarde para ver contenido nuevo
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ===============================
+  // RENDER TRADITIONAL GRID/LIST - DESKTOP Y OTROS LAYOUTS
   // ===============================
   return (
     <div className="space-y-6">
