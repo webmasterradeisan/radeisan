@@ -1,5 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // Feed vertical optimizado para DESKTOP - Tamaño compacto como TikTok PC
+// ✅ ACTUALIZADO: Ahora incluye poster (thumbnail) en videos
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -325,12 +326,13 @@ const ReelsContainer = ({
         ${isDesktop ? 'h-[80vh]' : 'h-screen'}
         ${isActive ? 'z-10' : 'z-0'}
       `}>
-        {/* VIDEO PLAYER */}
+        {/* VIDEO PLAYER - ✅ AHORA CON POSTER (THUMBNAIL) */}
         <video
           ref={ref => {
             if (ref) videoRefs.current[index] = ref;
           }}
           src={video.videoUrl}
+          poster={video.thumbnail}
           className="w-full h-full object-cover"
           loop
           playsInline
