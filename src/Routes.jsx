@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA
+// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -19,6 +19,7 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import VideoFeedDashboard from './pages/video-feed-dashboard';
 import VideoUploadStudio from './pages/video-upload-studio';
+import VideoPlayerPage from './pages/VideoPlayerPage'; // NUEVO
 import NotFound from "pages/NotFound";
 
 // ===============================
@@ -72,7 +73,8 @@ const Routes = () => {
           <ScrollToTop />
           <RouterRoutes>
             
-            {/* RUTAS PÚBLICAS - Sin MobileLayout por ahora */}
+            {/* =================== RUTAS PÚBLICAS =================== */}
+            
             <Route 
               path="/" 
               element={
@@ -109,7 +111,30 @@ const Routes = () => {
               } 
             />
 
-            {/* RUTAS PROTEGIDAS - CON MOBILELAYOUT ACTIVO */}
+            {/* =================== SISTEMA DE VIDEOS (NUEVO) =================== */}
+            
+            {/* Página de reproducción individual de video */}
+            <Route 
+              path="/video/:videoId" 
+              element={
+                <UniversalRoute>
+                  <VideoPlayerPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* Alias para reels - redirige a la página de video */}
+            <Route 
+              path="/reel/:videoId" 
+              element={
+                <UniversalRoute>
+                  <VideoPlayerPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== RUTAS PROTEGIDAS - CON MOBILELAYOUT =================== */}
+            
             <Route 
               path="/dashboard" 
               element={
@@ -217,12 +242,15 @@ const Routes = () => {
               } 
             />
 
-            {/* REDIRECTS */}
+            {/* =================== REDIRECTS =================== */}
+            
             <Route path="/create" element={<Navigate to="/upload" replace />} />
             <Route path="/home" element={<Navigate to="/dashboard" replace />} />
             <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
 
-            {/* 404 */}
+            {/* =================== 404 =================== */}
+            
             <Route 
               path="*" 
               element={
