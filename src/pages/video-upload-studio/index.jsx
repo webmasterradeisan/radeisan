@@ -12,6 +12,7 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
+import VideoUploadZone from './components/VideoUploadZone';
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -394,100 +395,6 @@ const formatTime = (seconds) => {
 };
 
 // ===============================
-// COMPONENTES INTERNOS
-// ===============================
-
-// Componente VideoUploadZone (modificado para mostrar detección)
-const VideoUploadZone = ({ onFileSelect, uploadProgress, isUploading, detectionResult }) => {
-  const [dragOver, setDragOver] = useState(false);
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    const videoFile = files.find(file => file.type.startsWith('video/'));
-    
-    if (videoFile) {
-      onFileSelect(videoFile);
-    }
-  };
-
-  const handleFileInput = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      onFileSelect(file);
-    }
-  };
-
-  return (
-    <div 
-      className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
-        dragOver 
-          ? 'border-primary bg-primary/5' 
-          : 'border-border hover:border-primary/50'
-      } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
-    >
-      <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Icon name="Upload" size={32} color="var(--color-primary)" />
-      </div>
-      
-      <h3 className="text-lg font-medium text-foreground mb-2">
-        Arrastra tu video aquí
-      </h3>
-      <p className="text-muted-foreground mb-4">
-        O haz clic para seleccionar desde tu computadora
-      </p>
-      
-      <input
-        type="file"
-        accept="video/*"
-        onChange={handleFileInput}
-        className="hidden"
-        id="video-upload"
-      />
-      
-      <Button asChild variant="outline">
-        <label htmlFor="video-upload" className="cursor-pointer">
-          <Icon name="FolderOpen" size={16} className="mr-2" />
-          Seleccionar archivo
-        </label>
-      </Button>
-      
-      <p className="text-xs text-muted-foreground mt-4">
-        MP4, MOV, AVI, MKV, WebM • Max 2GB • Max 60 minutos
-      </p>
-
-      {/* NUEVO: Mostrar información de detección */}
-      {detectionResult && (
-        <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-          <div className="flex items-center justify-center space-x-2 mb-2">
-            <Icon 
-              name={detectionResult.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
-              size={16} 
-              color="var(--color-primary)" 
-            />
-            <span className="text-sm font-medium text-primary">
-              {detectionResult.orientation === 'vertical' ? 'Reel Detectado' : 
-               detectionResult.orientation === 'square' ? 'Video Cuadrado' : 'Video Detectado'}
-            </span>
-          </div>
-          <p className="text-xs text-primary/80">
-            {detectionResult.width && detectionResult.height ? 
-              `${detectionResult.width}x${detectionResult.height} • ${detectionResult.aspectRatio}` :
-              'Orientación detectada automáticamente'
-            }
-          </p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
 const VideoUploadStudio = () => {
@@ -539,8 +446,11 @@ const VideoUploadStudio = () => {
   // EVENT HANDLERS
   // ===============================
 
-  const handleFileSelect = async (file) => {
+  const handleFileSelect = async (fileData) => {
     try {
+      // Puede recibir objeto con file y orientationData, o solo el file
+      const file = fileData.file || fileData;
+      
       setSelectedFile(file);
       setCurrentStep(2);
       
@@ -778,7 +688,6 @@ const VideoUploadStudio = () => {
                       onFileSelect={handleFileSelect}
                       uploadProgress={uploadProgress}
                       isUploading={isUploading}
-                      detectionResult={detectionResult}
                     />
                     {uploadError && (
                       <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
