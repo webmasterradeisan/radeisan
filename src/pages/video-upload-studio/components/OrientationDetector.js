@@ -296,8 +296,3 @@ export default {
 
 ---
 
-## ✅ Instrucciones de Implementación
-
-1. **Crea el archivo** en la ruta exacta:
-```
-   src/pages/video-upload-studio/components/OrientationDetector.js
