@@ -292,7 +292,4 @@ export default {
   ORIENTATION_CONFIG,
   ASPECT_RATIOS
 };
-```
-
----
 
