@@ -155,17 +155,10 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // ✅ QUERY ACTUALIZADA: Incluye JOIN con user_profiles (sin nombre de FK)
+      // ✅ QUERY SIMPLE: Solo videos, sin JOIN
       let query = supabase
         .from('videos')
-        .select(`
-          *,
-          user_profiles!user_id (
-            id,
-            username,
-            avatar_url
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (category !== 'todos' && category !== 'all') {
@@ -182,13 +175,39 @@ const useVideos = () => {
         return;
       }
 
+      // ✅ Obtener IDs únicos de usuarios
+      const userIds = [...new Set(videoData?.map(v => v.user_id).filter(Boolean))];
+      
+      // ✅ Query separada para obtener perfiles de usuarios
+      let userProfiles = {};
+      if (userIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url')
+          .in('id', userIds);
+
+        if (!profilesError && profiles) {
+          // Crear mapa de perfiles por ID
+          userProfiles = profiles.reduce((acc, profile) => {
+            acc[profile.id] = profile;
+            return acc;
+          }, {});
+        }
+      }
+
+      // ✅ Combinar datos de videos con perfiles
+      const videosWithProfiles = videoData?.map(video => ({
+        ...video,
+        user_profiles: userProfiles[video.user_id] || null
+      })) || [];
+
       console.log('✅ Videos obtenidos:', {
-        count: videoData?.length || 0,
-        sampleCreator: videoData?.[0]?.user_profiles,
-        firstVideo: videoData?.[0]
+        count: videosWithProfiles.length,
+        sampleCreator: videosWithProfiles[0]?.user_profiles,
+        firstVideo: videosWithProfiles[0]
       });
 
-      const processedVideos = processVideos(videoData || []);
+      const processedVideos = processVideos(videosWithProfiles);
 
       if (reset) {
         setVideos(processedVideos);
