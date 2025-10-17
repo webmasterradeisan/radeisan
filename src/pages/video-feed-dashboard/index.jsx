@@ -1,5 +1,6 @@
-// src/pages/video-feed-dashboard/index.jsx  
-// VideoFeedDashboard CORREGIDO - Sin columna status que no existe
+// src/pages/video-feed-dashboard/index.jsx
+// VideoFeedDashboard con FILTRADO POR ORIENTACIÓN (Reels/Videos/Todo)
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,7 +13,6 @@ import TrendingSidebar from './components/TrendingSidebar';
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
 import PullToRefresh from './components/PullToRefresh';
 import PointsBalanceIndicator from '../../components/ui/PointsBalanceIndicator';
-import useIsMobile from '../../hooks/useIsMobile';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
@@ -53,7 +53,7 @@ const ORIENTATION_TABS = [
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar videos - QUERY SIMPLIFICADA SIN COLUMNAS PROBLEMÁTICAS
+// Hook para manejar videos con integración real de Supabase
 const useVideos = () => {
   const { user: currentUser } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -62,137 +62,124 @@ const useVideos = () => {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const [orientationStats, setOrientationStats] = useState({
+    total: 0,
     horizontal: 0,
     vertical: 0,
-    square: 0,
-    total: 0
+    square: 0
   });
 
-  const determineOrientation = useCallback((video) => {
-    // Si hay dimensiones, usarlas
-    if (video.width && video.height) {
-      const aspectRatio = video.width / video.height;
-      if (aspectRatio <= 0.8) return 'vertical';
-      if (aspectRatio >= 1.3) return 'horizontal'; 
-      return 'square';
-    }
-    
-    // Si no hay dimensiones, usar heurística de título/descripción
-    const title = (video.title || '').toLowerCase();
-    const description = (video.description || '').toLowerCase();
-    const text = title + ' ' + description;
+  const VIDEOS_PER_PAGE = 12;
 
-    if (text.includes('reel') || text.includes('vertical') || text.includes('móvil') || 
-        text.includes('short') || text.includes('tiktok') || text.includes('stories')) {
-      return 'vertical';
-    }
-
-    // Por defecto, horizontal
-    return 'horizontal';
-  }, []);
-
-  const processVideos = useCallback((rawVideos) => {
-    const processed = rawVideos.map(video => ({
-      ...video,
-      orientation: determineOrientation(video),
-      // Normalizar datos
-      views: video.views_count || video.views || 0,
-      likes: video.likes_count || video.likes || 0,
-      comments: video.comments_count || video.comments || 0,
-      duration: video.duration_seconds || video.duration || 30,
-      thumbnail: video.thumbnail_url || video.thumbnail || '/api/placeholder/320/180',
-      // Datos del creador
-      creator: {
-        id: video.user_id,
-        username: 'usuario',
-        name: 'Usuario',
-        avatar: null
-      }
-    }));
-    
-    const stats = processed.reduce((acc, video) => {
-      acc[video.orientation] = (acc[video.orientation] || 0) + 1;
-      acc.total += 1;
-      return acc;
-    }, { horizontal: 0, vertical: 0, square: 0, total: 0 });
-    
-    setOrientationStats(stats);
-    return processed;
-  }, [determineOrientation]);
-
-  const loadVideos = useCallback(async (pageNum = 0, category = 'todos', reset = false) => {
+  // Función para obtener videos de Supabase - ACTUALIZADA CON ORIENTATION
+  const fetchVideosBasic = async (pageNum = 0, category = 'all') => {
     try {
-      if (reset) {
-        setLoading(true);
-        setVideos([]);
-        setPage(0);
-        setHasMore(true);
-        setError(null);
-      }
-
-      console.log('🎬 Cargando videos:', { pageNum, category, reset });
-
-      // QUERY BÁSICA - Solo columnas que sabemos que existen
+      console.log(`📡 Fetching videos - Page: ${pageNum}, Category: ${category}`);
+      
       let query = supabase
         .from('videos')
-        .select('*') // Seleccionar todo para ver qué columnas hay realmente
-        .order('created_at', { ascending: false });
+        .select(`
+          id,
+          title,
+          description,
+          video_url,
+          thumbnail_url,
+          category,
+          tags,
+          duration_seconds,
+          views_count,
+          likes_count,
+          comments_count,
+          created_at,
+          user_id,
+          orientation,
+          aspect_ratio,
+          video_width,
+          video_height
+        `)
+        .order('created_at', { ascending: false })
+        .range(pageNum * VIDEOS_PER_PAGE, (pageNum + 1) * VIDEOS_PER_PAGE - 1);
 
-      // Solo filtrar por is_published si existe la columna
-      // query = query.eq('is_published', true);
-
-      if (category !== 'todos' && category !== 'all') {
+      if (category !== 'all' && category !== 'todos') {
         query = query.eq('category', category);
       }
 
-      const ITEMS_PER_PAGE = 12;
-      const { data: videoData, error: fetchError } = await query
-        .range(pageNum * ITEMS_PER_PAGE, (pageNum + 1) * ITEMS_PER_PAGE - 1);
+      const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
         console.error('❌ Error fetching videos:', fetchError);
-        setError(fetchError.message);
-        return;
+        throw fetchError;
       }
 
-      console.log('✅ Videos obtenidos:', {
-        count: videoData?.length || 0,
-        firstVideo: videoData?.[0] ? Object.keys(videoData[0]) : [],
-        sample: videoData?.[0]
-      });
-
-      const processedVideos = processVideos(videoData || []);
-
-      if (reset) {
-        setVideos(processedVideos);
-      } else {
-        setVideos(prev => [...prev, ...processedVideos]);
+      console.log(`✅ Fetched ${data?.length || 0} videos`);
+      
+      // Calcular estadísticas de orientación
+      if (data) {
+        const stats = {
+          total: data.length,
+          horizontal: data.filter(v => v.orientation === 'horizontal').length,
+          vertical: data.filter(v => v.orientation === 'vertical').length,
+          square: data.filter(v => v.orientation === 'square').length
+        };
+        setOrientationStats(stats);
+        console.log('📊 Orientation stats:', stats);
       }
 
-      setHasMore((videoData || []).length === ITEMS_PER_PAGE);
-      setPage(pageNum);
+      return {
+        videos: data || [],
+        hasMore: data?.length === VIDEOS_PER_PAGE
+      };
 
     } catch (err) {
-      console.error('💥 Error en loadVideos:', err);
+      console.error('❌ Error in fetchVideosBasic:', err);
+      throw err;
+    }
+  };
+
+  // Cargar videos iniciales
+  const loadVideos = useCallback(async (category = 'all') => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await fetchVideosBasic(0, category);
+      setVideos(result.videos);
+      setHasMore(result.hasMore);
+      setPage(0);
+    } catch (err) {
       setError(err.message);
+      setVideos([]);
     } finally {
       setLoading(false);
     }
-  }, [processVideos]);
+  }, []);
 
-  const loadMore = useCallback(() => {
-    if (hasMore && !loading) {
-      loadVideos(page + 1, 'todos', false);
+  // Cargar más videos (paginación)
+  const loadMore = useCallback(async (category = 'all') => {
+    if (!hasMore || loading) return;
+
+    try {
+      setLoading(true);
+      const nextPage = page + 1;
+      const result = await fetchVideosBasic(nextPage, category);
+      
+      setVideos(prev => [...prev, ...result.videos]);
+      setHasMore(result.hasMore);
+      setPage(nextPage);
+    } catch (err) {
+      console.error('Error loading more videos:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [hasMore, loading, page, loadVideos]);
+  }, [page, hasMore, loading]);
 
-  const refresh = useCallback((category = 'todos') => {
-    loadVideos(0, category, true);
+  // Refrescar videos
+  const refresh = useCallback(async (category = 'all') => {
+    await loadVideos(category);
   }, [loadVideos]);
 
+  // Cargar videos al montar
   useEffect(() => {
-    loadVideos(0, 'todos', true);
-  }, []);
+    loadVideos();
+  }, [loadVideos]);
 
   return {
     videos,
@@ -205,49 +192,48 @@ const useVideos = () => {
   };
 };
 
-// Hook para gestionar puntos del usuario
+// Hook para manejar puntos del usuario
 const useUserPoints = () => {
   const { user } = useAuth();
   const [points, setPoints] = useState(0);
 
   useEffect(() => {
     if (user?.id) {
-      const loadUserPoints = async () => {
-        try {
-          const { data } = await supabase
-            .from('user_profiles')
-            .select('points')
-            .eq('id', user.id)
-            .single();
-          
-          setPoints(data?.points || 0);
-        } catch (error) {
-          console.error('Error loading points:', error);
+      const fetchPoints = async () => {
+        const { data } = await supabase
+          .from('user_points')
+          .select('points')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (data) {
+          setPoints(data.points);
         }
       };
-      
-      loadUserPoints();
+      fetchPoints();
     }
   }, [user]);
 
-  const addPoints = useCallback((amount) => {
+  const addPoints = (amount) => {
     setPoints(prev => prev + amount);
-  }, []);
+  };
 
   return { points, addPoints };
 };
 
-// Constantes para categorías
-const VIDEO_CATEGORIES = [
+// ===============================
+// DATOS DE FILTROS
+// ===============================
+const filterCategories = [
   { id: 'todos', label: 'Todos', icon: 'Grid3X3' },
-  { id: 'entertainment', label: 'Entretenimiento', icon: 'Smile' },
-  { id: 'education', label: 'Educación', icon: 'BookOpen' },
-  { id: 'technology', label: 'Tecnología', icon: 'Smartphone' },
-  { id: 'lifestyle', label: 'Estilo de vida', icon: 'Heart' },
-  { id: 'sports', label: 'Deportes', icon: 'Zap' },
-  { id: 'music', label: 'Música', icon: 'Music' },
-  { id: 'cooking', label: 'Cocina', icon: 'ChefHat' },
-  { id: 'travel', label: 'Viajes', icon: 'MapPin' }
+  { id: 'educacion', label: 'Educación', icon: 'GraduationCap' },
+  { id: 'entretenimiento', label: 'Entretenimiento', icon: 'Tv' },
+  { id: 'tecnologia', label: 'Tecnología', icon: 'Cpu' },
+  { id: 'negocios', label: 'Negocios', icon: 'Briefcase' },
+  { id: 'deportes', label: 'Deportes', icon: 'Zap' },
+  { id: 'musica', label: 'Música', icon: 'Music' },
+  { id: 'cocina', label: 'Cocina', icon: 'ChefHat' },
+  { id: 'viajes', label: 'Viajes', icon: 'MapPin' }
 ];
 
 // ===============================
@@ -257,25 +243,12 @@ const VideoFeedDashboard = () => {
   const { user } = useAuth();
   const { videos, loading, error, hasMore, orientationStats, loadMore, refresh } = useVideos();
   const { points: userPoints, addPoints } = useUserPoints();
-  
-  // 📱 DETECCIÓN DE DISPOSITIVO MÓVIL
-  const isMobile = useIsMobile();
 
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [activeFilter, setActiveFilter] = useState('todos');
   const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
-
-  // 🎯 DEBUG: Console.logs para verificar estados
-  console.log('🏠 VideoFeedDashboard rendered:', {
-    isMobile,
-    activeOrientation,
-    layout,
-    videosCount: videos.length,
-    filteredCount: filteredVideos.length,
-    error
-  });
 
   // Filtrar videos cuando cambian los datos, filtro o orientación
   useEffect(() => {
@@ -286,47 +259,18 @@ const VideoFeedDashboard = () => {
       filtered = filtered.filter(video => video.category === activeFilter);
     }
 
-    // Filtrar por orientación (en frontend)
+    // 🎯 FILTRAR POR ORIENTACIÓN (NUEVO)
     if (activeOrientation !== 'all') {
-      filtered = filtered.filter(video => video.orientation === activeOrientation);
+      filtered = filtered.filter(video => {
+        // Si no tiene orientación, asumir horizontal por defecto
+        const videoOrientation = video.orientation || 'horizontal';
+        return videoOrientation === activeOrientation;
+      });
     }
-
-    console.log('🔍 Filtrado de videos:', {
-      original: videos.length,
-      afterCategory: filtered.length,
-      activeFilter,
-      activeOrientation
-    });
 
     setFilteredVideos(filtered);
+    console.log(`🔍 Filtered: ${filtered.length} videos (Orientation: ${activeOrientation}, Category: ${activeFilter})`);
   }, [videos, activeFilter, activeOrientation]);
-
-  // ===============================
-  // LÓGICA DE LAYOUT CORREGIDA
-  // ===============================
-  
-  // 🚀 NUEVA LÓGICA: Layout inteligente según dispositivo
-  const getEffectiveLayout = () => {
-    // Si es orientación vertical (Reels)
-    if (activeOrientation === VIDEO_ORIENTATIONS.VERTICAL) {
-      // En MÓVIL: mantener grid para mostrar carousel
-      // En DESKTOP: usar reels para pantalla completa
-      return isMobile ? 'grid' : 'reels';
-    }
-    
-    // Para otras orientaciones, usar layout normal
-    return layout;
-  };
-
-  const effectiveLayout = getEffectiveLayout();
-
-  console.log('🎬 Layout logic:', {
-    activeOrientation,
-    isMobile,
-    originalLayout: layout,
-    effectiveLayout,
-    willShowCarousel: isMobile && effectiveLayout === 'grid'
-  });
 
   // ===============================
   // EVENT HANDLERS
@@ -347,247 +291,138 @@ const VideoFeedDashboard = () => {
     setLayout(prev => prev === 'grid' ? 'list' : 'grid');
   }, []);
 
-  const handleRefresh = useCallback(() => {
-    refresh(activeFilter);
-  }, [refresh, activeFilter]);
+  const handleVideoInteraction = useCallback((videoId, action, pointsEarned) => {
+    console.log(`🎯 Video ${videoId} - ${action} (+${pointsEarned} pts)`);
+    
+    if (pointsEarned > 0) {
+      addPoints(pointsEarned);
+      
+      setPointsAnimation({
+        id: Date.now(),
+        points: pointsEarned,
+        position: { x: Math.random() * 100, y: 20 }
+      });
 
-  const handleLoadMore = useCallback(() => {
-    loadMore();
-  }, [loadMore]);
-
-  const handlePointsEarned = useCallback((pointsData) => {
-    addPoints(pointsData.points);
-    setPointsAnimation(pointsData);
+      setTimeout(() => setPointsAnimation(null), 2000);
+    }
   }, [addPoints]);
 
-  const handleAnimationComplete = useCallback(() => {
-    setPointsAnimation(null);
-  }, []);
+  const handleRefresh = useCallback(async () => {
+    await refresh(activeFilter);
+  }, [refresh, activeFilter]);
 
   // ===============================
-  // ERROR STATE
+  // RENDER
   // ===============================
+
   if (error) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <PrimaryNavigation />
-        <main className="pt-32">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-center py-16">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
-                </div>
-                <h2 className="text-xl font-semibold text-foreground mb-2">Error al cargar videos</h2>
-                <p className="text-muted-foreground mb-4">{error}</p>
-                <Button onClick={() => window.location.reload()}>
-                  <Icon name="RefreshCw" size={16} className="mr-2" />
-                  Intentar de nuevo
-                </Button>
-              </div>
-            </div>
+        <div className="container mx-auto px-4 py-8">
+          <div className="bg-destructive/10 border border-destructive rounded-lg p-6 text-center">
+            <Icon name="AlertCircle" size={48} color="var(--color-destructive)" className="mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-destructive mb-2">Error al cargar videos</h2>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={handleRefresh} variant="outline">
+              <Icon name="RefreshCw" size={16} className="mr-2" />
+              Reintentar
+            </Button>
           </div>
-        </main>
+        </div>
       </div>
     );
   }
 
-  // ===============================
-  // RENDER PRINCIPAL
-  // ===============================
   return (
     <>
       <Helmet>
-        <title>
-          {activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Reels - ' : 
-           activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Videos - ' : 
-           'Dashboard - '}Descubre Contenido | RADEISAN
-        </title>
+        <title>Feed de Videos - Radeisan</title>
+        <meta name="description" content="Descubre contenido increíble en Radeisan" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
         <Header />
-        <PrimaryNavigation />
         
-        <main className="pt-32">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col xl:flex-row gap-8">
-              
-              {/* Main Content */}
-              <div className="flex-1 min-w-0">
-                
-                {/* Header Section */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                  <div className="flex items-center space-x-4 mb-4 sm:mb-0">
-                    <h1 className="text-2xl font-bold text-foreground">
-                      {activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Reels' :
-                       activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Videos' :
-                       activeFilter === 'todos' ? 'Para ti' : 
-                       VIDEO_CATEGORIES.find(c => c.id === activeFilter)?.label || 'Contenido'
-                      }
-                    </h1>
-                    <div className="hidden sm:block">
-                      <PointsBalanceIndicator 
-                        points={userPoints} 
-                        showAnimation={true}
-                        size="default"
-                        variant="prominent"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleLayoutChange}
-                      className="hidden md:flex"
-                      title={layout === 'grid' ? 'Vista de lista' : 'Vista de cuadrícula'}
-                    >
-                      <Icon name={layout === 'grid' ? 'List' : 'Grid3X3'} size={20} />
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleRefresh}
-                      disabled={loading}
-                      title="Actualizar feed"
-                    >
-                      <Icon 
-                        name="RefreshCw" 
-                        size={20} 
-                        className={loading ? 'animate-spin' : ''} 
-                      />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Orientation Tabs */}
-                <div className="flex items-center space-x-1 mb-6 overflow-x-auto scrollbar-hide">
-                  {ORIENTATION_TABS.map((tab) => (
-                    <Button
-                      key={tab.id}
-                      variant={activeOrientation === tab.id ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => handleOrientationChange(tab.id)}
-                      className="flex-shrink-0 flex items-center space-x-2"
-                    >
-                      <Icon name={tab.icon} size={16} />
-                      <span>{tab.label}</span>
-                      {tab.id !== 'all' && orientationStats[tab.id === 'vertical' ? 'vertical' : tab.id === 'horizontal' ? 'horizontal' : 'square'] > 0 && (
-                        <span className="text-xs bg-primary/20 text-primary px-1 rounded">
-                          {orientationStats[tab.id === 'vertical' ? 'vertical' : tab.id === 'horizontal' ? 'horizontal' : 'square']}
-                        </span>
-                      )}
-                    </Button>
-                  ))}
-                </div>
-
-                {/* Filter Chips */}
-                <div className="mb-6">
-                  <FilterChips
-                    categories={VIDEO_CATEGORIES}
-                    activeFilter={activeFilter}
-                    onFilterChange={handleFilterChange}
-                  />
-                </div>
-
-                {/* Content Area */}
-                <div className="min-h-screen">
-                  {filteredVideos.length === 0 && !loading ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                        <Icon name="Search" size={24} color="var(--color-muted-foreground)" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        No hay videos para mostrar
-                      </h3>
-                      <p className="text-muted-foreground max-w-md">
-                        {activeOrientation !== 'all' 
-                          ? `No se encontraron videos ${activeOrientation === 'vertical' ? 'verticales' : 'horizontales'} en esta categoría.`
-                          : 'No hay contenido disponible. Prueba con otros filtros o vuelve más tarde.'
-                        }
-                      </p>
-                      <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                        <Button onClick={() => setActiveFilter('todos')}>
-                          <Icon name="Grid3X3" size={16} className="mr-2" />
-                          Ver todo el contenido
-                        </Button>
-                        <Button variant="outline" onClick={handleRefresh}>
-                          <Icon name="RefreshCw" size={16} className="mr-2" />
-                          Actualizar
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      {filteredVideos.length > 0 && (
-                        <div className="mb-4 text-sm text-muted-foreground">
-                          <p>
-                            Mostrando {filteredVideos.length} de {videos.length} videos disponibles.
-                          </p>
-                        </div>
-                      )}
-                      
-                      <PullToRefresh onRefresh={handleRefresh}>
-                        <VideoFeedGrid
-                          videos={filteredVideos}
-                          layout={effectiveLayout}
-                          orientation={activeOrientation}
-                          onLoadMore={handleLoadMore}
-                          onPointsEarned={handlePointsEarned}
-                          hasMore={hasMore}
-                          loading={loading}
-                        />
-                      </PullToRefresh>
-                    </div>
-                  )}
-                </div>
+        <PullToRefresh onRefresh={handleRefresh}>
+          <div className="container mx-auto px-4 py-6">
+            
+            {/* 🎯 PESTAÑAS DE ORIENTACIÓN (NUEVO) */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Tipo de Contenido
+                </h2>
+                <PointsBalanceIndicator points={userPoints} />
               </div>
 
-              {/* Desktop Sidebar */}
-              <div className="hidden xl:block">
-                <TrendingSidebar onPointsEarned={handlePointsEarned} />
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                {ORIENTATION_TABS.map(tab => {
+                  const isActive = activeOrientation === tab.id;
+                  const count = tab.id === 'all' 
+                    ? orientationStats.total 
+                    : orientationStats[tab.id] || 0;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleOrientationChange(tab.id)}
+                      className={`
+                        flex items-center gap-2 px-4 py-2 rounded-lg font-medium
+                        whitespace-nowrap transition-all duration-200
+                        ${isActive 
+                          ? 'bg-primary text-primary-foreground shadow-md' 
+                          : 'bg-card text-muted-foreground hover:bg-muted'
+                        }
+                      `}
+                      style={isActive ? { backgroundColor: tab.color } : {}}
+                    >
+                      <Icon name={tab.icon} size={18} />
+                      <span>{tab.label}</span>
+                      <span className="text-xs opacity-75">({count})</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
+
+            {/* Filtros de Categoría */}
+            <FilterChips
+              filters={filterCategories}
+              activeFilter={activeFilter}
+              onFilterChange={handleFilterChange}
+            />
+
+            {/* Grid de Videos */}
+            <div className="lg:grid lg:grid-cols-12 lg:gap-6">
+              <div className="lg:col-span-9">
+                <VideoFeedGrid
+                  videos={filteredVideos}
+                  layout={layout}
+                  onLayoutChange={handleLayoutChange}
+                  onVideoInteraction={handleVideoInteraction}
+                  onLoadMore={() => loadMore(activeFilter)}
+                  hasMore={hasMore}
+                  loading={loading}
+                />
+              </div>
+
+              <div className="hidden lg:block lg:col-span-3">
+                <TrendingSidebar />
+              </div>
+            </div>
+
+            {/* Animación de puntos */}
+            {pointsAnimation && (
+              <PointsFloatingAnimation
+                points={pointsAnimation.points}
+                position={pointsAnimation.position}
+              />
+            )}
           </div>
-        </main>
+        </PullToRefresh>
 
-        {/* Points Animation */}
-        {pointsAnimation && (
-          <PointsFloatingAnimation
-            points={pointsAnimation?.points}
-            onAnimationComplete={handleAnimationComplete}
-          />
-        )}
-
-        {/* Mobile Points Indicator */}
-        <div className="fixed top-20 right-4 z-40 sm:hidden">
-          <PointsBalanceIndicator 
-            points={userPoints} 
-            showAnimation={true}
-            size="sm"
-            variant="prominent"
-          />
-        </div>
-
-        {/* Debug Info for Development */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">🏠 Dashboard Debug</div>
-            <div>📱 isMobile: {isMobile.toString()}</div>
-            <div>🎬 activeOrientation: {activeOrientation}</div>
-            <div>🎯 originalLayout: {layout}</div>
-            <div>✨ effectiveLayout: {effectiveLayout}</div>
-            <div>📹 videos: {videos.length}</div>
-            <div>🔍 filtered: {filteredVideos.length}</div>
-            <div>🔄 loading: {loading.toString()}</div>
-            <div>🎠 Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
-            <div>❌ error: {error || 'none'}</div>
-          </div>
-        )}
+        <PrimaryNavigation />
       </div>
     </>
   );
