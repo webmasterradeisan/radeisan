@@ -155,12 +155,12 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // ✅ QUERY ACTUALIZADA: Incluye JOIN con user_profiles
+      // ✅ QUERY ACTUALIZADA: Incluye JOIN con user_profiles (sin nombre de FK)
       let query = supabase
         .from('videos')
         .select(`
           *,
-          user_profiles!videos_user_id_fkey (
+          user_profiles!user_id (
             id,
             username,
             avatar_url
