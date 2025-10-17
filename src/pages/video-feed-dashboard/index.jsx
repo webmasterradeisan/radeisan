@@ -1,5 +1,7 @@
 // src/pages/video-feed-dashboard/index.jsx  
-// VideoFeedDashboard CORREGIDO - Sin columna status que no existe
+// VideoFeedDashboard CORREGIDO - Con nombres de usuario reales
+// ✅ ACTUALIZADO: Ahora muestra username real de user_profiles
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,7 +55,7 @@ const ORIENTATION_TABS = [
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar videos - QUERY SIMPLIFICADA SIN COLUMNAS PROBLEMÁTICAS
+// Hook para manejar videos - ✅ QUERY ACTUALIZADA CON JOIN A user_profiles
 const useVideos = () => {
   const { user: currentUser } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -69,7 +71,7 @@ const useVideos = () => {
   });
 
   const determineOrientation = useCallback((video) => {
-    // 🆕 PRIORIDAD 1: Si tiene campo orientation en BD, usarlo
+    // PRIORIDAD 1: Si tiene campo orientation en BD, usarlo
     if (video.orientation) {
       return video.orientation;
     }
@@ -82,7 +84,7 @@ const useVideos = () => {
       return 'square';
     }
 
-    // 🆕 PRIORIDAD 3: Si tiene video_width y video_height, usarlos
+    // PRIORIDAD 3: Si tiene video_width y video_height, usarlos
     if (video.video_width && video.video_height) {
       const aspectRatio = video.video_width / video.video_height;
       if (aspectRatio <= 0.8) return 'vertical';
@@ -104,24 +106,32 @@ const useVideos = () => {
     return 'horizontal';
   }, []);
 
+  // ✅ FUNCIÓN ACTUALIZADA: Ahora usa datos reales de user_profiles
   const processVideos = useCallback((rawVideos) => {
-    const processed = rawVideos.map(video => ({
-      ...video,
-      orientation: determineOrientation(video),
-      // Normalizar datos
-      views: video.views_count || video.views || 0,
-      likes: video.likes_count || video.likes || 0,
-      comments: video.comments_count || video.comments || 0,
-      duration: video.duration_seconds || video.duration || 30,
-      thumbnail: video.thumbnail_url || video.thumbnail || '/api/placeholder/320/180',
-      // Datos del creador
-      creator: {
-        id: video.user_id,
-        username: 'usuario',
-        name: 'Usuario',
-        avatar: null
-      }
-    }));
+    const processed = rawVideos.map(video => {
+      // Generar avatar con UI Avatars si no existe
+      const username = video.user_profiles?.username || 'usuario';
+      const avatarUrl = video.user_profiles?.avatar_url || 
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=6366f1&color=ffffff&size=128`;
+
+      return {
+        ...video,
+        orientation: determineOrientation(video),
+        // Normalizar datos
+        views: video.views_count || video.views || 0,
+        likes: video.likes_count || video.likes || 0,
+        comments: video.comments_count || video.comments || 0,
+        duration: video.duration_seconds || video.duration || 30,
+        thumbnail: video.thumbnail_url || video.thumbnail || '/api/placeholder/320/180',
+        // ✅ DATOS DEL CREADOR REALES
+        creator: {
+          id: video.user_profiles?.id || video.user_id,
+          username: video.user_profiles?.username || `user_${video.user_id?.substring(0, 8)}`,
+          name: video.user_profiles?.username || 'usuario',  // ← SOLO USERNAME
+          avatar: avatarUrl
+        }
+      };
+    });
     
     const stats = processed.reduce((acc, video) => {
       acc[video.orientation] = (acc[video.orientation] || 0) + 1;
@@ -145,14 +155,18 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // QUERY BÁSICA - Solo columnas que sabemos que existen
+      // ✅ QUERY ACTUALIZADA: Incluye JOIN con user_profiles
       let query = supabase
         .from('videos')
-        .select('*') // Seleccionar todo para ver qué columnas hay realmente
+        .select(`
+          *,
+          user_profiles!videos_user_id_fkey (
+            id,
+            username,
+            avatar_url
+          )
+        `)
         .order('created_at', { ascending: false });
-
-      // Solo filtrar por is_published si existe la columna
-      // query = query.eq('is_published', true);
 
       if (category !== 'todos' && category !== 'all') {
         query = query.eq('category', category);
@@ -170,8 +184,8 @@ const useVideos = () => {
 
       console.log('✅ Videos obtenidos:', {
         count: videoData?.length || 0,
-        firstVideo: videoData?.[0] ? Object.keys(videoData[0]) : [],
-        sample: videoData?.[0]
+        sampleCreator: videoData?.[0]?.user_profiles,
+        firstVideo: videoData?.[0]
       });
 
       const processedVideos = processVideos(videoData || []);
@@ -271,7 +285,6 @@ const VideoFeedDashboard = () => {
   const { videos, loading, error, hasMore, orientationStats, loadMore, refresh } = useVideos();
   const { points: userPoints, addPoints } = useUserPoints();
   
-  // 📱 DETECCIÓN DE DISPOSITIVO MÓVIL
   const isMobile = useIsMobile();
 
   const [filteredVideos, setFilteredVideos] = useState([]);
@@ -280,7 +293,6 @@ const VideoFeedDashboard = () => {
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
 
-  // 🎯 DEBUG: Console.logs para verificar estados
   console.log('🏠 VideoFeedDashboard rendered:', {
     isMobile,
     activeOrientation,
@@ -300,7 +312,7 @@ const VideoFeedDashboard = () => {
       filtered = filtered.filter(video => video.category === activeFilter);
     }
 
-    // 🆕 Filtrar por orientación (en frontend)
+    // Filtrar por orientación
     if (activeOrientation !== 'all') {
       filtered = filtered.filter(video => video.orientation === activeOrientation);
     }
@@ -316,19 +328,13 @@ const VideoFeedDashboard = () => {
   }, [videos, activeFilter, activeOrientation]);
 
   // ===============================
-  // LÓGICA DE LAYOUT CORREGIDA
+  // LÓGICA DE LAYOUT
   // ===============================
   
-  // 🚀 NUEVA LÓGICA: Layout inteligente según dispositivo
   const getEffectiveLayout = () => {
-    // Si es orientación vertical (Reels)
     if (activeOrientation === VIDEO_ORIENTATIONS.VERTICAL) {
-      // En MÓVIL: mantener grid para mostrar carousel
-      // En DESKTOP: usar reels para pantalla completa
       return isMobile ? 'grid' : 'reels';
     }
-    
-    // Para otras orientaciones, usar layout normal
     return layout;
   };
 
@@ -478,7 +484,7 @@ const VideoFeedDashboard = () => {
                   </div>
                 </div>
 
-                {/* 🆕 Orientation Tabs */}
+                {/* Orientation Tabs */}
                 <div className="flex items-center space-x-1 mb-6 overflow-x-auto scrollbar-hide">
                   {ORIENTATION_TABS.map((tab) => (
                     <Button
