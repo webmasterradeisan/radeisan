@@ -1,8 +1,10 @@
 // src/pages/VideoPlayerPage/index.jsx
-// Página principal para reproducción de video individual estilo YouTube
-// ✅ ACTUALIZADO: Sin JOIN - usa 2 queries separadas
+// ✅ ACTUALIZADO: UX móvil según PDF de YouTube
+// - Player sticky arriba
+// - Videos relacionados en scroll infinito debajo
+// - Mini-player opcional al hacer scroll
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { supabase } from '../../lib/supabase';
@@ -39,6 +41,47 @@ const VideoPlayerPage = () => {
   const [watchTime, setWatchTime] = useState(0);
   const [pointsEarned, setPointsEarned] = useState(0);
 
+  // ✅ NUEVOS ESTADOS PARA UX MÓVIL
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [showMiniPlayer, setShowMiniPlayer] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
+  const playerRef = useRef(null);
+  const miniPlayerThreshold = 400; // Píxeles de scroll para activar mini-player
+
+  // ===============================
+  // RESPONSIVE DETECTION
+  // ===============================
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ===============================
+  // SCROLL DETECTION PARA MINI-PLAYER (OPCIONAL)
+  // ===============================
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setScrollY(currentScrollY);
+
+      // Activar mini-player cuando scrolleas más allá del player
+      if (currentScrollY > miniPlayerThreshold && !showMiniPlayer) {
+        setShowMiniPlayer(true);
+      } else if (currentScrollY <= miniPlayerThreshold && showMiniPlayer) {
+        setShowMiniPlayer(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isMobile, showMiniPlayer]);
+
   // ===============================
   // FETCH VIDEO DATA - SIN JOIN
   // ===============================
@@ -52,7 +95,7 @@ const VideoPlayerPage = () => {
 
       console.log('🎬 Cargando video:', videoId);
 
-      // ✅ PASO 1: Obtener datos del video sin JOIN
+      // PASO 1: Obtener datos del video sin JOIN
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
         .select('*')
@@ -69,7 +112,7 @@ const VideoPlayerPage = () => {
 
       console.log('✅ Video obtenido:', videoData);
 
-      // ✅ PASO 2: Obtener perfil del creador
+      // PASO 2: Obtener perfil del creador
       let creatorProfile = null;
       if (videoData.user_id) {
         const { data: profileData, error: profileError } = await supabase
@@ -86,7 +129,7 @@ const VideoPlayerPage = () => {
         }
       }
 
-      // ✅ PASO 3: Transformar datos
+      // PASO 3: Transformar datos
       const transformedVideo = {
         id: videoData.id,
         title: videoData.title || 'Video sin título',
@@ -137,7 +180,7 @@ const VideoPlayerPage = () => {
     try {
       console.log('🔗 Cargando videos relacionados...');
 
-      // ✅ PASO 1: Obtener videos relacionados
+      // PASO 1: Obtener videos relacionados
       const { data: videosData, error: videosError } = await supabase
         .from('videos')
         .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id')
@@ -145,13 +188,13 @@ const VideoPlayerPage = () => {
         .neq('id', currentVideoId)
         .eq('category', category)
         .order('views_count', { ascending: false })
-        .limit(10);
+        .limit(20); // Más videos para scroll infinito
 
       if (videosError) throw videosError;
 
       console.log('✅ Videos relacionados obtenidos:', videosData?.length || 0);
 
-      // ✅ PASO 2: Obtener perfiles de los creadores
+      // PASO 2: Obtener perfiles de los creadores
       const userIds = [...new Set(videosData?.map(v => v.user_id).filter(Boolean))];
       
       let userProfilesMap = {};
@@ -172,7 +215,7 @@ const VideoPlayerPage = () => {
         }
       }
 
-      // ✅ PASO 3: Transformar datos
+      // PASO 3: Transformar datos
       const transformed = (videosData || []).map(v => ({
         id: v.id,
         title: v.title,
@@ -223,7 +266,6 @@ const VideoPlayerPage = () => {
 
     try {
       if (isLiked) {
-        // Unlike
         await supabase
           .from('video_likes')
           .delete()
@@ -233,7 +275,6 @@ const VideoPlayerPage = () => {
         setLocalLikes(prev => prev - 1);
         setIsLiked(false);
       } else {
-        // Like
         await supabase
           .from('video_likes')
           .insert({
@@ -243,8 +284,6 @@ const VideoPlayerPage = () => {
         
         setLocalLikes(prev => prev + 1);
         setIsLiked(true);
-        
-        // Otorgar puntos por dar like
         addPoints(2, 'like_video');
       }
     } catch (err) {
@@ -308,7 +347,6 @@ const VideoPlayerPage = () => {
         }
       }
     } else {
-      // Fallback: copiar al clipboard
       try {
         await navigator.clipboard.writeText(shareUrl);
         alert('Link copiado al portapapeles');
@@ -330,7 +368,7 @@ const VideoPlayerPage = () => {
     }
 
     if (video.creator.id === user.id) {
-      return; // No puedes seguirte a ti mismo
+      return;
     }
 
     try {
@@ -366,21 +404,16 @@ const VideoPlayerPage = () => {
     if (!user) return;
 
     try {
-      // Aquí irá la lógica del sistema de puntos (FASE 1)
-      // Por ahora solo actualizamos el estado local
       setPointsEarned(prev => prev + points);
-      
       console.log(`+${points} puntos por ${action}`);
     } catch (err) {
       console.error('Error adding points:', err);
     }
   };
 
-  // Tracking de tiempo de visualización para puntos
   const handleTimeUpdate = useCallback((currentTime) => {
     setWatchTime(currentTime);
     
-    // Otorgar puntos por hitos de visualización
     if (currentTime >= video?.duration * 0.25 && watchTime < video?.duration * 0.25) {
       addPoints(5, 'watch_25_percent');
     }
@@ -404,13 +437,11 @@ const VideoPlayerPage = () => {
     fetchVideo();
   }, [fetchVideo]);
 
-  // Check if user has liked/saved this video
   useEffect(() => {
     if (!user || !videoId) return;
 
     const checkInteractions = async () => {
       try {
-        // Check like
         const { data: likeData } = await supabase
           .from('video_likes')
           .select('id')
@@ -420,7 +451,6 @@ const VideoPlayerPage = () => {
         
         setIsLiked(!!likeData);
 
-        // Check saved
         const { data: savedData } = await supabase
           .from('saved_videos')
           .select('id')
@@ -430,7 +460,6 @@ const VideoPlayerPage = () => {
         
         setIsSaved(!!savedData);
 
-        // Check following
         if (video?.creator?.id) {
           const { data: followData } = await supabase
             .from('user_follows')
@@ -528,7 +557,7 @@ const VideoPlayerPage = () => {
   }
 
   // ===============================
-  // RENDER PRINCIPAL
+  // ✅ RENDER PRINCIPAL - MOBILE vs DESKTOP
   // ===============================
 
   return (
@@ -546,197 +575,436 @@ const VideoPlayerPage = () => {
         <Header />
         <PrimaryNavigation />
         
-        <main className="pt-32 pb-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            
-            {/* Layout Principal: Video + Sidebar */}
-            <div className="flex flex-col lg:flex-row gap-6">
+        <main className={isMobile ? 'pt-16' : 'pt-32 pb-16'}>
+          {/* ===============================
+              LAYOUT MÓVIL (YouTube Style)
+              =============================== */}
+          {isMobile ? (
+            <div className="flex flex-col">
               
-              {/* COLUMNA PRINCIPAL - VIDEO Y DETALLES */}
-              <div className="flex-1 min-w-0">
+              {/* VIDEO PLAYER - Sticky en móvil */}
+              <div 
+                ref={playerRef}
+                className="sticky top-16 z-30 bg-black"
+              >
+                <VideoPlayer
+                  videoUrl={video.videoUrl}
+                  thumbnailUrl={video.thumbnail}
+                  autoPlay={true}
+                  onTimeUpdate={handleTimeUpdate}
+                  onEnded={handleVideoEnded}
+                  className="w-full aspect-video"
+                />
+              </div>
+
+              {/* CONTENIDO SCROLLABLE */}
+              <div className="bg-background">
                 
-                {/* VIDEO PLAYER */}
-                <div className="mb-4">
-                  <VideoPlayer
-                    videoUrl={video.videoUrl}
-                    thumbnailUrl={video.thumbnail}
-                    autoPlay={false}
-                    onTimeUpdate={handleTimeUpdate}
-                    onEnded={handleVideoEnded}
-                    className="w-full aspect-video"
-                  />
+                {/* Título y Stats */}
+                <div className="px-4 pt-4 pb-3 border-b border-border">
+                  <h1 className="text-lg font-bold text-foreground mb-2">
+                    {video.title}
+                  </h1>
+                  
+                  <div className="flex items-center text-sm text-muted-foreground space-x-2">
+                    <div className="flex items-center gap-1">
+                      <Icon name="Eye" size={14} />
+                      <span>{formatNumber(localViews)} vistas</span>
+                    </div>
+                    <span>•</span>
+                    <span>{formatDate(video.createdAt)}</span>
+                  </div>
                 </div>
 
-                {/* VIDEO INFO */}
-                <div className="space-y-4">
-                  
-                  {/* Título */}
-                  <div>
-                    <h1 className="text-2xl font-bold text-foreground mb-2">
-                      {video.title}
-                    </h1>
-                    
-                    {/* Stats Bar */}
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                {/* Creator Info + Botones de Acción */}
+                <div className="px-4 py-3 border-b border-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <Link 
+                      to={`/profile/${video.creator.id}`}
+                      className="flex items-center gap-3 flex-1 min-w-0"
+                    >
+                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-muted">
+                        {video.creator.avatar ? (
+                          <img 
+                            src={video.creator.avatar} 
+                            alt={video.creator.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold text-lg">
+                            {video.creator.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1">
-                          <Icon name="Eye" size={16} />
-                          <span>{formatNumber(localViews)} visualizaciones</span>
-                        </div>
-                        <span>•</span>
-                        <span>{formatDate(video.createdAt)}</span>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2">
-                        
-                        {/* Like Button */}
-                        <Button
-                          variant={isLiked ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={handleLike}
-                          className="gap-2"
-                        >
-                          <Icon name={isLiked ? 'Heart' : 'Heart'} size={16} className={isLiked ? 'fill-current' : ''} />
-                          <span>{formatNumber(localLikes)}</span>
-                        </Button>
-
-                        {/* Save Button */}
-                        <Button
-                          variant={isSaved ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={handleSave}
-                        >
-                          <Icon name={isSaved ? 'Bookmark' : 'Bookmark'} size={16} className={isSaved ? 'fill-current' : ''} />
-                        </Button>
-
-                        {/* Share Button */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleShare}
-                        >
-                          <Icon name="Share2" size={16} />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Creator Info */}
-                  <div className="p-4 bg-card border border-border rounded-lg">
-                    <div className="flex items-start justify-between gap-4">
-                      <Link 
-                        to={`/profile/${video.creator.id}`}
-                        className="flex items-center gap-3 flex-1 min-w-0"
-                      >
-                        <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-muted">
-                          {video.creator.avatar ? (
-                            <img 
-                              src={video.creator.avatar} 
-                              alt={video.creator.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold">
-                              {video.creator.name.charAt(0).toUpperCase()}
-                            </div>
+                          <h3 className="font-semibold text-foreground truncate text-sm">
+                            {video.creator.name}
+                          </h3>
+                          {video.creator.isVerified && (
+                            <Icon name="BadgeCheck" size={14} color="var(--color-primary)" />
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-foreground truncate">
-                              {video.creator.name}
-                            </h3>
-                            {video.creator.isVerified && (
-                              <Icon name="BadgeCheck" size={16} color="var(--color-primary)" />
-                            )}
+                        <p className="text-xs text-muted-foreground">
+                          @{video.creator.username}
+                        </p>
+                      </div>
+                    </Link>
+
+                    {user?.id !== video.creator.id && (
+                      <Button
+                        variant={isFollowing ? 'outline' : 'default'}
+                        size="sm"
+                        onClick={handleFollow}
+                        className="flex-shrink-0 ml-2"
+                      >
+                        {isFollowing ? 'Siguiendo' : 'Seguir'}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Botones de Acción - Horizontales */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={isLiked ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={handleLike}
+                      className="flex-1 gap-2"
+                    >
+                      <Icon name="Heart" size={16} className={isLiked ? 'fill-current' : ''} />
+                      <span>{formatNumber(localLikes)}</span>
+                    </Button>
+
+                    <Button
+                      variant={isSaved ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={handleSave}
+                      className="flex-1 gap-2"
+                    >
+                      <Icon name="Bookmark" size={16} className={isSaved ? 'fill-current' : ''} />
+                      <span>{isSaved ? 'Guardado' : 'Guardar'}</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleShare}
+                      className="flex-1 gap-2"
+                    >
+                      <Icon name="Share2" size={16} />
+                      <span>Compartir</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Descripción */}
+                <div className="px-4 py-3 border-b border-border">
+                  <p className={`text-sm text-foreground whitespace-pre-wrap ${!showFullDescription ? 'line-clamp-3' : ''}`}>
+                    {video.description}
+                  </p>
+                  {video.description.length > 150 && (
+                    <button
+                      onClick={() => setShowFullDescription(!showFullDescription)}
+                      className="text-sm text-primary hover:text-primary/80 font-medium mt-2"
+                    >
+                      {showFullDescription ? 'Mostrar menos' : 'Mostrar más'}
+                    </button>
+                  )}
+
+                  {video.tags && video.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {video.tags.map((tag, index) => (
+                        <Link
+                          key={index}
+                          to={`/search?tag=${tag}`}
+                          className="text-xs text-primary hover:text-primary/80 font-medium"
+                        >
+                          #{tag}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Videos Relacionados - Lista Vertical Infinita */}
+                <div className="py-3">
+                  <h3 className="px-4 text-lg font-semibold text-foreground mb-3">
+                    Videos relacionados
+                  </h3>
+                  <div className="space-y-2">
+                    {relatedVideos.map((relatedVideo) => (
+                      <Link
+                        key={relatedVideo.id}
+                        to={`/video/${relatedVideo.id}`}
+                        className="flex gap-3 px-4 py-2 hover:bg-muted transition-colors"
+                        onClick={() => window.scrollTo(0, 0)}
+                      >
+                        {/* Thumbnail */}
+                        <div className="relative w-40 flex-shrink-0 aspect-video bg-muted rounded-lg overflow-hidden">
+                          <img
+                            src={relatedVideo.thumbnail}
+                            alt={relatedVideo.title}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 rounded">
+                            {Math.floor(relatedVideo.duration / 60)}:{(relatedVideo.duration % 60).toString().padStart(2, '0')}
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            @{video.creator.username}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-medium text-foreground line-clamp-2 mb-1">
+                            {relatedVideo.title}
+                          </h4>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            {relatedVideo.creator.name}
                           </p>
+                          <div className="flex items-center text-xs text-muted-foreground space-x-1">
+                            <span>{formatNumber(relatedVideo.views)} vistas</span>
+                          </div>
                         </div>
                       </Link>
+                    ))}
+                  </div>
 
-                      {/* Follow Button */}
-                      {user?.id !== video.creator.id && (
-                        <Button
-                          variant={isFollowing ? 'outline' : 'default'}
-                          size="sm"
-                          onClick={handleFollow}
-                          className="flex-shrink-0"
-                        >
-                          <Icon name={isFollowing ? 'UserCheck' : 'UserPlus'} size={16} className="mr-2" />
-                          {isFollowing ? 'Siguiendo' : 'Seguir'}
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Description */}
-                    <div className="mt-4 pt-4 border-t border-border">
-                      <p className={`text-sm text-foreground whitespace-pre-wrap ${!showFullDescription ? 'line-clamp-3' : ''}`}>
-                        {video.description}
+                  {/* Mensaje de fin */}
+                  {relatedVideos.length > 0 && (
+                    <div className="px-4 py-6 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Has visto todos los videos relacionados
                       </p>
-                      {video.description.length > 150 && (
-                        <button
-                          onClick={() => setShowFullDescription(!showFullDescription)}
-                          className="text-sm text-primary hover:text-primary/80 font-medium mt-2"
-                        >
-                          {showFullDescription ? 'Mostrar menos' : 'Mostrar más'}
-                        </button>
-                      )}
-
-                      {/* Tags */}
-                      {video.tags && video.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-4">
-                          {video.tags.map((tag, index) => (
-                            <Link
-                              key={index}
-                              to={`/search?tag=${tag}`}
-                              className="text-xs text-primary hover:text-primary/80 font-medium"
-                            >
-                              #{tag}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate('/dashboard')}
+                        className="mt-3"
+                      >
+                        Explorar más videos
+                      </Button>
                     </div>
-                  </div>
-
-                  {/* Comments Section (Placeholder) */}
-                  <div className="border border-border rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-foreground">
-                        Comentarios ({formatNumber(video.comments)})
-                      </h3>
-                    </div>
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Icon name="MessageSquare" size={32} className="mx-auto mb-3 opacity-50" />
-                      <p className="text-sm">Los comentarios estarán disponibles próximamente</p>
-                    </div>
-                  </div>
-
+                  )}
                 </div>
-              </div>
 
-              {/* SIDEBAR - VIDEOS RELACIONADOS */}
-              <div className="lg:w-96 flex-shrink-0">
-                <div className="lg:sticky lg:top-32">
-                  <RelatedVideosSidebar
-                    videos={relatedVideos}
-                    currentVideoId={videoId}
-                    autoplayEnabled={true}
-                    onVideoSelect={(selectedVideo) => {
-                      navigate(`/video/${selectedVideo.id}`);
-                      window.scrollTo(0, 0);
-                    }}
+              </div>
+            </div>
+          ) : (
+            /* ===============================
+               LAYOUT DESKTOP (Original)
+               =============================== */
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex flex-col lg:flex-row gap-6">
+                
+                {/* COLUMNA PRINCIPAL - VIDEO Y DETALLES */}
+                <div className="flex-1 min-w-0">
+                  
+                  <div className="mb-4">
+                    <VideoPlayer
+                      videoUrl={video.videoUrl}
+                      thumbnailUrl={video.thumbnail}
+                      autoPlay={false}
+                      onTimeUpdate={handleTimeUpdate}
+                      onEnded={handleVideoEnded}
+                      className="w-full aspect-video"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h1 className="text-2xl font-bold text-foreground mb-2">
+                        {video.title}
+                      </h1>
+                      
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Icon name="Eye" size={16} />
+                            <span>{formatNumber(localViews)} visualizaciones</span>
+                          </div>
+                          <span>•</span>
+                          <span>{formatDate(video.createdAt)}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant={isLiked ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={handleLike}
+                            className="gap-2"
+                          >
+                            <Icon name={isLiked ? 'Heart' : 'Heart'} size={16} className={isLiked ? 'fill-current' : ''} />
+                            <span>{formatNumber(localLikes)}</span>
+                          </Button>
+
+                          <Button
+                            variant={isSaved ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={handleSave}
+                          >
+                            <Icon name={isSaved ? 'Bookmark' : 'Bookmark'} size={16} className={isSaved ? 'fill-current' : ''} />
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleShare}
+                          >
+                            <Icon name="Share2" size={16} />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-card border border-border rounded-lg">
+                      <div className="flex items-start justify-between gap-4">
+                        <Link 
+                          to={`/profile/${video.creator.id}`}
+                          className="flex items-center gap-3 flex-1 min-w-0"
+                        >
+                          <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-muted">
+                            {video.creator.avatar ? (
+                              <img 
+                                src={video.creator.avatar} 
+                                alt={video.creator.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold">
+                                {video.creator.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-foreground truncate">
+                                {video.creator.name}
+                              </h3>
+                              {video.creator.isVerified && (
+                                <Icon name="BadgeCheck" size={16} color="var(--color-primary)" />
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              @{video.creator.username}
+                            </p>
+                          </div>
+                        </Link>
+
+                        {user?.id !== video.creator.id && (
+                          <Button
+                            variant={isFollowing ? 'outline' : 'default'}
+                            size="sm"
+                            onClick={handleFollow}
+                            className="flex-shrink-0"
+                          >
+                            <Icon name={isFollowing ? 'UserCheck' : 'UserPlus'} size={16} className="mr-2" />
+                            {isFollowing ? 'Siguiendo' : 'Seguir'}
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="mt-4 pt-4 border-t border-border">
+                        <p className={`text-sm text-foreground whitespace-pre-wrap ${!showFullDescription ? 'line-clamp-3' : ''}`}>
+                          {video.description}
+                        </p>
+                        {video.description.length > 150 && (
+                          <button
+                            onClick={() => setShowFullDescription(!showFullDescription)}
+                            className="text-sm text-primary hover:text-primary/80 font-medium mt-2"
+                          >
+                            {showFullDescription ? 'Mostrar menos' : 'Mostrar más'}
+                          </button>
+                        )}
+
+                        {video.tags && video.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            {video.tags.map((tag, index) => (
+                              <Link
+                                key={index}
+                                to={`/search?tag=${tag}`}
+                                className="text-xs text-primary hover:text-primary/80 font-medium"
+                              >
+                                #{tag}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border border-border rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-foreground">
+                          Comentarios ({formatNumber(video.comments)})
+                        </h3>
+                      </div>
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Icon name="MessageSquare" size={32} className="mx-auto mb-3 opacity-50" />
+                        <p className="text-sm">Los comentarios estarán disponibles próximamente</p>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* SIDEBAR - VIDEOS RELACIONADOS */}
+                <div className="lg:w-96 flex-shrink-0">
+                  <div className="lg:sticky lg:top-32">
+                    <RelatedVideosSidebar
+                      videos={relatedVideos}
+                      currentVideoId={videoId}
+                      autoplayEnabled={true}
+                      onVideoSelect={(selectedVideo) => {
+                        navigate(`/video/${selectedVideo.id}`);
+                        window.scrollTo(0, 0);
+                      }}
+                    />
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* ===============================
+            MINI-PLAYER FLOTANTE (OPCIONAL - MÓVIL)
+            =============================== */}
+        {isMobile && showMiniPlayer && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-black shadow-2xl border-t border-border">
+            <div className="flex items-center justify-between p-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="w-16 aspect-video bg-muted rounded overflow-hidden flex-shrink-0">
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-full h-full object-cover"
                   />
                 </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-medium text-white truncate">
+                    {video.title}
+                  </h4>
+                  <p className="text-xs text-gray-400 truncate">
+                    {video.creator.name}
+                  </p>
+                </div>
               </div>
-
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <Icon name="Maximize2" size={20} />
+                </button>
+                <button
+                  onClick={() => setShowMiniPlayer(false)}
+                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                >
+                  <Icon name="X" size={20} />
+                </button>
+              </div>
             </div>
-
           </div>
-        </main>
+        )}
       </div>
     </>
   );
