@@ -643,26 +643,7 @@ const ReelsContainer = ({
         </div>
       )}
 
-      {/* INDICADORES DE NAVEGACIÓN LATERAL */}
-      <div className={`
-        absolute top-1/2 transform -translate-y-1/2 flex flex-col space-y-2
-        ${isDesktop ? 'right-2' : 'right-2'}
-      `}>
-        {videos.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrentIndex(index)}
-            className={`
-              rounded-full transition-all duration-200
-              ${isDesktop ? 'w-2 h-8' : 'w-1 h-6'}
-              ${index === currentIndex 
-                ? 'bg-white' 
-                : 'bg-white/40 hover:bg-white/60'
-              }
-            `}
-          />
-        ))}
-      </div>
+      {/* INDICADORES DE NAVEGACIÓN LATERAL - REMOVIDOS */}
 
       {/* CONTADOR E INDICADORES DE ESTADO */}
       <div className={`
