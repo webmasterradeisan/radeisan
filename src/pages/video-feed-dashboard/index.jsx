@@ -155,17 +155,10 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // ✅ QUERY OPTIMIZADA: JOIN directo a user_profiles usando sintaxis por columna
+      // ✅ PASO 1: Obtener videos sin JOIN
       let query = supabase
         .from('videos')
-        .select(`
-          *,
-          user_profiles:user_id (
-            id,
-            username,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
@@ -184,17 +177,54 @@ const useVideos = () => {
         return;
       }
 
-      console.log('✅ Videos obtenidos con JOIN:', {
+      console.log('✅ Videos obtenidos:', {
         count: videoData?.length || 0,
-        sampleCreator: videoData?.[0]?.user_profiles,
-        firstVideo: {
-          id: videoData?.[0]?.id,
-          title: videoData?.[0]?.title,
-          creator: videoData?.[0]?.user_profiles?.username
+        firstVideo: videoData?.[0]
+      });
+
+      // ✅ PASO 2: Obtener user_ids únicos
+      const userIds = [...new Set(videoData?.map(v => v.user_id).filter(Boolean))];
+      
+      console.log('👥 User IDs a buscar:', userIds);
+
+      // ✅ PASO 3: Obtener perfiles de usuarios
+      let userProfilesMap = {};
+      
+      if (userIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url')
+          .in('id', userIds);
+
+        if (profilesError) {
+          console.error('⚠️ Error fetching profiles:', profilesError);
+          // Continuar sin perfiles si hay error
+        } else {
+          console.log('✅ Perfiles obtenidos:', profiles?.length || 0);
+          // Crear mapa de perfiles por ID
+          userProfilesMap = (profiles || []).reduce((acc, profile) => {
+            acc[profile.id] = profile;
+            return acc;
+          }, {});
+        }
+      }
+
+      // ✅ PASO 4: Combinar videos con perfiles
+      const videosWithProfiles = (videoData || []).map(video => ({
+        ...video,
+        user_profiles: userProfilesMap[video.user_id] || null
+      }));
+
+      console.log('✅ Videos con perfiles combinados:', {
+        total: videosWithProfiles.length,
+        sample: {
+          id: videosWithProfiles[0]?.id,
+          title: videosWithProfiles[0]?.title,
+          username: videosWithProfiles[0]?.user_profiles?.username
         }
       });
 
-      const processedVideos = processVideos(videoData || []);
+      const processedVideos = processVideos(videosWithProfiles);
 
       if (reset) {
         setVideos(processedVideos);
