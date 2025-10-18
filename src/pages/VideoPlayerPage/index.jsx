@@ -1,5 +1,6 @@
 // src/pages/VideoPlayerPage/index.jsx
 // Página principal para reproducción de video individual estilo YouTube
+// ✅ ACTUALIZADO: Sin JOIN - usa 2 queries separadas
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -39,7 +40,7 @@ const VideoPlayerPage = () => {
   const [pointsEarned, setPointsEarned] = useState(0);
 
   // ===============================
-  // FETCH VIDEO DATA
+  // FETCH VIDEO DATA - SIN JOIN
   // ===============================
 
   const fetchVideo = useCallback(async () => {
@@ -49,19 +50,12 @@ const VideoPlayerPage = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch video con información del creador
+      console.log('🎬 Cargando video:', videoId);
+
+      // ✅ PASO 1: Obtener datos del video sin JOIN
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
-        .select(`
-          *,
-          user_profiles!videos_user_id_fkey (
-            id,
-            full_name,
-            username,
-            avatar_url,
-            is_verified
-          )
-        `)
+        .select('*')
         .eq('id', videoId)
         .eq('is_published', true)
         .single();
@@ -73,7 +67,26 @@ const VideoPlayerPage = () => {
         return;
       }
 
-      // Transformar datos
+      console.log('✅ Video obtenido:', videoData);
+
+      // ✅ PASO 2: Obtener perfil del creador
+      let creatorProfile = null;
+      if (videoData.user_id) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, username, avatar_url, is_verified')
+          .eq('id', videoData.user_id)
+          .single();
+
+        if (profileError) {
+          console.error('⚠️ Error obteniendo perfil:', profileError);
+        } else {
+          creatorProfile = profileData;
+          console.log('✅ Perfil del creador obtenido:', creatorProfile);
+        }
+      }
+
+      // ✅ PASO 3: Transformar datos
       const transformedVideo = {
         id: videoData.id,
         title: videoData.title || 'Video sin título',
@@ -88,13 +101,15 @@ const VideoPlayerPage = () => {
         tags: videoData.tags || [],
         createdAt: videoData.created_at,
         creator: {
-          id: videoData.user_profiles?.id || videoData.user_id,
-          name: videoData.user_profiles?.full_name || 'Usuario Anónimo',
-          username: videoData.user_profiles?.username || 'usuario',
-          avatar: videoData.user_profiles?.avatar_url || null,
-          isVerified: videoData.user_profiles?.is_verified || false
+          id: creatorProfile?.id || videoData.user_id,
+          name: creatorProfile?.full_name || 'Usuario Anónimo',
+          username: creatorProfile?.username || 'usuario',
+          avatar: creatorProfile?.avatar_url || null,
+          isVerified: creatorProfile?.is_verified || false
         }
       };
+
+      console.log('✅ Video transformado:', transformedVideo);
 
       setVideo(transformedVideo);
       setLocalLikes(transformedVideo.likes);
@@ -107,7 +122,7 @@ const VideoPlayerPage = () => {
       fetchRelatedVideos(transformedVideo.category, videoId);
 
     } catch (err) {
-      console.error('Error fetching video:', err);
+      console.error('❌ Error fetching video:', err);
       setError(err.message || 'Error al cargar el video');
     } finally {
       setLoading(false);
@@ -115,39 +130,50 @@ const VideoPlayerPage = () => {
   }, [videoId]);
 
   // ===============================
-  // FETCH RELATED VIDEOS
+  // FETCH RELATED VIDEOS - SIN JOIN
   // ===============================
 
   const fetchRelatedVideos = async (category, currentVideoId) => {
     try {
-      const { data, error } = await supabase
+      console.log('🔗 Cargando videos relacionados...');
+
+      // ✅ PASO 1: Obtener videos relacionados
+      const { data: videosData, error: videosError } = await supabase
         .from('videos')
-        .select(`
-          id,
-          title,
-          description,
-          thumbnail_url,
-          duration_seconds,
-          views_count,
-          likes_count,
-          category,
-          created_at,
-          user_profiles!videos_user_id_fkey (
-            id,
-            full_name,
-            username,
-            avatar_url
-          )
-        `)
+        .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id')
         .eq('is_published', true)
         .neq('id', currentVideoId)
         .eq('category', category)
         .order('views_count', { ascending: false })
         .limit(10);
 
-      if (error) throw error;
+      if (videosError) throw videosError;
 
-      const transformed = data?.map(v => ({
+      console.log('✅ Videos relacionados obtenidos:', videosData?.length || 0);
+
+      // ✅ PASO 2: Obtener perfiles de los creadores
+      const userIds = [...new Set(videosData?.map(v => v.user_id).filter(Boolean))];
+      
+      let userProfilesMap = {};
+      if (userIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, username, avatar_url')
+          .in('id', userIds);
+
+        if (profilesError) {
+          console.error('⚠️ Error obteniendo perfiles relacionados:', profilesError);
+        } else {
+          console.log('✅ Perfiles relacionados obtenidos:', profiles?.length || 0);
+          userProfilesMap = (profiles || []).reduce((acc, profile) => {
+            acc[profile.id] = profile;
+            return acc;
+          }, {});
+        }
+      }
+
+      // ✅ PASO 3: Transformar datos
+      const transformed = (videosData || []).map(v => ({
         id: v.id,
         title: v.title,
         thumbnail: v.thumbnail_url,
@@ -157,17 +183,18 @@ const VideoPlayerPage = () => {
         category: v.category,
         timeAgo: v.created_at,
         creator: {
-          id: v.user_profiles?.id,
-          name: v.user_profiles?.full_name || 'Usuario',
-          username: v.user_profiles?.username || 'usuario',
-          avatar: v.user_profiles?.avatar_url
+          id: userProfilesMap[v.user_id]?.id || v.user_id,
+          name: userProfilesMap[v.user_id]?.full_name || 'Usuario',
+          username: userProfilesMap[v.user_id]?.username || 'usuario',
+          avatar: userProfilesMap[v.user_id]?.avatar_url
         }
-      })) || [];
+      }));
 
+      console.log('✅ Videos relacionados transformados:', transformed.length);
       setRelatedVideos(transformed);
 
     } catch (err) {
-      console.error('Error fetching related videos:', err);
+      console.error('❌ Error fetching related videos:', err);
     }
   };
 
