@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/HorizontalVideoGrid.jsx
-// Grid especializado para videos horizontales (16:9) estilo YouTube
+// ✅ ARREGLADO: Videos horizontales se reproducen correctamente + Click navega a /video/:id
 
-import React, { useState, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import Image from '../../../components/AppImage';
@@ -14,27 +14,25 @@ const HorizontalVideoGrid = ({
   hasMore = true,
   loading = false 
 }) => {
-  const [selectedVideo, setSelectedVideo] = useState(null);
+  const navigate = useNavigate();
   const [likedVideos, setLikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [hoveredVideo, setHoveredVideo] = useState(null);
-  const videoModalRef = useRef(null);
+
+  console.log('🎬 HorizontalVideoGrid render:', {
+    videosCount: videos.length,
+    firstVideo: videos[0]
+  });
 
   // ===============================
   // HANDLERS DE INTERACCIÓN
   // ===============================
 
+  // ✅ Click en video -> navega a /video/:id (igual que YouTube)
   const handleVideoClick = (video) => {
-    setSelectedVideo(video);
+    console.log('🔗 Navegando a video:', video.id);
+    navigate(`/video/${video.id}`);
     onPointsEarned && onPointsEarned(2); // Puntos por ver video
-  };
-
-  const handleCloseModal = () => {
-    setSelectedVideo(null);
-    if (videoModalRef.current) {
-      videoModalRef.current.pause();
-      videoModalRef.current.currentTime = 0;
-    }
   };
 
   const handleLike = (videoId, e) => {
@@ -69,7 +67,7 @@ const HorizontalVideoGrid = ({
       try {
         await navigator.share({
           title: video.title,
-          text: `Mira este video de ${video.creator.name}`,
+          text: `Mira este video de ${video.creator?.name}`,
           url: shareUrl
         });
         onPointsEarned && onPointsEarned(3);
@@ -92,13 +90,27 @@ const HorizontalVideoGrid = ({
     } else if (count >= 1000) {
       return `${(count / 1000).toFixed(1)}K`;
     }
-    return count.toString();
+    return count?.toString() || '0';
   };
 
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return 'Reciente';
+    
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - past) / 1000);
+    
+    if (diffInSeconds < 60) return 'Hace un momento';
+    if (diffInSeconds < 3600) return `Hace ${Math.floor(diffInSeconds / 60)} min`;
+    if (diffInSeconds < 86400) return `Hace ${Math.floor(diffInSeconds / 3600)} h`;
+    if (diffInSeconds < 604800) return `Hace ${Math.floor(diffInSeconds / 86400)} días`;
+    return past.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   };
 
   // ===============================
@@ -112,7 +124,7 @@ const HorizontalVideoGrid = ({
 
     return (
       <div 
-        className="group cursor-pointer bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-300"
+        className="group cursor-pointer bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-border hover:border-primary/50"
         onClick={() => handleVideoClick(video)}
         onMouseEnter={() => setHoveredVideo(video.id)}
         onMouseLeave={() => setHoveredVideo(null)}
@@ -120,29 +132,24 @@ const HorizontalVideoGrid = ({
         {/* Thumbnail Container */}
         <div className="relative aspect-video bg-muted overflow-hidden">
           <Image
-            src={video.thumbnail}
+            src={video.thumbnail || video.thumbnail_url}
             alt={video.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            fallbackSrc="/api/placeholder/640/360"
           />
           
           {/* Duration Badge */}
-          <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
-            {formatDuration(video.duration)}
-          </div>
-
-          {/* Points Reward Badge */}
-          <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground text-xs px-2 py-1 rounded-full flex items-center space-x-1">
-            <Icon name="Star" size={12} />
-            <span>+{video.pointsReward}</span>
+          <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs font-medium px-2 py-1 rounded">
+            {formatDuration(video.duration || video.duration_seconds || 0)}
           </div>
 
           {/* Play Overlay */}
           <div className={`
-            absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center
+            absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center
             ${isHovered ? 'opacity-100' : 'opacity-0'}
           `}>
-            <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center transform scale-75 group-hover:scale-100 transition-transform duration-300">
-              <Icon name="Play" size={24} color="var(--color-foreground)" className="ml-1" />
+            <div className="w-16 h-16 bg-white/95 rounded-full flex items-center justify-center transform scale-75 group-hover:scale-100 transition-transform duration-300 shadow-lg">
+              <Icon name="Play" size={28} color="var(--color-foreground)" className="ml-1" />
             </div>
           </div>
 
@@ -156,10 +163,11 @@ const HorizontalVideoGrid = ({
               className={`
                 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200
                 ${isLiked 
-                  ? 'bg-red-500 text-white' 
+                  ? 'bg-red-500 text-white shadow-lg' 
                   : 'bg-white/90 text-gray-700 hover:bg-red-500 hover:text-white'
                 }
               `}
+              title={isLiked ? 'Quitar me gusta' : 'Me gusta'}
             >
               <Icon name="Heart" size={14} className={isLiked ? 'fill-current' : ''} />
             </button>
@@ -169,17 +177,19 @@ const HorizontalVideoGrid = ({
               className={`
                 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200
                 ${isSaved 
-                  ? 'bg-yellow-500 text-white' 
+                  ? 'bg-yellow-500 text-white shadow-lg' 
                   : 'bg-white/90 text-gray-700 hover:bg-yellow-500 hover:text-white'
                 }
               `}
+              title={isSaved ? 'Guardado' : 'Guardar'}
             >
               <Icon name="Bookmark" size={14} className={isSaved ? 'fill-current' : ''} />
             </button>
-            
+
             <button
               onClick={(e) => handleShare(video, e)}
-              className="w-8 h-8 bg-white/90 text-gray-700 rounded-full flex items-center justify-center hover:bg-blue-500 hover:text-white transition-all duration-200"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 bg-white/90 text-gray-700 hover:bg-blue-500 hover:text-white"
+              title="Compartir"
             >
               <Icon name="Share" size={14} />
             </button>
@@ -189,175 +199,59 @@ const HorizontalVideoGrid = ({
         {/* Video Info */}
         <div className="p-4">
           {/* Creator Info */}
-          <div className="flex items-center space-x-3 mb-3">
+          <div className="flex items-start space-x-3 mb-2">
             <Link 
-              to={`/profile/${video.creator.id}`}
+              to={`/profile/${video.creator?.id}`}
               onClick={(e) => e.stopPropagation()}
               className="flex-shrink-0"
             >
               <img
-                src={video.creator.avatar}
-                alt={video.creator.name}
-                className="w-8 h-8 rounded-full object-cover"
+                src={video.creator?.avatar}
+                alt={video.creator?.name}
+                className="w-10 h-10 rounded-full object-cover border-2 border-border"
               />
             </Link>
+            
             <div className="flex-1 min-w-0">
+              {/* Title */}
+              <h3 className="text-sm font-semibold text-foreground line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+                {video.title}
+              </h3>
+              
+              {/* Creator Name */}
               <Link 
-                to={`/profile/${video.creator.id}`}
+                to={`/profile/${video.creator?.id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                {video.creator.name}
+                {video.creator?.name || 'Usuario'}
               </Link>
-              <p className="text-xs text-muted-foreground">{video.timeAgo}</p>
             </div>
           </div>
-
-          {/* Title */}
-          <h3 className="font-medium text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors">
-            {video.title}
-          </h3>
-
-          {/* Description */}
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-            {video.description}
-          </p>
 
           {/* Stats */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-1">
-                <Icon name="Eye" size={12} />
-                <span>{formatCount(video.views)}</span>
+                <Icon name="Eye" size={14} />
+                <span>{formatCount(video.views || video.views_count || 0)}</span>
               </div>
               <div className="flex items-center space-x-1">
-                <Icon name="Heart" size={12} />
-                <span>{formatCount(video.likes + (isLiked ? 1 : 0))}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <Icon name="MessageCircle" size={12} />
-                <span>{formatCount(video.comments)}</span>
+                <Icon name="Heart" size={14} />
+                <span>{formatCount((video.likes || video.likes_count || 0) + (isLiked ? 1 : 0))}</span>
               </div>
             </div>
-            
-            {/* Category Badge */}
-            <span className="px-2 py-1 bg-muted rounded-full text-xs font-medium">
-              {video.category}
-            </span>
+            <span>{formatTimeAgo(video.created_at || video.timeAgo)}</span>
           </div>
 
-          {/* Tags */}
-          {video.tags && video.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-3">
-              {video.tags.slice(0, 3).map((tag, index) => (
-                <span
-                  key={index}
-                  className="text-xs text-primary bg-primary/10 px-2 py-1 rounded-full"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {video.tags.length > 3 && (
-                <span className="text-xs text-muted-foreground">
-                  +{video.tags.length - 3} más
-                </span>
-              )}
+          {/* Category Badge */}
+          {video.category && (
+            <div className="mt-2">
+              <span className="inline-block text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                {video.category}
+              </span>
             </div>
           )}
-        </div>
-      </div>
-    );
-  };
-
-  // ===============================
-  // MODAL DE REPRODUCCIÓN
-  // ===============================
-
-  const VideoModal = ({ video, onClose }) => {
-    if (!video) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors z-10"
-        >
-          <Icon name="X" size={24} color="white" />
-        </button>
-
-        {/* Video Container */}
-        <div className="relative w-full max-w-4xl aspect-video bg-black rounded-lg overflow-hidden">
-          <video
-            ref={videoModalRef}
-            src={video.videoUrl}
-            className="w-full h-full object-contain"
-            controls
-            autoPlay
-            onPlay={() => onPointsEarned && onPointsEarned(10)}
-          />
-        </div>
-
-        {/* Video Info Overlay */}
-        <div className="absolute bottom-4 left-4 right-4 text-white">
-          <div className="bg-black/50 rounded-lg p-4 backdrop-blur-sm">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold mb-2">{video.title}</h2>
-                <p className="text-gray-300 mb-3">{video.description}</p>
-                
-                <div className="flex items-center space-x-6 text-sm">
-                  <div className="flex items-center space-x-2">
-                    <img
-                      src={video.creator.avatar}
-                      alt={video.creator.name}
-                      className="w-6 h-6 rounded-full"
-                    />
-                    <span>{video.creator.name}</span>
-                  </div>
-                  <span>{formatCount(video.views)} visualizaciones</span>
-                  <span>{video.timeAgo}</span>
-                </div>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flex items-center space-x-3 ml-4">
-                <button
-                  onClick={(e) => handleLike(video.id, e)}
-                  className={`
-                    flex items-center space-x-2 px-3 py-2 rounded-full transition-all duration-200
-                    ${likedVideos.has(video.id)
-                      ? 'bg-red-500 text-white' 
-                      : 'bg-white/20 hover:bg-red-500 text-white'
-                    }
-                  `}
-                >
-                  <Icon name="Heart" size={16} className={likedVideos.has(video.id) ? 'fill-current' : ''} />
-                  <span>{formatCount(video.likes + (likedVideos.has(video.id) ? 1 : 0))}</span>
-                </button>
-
-                <button
-                  onClick={(e) => handleSave(video.id, e)}
-                  className={`
-                    p-2 rounded-full transition-all duration-200
-                    ${savedVideos.has(video.id)
-                      ? 'bg-yellow-500 text-white' 
-                      : 'bg-white/20 hover:bg-yellow-500 text-white'
-                    }
-                  `}
-                >
-                  <Icon name="Bookmark" size={16} className={savedVideos.has(video.id) ? 'fill-current' : ''} />
-                </button>
-
-                <button
-                  onClick={(e) => handleShare(video, e)}
-                  className="p-2 bg-white/20 hover:bg-blue-500 rounded-full text-white transition-all duration-200"
-                >
-                  <Icon name="Share" size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -367,7 +261,7 @@ const HorizontalVideoGrid = ({
   // EMPTY STATE
   // ===============================
 
-  if (videos.length === 0) {
+  if (videos.length === 0 && !loading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
@@ -394,7 +288,7 @@ const HorizontalVideoGrid = ({
   return (
     <div className="space-y-6">
       {/* Grid de Videos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
         {videos.map((video) => (
           <HorizontalVideoCard key={video.id} video={video} />
         ))}
@@ -433,18 +327,15 @@ const HorizontalVideoGrid = ({
           <p className="text-muted-foreground">
             ¡Has visto todos los videos disponibles!
           </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Vuelve más tarde para ver contenido nuevo
-          </p>
+          <Button
+            variant="ghost"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="mt-4"
+          >
+            <Icon name="ArrowUp" size={16} className="mr-2" />
+            Volver arriba
+          </Button>
         </div>
-      )}
-
-      {/* Modal de Reproducción */}
-      {selectedVideo && (
-        <VideoModal
-          video={selectedVideo}
-          onClose={handleCloseModal}
-        />
       )}
     </div>
   );
