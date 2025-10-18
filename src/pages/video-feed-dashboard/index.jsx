@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/index.jsx  
-// VideoFeedDashboard CORREGIDO - Con nombres de usuario reales
-// ✅ ACTUALIZADO: Ahora muestra username real de user_profiles
+// VideoFeedDashboard OPTIMIZADO - Query con JOIN directo a user_profiles
+// ✅ ACTUALIZADO: Query optimizada igual que VideoPlayerPage
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -55,7 +55,7 @@ const ORIENTATION_TABS = [
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar videos - ✅ QUERY ACTUALIZADA CON JOIN A user_profiles
+// Hook para manejar videos - ✅ QUERY OPTIMIZADA CON JOIN DIRECTO
 const useVideos = () => {
   const { user: currentUser } = useAuth();
   const [videos, setVideos] = useState([]);
@@ -106,7 +106,7 @@ const useVideos = () => {
     return 'horizontal';
   }, []);
 
-  // ✅ FUNCIÓN ACTUALIZADA: Ahora usa datos reales de user_profiles
+  // ✅ FUNCIÓN ACTUALIZADA: Procesa videos con datos de user_profiles
   const processVideos = useCallback((rawVideos) => {
     const processed = rawVideos.map(video => {
       // Generar avatar con UI Avatars si no existe
@@ -127,7 +127,7 @@ const useVideos = () => {
         creator: {
           id: video.user_profiles?.id || video.user_id,
           username: video.user_profiles?.username || `user_${video.user_id?.substring(0, 8)}`,
-          name: video.user_profiles?.username || 'usuario',  // ← SOLO USERNAME
+          name: video.user_profiles?.username || 'usuario',
           avatar: avatarUrl
         }
       };
@@ -155,12 +155,21 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // ✅ QUERY SIMPLE: Solo videos, sin JOIN
+      // ✅ QUERY OPTIMIZADA: JOIN directo a user_profiles (igual que VideoPlayerPage)
       let query = supabase
         .from('videos')
-        .select('*')
+        .select(`
+          *,
+          user_profiles!videos_user_id_fkey (
+            id,
+            username,
+            avatar_url
+          )
+        `)
+        .eq('is_published', true)
         .order('created_at', { ascending: false });
 
+      // Filtrar por categoría si no es 'todos'
       if (category !== 'todos' && category !== 'all') {
         query = query.eq('category', category);
       }
@@ -175,39 +184,17 @@ const useVideos = () => {
         return;
       }
 
-      // ✅ Obtener IDs únicos de usuarios
-      const userIds = [...new Set(videoData?.map(v => v.user_id).filter(Boolean))];
-      
-      // ✅ Query separada para obtener perfiles de usuarios
-      let userProfiles = {};
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .in('id', userIds);
-
-        if (!profilesError && profiles) {
-          // Crear mapa de perfiles por ID
-          userProfiles = profiles.reduce((acc, profile) => {
-            acc[profile.id] = profile;
-            return acc;
-          }, {});
+      console.log('✅ Videos obtenidos con JOIN:', {
+        count: videoData?.length || 0,
+        sampleCreator: videoData?.[0]?.user_profiles,
+        firstVideo: {
+          id: videoData?.[0]?.id,
+          title: videoData?.[0]?.title,
+          creator: videoData?.[0]?.user_profiles?.username
         }
-      }
-
-      // ✅ Combinar datos de videos con perfiles
-      const videosWithProfiles = videoData?.map(video => ({
-        ...video,
-        user_profiles: userProfiles[video.user_id] || null
-      })) || [];
-
-      console.log('✅ Videos obtenidos:', {
-        count: videosWithProfiles.length,
-        sampleCreator: videosWithProfiles[0]?.user_profiles,
-        firstVideo: videosWithProfiles[0]
       });
 
-      const processedVideos = processVideos(videosWithProfiles);
+      const processedVideos = processVideos(videoData || []);
 
       if (reset) {
         setVideos(processedVideos);
