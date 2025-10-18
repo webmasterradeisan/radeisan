@@ -155,12 +155,12 @@ const useVideos = () => {
 
       console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // ✅ QUERY OPTIMIZADA: JOIN directo a user_profiles (igual que VideoPlayerPage)
+      // ✅ QUERY OPTIMIZADA: JOIN directo a user_profiles usando sintaxis por columna
       let query = supabase
         .from('videos')
         .select(`
           *,
-          user_profiles!videos_user_id_fkey (
+          user_profiles:user_id (
             id,
             username,
             avatar_url
