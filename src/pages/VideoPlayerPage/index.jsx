@@ -801,7 +801,7 @@ const VideoPlayerPage = () => {
                     <VideoPlayer
                       videoUrl={video.videoUrl}
                       thumbnailUrl={video.thumbnail}
-                      autoPlay={false}
+                      autoPlay={true}
                       onTimeUpdate={handleTimeUpdate}
                       onEnded={handleVideoEnded}
                       className="w-full aspect-video"
