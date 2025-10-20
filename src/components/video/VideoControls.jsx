@@ -1,4 +1,4 @@
-// src/components/video/VideoControl.jsx
+// src/components/video/VideoControls.jsx
 // Controles personalizados para el reproductor de video
 
 import React, { useState, useRef, useCallback } from 'react';
