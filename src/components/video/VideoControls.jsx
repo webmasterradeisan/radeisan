@@ -339,14 +339,7 @@ const VideoControls = ({
         </div>
       </div>
 
-      {/* KEYBOARD SHORTCUTS HINT (opcional, mostrar en hover) */}
-      <div className="hidden group-hover:block absolute top-4 left-4 bg-black/80 rounded-lg p-3 text-xs text-white/80 space-y-1">
-        <div><kbd className="px-2 py-1 bg-white/20 rounded">Espacio</kbd> Play/Pausa</div>
-        <div><kbd className="px-2 py-1 bg-white/20 rounded">F</kbd> Pantalla completa</div>
-        <div><kbd className="px-2 py-1 bg-white/20 rounded">M</kbd> Silenciar</div>
-        <div><kbd className="px-2 py-1 bg-white/20 rounded">← →</kbd> Adelantar/Retroceder 5s</div>
-        <div><kbd className="px-2 py-1 bg-white/20 rounded">↑ ↓</kbd> Volumen</div>
-      </div>
+      
     </div>
   );
 };
