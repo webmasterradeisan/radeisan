@@ -1,6 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
-// Feed vertical tipo TikTok/Instagram para videos verticales (9:16)
-// ✅ ACTUALIZADO: Soporte para initialIndex para comenzar en reel específico
+// ✅ ARREGLADO: Videos se reproducen + Tamaño compacto responsive
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -9,44 +8,80 @@ import Button from '../../../components/ui/Button';
 
 const ReelsContainer = ({ 
   videos = [], 
-  initialIndex = 0, // ✅ NUEVO PARÁMETRO: Índice inicial del reel
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
   loading = false 
 }) => {
-  const [currentIndex, setCurrentIndex] = useState(initialIndex); // ✅ USAR initialIndex
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
 
-  console.log('🎬 ReelsContainer renderizado:', {
+  console.log('🎬 ReelsContainer render:', {
     videosCount: videos.length,
-    currentIndex,
-    initialIndex,
-    isAutoPlaying
+    firstVideo: videos[0],
+    videoUrl: videos[0]?.videoUrl || videos[0]?.video_url,
+    currentIndex
   });
 
   // ===============================
-  // ✅ SINCRONIZAR CON initialIndex CUANDO CAMBIA
+  // RESPONSIVE DETECTION
   // ===============================
   useEffect(() => {
-    console.log('🎯 ReelsContainer: Actualizando currentIndex a', initialIndex);
-    setCurrentIndex(initialIndex);
-  }, [initialIndex]);
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // ===============================
-  // AUTOPLAY Y GESTIÓN DE VIDEOS
+  // MOUSE WHEEL NAVIGATION (DESKTOP)
+  // ===============================
+  useEffect(() => {
+    if (!isDesktop) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      
+      clearTimeout(handleWheel.timeout);
+      handleWheel.timeout = setTimeout(() => {
+        if (e.deltaY > 0 && currentIndex < videos.length - 1) {
+          setCurrentIndex(prev => prev + 1);
+        } else if (e.deltaY < 0 && currentIndex > 0) {
+          setCurrentIndex(prev => prev - 1);
+        }
+      }, 150);
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }
+  }, [isDesktop, currentIndex, videos.length]);
+
+  // ===============================
+  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS - ARREGLADO
   // ===============================
 
-  // Configurar autoplay cuando cambia el índice actual
   useEffect(() => {
     if (videos.length === 0) return;
 
     const currentVideo = videoRefs.current[currentIndex];
+    console.log('🎮 Intentando reproducir video:', {
+      index: currentIndex,
+      videoExists: !!currentVideo,
+      videoSrc: currentVideo?.src,
+      isAutoPlaying
+    });
+
     if (currentVideo && isAutoPlaying) {
       // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
@@ -56,11 +91,23 @@ const ReelsContainer = ({
         }
       });
 
-      // Reproducir video actual
+      // ✅ REPRODUCIR VIDEO ACTUAL
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
-      currentVideo.play().catch(err => {
-        console.log('Error autoplay:', err);
-      });
+      
+      const playPromise = currentVideo.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('✅ Video reproduciendo correctamente');
+          })
+          .catch(err => {
+            console.error('❌ Error autoplay:', err);
+            // Si falla, intentar con muted
+            currentVideo.muted = true;
+            currentVideo.play().catch(e => console.error('❌ Error crítico:', e));
+          });
+      }
     }
   }, [currentIndex, videos, isAutoPlaying, mutedVideos]);
 
@@ -68,7 +115,6 @@ const ReelsContainer = ({
   useEffect(() => {
     if (videos.length === 0) return;
 
-    // Precargar video siguiente
     if (currentIndex < videos.length - 1) {
       const nextVideo = videoRefs.current[currentIndex + 1];
       if (nextVideo && nextVideo.readyState < 2) {
@@ -76,31 +122,30 @@ const ReelsContainer = ({
       }
     }
 
-    // Cargar más videos si estamos cerca del final
     if (currentIndex >= videos.length - 3 && hasMore && !loading) {
       onLoadMore && onLoadMore();
     }
   }, [currentIndex, videos.length, hasMore, loading, onLoadMore]);
 
   // ===============================
-  // NAVEGACIÓN POR SCROLL/TOUCH
+  // NAVEGACIÓN MÓVIL (TOUCH)
   // ===============================
 
   const [startY, setStartY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleTouchStart = (e) => {
+    if (isDesktop) return;
     setStartY(e.touches[0].clientY);
     setIsDragging(true);
   };
 
   const handleTouchMove = (e) => {
-    if (!isDragging) return;
+    if (!isDragging || isDesktop) return;
     
     const currentY = e.touches[0].clientY;
     const diff = startY - currentY;
     
-    // Visual feedback durante el drag
     const container = containerRef.current;
     if (container && Math.abs(diff) > 50) {
       container.style.transform = `translateY(${-diff * 0.1}px)`;
@@ -108,7 +153,7 @@ const ReelsContainer = ({
   };
 
   const handleTouchEnd = (e) => {
-    if (!isDragging) return;
+    if (!isDragging || isDesktop) return;
     setIsDragging(false);
 
     const currentY = e.changedTouches[0].clientY;
@@ -119,25 +164,37 @@ const ReelsContainer = ({
       container.style.transform = 'translateY(0)';
     }
 
-    // Navegar si el swipe es suficientemente grande
     if (Math.abs(diff) > 100) {
       if (diff > 0 && currentIndex < videos.length - 1) {
-        // Swipe up - próximo video
         setCurrentIndex(prev => prev + 1);
       } else if (diff < 0 && currentIndex > 0) {
-        // Swipe down - video anterior  
         setCurrentIndex(prev => prev - 1);
       }
     }
   };
 
-  // Navegación con teclas
+  // ===============================
+  // NAVEGACIÓN CON FLECHAS Y TECLADO
+  // ===============================
+  
+  const navigateNext = () => {
+    if (currentIndex < videos.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    }
+  };
+
+  const navigatePrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowUp' && currentIndex > 0) {
-        setCurrentIndex(prev => prev - 1);
-      } else if (e.key === 'ArrowDown' && currentIndex < videos.length - 1) {
-        setCurrentIndex(prev => prev + 1);
+      if (e.key === 'ArrowUp') {
+        navigatePrevious();
+      } else if (e.key === 'ArrowDown') {
+        navigateNext();
       } else if (e.key === ' ') {
         e.preventDefault();
         handlePlayPause();
@@ -186,7 +243,7 @@ const ReelsContainer = ({
       newLikedVideos.delete(videoId);
     } else {
       newLikedVideos.add(videoId);
-      onPointsEarned && onPointsEarned({ points: 5 });
+      onPointsEarned && onPointsEarned(5);
     }
     setLikedVideos(newLikedVideos);
   };
@@ -197,7 +254,7 @@ const ReelsContainer = ({
       newSavedVideos.delete(videoId);
     } else {
       newSavedVideos.add(videoId);
-      onPointsEarned && onPointsEarned({ points: 2 });
+      onPointsEarned && onPointsEarned(2);
     }
     setSavedVideos(newSavedVideos);
   };
@@ -210,20 +267,19 @@ const ReelsContainer = ({
           text: `Mira este reel de ${video.creator.name}`,
           url: `${window.location.origin}/reel/${video.id}`
         });
-        onPointsEarned && onPointsEarned({ points: 3 });
+        onPointsEarned && onPointsEarned(3);
       } catch (error) {
         console.log('Error sharing:', error);
       }
     } else {
-      // Fallback: copiar al clipboard
       navigator.clipboard?.writeText(`${window.location.origin}/reel/${video.id}`);
-      onPointsEarned && onPointsEarned({ points: 3 });
+      onPointsEarned && onPointsEarned(3);
     }
   };
 
   const handleFollow = (creatorId) => {
     console.log('Following creator:', creatorId);
-    onPointsEarned && onPointsEarned({ points: 10 });
+    onPointsEarned && onPointsEarned(10);
   };
 
   // ===============================
@@ -236,7 +292,7 @@ const ReelsContainer = ({
     } else if (count >= 1000) {
       return `${(count / 1000).toFixed(1)}K`;
     }
-    return count.toString();
+    return count?.toString() || '0';
   };
 
   // ===============================
@@ -245,7 +301,10 @@ const ReelsContainer = ({
 
   if (videos.length === 0) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
+      <div className={`
+        flex items-center justify-center bg-background
+        ${isDesktop ? 'h-[80vh] max-w-md mx-auto' : 'h-screen'}
+      `}>
         <div className="text-center px-4">
           <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <Icon name="Smartphone" size={32} color="var(--color-primary)" />
@@ -274,153 +333,210 @@ const ReelsContainer = ({
     const isSaved = savedVideos.has(video.id);
     const isMuted = mutedVideos.has(video.id);
 
+    // ✅ NORMALIZAR videoUrl - soporta ambos formatos
+    const videoSource = video.videoUrl || video.video_url;
+
+    console.log('🎬 Rendering ReelItem:', {
+      index,
+      isActive,
+      videoId: video.id,
+      videoSource,
+      hasVideoUrl: !!videoSource
+    });
+
     return (
       <div className={`
-        relative w-full h-screen flex-shrink-0 bg-black
+        relative w-full flex-shrink-0 bg-black rounded-lg overflow-hidden
+        ${isDesktop ? 'h-[80vh]' : 'h-screen'}
         ${isActive ? 'z-10' : 'z-0'}
       `}>
-        {/* VIDEO PLAYER */}
-        <video
-          ref={ref => {
-            if (ref) videoRefs.current[index] = ref;
-          }}
-          src={video.videoUrl || video.video_url}
-          className="w-full h-full object-cover"
-          loop
-          playsInline
-          preload={Math.abs(index - currentIndex) <= 1 ? 'auto' : 'metadata'}
-          onClick={handlePlayPause}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        />
+        {/* ✅ VIDEO PLAYER - CON VERIFICACIÓN DE URL */}
+        {videoSource ? (
+          <video
+            ref={ref => {
+              if (ref) videoRefs.current[index] = ref;
+            }}
+            src={videoSource}
+            poster={video.thumbnail || video.thumbnail_url}
+            className="w-full h-full object-cover"
+            loop
+            playsInline
+            preload={Math.abs(index - currentIndex) <= 1 ? 'auto' : 'none'}
+            muted={isMuted}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onClick={handlePlayPause}
+            onError={(e) => {
+              console.error('❌ Error cargando video:', {
+                src: videoSource,
+                error: e.target.error
+              });
+            }}
+            onLoadedData={() => {
+              console.log('✅ Video cargado:', videoSource);
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gray-900">
+            <div className="text-center text-white">
+              <Icon name="AlertCircle" size={48} className="mx-auto mb-4 opacity-50" />
+              <p className="text-sm opacity-75">Video no disponible</p>
+            </div>
+          </div>
+        )}
 
-        {/* CONTROLES LATERALES (Derecha) */}
-        <div className="absolute right-4 bottom-32 flex flex-col space-y-6 z-20">
+        {/* OVERLAY GRADIENTE */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
+
+        {/* CONTROLES LATERALES (Estilo TikTok) */}
+        <div className={`
+          absolute flex flex-col items-center space-y-4
+          ${isDesktop ? 'right-6 bottom-16' : 'right-4 bottom-20'}
+        `}>
           
-          {/* Avatar + Seguir */}
+          {/* Avatar del creador */}
           <div className="relative">
-            <Link to={`/profile/${video.creator.id}`}>
+            <Link to={`/profile/${video.creator?.id}`} className="block">
               <img
-                src={video.creator.avatar}
-                alt={video.creator.name}
-                className="w-12 h-12 rounded-full border-2 border-white"
+                src={video.creator?.avatar}
+                alt={video.creator?.name}
+                className={`
+                  rounded-full border-2 border-white object-cover
+                  ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
+                `}
               />
             </Link>
             <button
-              onClick={() => handleFollow(video.creator.id)}
-              className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-primary rounded-full flex items-center justify-center border-2 border-black"
+              onClick={() => handleFollow(video.creator?.id)}
+              className={`
+                absolute -bottom-2 left-1/2 transform -translate-x-1/2 
+                bg-red-500 rounded-full flex items-center justify-center 
+                text-white font-bold hover:bg-red-600 transition-colors
+                ${isDesktop ? 'w-7 h-7 text-base' : 'w-6 h-6 text-sm'}
+              `}
             >
-              <Icon name="Plus" size={14} color="white" />
+              +
             </button>
           </div>
 
           {/* Like */}
           <button
             onClick={() => handleLike(video.id)}
-            className="flex flex-col items-center space-y-1"
+            className="flex flex-col items-center space-y-1 group"
           >
             <div className={`
-              w-12 h-12 rounded-full flex items-center justify-center
-              ${isLiked ? 'bg-red-500' : 'bg-white/20 backdrop-blur-sm'}
+              rounded-full flex items-center justify-center transition-all duration-200
+              ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
+              ${isLiked 
+                ? 'bg-red-500/20 text-red-500' 
+                : 'bg-black/30 text-white hover:bg-white/20'
+              }
             `}>
               <Icon 
-                name={isLiked ? 'Heart' : 'Heart'} 
-                size={24} 
-                color={isLiked ? 'white' : 'white'}
-                fill={isLiked ? 'white' : 'none'}
+                name="Heart" 
+                size={isDesktop ? 26 : 24} 
+                className={isLiked ? 'fill-current' : ''} 
               />
             </div>
-            <span className="text-white text-xs font-medium">
-              {formatCount(video.likes + (isLiked ? 1 : 0))}
+            <span className={`text-white font-medium ${isDesktop ? 'text-sm' : 'text-xs'}`}>
+              {formatCount((video.likes || 0) + (isLiked ? 1 : 0))}
             </span>
           </button>
 
-          {/* Comments */}
-          <button
-            onClick={() => console.log('Open comments')}
-            className="flex flex-col items-center space-y-1"
-          >
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-              <Icon name="MessageCircle" size={24} color="white" />
+          {/* Comentarios */}
+          <button className="flex flex-col items-center space-y-1">
+            <div className={`
+              bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors
+              ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
+            `}>
+              <Icon name="MessageCircle" size={isDesktop ? 26 : 24} color="white" />
             </div>
-            <span className="text-white text-xs font-medium">
-              {formatCount(video.comments)}
+            <span className={`text-white font-medium ${isDesktop ? 'text-sm' : 'text-xs'}`}>
+              {formatCount(video.comments || 0)}
             </span>
           </button>
 
-          {/* Save */}
+          {/* Guardar */}
           <button
             onClick={() => handleSave(video.id)}
             className="flex flex-col items-center space-y-1"
           >
             <div className={`
-              w-12 h-12 rounded-full flex items-center justify-center
-              ${isSaved ? 'bg-yellow-500' : 'bg-white/20 backdrop-blur-sm'}
+              rounded-full flex items-center justify-center transition-all duration-200
+              ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
+              ${isSaved 
+                ? 'bg-yellow-500/20 text-yellow-500' 
+                : 'bg-black/30 text-white hover:bg-white/20'
+              }
             `}>
               <Icon 
                 name="Bookmark" 
-                size={24} 
-                color="white"
-                fill={isSaved ? 'white' : 'none'}
+                size={isDesktop ? 26 : 24} 
+                className={isSaved ? 'fill-current' : ''} 
               />
             </div>
-            <span className="text-white text-xs font-medium">
-              {isSaved ? 'Guardado' : 'Guardar'}
-            </span>
           </button>
 
-          {/* Share */}
+          {/* Compartir */}
           <button
             onClick={() => handleShare(video)}
             className="flex flex-col items-center space-y-1"
           >
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-              <Icon name="Share2" size={24} color="white" />
+            <div className={`
+              bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors
+              ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
+            `}>
+              <Icon name="Share" size={isDesktop ? 26 : 24} color="white" />
             </div>
-            <span className="text-white text-xs font-medium">
-              Compartir
-            </span>
           </button>
 
           {/* Mute/Unmute */}
           <button
             onClick={() => handleMuteToggle(video.id)}
-            className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
+            className="flex flex-col items-center space-y-1"
           >
-            <Icon 
-              name={isMuted ? 'VolumeX' : 'Volume2'} 
-              size={24} 
-              color="white" 
-            />
+            <div className={`
+              bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors
+              ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
+            `}>
+              <Icon 
+                name={isMuted ? 'VolumeX' : 'Volume2'} 
+                size={isDesktop ? 26 : 24} 
+                color="white" 
+              />
+            </div>
           </button>
         </div>
 
         {/* INFORMACIÓN DEL VIDEO (Abajo Izquierda) */}
-        <div className="absolute bottom-8 left-4 right-20 text-white z-20">
+        <div className={`
+          absolute text-white
+          ${isDesktop ? 'bottom-12 left-6 right-24' : 'bottom-8 left-4 right-20'}
+        `}>
           
           {/* Información del creador */}
           <div className="flex items-center space-x-3 mb-3">
             <Link 
-              to={`/profile/${video.creator.id}`}
-              className="font-semibold hover:underline"
+              to={`/profile/${video.creator?.id}`}
+              className={`font-semibold hover:underline ${isDesktop ? 'text-lg' : 'text-base'}`}
             >
-              @{video.creator.username || video.creator.name}
+              {video.creator?.name || 'Usuario'}
             </Link>
             <span className="text-gray-300">•</span>
-            <span className="text-gray-300 text-sm">{video.timeAgo || 'Hace poco'}</span>
+            <span className={`text-gray-300 ${isDesktop ? 'text-base' : 'text-sm'}`}>
+              {video.timeAgo || 'Reciente'}
+            </span>
           </div>
 
           {/* Título y descripción */}
           <div className="mb-3">
-            <h3 className="font-medium text-lg mb-1 line-clamp-2">
+            <h3 className={`font-medium mb-1 line-clamp-2 ${isDesktop ? 'text-xl' : 'text-lg'}`}>
               {video.title}
             </h3>
-            {video.description && (
-              <p className="text-gray-200 text-sm line-clamp-2 opacity-90">
-                {video.description}
-              </p>
-            )}
+            <p className={`text-gray-200 line-clamp-2 opacity-90 ${isDesktop ? 'text-base' : 'text-sm'}`}>
+              {video.description}
+            </p>
           </div>
 
           {/* Tags */}
@@ -429,7 +545,7 @@ const ReelsContainer = ({
               {video.tags.slice(0, 3).map((tag, tagIndex) => (
                 <span
                   key={tagIndex}
-                  className="text-cyan-400 text-sm font-medium"
+                  className={`text-cyan-400 font-medium ${isDesktop ? 'text-base' : 'text-sm'}`}
                 >
                   #{tag}
                 </span>
@@ -440,20 +556,23 @@ const ReelsContainer = ({
 
         {/* INDICADOR DE PLAY/PAUSE */}
         {!isAutoPlaying && isActive && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
-              <Icon name="Play" size={24} color="white" />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className={`
+              bg-black/50 rounded-full flex items-center justify-center
+              ${isDesktop ? 'w-20 h-20' : 'w-16 h-16'}
+            `}>
+              <Icon name="Play" size={isDesktop ? 28 : 24} color="white" />
             </div>
           </div>
         )}
 
         {/* PROGRESO DEL VIDEO */}
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20 z-20">
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
           <div 
             className="h-full bg-white transition-all duration-1000"
             style={{ 
               width: isActive ? '100%' : '0%',
-              transitionDuration: isActive ? `${video.duration}s` : '0s'
+              transitionDuration: isActive ? `${video.duration || 30}s` : '0s'
             }}
           />
         </div>
@@ -462,17 +581,23 @@ const ReelsContainer = ({
   };
 
   // ===============================
-  // RENDER PRINCIPAL
+  // ✅ RENDER PRINCIPAL - CON TAMAÑO RESPONSIVE CORRECTO
   // ===============================
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
+    <div className={`
+      relative overflow-hidden bg-black
+      ${isDesktop 
+        ? 'max-w-[500px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
+        : 'w-full h-screen'
+      }
+    `}>
       
       {/* CONTENEDOR DE REELS */}
       <div
         ref={containerRef}
-        className="flex flex-col h-full transition-transform duration-300"
+        className="flex flex-col h-full transition-transform duration-500 ease-out"
         style={{
-          transform: `translateY(-${currentIndex * 100}vh)`
+          transform: `translateY(-${currentIndex * (isDesktop ? 80 : 100)}vh)`
         }}
       >
         {videos.map((video, index) => (
@@ -485,60 +610,69 @@ const ReelsContainer = ({
         ))}
       </div>
 
-      {/* INDICADORES DE NAVEGACIÓN */}
-      <div className="absolute top-1/2 right-2 transform -translate-y-1/2 flex flex-col space-y-2 z-30">
-        {videos.map((_, index) => (
+      {/* FLECHAS DE NAVEGACIÓN DESKTOP */}
+      {isDesktop && (
+        <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between pointer-events-none">
           <button
-            key={index}
-            onClick={() => setCurrentIndex(index)}
+            onClick={navigatePrevious}
+            disabled={currentIndex === 0}
             className={`
-              w-1 h-6 rounded-full transition-all duration-200
-              ${index === currentIndex 
-                ? 'bg-white' 
-                : 'bg-white/40 hover:bg-white/60'
-              }
+              absolute top-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
+              w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full 
+              flex items-center justify-center transition-all duration-200
+              hover:bg-black/70 hover:scale-110 active:scale-95
+              ${currentIndex === 0 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
             `}
-          />
-        ))}
-      </div>
+          >
+            <Icon name="ChevronUp" size={24} color="white" />
+          </button>
 
-      {/* INDICADORES DE ESTADO */}
-      <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-30">
-        <div className="text-white text-sm bg-black/50 px-3 py-1 rounded-full backdrop-blur-sm">
+          <button
+            onClick={navigateNext}
+            disabled={currentIndex === videos.length - 1}
+            className={`
+              absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
+              w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full 
+              flex items-center justify-center transition-all duration-200
+              hover:bg-black/70 hover:scale-110 active:scale-95
+              ${currentIndex === videos.length - 1 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
+            `}
+          >
+            <Icon name="ChevronDown" size={24} color="white" />
+          </button>
+        </div>
+      )}
+
+      {/* INDICADORES DE NAVEGACIÓN LATERAL - REMOVIDOS */}
+
+      {/* CONTADOR E INDICADORES DE ESTADO */}
+      <div className={`
+        absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none
+        ${isDesktop ? 'text-base' : 'text-sm'}
+      `}>
+        <div className="text-white font-medium bg-black/30 rounded-full px-3 py-1">
           {currentIndex + 1} / {videos.length}
         </div>
         
         {loading && (
-          <div className="text-white text-sm flex items-center space-x-2 bg-black/50 px-3 py-1 rounded-full backdrop-blur-sm">
+          <div className="text-white flex items-center space-x-2 bg-black/30 rounded-full px-3 py-1">
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             <span>Cargando más...</span>
           </div>
         )}
       </div>
 
-      {/* INSTRUCCIONES DE USO (Solo primera vez) */}
-      {currentIndex === 0 && initialIndex === 0 && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none z-30">
-          <div className="bg-black/50 rounded-lg px-4 py-2 backdrop-blur-sm">
-            <p className="text-sm">Desliza ↑↓ para navegar</p>
-            <p className="text-xs opacity-75">Toca para pausar</p>
+      {/* INSTRUCCIONES DESKTOP/MÓVIL */}
+      {currentIndex === 0 && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none">
+          <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
+            <p className={isDesktop ? 'text-base' : 'text-sm'}>
+              {isDesktop ? 'Usa flechas ↑↓ o rueda del mouse' : 'Desliza ↑↓ para navegar'}
+            </p>
+            <p className={`opacity-75 ${isDesktop ? 'text-sm' : 'text-xs'}`}>
+              Toca para pausar
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* 🐛 DEBUG INFO - Solo en desarrollo */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 right-4 bg-black/90 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsContainer</div>
-          <div>📹 videos: {videos.length}</div>
-          <div>🎯 currentIndex: {currentIndex}</div>
-          <div>🎬 initialIndex: {initialIndex}</div>
-          <div>▶️ isAutoPlaying: {isAutoPlaying.toString()}</div>
-          <div>🔇 muted: {mutedVideos.size}</div>
-          <div>❤️ liked: {likedVideos.size}</div>
-          <div>📌 saved: {savedVideos.size}</div>
-          <div>🔄 loading: {loading.toString()}</div>
-          <div>⚡ hasMore: {hasMore.toString()}</div>
         </div>
       )}
     </div>
