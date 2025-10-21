@@ -1,6 +1,7 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ✅ ARREGLADO: Videos se reproducen + Tamaño compacto responsive
 // ✅ CORREGIDO: Salta directamente al reel seleccionado sin iterar por todos
+// ✅ CORREGIDO: Video inicial se reproduce automáticamente
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -21,10 +22,11 @@ const ReelsContainer = ({
   const [likedVideos, setLikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
-  const [enableTransition, setEnableTransition] = useState(false); // ✅ NUEVO: Controla si hay transición
+  const [enableTransition, setEnableTransition] = useState(false);
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
-  const isInitialMount = useRef(true); // ✅ NUEVO: Detecta el primer montaje
+  const isInitialMount = useRef(true);
+  const hasPlayedInitial = useRef(false); // ✅ NUEVO: Controla si ya reprodujo el video inicial
 
   console.log('🎬 ReelsContainer render:', {
     videosCount: videos.length,
@@ -32,7 +34,8 @@ const ReelsContainer = ({
     videoUrl: videos[0]?.videoUrl || videos[0]?.video_url,
     currentIndex,
     initialIndex,
-    enableTransition
+    enableTransition,
+    hasPlayedInitial: hasPlayedInitial.current
   });
 
   // ===============================
@@ -62,6 +65,61 @@ const ReelsContainer = ({
       setCurrentIndex(initialIndex);
     }
   }, [initialIndex, videos]);
+
+  // ===============================
+  // ✅ NUEVO: FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
+  // ===============================
+  useEffect(() => {
+    // Solo ejecutar una vez cuando el componente se monta
+    if (hasPlayedInitial.current || videos.length === 0) return;
+
+    console.log('🎬 Intentando reproducir video inicial:', currentIndex);
+    
+    // Esperar a que el video esté en el DOM y listo
+    const attemptPlay = () => {
+      const currentVideo = videoRefs.current[currentIndex];
+      
+      if (!currentVideo) {
+        console.log('⏳ Video no disponible aún, reintentando...');
+        setTimeout(attemptPlay, 100);
+        return;
+      }
+
+      console.log('🎮 Video encontrado, reproduciendo:', {
+        index: currentIndex,
+        src: currentVideo.src,
+        readyState: currentVideo.readyState
+      });
+
+      // Configurar el video
+      currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
+      
+      // Intentar reproducir
+      const playPromise = currentVideo.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('✅ Video inicial reproduciendo correctamente');
+            hasPlayedInitial.current = true;
+          })
+          .catch(err => {
+            console.error('❌ Error autoplay inicial:', err);
+            // Si falla, intentar con muted
+            currentVideo.muted = true;
+            currentVideo.play()
+              .then(() => {
+                console.log('✅ Video inicial reproduciendo (muted)');
+                hasPlayedInitial.current = true;
+              })
+              .catch(e => console.error('❌ Error crítico reproducción inicial:', e));
+          });
+      }
+    };
+
+    // Iniciar intento de reproducción
+    setTimeout(attemptPlay, 200);
+  }, [videos, currentIndex, mutedVideos]);
 
   // ===============================
   // RESPONSIVE DETECTION
@@ -107,13 +165,19 @@ const ReelsContainer = ({
 
   useEffect(() => {
     if (videos.length === 0) return;
+    
+    // Si es el video inicial y ya fue reproducido, skip
+    if (!hasPlayedInitial.current && currentIndex === initialIndex) {
+      return;
+    }
 
     const currentVideo = videoRefs.current[currentIndex];
     console.log('🎮 Intentando reproducir video:', {
       index: currentIndex,
       videoExists: !!currentVideo,
       videoSrc: currentVideo?.src,
-      isAutoPlaying
+      isAutoPlaying,
+      isInitialVideo: currentIndex === initialIndex
     });
 
     if (currentVideo && isAutoPlaying) {
@@ -143,7 +207,7 @@ const ReelsContainer = ({
           });
       }
     }
-  }, [currentIndex, videos, isAutoPlaying, mutedVideos]);
+  }, [currentIndex, videos, isAutoPlaying, mutedVideos, initialIndex]);
 
   // Precargar videos adyacentes
   useEffect(() => {
@@ -606,8 +670,6 @@ const ReelsContainer = ({
           </button>
         </div>
       )}
-
-      {/* INDICADORES DE NAVEGACIÓN LATERAL - REMOVIDOS */}
 
       {/* CONTADOR E INDICADORES DE ESTADO */}
       <div className={`
