@@ -1,5 +1,6 @@
 // src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
 // ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
+// ✅ ACTUALIZADO: Recibe y pasa índice de reel seleccionado a ReelsContainer
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import VideoCard from './VideoCard';
@@ -27,6 +28,7 @@ const VideoFeedGrid = ({
   videos = [], 
   layout = 'grid', 
   orientation = 'all',
+  selectedReelIndex = 0, // ✅ NUEVO PARÁMETRO: Índice del reel seleccionado
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
@@ -46,10 +48,11 @@ const VideoFeedGrid = ({
   const isMobile = useIsMobile();
   
   // 🎯 DEBUG: Console.logs para verificar cambios
-  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON NAVEGACIÓN A /reels');
+  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ÍNDICE DE REEL');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
   console.log('📐 orientation:', orientation);
+  console.log('🎯 selectedReelIndex:', selectedReelIndex); // ✅ NUEVO DEBUG
   console.log('📹 videos count:', videos.length);
   console.log('🎥 reels count:', reelsVideos.length);
   console.log('🎬 horizontal videos count:', horizontalVideos.length);
@@ -301,13 +304,14 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // RENDER REELS CONTAINER (PANTALLA COMPLETA)
+  // ✅ RENDER REELS CONTAINER (PANTALLA COMPLETA) - CON ÍNDICE INICIAL
   // ===============================
   if (layout === 'reels') {
-    console.log('🎬 Renderizando ReelsContainer (pantalla completa)');
+    console.log('🎬 Renderizando ReelsContainer con initialIndex:', selectedReelIndex);
     return (
       <ReelsContainer
         videos={reelsVideos}
+        initialIndex={selectedReelIndex}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
         hasMore={hasMore}
@@ -424,7 +428,7 @@ const VideoFeedGrid = ({
       {/* 🐛 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v3.0</div>
+          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v3.1</div>
           <div>📱 isMobile: {isMobile.toString()}</div>
           <div>🎬 layout: {layout}</div>
           <div>📹 total videos: {videos.length}</div>
@@ -434,6 +438,7 @@ const VideoFeedGrid = ({
           <div>🔄 loading: {loading.toString()}</div>
           <div>⚡ hasMore: {hasMore.toString()}</div>
           <div>📐 orientation: {orientation}</div>
+          <div>🎯 selectedReelIndex: {selectedReelIndex}</div>
           <div>🎯 Carousel: {(isMobile && reelsVideos.length > 0).toString()}</div>
         </div>
       )}
