@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsCarouselDesktop.jsx
-// ✅ NUEVO COMPONENTE: Carrusel horizontal de reels para desktop
+// ✅ ACTUALIZADO: Pasa ID del video además del índice para reproducción correcta
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -8,7 +8,7 @@ import Button from '../../../components/ui/Button';
 /**
  * 🖥️ CAROUSEL HORIZONTAL DE REELS PARA DESKTOP
  * Muestra 4-5 reels visibles + navegación con botones
- * Al hacer clic → Abre ReelsContainer
+ * Al hacer clic → Abre ReelsContainer con el reel correcto
  */
 const ReelsCarouselDesktop = ({ 
   videos = [], 
@@ -83,12 +83,18 @@ const ReelsCarouselDesktop = ({
     }
   };
 
-  // Handler para clic en reel
-  const handleReelClick = (reelIndex) => {
-    console.log('🎯 Desktop: Click en reel', reelIndex);
+  // ===============================
+  // ✅ HANDLER ACTUALIZADO: Pasa el reel completo para obtener su ID
+  // ===============================
+  const handleReelClick = (reel, reelIndex) => {
+    console.log('🎯 Desktop Carousel: Click en reel');
+    console.log('   📍 Índice en carrusel:', reelIndex);
+    console.log('   🆔 ID del video:', reel.id);
+    console.log('   📹 Título:', reel.title);
     
     if (onReelClick) {
-      onReelClick(reelIndex);
+      // ✅ Pasar ÍNDICE Y ID al handler padre
+      onReelClick(reelIndex, reel.id);
     } else {
       // Fallback: navegar a /reels
       navigate(`/reels?start=${reelIndex}`);
@@ -178,7 +184,7 @@ const ReelsCarouselDesktop = ({
                 key={reel.id}
                 className="flex-shrink-0 cursor-pointer group/reel"
                 style={{ width: ITEM_WIDTH }}
-                onClick={() => handleReelClick(index)}
+                onClick={() => handleReelClick(reel, index)}
               >
                 {/* Thumbnail Container (9:16 aspect ratio) */}
                 <div className="relative w-full aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-md">
