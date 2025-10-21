@@ -1,4 +1,4 @@
-// src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
+// src/pages/video-feed-dashboard/components/VideoFeedGri.jsx
 // ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
 // ✅ ACTUALIZADO: Recibe y pasa índice de reel seleccionado a ReelsContainer
 import React, { useState, useEffect, useCallback } from 'react';
