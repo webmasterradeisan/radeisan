@@ -2,6 +2,7 @@
 // ✅ ARREGLADO: Videos se reproducen + Tamaño compacto responsive
 // ✅ CORREGIDO: Salta directamente al reel seleccionado sin iterar por todos
 // ✅ CORREGIDO: Video inicial se reproduce automáticamente
+// ✅ CORREGIDO: Solo un video se reproduce a la vez (sin audio duplicado)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -26,7 +27,7 @@ const ReelsContainer = ({
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
   const isInitialMount = useRef(true);
-  const hasPlayedInitial = useRef(false); // ✅ NUEVO: Controla si ya reprodujo el video inicial
+  const hasPlayedInitial = useRef(false);
 
   console.log('🎬 ReelsContainer render:', {
     videosCount: videos.length,
@@ -67,7 +68,7 @@ const ReelsContainer = ({
   }, [initialIndex, videos]);
 
   // ===============================
-  // ✅ NUEVO: FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
+  // ✅ NUEVO: FORZAR REPRODUCCIÓN DEL VIDEO INICIAL (CORREGIDO)
   // ===============================
   useEffect(() => {
     // Solo ejecutar una vez cuando el componente se monta
@@ -91,7 +92,17 @@ const ReelsContainer = ({
         readyState: currentVideo.readyState
       });
 
-      // Configurar el video
+      // ✅ PRIMERO: PAUSAR TODOS LOS OTROS VIDEOS
+      console.log('⏸️ Pausando todos los videos excepto el índice:', currentIndex);
+      videoRefs.current.forEach((video, index) => {
+        if (video && index !== currentIndex) {
+          video.pause();
+          video.currentTime = 0;
+          console.log('   ⏸️ Video pausado:', index);
+        }
+      });
+
+      // ✅ SEGUNDO: CONFIGURAR Y REPRODUCIR EL VIDEO ACTUAL
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       // Intentar reproducir
@@ -118,7 +129,7 @@ const ReelsContainer = ({
     };
 
     // Iniciar intento de reproducción
-    setTimeout(attemptPlay, 200);
+    setTimeout(attemptPlay, 250);
   }, [videos, currentIndex, mutedVideos]);
 
   // ===============================
@@ -166,22 +177,25 @@ const ReelsContainer = ({
   useEffect(() => {
     if (videos.length === 0) return;
     
-    // Si es el video inicial y ya fue reproducido, skip
+    // ✅ Si es el video inicial y aún no se ha reproducido, dejar que el useEffect anterior lo maneje
     if (!hasPlayedInitial.current && currentIndex === initialIndex) {
+      console.log('⏭️ Skipping autoplay - el video inicial será manejado por useEffect dedicado');
       return;
     }
 
     const currentVideo = videoRefs.current[currentIndex];
-    console.log('🎮 Intentando reproducir video:', {
+    console.log('🎮 Autoplay - Intentando reproducir video:', {
       index: currentIndex,
       videoExists: !!currentVideo,
       videoSrc: currentVideo?.src,
       isAutoPlaying,
-      isInitialVideo: currentIndex === initialIndex
+      isInitialVideo: currentIndex === initialIndex,
+      hasPlayedInitial: hasPlayedInitial.current
     });
 
     if (currentVideo && isAutoPlaying) {
       // Pausar todos los otros videos
+      console.log('⏸️ Autoplay - Pausando todos excepto:', currentIndex);
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
@@ -197,7 +211,7 @@ const ReelsContainer = ({
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log('✅ Video reproduciendo correctamente');
+            console.log('✅ Video reproduciendo correctamente (autoplay)');
           })
           .catch(err => {
             console.error('❌ Error autoplay:', err);
