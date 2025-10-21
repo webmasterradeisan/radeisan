@@ -1,4 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
+// ✅ ACTUALIZADO: onClick abre ReelsContainer en lugar de navegar a /reels
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -7,13 +8,14 @@ import Button from '../../../components/ui/Button';
 /**
  * 📱 CAROUSEL HORIZONTAL DE REELS PARA MÓVIL
  * Muestra 3 reels visibles + scroll horizontal táctil
- * Navegación a reels específicos con parámetros
+ * ✅ ACTUALIZADO: onClick abre visor en lugar de navegar
  */
 const ReelsGridMobile = ({ 
   videos = [], 
   onLoadMore, 
   hasMore = true, 
-  loading = false 
+  loading = false,
+  onReelClick // ✅ NUEVO: Callback para abrir visor
 }) => {
   const navigate = useNavigate();
   const scrollRef = useRef(null);
@@ -23,7 +25,8 @@ const ReelsGridMobile = ({
   console.log('🎬 ReelsGridMobile renderizado:', {
     totalVideos: videos.length,
     hasMore,
-    loading
+    loading,
+    hasOnReelClick: !!onReelClick
   });
 
   // Filtrar solo videos verticales para reels (aspect ratio <= 0.8)
@@ -69,10 +72,21 @@ const ReelsGridMobile = ({
     scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
   };
 
-  // Navegar a reel específico con parámetro de índice
+  // ===============================
+  // ✅ HANDLER ACTUALIZADO - Abre visor en lugar de navegar
+  // ===============================
   const handleReelClick = (reelIndex) => {
-    console.log('🎯 Navegando a reel:', reelIndex);
-    navigate(`/reels?start=${reelIndex}`);
+    console.log('🎯 Click en reel:', reelIndex);
+    
+    // Si existe el callback onReelClick, usarlo (NUEVO COMPORTAMIENTO)
+    if (onReelClick) {
+      console.log('✅ Abriendo visor de reels con índice:', reelIndex);
+      onReelClick(reelIndex);
+    } else {
+      // Fallback: Navegar a página de reels (COMPORTAMIENTO ANTERIOR)
+      console.log('⚠️ No hay onReelClick, navegando a /reels');
+      navigate(`/reels?start=${reelIndex}`);
+    }
   };
 
   // Navegar a página completa de reels
