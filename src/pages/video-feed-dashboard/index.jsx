@@ -2,7 +2,7 @@
 // VideoFeedDashboard OPTIMIZADO - Query con JOIN directo a user_profiles
 // ✅ ACTUALIZADO: Con carrusel de reels para desktop + aleatorización completa
 // ✅ CORREGIDO: Navegación del carrusel desktop (cambia vista en vez de navegar)
-// ✅ CORREGIDO: Pasa índice de reel seleccionado a ReelsContainer
+// ✅ CORREGIDO: Pasa ID del video en lugar de índice para reproducción correcta
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -331,7 +331,7 @@ const VideoFeedDashboard = () => {
   const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
-  const [selectedReelIndex, setSelectedReelIndex] = useState(0); // ✅ NUEVO ESTADO
+  const [selectedReelId, setSelectedReelId] = useState(null); // ✅ CAMBIADO: De selectedReelIndex a selectedReelId
 
   console.log('🏠 VideoFeedDashboard rendered:', {
     isMobile,
@@ -340,7 +340,7 @@ const VideoFeedDashboard = () => {
     videosCount: videos.length,
     filteredCount: filteredVideos.length,
     orientationStats,
-    selectedReelIndex, // ✅ DEBUG
+    selectedReelId, // ✅ DEBUG ACTUALIZADO
     error
   });
 
@@ -405,11 +405,14 @@ const VideoFeedDashboard = () => {
   }, []);
 
   // ===============================
-  // ✅ HANDLER ACTUALIZADO: GUARDA ÍNDICE DEL REEL SELECCIONADO
+  // ✅ HANDLER ACTUALIZADO: GUARDA ID DEL REEL SELECCIONADO (NO ÍNDICE)
   // ===============================
-  const handleReelClickDesktop = useCallback((reelIndex) => {
-    console.log('🎯 Desktop: Cambiando a vista Reels desde carrusel, índice:', reelIndex);
-    setSelectedReelIndex(reelIndex); // ✅ GUARDAR ÍNDICE
+  const handleReelClickDesktop = useCallback((reelIndex, videoId) => {
+    console.log('🎯 Desktop: Reel clickeado desde carrusel');
+    console.log('   📍 Índice en carrusel:', reelIndex);
+    console.log('   🆔 ID del video:', videoId);
+    
+    setSelectedReelId(videoId); // ✅ GUARDAR ID EN VEZ DE ÍNDICE
     setActiveOrientation('vertical');
   }, []);
 
@@ -629,7 +632,7 @@ const VideoFeedDashboard = () => {
                           videos={filteredVideos}
                           layout={effectiveLayout}
                           orientation={activeOrientation}
-                          selectedReelIndex={selectedReelIndex}
+                          selectedReelId={selectedReelId}
                           onLoadMore={handleLoadMore}
                           onPointsEarned={handlePointsEarned}
                           hasMore={hasMore}
@@ -670,7 +673,7 @@ const VideoFeedDashboard = () => {
         {/* Debug Info for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">✅ Dashboard v2.2 - CON ÍNDICE</div>
+            <div className="text-green-400 font-bold mb-1">✅ Dashboard v3.0 - CON ID</div>
             <div>📱 isMobile: {isMobile.toString()}</div>
             <div>🎬 activeOrientation: {activeOrientation}</div>
             <div>🎯 originalLayout: {layout}</div>
@@ -681,7 +684,7 @@ const VideoFeedDashboard = () => {
             <div>🎠 Mobile Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
             <div>🖥️ Desktop Carousel: {(!isMobile && activeOrientation === 'all').toString()}</div>
             <div>📊 Stats: V:{orientationStats.vertical} H:{orientationStats.horizontal}</div>
-            <div>🎯 selectedReelIndex: {selectedReelIndex}</div>
+            <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
             <div>❌ error: {error || 'none'}</div>
           </div>
         )}
