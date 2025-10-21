@@ -1,6 +1,7 @@
 // src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
-// ✅ ACTUALIZADO: Separación de reels y videos + Aleatorización + Visor de reels
+// ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
 import HorizontalVideoGrid from './HorizontalVideoGrid';
@@ -34,19 +35,18 @@ const VideoFeedGrid = ({
   const [displayVideos, setDisplayVideos] = useState(videos);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  // ✅ NUEVOS ESTADOS PARA REELS Y VIDEOS SEPARADOS
+  // ✅ ESTADOS PARA REELS Y VIDEOS SEPARADOS
   const [reelsVideos, setReelsVideos] = useState([]);
   const [horizontalVideos, setHorizontalVideos] = useState([]);
   
-  // ✅ ESTADO PARA MOSTRAR VISOR DE REELS
-  const [showReelsViewer, setShowReelsViewer] = useState(false);
-  const [selectedReelIndex, setSelectedReelIndex] = useState(0);
+  // ✅ NAVEGACIÓN CON REACT ROUTER (EN VEZ DE MODAL)
+  const navigate = useNavigate();
   
   // 📱 DETECCIÓN DE DISPOSITIVO MÓVIL
   const isMobile = useIsMobile();
   
   // 🎯 DEBUG: Console.logs para verificar cambios
-  console.log('🚨 VIDEOFEEDGRID - NUEVA VERSIÓN CON SEPARACIÓN Y ALEATORIZACIÓN');
+  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON NAVEGACIÓN A /reels');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
   console.log('📐 orientation:', orientation);
@@ -55,7 +55,6 @@ const VideoFeedGrid = ({
   console.log('🎬 horizontal videos count:', horizontalVideos.length);
   console.log('🔄 loading:', loading);
   console.log('⚡ hasMore:', hasMore);
-  console.log('👀 showReelsViewer:', showReelsViewer);
 
   // ===============================
   // ✅ SEPARACIÓN Y ALEATORIZACIÓN DE VIDEOS
@@ -123,8 +122,8 @@ const VideoFeedGrid = ({
   }, [videos, orientation]);
 
   const handleScroll = useCallback(() => {
-    // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
-    if (layout === 'reels' || showReelsViewer) return;
+    // Solo manejar scroll si NO estamos en modo reels
+    if (layout === 'reels') return;
 
     if (
       window.innerHeight + document.documentElement?.scrollTop
@@ -134,15 +133,15 @@ const VideoFeedGrid = ({
       setIsLoadingMore(true);
       onLoadMore && onLoadMore();
     }
-  }, [hasMore, isLoadingMore, loading, onLoadMore, layout, showReelsViewer]);
+  }, [hasMore, isLoadingMore, loading, onLoadMore, layout]);
 
   useEffect(() => {
     // Solo agregar event listener si NO estamos en modo reels
-    if (layout === 'reels' || showReelsViewer) return;
+    if (layout === 'reels') return;
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [handleScroll, layout, showReelsViewer]);
+  }, [handleScroll, layout]);
 
   useEffect(() => {
     if (!loading) {
@@ -151,19 +150,13 @@ const VideoFeedGrid = ({
   }, [loading]);
 
   // ===============================
-  // ✅ HANDLERS PARA REELS VIEWER
+  // ✅ HANDLER PARA NAVEGACIÓN A /reels
   // ===============================
   
   const handleReelClick = useCallback((reelIndex) => {
-    console.log('🎯 Abriendo reel en índice:', reelIndex);
-    setSelectedReelIndex(reelIndex);
-    setShowReelsViewer(true);
-  }, []);
-
-  const handleCloseReelsViewer = useCallback(() => {
-    console.log('❌ Cerrando visor de reels');
-    setShowReelsViewer(false);
-  }, []);
+    console.log('🎯 Navegando a /reels con índice:', reelIndex);
+    navigate(`/reels?start=${reelIndex}`);
+  }, [navigate]);
 
   // ===============================
   // HANDLERS ORIGINALES
@@ -214,6 +207,36 @@ const VideoFeedGrid = ({
       default:
         return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6';
     }
+  };
+
+  // ===============================
+  // ✅ DETERMINAR QUÉ VIDEOS MOSTRAR EN EL GRID
+  // ===============================
+  
+  const getGridVideos = () => {
+    console.log('🎬 getGridVideos:', { 
+      isMobile, 
+      orientation, 
+      reelsCount: reelsVideos.length,
+      horizontalsCount: horizontalVideos.length,
+      displayCount: displayVideos.length
+    });
+    
+    // En mobile: siempre solo videos horizontales
+    if (isMobile) {
+      console.log('📱 Mobile: mostrando horizontales');
+      return horizontalVideos;
+    }
+    
+    // En desktop con vista 'all': solo horizontales (reels ya en carrusel arriba)
+    if (orientation === 'all') {
+      console.log('🖥️ Desktop + all: mostrando horizontales (reels en carrusel)');
+      return horizontalVideos;
+    }
+    
+    // En desktop con filtro específico: usar displayVideos
+    console.log('🖥️ Desktop + filtrado: mostrando displayVideos');
+    return displayVideos;
   };
 
   // ===============================
@@ -278,33 +301,6 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // ✅ RENDER VISOR DE REELS (FULLSCREEN)
-  // ===============================
-  if (showReelsViewer) {
-    console.log('🎬 Renderizando ReelsContainer fullscreen');
-    return (
-      <div className="fixed inset-0 z-50 bg-black">
-        {/* Botón cerrar */}
-        <button
-          onClick={handleCloseReelsViewer}
-          className="absolute top-4 left-4 z-50 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors"
-        >
-          <Icon name="X" size={20} />
-        </button>
-        
-        <ReelsContainer
-          videos={reelsVideos}
-          initialIndex={selectedReelIndex}
-          onLoadMore={onLoadMore}
-          onPointsEarned={onPointsEarned}
-          hasMore={hasMore}
-          loading={loading}
-        />
-      </div>
-    );
-  }
-
-  // ===============================
   // RENDER REELS CONTAINER (PANTALLA COMPLETA)
   // ===============================
   if (layout === 'reels') {
@@ -337,35 +333,6 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // ✅ DETERMINAR QUÉ VIDEOS MOSTRAR EN EL GRID
-  // ===============================
-  
-  const getGridVideos = () => {
-    console.log('🎬 getGridVideos:', { 
-      isMobile, 
-      orientation, 
-      reelsCount: reelsVideos.length,
-      horizontalsCount: horizontalVideos.length,
-      displayCount: displayVideos.length
-    });
-    
-    // En mobile: siempre solo videos horizontales
-    if (isMobile) {
-      console.log('📱 Mobile: mostrando horizontales');
-      return horizontalVideos;
-    }
-    
-    // En desktop con vista 'all': solo horizontales (reels ya en carrusel arriba)
-    if (orientation === 'all') {
-      console.log('🖥️ Desktop + all: mostrando horizontales (reels en carrusel)');
-      return horizontalVideos;
-    }
-    
-    // En desktop con filtro específico: usar displayVideos
-    console.log('🖥️ Desktop + filtrado: mostrando displayVideos');
-    return displayVideos;
-  };
-  // ===============================
   // 📱 RENDER DASHBOARD PRINCIPAL
   // ===============================
   console.log('🎬 Renderizando Dashboard Principal:', { 
@@ -374,6 +341,7 @@ const VideoFeedGrid = ({
     videosCount: displayVideos.length,
     reelsCount: reelsVideos.length,
     horizontalsCount: horizontalVideos.length,
+    gridWillShow: getGridVideos().length,
     showCarousel: isMobile && layout !== 'reels'
   });
   
@@ -396,7 +364,7 @@ const VideoFeedGrid = ({
         </>
       )}
 
-      {/* ✅ GRID PRINCIPAL - SOLO VIDEOS HORIZONTALES EN MOBILE */}
+      {/* ✅ GRID PRINCIPAL - CON LÓGICA CORREGIDA */}
       <div className={getGridClasses()}>
         {getGridVideos()?.map((video) => (
           <VideoCard
@@ -456,7 +424,7 @@ const VideoFeedGrid = ({
       {/* 🐛 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v2.0</div>
+          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v3.0</div>
           <div>📱 isMobile: {isMobile.toString()}</div>
           <div>🎬 layout: {layout}</div>
           <div>📹 total videos: {videos.length}</div>
@@ -467,7 +435,6 @@ const VideoFeedGrid = ({
           <div>⚡ hasMore: {hasMore.toString()}</div>
           <div>📐 orientation: {orientation}</div>
           <div>🎯 Carousel: {(isMobile && reelsVideos.length > 0).toString()}</div>
-          <div>👀 Viewer: {showReelsViewer.toString()}</div>
         </div>
       )}
     </div>
