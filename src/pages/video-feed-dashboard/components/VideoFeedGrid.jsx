@@ -1,4 +1,5 @@
 // src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
+// ✅ ACTUALIZADO: Separación de reels y videos + Aleatorización + Visor de reels
 import React, { useState, useEffect, useCallback } from 'react';
 import VideoCard from './VideoCard';
 import ReelsContainer from './ReelsContainer';
@@ -7,6 +8,19 @@ import ReelsGridMobile from './ReelsGridMobile';
 import useIsMobile from '../../../hooks/useIsMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
+
+/**
+ * ✅ FUNCIÓN DE ALEATORIZACIÓN
+ * Mezcla un array sin mutar el original
+ */
+const shuffleArray = (array) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
 
 const VideoFeedGrid = ({ 
   videos = [], 
@@ -20,26 +34,97 @@ const VideoFeedGrid = ({
   const [displayVideos, setDisplayVideos] = useState(videos);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
+  // ✅ NUEVOS ESTADOS PARA REELS Y VIDEOS SEPARADOS
+  const [reelsVideos, setReelsVideos] = useState([]);
+  const [horizontalVideos, setHorizontalVideos] = useState([]);
+  
+  // ✅ ESTADO PARA MOSTRAR VISOR DE REELS
+  const [showReelsViewer, setShowReelsViewer] = useState(false);
+  const [selectedReelIndex, setSelectedReelIndex] = useState(0);
+  
   // 📱 DETECCIÓN DE DISPOSITIVO MÓVIL
   const isMobile = useIsMobile();
   
-  // 🎯 DEBUG: Console.logs para verificar que los cambios se aplican
-  console.log('🚨 VIDEOFEEDGRID CARGADO - NUEVA VERSIÓN CON CAROUSEL MÓVIL');
+  // 🎯 DEBUG: Console.logs para verificar cambios
+  console.log('🚨 VIDEOFEEDGRID - NUEVA VERSIÓN CON SEPARACIÓN Y ALEATORIZACIÓN');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
   console.log('📐 orientation:', orientation);
   console.log('📹 videos count:', videos.length);
+  console.log('🎥 reels count:', reelsVideos.length);
+  console.log('🎬 horizontal videos count:', horizontalVideos.length);
   console.log('🔄 loading:', loading);
   console.log('⚡ hasMore:', hasMore);
+  console.log('👀 showReelsViewer:', showReelsViewer);
 
+  // ===============================
+  // ✅ SEPARACIÓN Y ALEATORIZACIÓN DE VIDEOS
+  // ===============================
   useEffect(() => {
-    setDisplayVideos(videos);
-    console.log('📺 displayVideos updated:', videos.length);
-  }, [videos]);
+    console.log('🔄 Procesando videos:', videos.length);
+    
+    // Separar videos por orientación
+    const reels = videos.filter(video => {
+      // Si tiene orientation definida, usarla
+      if (video.orientation) {
+        return video.orientation === 'vertical';
+      }
+      
+      // Si no, usar aspect ratio
+      if (video.width && video.height) {
+        const aspectRatio = video.width / video.height;
+        return aspectRatio <= 0.8; // Vertical
+      }
+      
+      // Por defecto, asumir que es video horizontal
+      return false;
+    });
+    
+    const horizontals = videos.filter(video => {
+      // Si tiene orientation definida, usarla
+      if (video.orientation) {
+        return video.orientation === 'horizontal';
+      }
+      
+      // Si no, usar aspect ratio
+      if (video.width && video.height) {
+        const aspectRatio = video.width / video.height;
+        return aspectRatio >= 1.3; // Horizontal
+      }
+      
+      // Por defecto, asumir que es video horizontal
+      return true;
+    });
+    
+    // ✅ ALEATORIZAR AMBOS ARRAYS
+    const shuffledReels = shuffleArray(reels);
+    const shuffledHorizontals = shuffleArray(horizontals);
+    
+    console.log('✅ Videos separados y aleatorizados:', {
+      reelsOriginal: reels.length,
+      reelsShuffled: shuffledReels.length,
+      horizontalsOriginal: horizontals.length,
+      horizontalsShuffled: shuffledHorizontals.length
+    });
+    
+    setReelsVideos(shuffledReels);
+    setHorizontalVideos(shuffledHorizontals);
+    
+    // Actualizar displayVideos según la orientación activa
+    if (orientation === 'vertical') {
+      setDisplayVideos(shuffledReels);
+    } else if (orientation === 'horizontal') {
+      setDisplayVideos(shuffledHorizontals);
+    } else {
+      // Si es 'all', mostrar todos mezclados
+      setDisplayVideos(videos);
+    }
+    
+  }, [videos, orientation]);
 
   const handleScroll = useCallback(() => {
     // Solo manejar scroll si NO estamos en modo reels (el ReelsContainer maneja su propio scroll)
-    if (layout === 'reels') return;
+    if (layout === 'reels' || showReelsViewer) return;
 
     if (
       window.innerHeight + document.documentElement?.scrollTop
@@ -49,21 +134,40 @@ const VideoFeedGrid = ({
       setIsLoadingMore(true);
       onLoadMore && onLoadMore();
     }
-  }, [hasMore, isLoadingMore, loading, onLoadMore, layout]);
+  }, [hasMore, isLoadingMore, loading, onLoadMore, layout, showReelsViewer]);
 
   useEffect(() => {
     // Solo agregar event listener si NO estamos en modo reels
-    if (layout === 'reels') return;
+    if (layout === 'reels' || showReelsViewer) return;
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [handleScroll, layout]);
+  }, [handleScroll, layout, showReelsViewer]);
 
   useEffect(() => {
     if (!loading) {
       setIsLoadingMore(false);
     }
   }, [loading]);
+
+  // ===============================
+  // ✅ HANDLERS PARA REELS VIEWER
+  // ===============================
+  
+  const handleReelClick = useCallback((reelIndex) => {
+    console.log('🎯 Abriendo reel en índice:', reelIndex);
+    setSelectedReelIndex(reelIndex);
+    setShowReelsViewer(true);
+  }, []);
+
+  const handleCloseReelsViewer = useCallback(() => {
+    console.log('❌ Cerrando visor de reels');
+    setShowReelsViewer(false);
+  }, []);
+
+  // ===============================
+  // HANDLERS ORIGINALES
+  // ===============================
 
   const handleVideoLike = (videoId, isLiked) => {
     setDisplayVideos(prev => 
@@ -174,13 +278,40 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
+  // ✅ RENDER VISOR DE REELS (FULLSCREEN)
+  // ===============================
+  if (showReelsViewer) {
+    console.log('🎬 Renderizando ReelsContainer fullscreen');
+    return (
+      <div className="fixed inset-0 z-50 bg-black">
+        {/* Botón cerrar */}
+        <button
+          onClick={handleCloseReelsViewer}
+          className="absolute top-4 left-4 z-50 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+        >
+          <Icon name="X" size={20} />
+        </button>
+        
+        <ReelsContainer
+          videos={reelsVideos}
+          initialIndex={selectedReelIndex}
+          onLoadMore={onLoadMore}
+          onPointsEarned={onPointsEarned}
+          hasMore={hasMore}
+          loading={loading}
+        />
+      </div>
+    );
+  }
+
+  // ===============================
   // RENDER REELS CONTAINER (PANTALLA COMPLETA)
   // ===============================
   if (layout === 'reels') {
     console.log('🎬 Renderizando ReelsContainer (pantalla completa)');
     return (
       <ReelsContainer
-        videos={displayVideos}
+        videos={reelsVideos}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
         hasMore={hasMore}
@@ -196,7 +327,7 @@ const VideoFeedGrid = ({
     console.log('🎬 Renderizando HorizontalVideoGrid');
     return (
       <HorizontalVideoGrid
-        videos={displayVideos}
+        videos={horizontalVideos}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
         hasMore={hasMore}
@@ -212,20 +343,23 @@ const VideoFeedGrid = ({
     isMobile, 
     layout, 
     videosCount: displayVideos.length,
+    reelsCount: reelsVideos.length,
+    horizontalsCount: horizontalVideos.length,
     showCarousel: isMobile && layout !== 'reels'
   });
   
   return (
     <div className="space-y-6">
-      {/* 🚀 CAROUSEL HORIZONTAL DE REELS - SOLO EN MÓVIL */}
-      {isMobile && (
+      {/* ✅ CAROUSEL HORIZONTAL DE REELS - SOLO EN MÓVIL */}
+      {isMobile && reelsVideos.length > 0 && (
         <>
           <div className="block md:hidden">
             <ReelsGridMobile
-              videos={displayVideos}
+              videos={reelsVideos}
               onLoadMore={onLoadMore}
               hasMore={hasMore}
               loading={loading}
+              onReelClick={handleReelClick}
             />
           </div>
           {/* Separador visual */}
@@ -233,9 +367,9 @@ const VideoFeedGrid = ({
         </>
       )}
 
-      {/* 🎥 GRID PRINCIPAL DE VIDEOS */}
+      {/* ✅ GRID PRINCIPAL - SOLO VIDEOS HORIZONTALES EN MOBILE */}
       <div className={getGridClasses()}>
-        {displayVideos?.map((video) => (
+        {(isMobile ? horizontalVideos : displayVideos)?.map((video) => (
           <VideoCard
             key={video?.id}
             video={video}
@@ -293,14 +427,18 @@ const VideoFeedGrid = ({
       {/* 🐛 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
-          <div className="text-green-400 font-bold mb-1">🚨 DEBUG VideoFeedGrid</div>
+          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v2.0</div>
           <div>📱 isMobile: {isMobile.toString()}</div>
           <div>🎬 layout: {layout}</div>
-          <div>📹 videos: {displayVideos.length}</div>
+          <div>📹 total videos: {videos.length}</div>
+          <div>🎥 reels: {reelsVideos.length}</div>
+          <div>🎬 horizontals: {horizontalVideos.length}</div>
+          <div>📺 displaying: {displayVideos.length}</div>
           <div>🔄 loading: {loading.toString()}</div>
           <div>⚡ hasMore: {hasMore.toString()}</div>
           <div>📐 orientation: {orientation}</div>
-          <div>🎯 Carousel: {(isMobile && layout !== 'reels').toString()}</div>
+          <div>🎯 Carousel: {(isMobile && reelsVideos.length > 0).toString()}</div>
+          <div>👀 Viewer: {showReelsViewer.toString()}</div>
         </div>
       )}
     </div>
