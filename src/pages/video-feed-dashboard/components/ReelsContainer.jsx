@@ -8,12 +8,13 @@ import Button from '../../../components/ui/Button';
 
 const ReelsContainer = ({ 
   videos = [], 
+  initialIndex = 0,
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
   loading = false 
 }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
@@ -28,6 +29,14 @@ const ReelsContainer = ({
     videoUrl: videos[0]?.videoUrl || videos[0]?.video_url,
     currentIndex
   });
+
+  // ===============================
+// ✅ SINCRONIZAR CON initialIndex
+// ===============================
+useEffect(() => {
+  console.log('🎯 Sincronizando con initialIndex:', initialIndex);
+  setCurrentIndex(initialIndex);
+}, [initialIndex]);
 
   // ===============================
   // RESPONSIVE DETECTION
