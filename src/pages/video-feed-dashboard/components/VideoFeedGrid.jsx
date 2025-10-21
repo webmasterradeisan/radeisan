@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
 // ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
-// ✅ ACTUALIZADO: Recibe y pasa índice de reel seleccionado a ReelsContainer
+// ✅ ACTUALIZADO: Recibe ID del reel y lo convierte a índice correcto
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import VideoCard from './VideoCard';
@@ -28,7 +28,7 @@ const VideoFeedGrid = ({
   videos = [], 
   layout = 'grid', 
   orientation = 'all',
-  selectedReelIndex = 0, // ✅ NUEVO PARÁMETRO: Índice del reel seleccionado
+  selectedReelId = null, // ✅ CAMBIADO: De selectedReelIndex a selectedReelId
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
@@ -48,11 +48,11 @@ const VideoFeedGrid = ({
   const isMobile = useIsMobile();
   
   // 🎯 DEBUG: Console.logs para verificar cambios
-  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ÍNDICE DE REEL');
+  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ID DE REEL');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
   console.log('📐 orientation:', orientation);
-  console.log('🎯 selectedReelIndex:', selectedReelIndex); // ✅ NUEVO DEBUG
+  console.log('🆔 selectedReelId:', selectedReelId); // ✅ ACTUALIZADO
   console.log('📹 videos count:', videos.length);
   console.log('🎥 reels count:', reelsVideos.length);
   console.log('🎬 horizontal videos count:', horizontalVideos.length);
@@ -123,6 +123,34 @@ const VideoFeedGrid = ({
     }
     
   }, [videos, orientation]);
+
+  // ===============================
+  // ✅ FUNCIÓN NUEVA: Convierte ID del video a índice en array aleatorizado
+  // ===============================
+  const getInitialReelIndex = useCallback(() => {
+    // Si no hay ID seleccionado, iniciar en 0
+    if (!selectedReelId) {
+      console.log('🔍 VideoFeedGrid: No hay ID seleccionado, iniciando en índice 0');
+      return 0;
+    }
+    
+    // Buscar el índice del video por su ID en el array aleatorizado
+    const index = reelsVideos.findIndex(video => video.id === selectedReelId);
+    
+    console.log('🔍 VideoFeedGrid: Búsqueda de video por ID');
+    console.log('   🆔 ID buscado:', selectedReelId);
+    console.log('   📍 Índice encontrado:', index);
+    console.log('   📹 Video:', index >= 0 ? reelsVideos[index]?.title : 'No encontrado');
+    console.log('   📊 Total reels en array:', reelsVideos.length);
+    
+    // Si no se encuentra, iniciar en 0 (fallback)
+    if (index < 0) {
+      console.warn('⚠️ Video con ID', selectedReelId, 'no encontrado en array de reels');
+      return 0;
+    }
+    
+    return index;
+  }, [selectedReelId, reelsVideos]);
 
   const handleScroll = useCallback(() => {
     // Solo manejar scroll si NO estamos en modo reels
@@ -304,14 +332,21 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
-  // ✅ RENDER REELS CONTAINER (PANTALLA COMPLETA) - CON ÍNDICE INICIAL
+  // ✅ RENDER REELS CONTAINER (PANTALLA COMPLETA) - CON CONVERSIÓN DE ID A ÍNDICE
   // ===============================
   if (layout === 'reels') {
-    console.log('🎬 Renderizando ReelsContainer con initialIndex:', selectedReelIndex);
+    const initialIndex = getInitialReelIndex();
+    
+    console.log('🎬 Renderizando ReelsContainer:');
+    console.log('   🆔 selectedReelId recibido:', selectedReelId);
+    console.log('   📍 initialIndex calculado:', initialIndex);
+    console.log('   📊 Total reels:', reelsVideos.length);
+    console.log('   📹 Video a reproducir:', reelsVideos[initialIndex]?.title || 'No encontrado');
+    
     return (
       <ReelsContainer
         videos={reelsVideos}
-        initialIndex={selectedReelIndex}
+        initialIndex={initialIndex}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
         hasMore={hasMore}
@@ -428,7 +463,7 @@ const VideoFeedGrid = ({
       {/* 🐛 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v3.1</div>
+          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v4.0</div>
           <div>📱 isMobile: {isMobile.toString()}</div>
           <div>🎬 layout: {layout}</div>
           <div>📹 total videos: {videos.length}</div>
@@ -438,7 +473,7 @@ const VideoFeedGrid = ({
           <div>🔄 loading: {loading.toString()}</div>
           <div>⚡ hasMore: {hasMore.toString()}</div>
           <div>📐 orientation: {orientation}</div>
-          <div>🎯 selectedReelIndex: {selectedReelIndex}</div>
+          <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
           <div>🎯 Carousel: {(isMobile && reelsVideos.length > 0).toString()}</div>
         </div>
       )}
