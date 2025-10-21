@@ -1,5 +1,5 @@
 // src/pages/video-upload-studio/index.jsx
-// VideoUploadStudio con MINIATURAS ADAPTADAS para Reels (9:16) y Videos (16:9)
+// VideoUploadStudio con CARRUSEL de miniaturas y vista previa adaptada
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -45,7 +45,7 @@ const useVideoUpload = () => {
     return true;
   };
 
-  // NUEVA FUNCIÓN: Subir video con detección automática
+  // Subir video con detección automática
   const uploadVideo = async (file, metadata) => {
     try {
       setIsUploading(true);
@@ -64,7 +64,7 @@ const useVideoUpload = () => {
       // PASO 2: VALIDAR ARCHIVO
       validateVideoFile(file);
 
-      // PASO 3: DETECTAR ORIENTACIÓN PRIMERO
+      // PASO 3: DETECTAR ORIENTACIÓN
       setUploadProgress(5);
       console.log('🔍 Detectando orientación del video...');
       
@@ -73,10 +73,6 @@ const useVideoUpload = () => {
         orientationData = await detectVideoFileOrientation(file);
         setDetectionResult(orientationData);
         console.log('✅ Orientación detectada:', orientationData);
-        
-        console.log(`📊 Video detectado como: ${orientationData.orientation.toUpperCase()}`);
-        console.log(`📐 Dimensiones: ${orientationData.width}x${orientationData.height}`);
-        console.log(`📏 Aspect Ratio: ${orientationData.aspectRatio}`);
         
       } catch (detectionError) {
         console.warn('⚠️ Error en detección, continuando con fallback:', detectionError);
@@ -92,7 +88,7 @@ const useVideoUpload = () => {
 
       setUploadProgress(15);
 
-      // PASO 4: GENERAR NOMBRE ÚNICO PARA EL ARCHIVO
+      // PASO 4: GENERAR NOMBRE ÚNICO
       const timestamp = Date.now();
       const fileExtension = file.name.split('.').pop();
       const sanitizedTitle = metadata.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
@@ -113,24 +109,23 @@ const useVideoUpload = () => {
         if (uploadError) throw uploadError;
         uploadData = data;
       } catch (uploadError) {
-        console.warn('Bucket error, using fallback:', uploadError);
+        console.warn('Bucket error:', uploadError);
         throw new Error('Error de configuración de almacenamiento. Contacta al administrador.');
       }
 
       setUploadProgress(50);
 
-      // PASO 6: OBTENER URL PÚBLICA DEL VIDEO
+      // PASO 6: OBTENER URL PÚBLICA
       const { data: urlData } = supabase.storage
         .from('videos')
         .getPublicUrl(fileName);
 
       setUploadProgress(65);
 
-      // PASO 7: GENERAR Y SUBIR THUMBNAIL (MEJORADO)
+      // PASO 7: SUBIR THUMBNAIL
       let thumbnailUrl = null;
       try {
         if (metadata.customThumbnail) {
-          // ✨ NUEVO: Subir miniatura personalizada
           console.log('📸 Subiendo miniatura personalizada...');
           const thumbnailFileName = `${currentUser.id}/${timestamp}_custom_thumb.jpg`;
           
@@ -138,10 +133,7 @@ const useVideoUpload = () => {
             .from('thumbnails')
             .upload(thumbnailFileName, metadata.customThumbnail);
 
-          if (thumbError) {
-            console.warn('Error subiendo miniatura personalizada:', thumbError);
-            throw thumbError;
-          }
+          if (thumbError) throw thumbError;
 
           const { data: thumbUrlData } = supabase.storage
             .from('thumbnails')
@@ -151,7 +143,6 @@ const useVideoUpload = () => {
           console.log('✅ Miniatura personalizada subida');
           
         } else if (metadata.selectedThumbnail) {
-          // Subir miniatura auto-generada seleccionada
           console.log('📸 Subiendo miniatura auto-generada...');
           const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
           
@@ -168,18 +159,17 @@ const useVideoUpload = () => {
           }
         }
       } catch (thumbError) {
-        console.warn('Error generating/uploading thumbnail:', thumbError);
-        // Continuar sin thumbnail si hay error
+        console.warn('Error uploading thumbnail:', thumbError);
       }
 
       setUploadProgress(75);
 
-      // PASO 8: OBTENER DURACIÓN DEL VIDEO
+      // PASO 8: OBTENER DURACIÓN
       const videoDuration = await getVideoDuration(file);
 
       setUploadProgress(85);
 
-      // PASO 9: INSERTAR METADATA EN LA BASE DE DATOS
+      // PASO 9: INSERTAR EN BASE DE DATOS
       const { data: videoData, error: insertError } = await supabase
         .from('videos')
         .insert({
@@ -206,7 +196,7 @@ const useVideoUpload = () => {
 
       setUploadProgress(95);
 
-      // PASO 10: OTORGAR PUNTOS POR SUBIR VIDEO
+      // PASO 10: OTORGAR PUNTOS
       const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
       const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0;
       const uploadPoints = basePoints + orientationBonus;
@@ -245,7 +235,7 @@ const useVideoUpload = () => {
   };
 };
 
-// Hook para obtener videos recientes del usuario
+// Hook para obtener videos recientes
 const useUserVideos = () => {
   const { user } = useAuth();
   const [recentVideos, setRecentVideos] = useState([]);
@@ -303,7 +293,6 @@ const useUserVideos = () => {
 // UTILIDADES
 // ===============================
 
-// Obtener duración del video
 const getVideoDuration = (file) => {
   return new Promise((resolve) => {
     const video = document.createElement('video');
@@ -316,7 +305,6 @@ const getVideoDuration = (file) => {
   });
 };
 
-// Calcular puntos por subir video
 const calculateUploadPoints = (durationSeconds, category) => {
   let basePoints = 50;
   let durationPoints = Math.floor(durationSeconds / 60) * 10;
@@ -337,30 +325,25 @@ const calculateUploadPoints = (durationSeconds, category) => {
   return Math.round((basePoints + durationPoints) * multiplier);
 };
 
-// Agregar transacción de puntos
 const addPointsTransaction = async (points, type, description) => {
   console.log(`Points transaction: +${points} for ${type}: ${description}`);
 };
 
-// Formatear duración en MM:SS
 const formatDuration = (seconds) => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-// Formatear fecha
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('es-ES');
 };
 
-// Formatear velocidad de subida
 const formatSpeed = (bytesPerSecond) => {
   const mbps = bytesPerSecond / (1024 * 1024);
   return mbps < 1 ? `${(mbps * 1024).toFixed(0)} KB/s` : `${mbps.toFixed(1)} MB/s`;
 };
 
-// Formatear tiempo estimado
 const formatTime = (seconds) => {
   if (seconds < 60) return `${Math.round(seconds)}s`;
   const minutes = Math.floor(seconds / 60);
@@ -390,8 +373,11 @@ const VideoUploadStudio = () => {
   const [useCustomThumbnail, setUseCustomThumbnail] = useState(false);
   const [thumbnailError, setThumbnailError] = useState(null);
   
-  // ✨ NUEVO: Estado para detectar orientación del video
+  // Estado para orientación del video
   const [videoOrientation, setVideoOrientation] = useState('horizontal');
+  
+  // ✨ NUEVO: Estado para el carrusel de miniaturas
+  const [carouselIndex, setCarouselIndex] = useState(0);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -404,7 +390,6 @@ const VideoUploadStudio = () => {
     scheduledDate: ''
   });
 
-  // Opciones de categorías
   const categories = [
     { value: '', label: 'Selecciona una categoría' },
     { value: 'entertainment', label: 'Entretenimiento' },
@@ -426,6 +411,33 @@ const VideoUploadStudio = () => {
   ];
 
   // ===============================
+  // FUNCIONES DEL CARRUSEL
+  // ===============================
+
+  const handleCarouselPrev = () => {
+    const itemsPerView = videoOrientation === 'vertical' ? 2 : 1;
+    setCarouselIndex(prev => Math.max(0, prev - itemsPerView));
+  };
+
+  const handleCarouselNext = () => {
+    const itemsPerView = videoOrientation === 'vertical' ? 2 : 1;
+    const maxIndex = generatedThumbnails.length - itemsPerView;
+    setCarouselIndex(prev => Math.min(maxIndex, prev + itemsPerView));
+  };
+
+  const getVisibleThumbnails = () => {
+    const itemsPerView = videoOrientation === 'vertical' ? 2 : 1;
+    return generatedThumbnails.slice(carouselIndex, carouselIndex + itemsPerView);
+  };
+
+  const getCarouselIndicator = () => {
+    const itemsPerView = videoOrientation === 'vertical' ? 2 : 1;
+    const currentStart = carouselIndex + 1;
+    const currentEnd = Math.min(carouselIndex + itemsPerView, generatedThumbnails.length);
+    return `${currentStart}${itemsPerView > 1 ? `-${currentEnd}` : ''} / ${generatedThumbnails.length}`;
+  };
+
+  // ===============================
   // EVENT HANDLERS
   // ===============================
 
@@ -435,20 +447,20 @@ const VideoUploadStudio = () => {
       
       setSelectedFile(file);
       setCurrentStep(2);
+      setCarouselIndex(0); // Reset carrusel
       
-      // Auto-generar título basado en el nombre del archivo
       const title = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
       setFormData(prev => ({
         ...prev,
         title: prev.title || title
       }));
 
-      // ✨ NUEVO: Detectar orientación del video PRIMERO
+      // Detectar orientación
       const orientation = await detectVideoOrientation(file);
       setVideoOrientation(orientation);
       console.log('🎯 Orientación detectada:', orientation);
 
-      // Generar thumbnails automáticamente CON LA ORIENTACIÓN DETECTADA
+      // Generar thumbnails
       const thumbnails = await generateThumbnails(file, orientation);
       setGeneratedThumbnails(thumbnails);
       if (thumbnails.length > 0) {
@@ -463,7 +475,6 @@ const VideoUploadStudio = () => {
     setSelectedThumbnail(thumbnail);
   };
 
-  // Handler para miniatura personalizada
   const handleCustomThumbnailUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -471,7 +482,6 @@ const VideoUploadStudio = () => {
     setThumbnailError(null);
 
     try {
-      // ✨ MEJORADO: Validar con la orientación del video
       await validateCustomThumbnail(file, videoOrientation);
       
       setCustomThumbnail(file);
@@ -516,7 +526,6 @@ const VideoUploadStudio = () => {
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     
-    // Validación básica
     if (!selectedFile) {
       alert('Por favor selecciona un archivo de video');
       return;
@@ -532,7 +541,6 @@ const VideoUploadStudio = () => {
       return;
     }
 
-    // Validación de miniatura
     if (!useCustomThumbnail && !selectedThumbnail) {
       alert('Por favor selecciona una miniatura o sube una personalizada');
       return;
@@ -541,7 +549,6 @@ const VideoUploadStudio = () => {
     setIsSubmitting(true);
     
     try {
-      // Preparar metadata incluyendo miniatura
       const uploadMetadata = {
         ...formData,
         customThumbnail: useCustomThumbnail ? customThumbnail : null,
@@ -580,13 +587,12 @@ const VideoUploadStudio = () => {
     setSelectedThumbnail(null);
     setGeneratedThumbnails([]);
     setUploadSuccess(null);
-    
-    // Limpiar miniatura personalizada
     setCustomThumbnail(null);
     setCustomThumbnailPreview(null);
     setUseCustomThumbnail(false);
     setThumbnailError(null);
     setVideoOrientation('horizontal');
+    setCarouselIndex(0);
     
     setFormData({
       title: '',
@@ -604,7 +610,6 @@ const VideoUploadStudio = () => {
   // FUNCIONES DE GENERACIÓN Y VALIDACIÓN
   // ===============================
 
-  // ✨ NUEVA: Detectar orientación del video
   const detectVideoOrientation = (videoFile) => {
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -630,7 +635,6 @@ const VideoUploadStudio = () => {
     });
   };
 
-  // ✨ MEJORADO: Genera 6 miniaturas ADAPTADAS según orientación
   const generateThumbnails = async (videoFile, orientation = 'horizontal') => {
     try {
       const video = document.createElement('video');
@@ -639,14 +643,13 @@ const VideoUploadStudio = () => {
 
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
-          // 6 miniaturas en diferentes puntos
           const times = [
-            video.duration * 0.10,  // 10%
-            video.duration * 0.25,  // 25%
-            video.duration * 0.40,  // 40%
-            video.duration * 0.60,  // 60%
-            video.duration * 0.75,  // 75%
-            video.duration * 0.90   // 90%
+            video.duration * 0.10,
+            video.duration * 0.25,
+            video.duration * 0.40,
+            video.duration * 0.60,
+            video.duration * 0.75,
+            video.duration * 0.90
           ];
           
           const thumbnails = [];
@@ -660,15 +663,12 @@ const VideoUploadStudio = () => {
 
             video.currentTime = times[currentIndex];
             video.onseeked = () => {
-              // ✨ CLAVE: Mantener aspect ratio ORIGINAL del video
               if (orientation === 'vertical') {
-                // REELS: Dimensiones verticales (9:16)
                 const targetHeight = 1280;
                 const targetWidth = Math.round(targetHeight * (video.videoWidth / video.videoHeight));
                 canvas.width = Math.min(targetWidth, 720);
                 canvas.height = Math.min(targetHeight, 1280);
               } else {
-                // VIDEOS: Dimensiones horizontales (16:9)
                 const targetWidth = 1920;
                 const targetHeight = Math.round(targetWidth * (video.videoHeight / video.videoWidth));
                 canvas.width = Math.min(targetWidth, 1920);
@@ -683,7 +683,7 @@ const VideoUploadStudio = () => {
                   blob: blob,
                   url: URL.createObjectURL(blob),
                   index: currentIndex,
-                  orientation: orientation // Guardar orientación
+                  orientation: orientation
                 });
                 currentIndex++;
                 captureThumbnail();
@@ -707,35 +707,29 @@ const VideoUploadStudio = () => {
     }
   };
 
-  // ✨ MEJORADA: Validar miniatura personalizada según orientación
   const validateCustomThumbnail = (file, orientation = 'horizontal') => {
     return new Promise((resolve, reject) => {
-      // Validar formato
       const validFormats = ['image/jpeg', 'image/jpg', 'image/png'];
       if (!validFormats.includes(file.type)) {
         reject('Solo se permiten imágenes JPG o PNG');
         return;
       }
 
-      // Validar tamaño (2MB)
       const maxSize = 2 * 1024 * 1024;
       if (file.size > maxSize) {
         reject('La imagen debe ser menor a 2MB');
         return;
       }
 
-      // Validar dimensiones según orientación
       const img = new Image();
       img.onload = () => {
         let minWidth, minHeight, expectedRatio;
         
         if (orientation === 'vertical') {
-          // REELS: 9:16 (vertical)
           minWidth = 720;
           minHeight = 1280;
           expectedRatio = 'vertical (9:16)';
         } else {
-          // VIDEOS: 16:9 (horizontal)
           minWidth = 1280;
           minHeight = 720;
           expectedRatio = 'horizontal (16:9)';
@@ -746,7 +740,6 @@ const VideoUploadStudio = () => {
           return;
         }
 
-        // Advertencia si el aspect ratio no coincide
         const isImageVertical = img.height > img.width;
         if (orientation === 'vertical' && !isImageVertical) {
           reject('La imagen debe ser vertical (9:16) para un Reel vertical');
@@ -769,7 +762,6 @@ const VideoUploadStudio = () => {
     });
   };
 
-  // Progreso steps
   const steps = [
     { number: 1, title: 'Subir', icon: 'Upload', active: currentStep >= 1, completed: currentStep > 1 },
     { number: 2, title: 'Configurar', icon: 'Settings', active: currentStep >= 2, completed: currentStep > 2 },
@@ -784,7 +776,6 @@ const VideoUploadStudio = () => {
       <Helmet>
         <title>Estudio de Subida - Comparte tu Contenido | RADEISAN</title>
         <meta name="description" content="Sube videos, gana puntos y comparte tu creatividad con la comunidad RADEISAN" />
-        <meta name="keywords" content="subir video, contenido, creador, puntos, recompensas" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
@@ -871,8 +862,11 @@ const VideoUploadStudio = () => {
                         Vista previa
                       </h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* ✨ Vista previa ADAPTADA según orientación */}
                         <div>
-                          <div className="aspect-video bg-black rounded-lg overflow-hidden mb-3">
+                          <div className={`bg-black rounded-lg overflow-hidden mb-3 ${
+                            videoOrientation === 'vertical' ? 'aspect-[9/16]' : 'aspect-video'
+                          }`}>
                             <video 
                               src={URL.createObjectURL(selectedFile)}
                               controls
@@ -909,47 +903,92 @@ const VideoUploadStudio = () => {
                           )}
                         </div>
                         
-                        {/* ✨ NUEVA UI: Thumbnails ADAPTADAS según orientación */}
+                        {/* ✨ CARRUSEL DE MINIATURAS */}
                         {generatedThumbnails.length > 0 && (
                           <div>
                             <h4 className="font-medium text-foreground mb-3">
                               Seleccionar miniatura {useCustomThumbnail && '(opcional)'}
                             </h4>
                             
-                            {/* ✨ Grid adaptado: 3x2 para horizontal, 2x3 para vertical */}
-                            <div className={`grid gap-3 mb-4 ${
-                              videoOrientation === 'vertical' 
-                                ? 'grid-cols-2' // 2 columnas para Reels (miniaturas verticales)
-                                : 'grid-cols-3' // 3 columnas para Videos (miniaturas horizontales)
-                            }`}>
-                              {generatedThumbnails.map((thumb, index) => (
-                                <div 
-                                  key={index}
-                                  className={`rounded-lg overflow-hidden cursor-pointer border-2 transition-all relative ${
-                                    videoOrientation === 'vertical' 
-                                      ? 'aspect-[9/16]' // Aspect ratio vertical para Reels
-                                      : 'aspect-video'   // Aspect ratio horizontal para Videos
-                                  } ${
-                                    !useCustomThumbnail && selectedThumbnail?.index === thumb.index
-                                      ? 'border-primary ring-2 ring-primary/20' 
-                                      : 'border-border hover:border-primary/50'
-                                  } ${useCustomThumbnail ? 'opacity-50' : ''}`}
-                                  onClick={() => {
-                                    if (!useCustomThumbnail) {
-                                      handleThumbnailSelect(thumb);
-                                    }
-                                  }}
+                            {/* Carrusel con navegación */}
+                            <div className="space-y-3">
+                              {/* Contenedor del carrusel */}
+                              <div className="relative">
+                                {/* Botón anterior */}
+                                <button
+                                  onClick={handleCarouselPrev}
+                                  disabled={carouselIndex === 0 || useCustomThumbnail}
+                                  className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-8 h-8 rounded-full bg-background border-2 border-border flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all ${
+                                    (carouselIndex === 0 || useCustomThumbnail) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                  }`}
                                 >
-                                  <img 
-                                    src={thumb.url} 
-                                    alt={`Thumbnail ${index + 1}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                  <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
-                                    {Math.round(thumb.time)}s
-                                  </div>
+                                  <Icon name="ChevronLeft" size={16} />
+                                </button>
+
+                                {/* Grid de miniaturas visibles */}
+                                <div className={`grid gap-3 ${
+                                  videoOrientation === 'vertical' 
+                                    ? 'grid-cols-2' // 2 visibles para Reels
+                                    : 'grid-cols-1' // 1 visible para Videos
+                                }`}>
+                                  {getVisibleThumbnails().map((thumb) => (
+                                    <div 
+                                      key={thumb.index}
+                                      className={`rounded-lg overflow-hidden cursor-pointer border-2 transition-all relative ${
+                                        videoOrientation === 'vertical' 
+                                          ? 'aspect-[9/16]'
+                                          : 'aspect-video'
+                                      } ${
+                                        !useCustomThumbnail && selectedThumbnail?.index === thumb.index
+                                          ? 'border-primary ring-2 ring-primary/20' 
+                                          : 'border-border hover:border-primary/50'
+                                      } ${useCustomThumbnail ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      onClick={() => {
+                                        if (!useCustomThumbnail) {
+                                          handleThumbnailSelect(thumb);
+                                        }
+                                      }}
+                                    >
+                                      <img 
+                                        src={thumb.url} 
+                                        alt={`Thumbnail ${thumb.index + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+                                        {Math.round(thumb.time)}s
+                                      </div>
+                                      {!useCustomThumbnail && selectedThumbnail?.index === thumb.index && (
+                                        <div className="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded">
+                                          ✓
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
+
+                                {/* Botón siguiente */}
+                                <button
+                                  onClick={handleCarouselNext}
+                                  disabled={
+                                    carouselIndex >= generatedThumbnails.length - (videoOrientation === 'vertical' ? 2 : 1) ||
+                                    useCustomThumbnail
+                                  }
+                                  className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-8 h-8 rounded-full bg-background border-2 border-border flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all ${
+                                    (carouselIndex >= generatedThumbnails.length - (videoOrientation === 'vertical' ? 2 : 1) || useCustomThumbnail) 
+                                      ? 'opacity-50 cursor-not-allowed' 
+                                      : 'cursor-pointer'
+                                  }`}
+                                >
+                                  <Icon name="ChevronRight" size={16} />
+                                </button>
+                              </div>
+
+                              {/* Indicador de posición */}
+                              <div className="text-center">
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  {getCarouselIndicator()}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Divider */}
@@ -1005,18 +1044,22 @@ const VideoUploadStudio = () => {
                                     </label>
                                   </div>
 
-                                  {/* Preview de miniatura personalizada */}
+                                  {/* ✨ Preview de miniatura personalizada MÁS PEQUEÑO */}
                                   {customThumbnailPreview && (
-                                    <div className={`relative rounded-lg overflow-hidden border-2 border-primary ${
-                                      videoOrientation === 'vertical' ? 'aspect-[9/16]' : 'aspect-video'
-                                    }`}>
-                                      <img 
-                                        src={customThumbnailPreview} 
-                                        alt="Miniatura personalizada"
-                                        className="w-full h-full object-cover"
-                                      />
-                                      <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
-                                        Personalizada ✓
+                                    <div className="flex justify-center">
+                                      <div className={`relative rounded-lg overflow-hidden border-2 border-primary ${
+                                        videoOrientation === 'vertical' 
+                                          ? 'w-32 aspect-[9/16]' // Más pequeño para Reels
+                                          : 'w-48 aspect-video'   // Más pequeño para Videos
+                                      }`}>
+                                        <img 
+                                          src={customThumbnailPreview} 
+                                          alt="Miniatura personalizada"
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
+                                          Personalizada ✓
+                                        </div>
                                       </div>
                                     </div>
                                   )}
@@ -1351,15 +1394,9 @@ const VideoUploadStudio = () => {
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
-                      <Icon name="Hash" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
-                      <p className="text-muted-foreground">
-                        Usa tags relevantes para mayor visibilidad
-                      </p>
-                    </div>
-                    <div className="flex items-start space-x-2">
                       <Icon name="Image" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
-                        Las miniaturas se adaptan automáticamente a Reels o Videos
+                        Usa el carrusel para elegir la mejor miniatura
                       </p>
                     </div>
                   </div>
