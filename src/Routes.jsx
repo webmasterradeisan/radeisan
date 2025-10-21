@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS
+// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS + REELS FULLSCREEN
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -19,7 +19,8 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import VideoFeedDashboard from './pages/video-feed-dashboard';
 import VideoUploadStudio from './pages/video-upload-studio';
-import VideoPlayerPage from './pages/VideoPlayerPage'; // NUEVO
+import VideoPlayerPage from './pages/VideoPlayerPage';
+import ReelsPage from './pages/reels'; // ✅ NUEVO: Página fullscreen de reels
 import NotFound from "pages/NotFound";
 
 // ===============================
@@ -157,21 +158,17 @@ const Routes = () => {
               } 
             />
 
-            {/* RUTAS NUEVAS CON PLACEHOLDERS */}
+            {/* ✅ REELS FULLSCREEN - SIN MOBILELAYOUT (Sin Header) */}
             <Route 
               path="/reels" 
               element={
                 <ProtectedRoute>
-                  <MobileLayoutWrapper>
-                    <PlaceholderPage 
-                      title="Reels" 
-                      description="Explora videos verticales increíbles en formato fullscreen" 
-                    />
-                  </MobileLayoutWrapper>
+                  <ReelsPage />
                 </ProtectedRoute>
               } 
             />
 
+            {/* RUTAS NUEVAS CON PLACEHOLDERS */}
             <Route 
               path="/profile" 
               element={
