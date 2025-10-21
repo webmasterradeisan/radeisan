@@ -1,5 +1,5 @@
 // src/pages/video-upload-studio/index.jsx
-// VideoUploadStudio con detección automática de orientación - INTEGRADO
+// VideoUploadStudio con detección automática de orientación + SISTEMA DE MINIATURAS MEJORADO
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -45,51 +45,6 @@ const useVideoUpload = () => {
     return true;
   };
 
-  // Generar thumbnail del video (mantenido del original)
-  const generateThumbnail = (videoFile) => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      video.onloadedmetadata = () => {
-        // Buscar thumbnail en diferentes momentos del video
-        const times = [0, video.duration * 0.25, video.duration * 0.5, video.duration * 0.75];
-        const thumbnails = [];
-        let currentIndex = 0;
-
-        const captureThumbnail = () => {
-          if (currentIndex >= times.length) {
-            resolve(thumbnails);
-            return;
-          }
-
-          video.currentTime = times[currentIndex];
-          video.onseeked = () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
-            
-            canvas.toBlob(blob => {
-              thumbnails.push({
-                time: times[currentIndex],
-                blob: blob,
-                url: URL.createObjectURL(blob)
-              });
-              currentIndex++;
-              captureThumbnail();
-            }, 'image/jpeg', 0.8);
-          };
-        };
-
-        captureThumbnail();
-      };
-
-      video.onerror = () => reject(new Error('Error generando thumbnails'));
-      video.src = URL.createObjectURL(videoFile);
-    });
-  };
-
   // NUEVA FUNCIÓN: Subir video con detección automática
   const uploadVideo = async (file, metadata) => {
     try {
@@ -109,7 +64,7 @@ const useVideoUpload = () => {
       // PASO 2: VALIDAR ARCHIVO
       validateVideoFile(file);
 
-      // PASO 3: DETECTAR ORIENTACIÓN PRIMERO (NUEVO)
+      // PASO 3: DETECTAR ORIENTACIÓN PRIMERO
       setUploadProgress(5);
       console.log('🔍 Detectando orientación del video...');
       
@@ -119,7 +74,6 @@ const useVideoUpload = () => {
         setDetectionResult(orientationData);
         console.log('✅ Orientación detectada:', orientationData);
         
-        // Mostrar información de detección al usuario
         console.log(`📊 Video detectado como: ${orientationData.orientation.toUpperCase()}`);
         console.log(`📐 Dimensiones: ${orientationData.width}x${orientationData.height}`);
         console.log(`📏 Aspect Ratio: ${orientationData.aspectRatio}`);
@@ -138,7 +92,7 @@ const useVideoUpload = () => {
 
       setUploadProgress(15);
 
-      // PASO 4: GENERAR NOMBRE ÚNICO PARA EL ARCHIVO (CÓDIGO ORIGINAL)
+      // PASO 4: GENERAR NOMBRE ÚNICO PARA EL ARCHIVO
       const timestamp = Date.now();
       const fileExtension = file.name.split('.').pop();
       const sanitizedTitle = metadata.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
@@ -146,7 +100,7 @@ const useVideoUpload = () => {
 
       setUploadProgress(25);
 
-      // PASO 5: SUBIR ARCHIVO A STORAGE (CÓDIGO ORIGINAL)
+      // PASO 5: SUBIR ARCHIVO A STORAGE
       let uploadData;
       try {
         const { data, error: uploadError } = await supabase.storage
@@ -165,45 +119,67 @@ const useVideoUpload = () => {
 
       setUploadProgress(50);
 
-      // PASO 6: OBTENER URL PÚBLICA DEL VIDEO (CÓDIGO ORIGINAL)
+      // PASO 6: OBTENER URL PÚBLICA DEL VIDEO
       const { data: urlData } = supabase.storage
         .from('videos')
         .getPublicUrl(fileName);
 
       setUploadProgress(65);
 
-      // PASO 7: GENERAR Y SUBIR THUMBNAIL (CÓDIGO ORIGINAL)
+      // PASO 7: GENERAR Y SUBIR THUMBNAIL (MEJORADO)
       let thumbnailUrl = null;
       try {
-        const thumbnails = await generateThumbnail(file);
-        if (thumbnails.length > 0) {
-          const selectedThumbnail = thumbnails[Math.floor(thumbnails.length / 2)]; // Usar el del medio
+        if (metadata.customThumbnail) {
+          // ✨ NUEVO: Subir miniatura personalizada
+          console.log('📸 Subiendo miniatura personalizada...');
+          const thumbnailFileName = `${currentUser.id}/${timestamp}_custom_thumb.jpg`;
+          
+          const { error: thumbError } = await supabase.storage
+            .from('thumbnails')
+            .upload(thumbnailFileName, metadata.customThumbnail);
+
+          if (thumbError) {
+            console.warn('Error subiendo miniatura personalizada:', thumbError);
+            throw thumbError;
+          }
+
+          const { data: thumbUrlData } = supabase.storage
+            .from('thumbnails')
+            .getPublicUrl(thumbnailFileName);
+          
+          thumbnailUrl = thumbUrlData.publicUrl;
+          console.log('✅ Miniatura personalizada subida');
+          
+        } else if (metadata.selectedThumbnail) {
+          // Subir miniatura auto-generada seleccionada
+          console.log('📸 Subiendo miniatura auto-generada...');
           const thumbnailFileName = fileName.replace(/\.[^/.]+$/, '_thumb.jpg');
           
           const { error: thumbError } = await supabase.storage
             .from('thumbnails')
-            .upload(thumbnailFileName, selectedThumbnail.blob);
+            .upload(thumbnailFileName, metadata.selectedThumbnail.blob);
 
           if (!thumbError) {
             const { data: thumbUrlData } = supabase.storage
               .from('thumbnails')
               .getPublicUrl(thumbnailFileName);
             thumbnailUrl = thumbUrlData.publicUrl;
+            console.log('✅ Miniatura auto-generada subida');
           }
         }
       } catch (thumbError) {
-        console.warn('Error generating thumbnail:', thumbError);
+        console.warn('Error generating/uploading thumbnail:', thumbError);
         // Continuar sin thumbnail si hay error
       }
 
       setUploadProgress(75);
 
-      // PASO 8: OBTENER DURACIÓN DEL VIDEO (CÓDIGO ORIGINAL)
+      // PASO 8: OBTENER DURACIÓN DEL VIDEO
       const videoDuration = await getVideoDuration(file);
 
       setUploadProgress(85);
 
-      // PASO 9: INSERTAR METADATA EN LA BASE DE DATOS (CÓDIGO ORIGINAL + CAMPOS DE ORIENTACIÓN)
+      // PASO 9: INSERTAR METADATA EN LA BASE DE DATOS
       const { data: videoData, error: insertError } = await supabase
         .from('videos')
         .insert({
@@ -217,8 +193,7 @@ const useVideoUpload = () => {
           duration_seconds: Math.round(videoDuration || 0),
           file_size_bytes: file.size,
           is_published: metadata.visibility === 'public',
-          points_earned: 0, // Se calculará cuando tenga views
-          // NUEVOS CAMPOS DE ORIENTACIÓN
+          points_earned: 0,
           orientation: orientationData.orientation,
           aspect_ratio: orientationData.aspectRatio,
           video_width: orientationData.width,
@@ -231,9 +206,9 @@ const useVideoUpload = () => {
 
       setUploadProgress(95);
 
-      // PASO 10: OTORGAR PUNTOS POR SUBIR VIDEO (CÓDIGO ORIGINAL + BONUS)
+      // PASO 10: OTORGAR PUNTOS POR SUBIR VIDEO
       const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
-      const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0; // Bonus para Reels
+      const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0;
       const uploadPoints = basePoints + orientationBonus;
       await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
 
@@ -270,7 +245,7 @@ const useVideoUpload = () => {
   };
 };
 
-// Hook para obtener videos recientes del usuario (sin cambios)
+// Hook para obtener videos recientes del usuario
 const useUserVideos = () => {
   const { user } = useAuth();
   const [recentVideos, setRecentVideos] = useState([]);
@@ -306,7 +281,7 @@ const useUserVideos = () => {
         status: video.is_published ? 'published' : 'draft',
         views: video.views_count,
         uploadDate: formatDate(video.created_at),
-        orientation: video.orientation || 'horizontal' // NUEVO: mostrar orientación
+        orientation: video.orientation || 'horizontal'
       }));
 
       setRecentVideos(transformedVideos);
@@ -325,7 +300,7 @@ const useUserVideos = () => {
 };
 
 // ===============================
-// UTILIDADES (mantenidas del original)
+// UTILIDADES
 // ===============================
 
 // Obtener duración del video
@@ -341,12 +316,11 @@ const getVideoDuration = (file) => {
   });
 };
 
-// Calcular puntos por subir video (mejorado con bonus de orientación)
+// Calcular puntos por subir video
 const calculateUploadPoints = (durationSeconds, category) => {
-  let basePoints = 50; // Base por subir
-  let durationPoints = Math.floor(durationSeconds / 60) * 10; // 10 puntos por minuto
+  let basePoints = 50;
+  let durationPoints = Math.floor(durationSeconds / 60) * 10;
   
-  // Multiplicador por categoría
   const categoryMultipliers = {
     'education': 1.5,
     'business': 1.3,
@@ -410,6 +384,12 @@ const VideoUploadStudio = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(null);
   
+  // ✨ NUEVOS ESTADOS PARA MINIATURA PERSONALIZADA
+  const [customThumbnail, setCustomThumbnail] = useState(null);
+  const [customThumbnailPreview, setCustomThumbnailPreview] = useState(null);
+  const [useCustomThumbnail, setUseCustomThumbnail] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState(null);
+  
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -421,7 +401,7 @@ const VideoUploadStudio = () => {
     scheduledDate: ''
   });
 
-  // Opciones de categorías (sin cambios)
+  // Opciones de categorías
   const categories = [
     { value: '', label: 'Selecciona una categoría' },
     { value: 'entertainment', label: 'Entretenimiento' },
@@ -448,7 +428,6 @@ const VideoUploadStudio = () => {
 
   const handleFileSelect = async (fileData) => {
     try {
-      // Puede recibir objeto con file y orientationData, o solo el file
       const file = fileData.file || fileData;
       
       setSelectedFile(file);
@@ -461,7 +440,7 @@ const VideoUploadStudio = () => {
         title: prev.title || title
       }));
 
-      // Generar thumbnails automáticamente
+      // Generar thumbnails automáticamente (AHORA 6 MINIATURAS)
       const thumbnails = await generateThumbnails(file);
       setGeneratedThumbnails(thumbnails);
       if (thumbnails.length > 0) {
@@ -474,6 +453,42 @@ const VideoUploadStudio = () => {
 
   const handleThumbnailSelect = (thumbnail) => {
     setSelectedThumbnail(thumbnail);
+  };
+
+  // ✨ NUEVO: Handler para miniatura personalizada
+  const handleCustomThumbnailUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setThumbnailError(null);
+
+    try {
+      // Validar archivo
+      await validateCustomThumbnail(file);
+      
+      // Si pasa validación, guardar
+      setCustomThumbnail(file);
+      setCustomThumbnailPreview(URL.createObjectURL(file));
+      setUseCustomThumbnail(true);
+      setThumbnailError(null);
+      
+      console.log('✅ Miniatura personalizada cargada:', file.name);
+    } catch (error) {
+      setThumbnailError(error);
+      setCustomThumbnail(null);
+      setCustomThumbnailPreview(null);
+      setUseCustomThumbnail(false);
+      console.error('❌ Error validando miniatura:', error);
+    }
+  };
+
+  const handleUseCustomThumbnailToggle = (checked) => {
+    setUseCustomThumbnail(checked);
+    if (!checked) {
+      setCustomThumbnail(null);
+      setCustomThumbnailPreview(null);
+      setThumbnailError(null);
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -509,11 +524,24 @@ const VideoUploadStudio = () => {
       alert('Por favor selecciona una categoría');
       return;
     }
+
+    // ✨ NUEVA VALIDACIÓN: Verificar que hay miniatura seleccionada
+    if (!useCustomThumbnail && !selectedThumbnail) {
+      alert('Por favor selecciona una miniatura o sube una personalizada');
+      return;
+    }
     
     setIsSubmitting(true);
     
     try {
-      const result = await uploadVideo(selectedFile, formData);
+      // Preparar metadata incluyendo miniatura
+      const uploadMetadata = {
+        ...formData,
+        customThumbnail: useCustomThumbnail ? customThumbnail : null,
+        selectedThumbnail: useCustomThumbnail ? null : selectedThumbnail
+      };
+
+      const result = await uploadVideo(selectedFile, uploadMetadata);
       
       if (result.success) {
         setUploadSuccess(result);
@@ -545,6 +573,13 @@ const VideoUploadStudio = () => {
     setSelectedThumbnail(null);
     setGeneratedThumbnails([]);
     setUploadSuccess(null);
+    
+    // ✨ NUEVAS LÍNEAS: Limpiar miniatura personalizada
+    setCustomThumbnail(null);
+    setCustomThumbnailPreview(null);
+    setUseCustomThumbnail(false);
+    setThumbnailError(null);
+    
     setFormData({
       title: '',
       description: '',
@@ -558,9 +593,10 @@ const VideoUploadStudio = () => {
   };
 
   // ===============================
-  // RENDER HELPERS
+  // FUNCIONES DE GENERACIÓN Y VALIDACIÓN
   // ===============================
 
+  // ✨ MEJORADO: Ahora genera 6 miniaturas
   const generateThumbnails = async (videoFile) => {
     try {
       const video = document.createElement('video');
@@ -569,7 +605,16 @@ const VideoUploadStudio = () => {
 
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
-          const times = [0, video.duration * 0.33, video.duration * 0.66];
+          // ✨ NUEVO: 6 miniaturas en lugar de 3
+          const times = [
+            video.duration * 0.10,  // 10%
+            video.duration * 0.25,  // 25%
+            video.duration * 0.40,  // 40%
+            video.duration * 0.60,  // 60%
+            video.duration * 0.75,  // 75%
+            video.duration * 0.90   // 90%
+          ];
+          
           const thumbnails = [];
           let currentIndex = 0;
 
@@ -581,6 +626,7 @@ const VideoUploadStudio = () => {
 
             video.currentTime = times[currentIndex];
             video.onseeked = () => {
+              // Mantener aspect ratio original (funciona para videos Y reels)
               canvas.width = Math.min(video.videoWidth, 1920);
               canvas.height = Math.min(video.videoHeight, 1080);
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -589,7 +635,8 @@ const VideoUploadStudio = () => {
                 thumbnails.push({
                   time: times[currentIndex],
                   blob: blob,
-                  url: URL.createObjectURL(blob)
+                  url: URL.createObjectURL(blob),
+                  index: currentIndex
                 });
                 currentIndex++;
                 captureThumbnail();
@@ -600,12 +647,58 @@ const VideoUploadStudio = () => {
           captureThumbnail();
         };
 
+        video.onerror = () => {
+          console.error('Error loading video for thumbnails');
+          resolve([]);
+        };
+
         video.src = URL.createObjectURL(videoFile);
       });
     } catch (error) {
       console.error('Error generating thumbnails:', error);
       return [];
     }
+  };
+
+  // ✨ NUEVA FUNCIÓN: Validar miniatura personalizada
+  const validateCustomThumbnail = (file) => {
+    return new Promise((resolve, reject) => {
+      // Validar formato
+      const validFormats = ['image/jpeg', 'image/jpg', 'image/png'];
+      if (!validFormats.includes(file.type)) {
+        reject('Solo se permiten imágenes JPG o PNG');
+        return;
+      }
+
+      // Validar tamaño (2MB)
+      const maxSize = 2 * 1024 * 1024; // 2MB en bytes
+      if (file.size > maxSize) {
+        reject('La imagen debe ser menor a 2MB');
+        return;
+      }
+
+      // Validar dimensiones
+      const img = new Image();
+      img.onload = () => {
+        const minWidth = 1280;
+        const minHeight = 720;
+        
+        if (img.width < minWidth || img.height < minHeight) {
+          reject(`Dimensión mínima recomendada: ${minWidth}x${minHeight}px`);
+          return;
+        }
+
+        resolve({
+          valid: true,
+          width: img.width,
+          height: img.height,
+          size: file.size
+        });
+      };
+
+      img.onerror = () => reject('Error al cargar la imagen');
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   // Progreso steps
@@ -722,7 +815,7 @@ const VideoUploadStudio = () => {
                             {selectedFile.name} • {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
                           </p>
                           
-                          {/* NUEVO: Mostrar información de detección en preview */}
+                          {/* Mostrar información de detección en preview */}
                           {detectionResult && (
                             <div className="mt-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
                               <div className="flex items-center space-x-2 mb-1">
@@ -748,28 +841,115 @@ const VideoUploadStudio = () => {
                           )}
                         </div>
                         
-                        {/* Thumbnails */}
+                        {/* ✨ NUEVA UI: Thumbnails con 6 opciones + personalizada */}
                         {generatedThumbnails.length > 0 && (
                           <div>
-                            <h4 className="font-medium text-foreground mb-3">Seleccionar miniatura</h4>
-                            <div className="grid grid-cols-3 gap-2">
+                            <h4 className="font-medium text-foreground mb-3">
+                              Seleccionar miniatura {useCustomThumbnail && '(opcional)'}
+                            </h4>
+                            
+                            {/* Grid de 6 miniaturas auto-generadas */}
+                            <div className="grid grid-cols-3 gap-3 mb-4">
                               {generatedThumbnails.map((thumb, index) => (
                                 <div 
                                   key={index}
-                                  className={`aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
-                                    selectedThumbnail?.time === thumb.time 
+                                  className={`aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all relative ${
+                                    !useCustomThumbnail && selectedThumbnail?.index === thumb.index
                                       ? 'border-primary ring-2 ring-primary/20' 
                                       : 'border-border hover:border-primary/50'
-                                  }`}
-                                  onClick={() => handleThumbnailSelect(thumb)}
+                                  } ${useCustomThumbnail ? 'opacity-50' : ''}`}
+                                  onClick={() => {
+                                    if (!useCustomThumbnail) {
+                                      handleThumbnailSelect(thumb);
+                                    }
+                                  }}
                                 >
                                   <img 
                                     src={thumb.url} 
                                     alt={`Thumbnail ${index + 1}`}
                                     className="w-full h-full object-cover"
                                   />
+                                  <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+                                    {Math.round(thumb.time)}s
+                                  </div>
                                 </div>
                               ))}
+                            </div>
+
+                            {/* Divider */}
+                            <div className="relative my-4">
+                              <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-border"></div>
+                              </div>
+                              <div className="relative flex justify-center text-sm">
+                                <span className="px-2 bg-card text-muted-foreground">O</span>
+                              </div>
+                            </div>
+
+                            {/* Opción de miniatura personalizada */}
+                            <div className="space-y-3">
+                              <label className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={useCustomThumbnail}
+                                  onChange={(e) => handleUseCustomThumbnailToggle(e.target.checked)}
+                                  className="rounded border-border text-primary focus:ring-primary"
+                                />
+                                <span className="text-sm font-medium text-foreground">
+                                  Usar miniatura personalizada
+                                </span>
+                              </label>
+
+                              {useCustomThumbnail && (
+                                <div className="space-y-3">
+                                  {/* Input de archivo */}
+                                  <div className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-all">
+                                    <input
+                                      type="file"
+                                      accept="image/jpeg,image/jpg,image/png"
+                                      onChange={handleCustomThumbnailUpload}
+                                      className="hidden"
+                                      id="custom-thumbnail-input"
+                                    />
+                                    <label 
+                                      htmlFor="custom-thumbnail-input"
+                                      className="cursor-pointer flex flex-col items-center space-y-2"
+                                    >
+                                      <Icon name="Upload" size={24} color="var(--color-primary)" />
+                                      <div className="text-center">
+                                        <p className="text-sm font-medium text-foreground">
+                                          Subir imagen
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          JPG o PNG • Máx 2MB • Min 1280x720px
+                                        </p>
+                                      </div>
+                                    </label>
+                                  </div>
+
+                                  {/* Preview de miniatura personalizada */}
+                                  {customThumbnailPreview && (
+                                    <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-primary">
+                                      <img 
+                                        src={customThumbnailPreview} 
+                                        alt="Miniatura personalizada"
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
+                                        Personalizada ✓
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Error de validación */}
+                                  {thumbnailError && (
+                                    <div className="flex items-start space-x-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                      <Icon name="AlertCircle" size={16} color="var(--color-destructive)" className="mt-0.5 flex-shrink-0" />
+                                      <p className="text-sm text-destructive">{thumbnailError}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1032,7 +1212,6 @@ const VideoUploadStudio = () => {
                               alt={video.title}
                               className="w-full h-full object-cover"
                             />
-                            {/* NUEVO: Indicador de orientación */}
                             <div className="absolute top-1 right-1">
                               <Icon 
                                 name={video.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
@@ -1095,6 +1274,12 @@ const VideoUploadStudio = () => {
                       <Icon name="Hash" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
                         Usa tags relevantes para mayor visibilidad
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Image" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Elige una miniatura atractiva o sube una personalizada
                       </p>
                     </div>
                   </div>
