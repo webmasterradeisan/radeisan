@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/index.jsx  
 // VideoFeedDashboard OPTIMIZADO - Query con JOIN directo a user_profiles
-// ✅ ACTUALIZADO: Query optimizada igual que VideoPlayerPage
+// ✅ ACTUALIZADO: Con carrusel de reels para desktop + aleatorización completa
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -10,6 +10,7 @@ import Header from '../../components/ui/Header';
 import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import FilterChips from './components/FilterChips';
 import VideoFeedGrid from './components/VideoFeedGrid';
+import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
 import TrendingSidebar from './components/TrendingSidebar';
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
 import PullToRefresh from './components/PullToRefresh';
@@ -560,6 +561,18 @@ const VideoFeedDashboard = () => {
                   />
                 </div>
 
+                {/* ✅ CARRUSEL DE REELS DESKTOP - SOLO VISIBLE EN DESKTOP Y CUANDO NO ESTÁ FILTRADO POR ORIENTACIÓN */}
+                {!isMobile && activeOrientation === 'all' && orientationStats.vertical > 0 && (
+                  <div className="hidden md:block mb-6">
+                    <ReelsCarouselDesktop
+                      videos={filteredVideos.filter(v => v.orientation === 'vertical')}
+                      onLoadMore={handleLoadMore}
+                      hasMore={hasMore}
+                      loading={loading}
+                    />
+                  </div>
+                )}
+
                 {/* Content Area */}
                 <div className="min-h-screen">
                   {filteredVideos.length === 0 && !loading ? (
@@ -642,7 +655,7 @@ const VideoFeedDashboard = () => {
         {/* Debug Info for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">🏠 Dashboard Debug</div>
+            <div className="text-green-400 font-bold mb-1">✅ Dashboard v2.0 - CON CARRUSEL</div>
             <div>📱 isMobile: {isMobile.toString()}</div>
             <div>🎬 activeOrientation: {activeOrientation}</div>
             <div>🎯 originalLayout: {layout}</div>
@@ -650,7 +663,8 @@ const VideoFeedDashboard = () => {
             <div>📹 videos: {videos.length}</div>
             <div>🔍 filtered: {filteredVideos.length}</div>
             <div>🔄 loading: {loading.toString()}</div>
-            <div>🎠 Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
+            <div>🎠 Mobile Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
+            <div>🖥️ Desktop Carousel: {(!isMobile && activeOrientation === 'all').toString()}</div>
             <div>📊 Stats: V:{orientationStats.vertical} H:{orientationStats.horizontal}</div>
             <div>❌ error: {error || 'none'}</div>
           </div>
