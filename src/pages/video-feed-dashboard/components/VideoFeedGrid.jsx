@@ -1,4 +1,4 @@
-// src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
+// src/pages/video-feed-dashboard/components/VideoFeedGri.jsx
 // ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
