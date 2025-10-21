@@ -337,6 +337,35 @@ const VideoFeedGrid = ({
   }
 
   // ===============================
+  // ✅ DETERMINAR QUÉ VIDEOS MOSTRAR EN EL GRID
+  // ===============================
+  
+  const getGridVideos = () => {
+    console.log('🎬 getGridVideos:', { 
+      isMobile, 
+      orientation, 
+      reelsCount: reelsVideos.length,
+      horizontalsCount: horizontalVideos.length,
+      displayCount: displayVideos.length
+    });
+    
+    // En mobile: siempre solo videos horizontales
+    if (isMobile) {
+      console.log('📱 Mobile: mostrando horizontales');
+      return horizontalVideos;
+    }
+    
+    // En desktop con vista 'all': solo horizontales (reels ya en carrusel arriba)
+    if (orientation === 'all') {
+      console.log('🖥️ Desktop + all: mostrando horizontales (reels en carrusel)');
+      return horizontalVideos;
+    }
+    
+    // En desktop con filtro específico: usar displayVideos
+    console.log('🖥️ Desktop + filtrado: mostrando displayVideos');
+    return displayVideos;
+  };
+  // ===============================
   // 📱 RENDER DASHBOARD PRINCIPAL
   // ===============================
   console.log('🎬 Renderizando Dashboard Principal:', { 
@@ -369,7 +398,7 @@ const VideoFeedGrid = ({
 
       {/* ✅ GRID PRINCIPAL - SOLO VIDEOS HORIZONTALES EN MOBILE */}
       <div className={getGridClasses()}>
-        {(isMobile ? horizontalVideos : displayVideos)?.map((video) => (
+        {getGridVideos()?.map((video) => (
           <VideoCard
             key={video?.id}
             video={video}
