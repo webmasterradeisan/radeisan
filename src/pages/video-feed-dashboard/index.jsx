@@ -1,6 +1,7 @@
 // src/pages/video-feed-dashboard/index.jsx  
 // VideoFeedDashboard OPTIMIZADO - Query con JOIN directo a user_profiles
 // ✅ ACTUALIZADO: Con carrusel de reels para desktop + aleatorización completa
+// ✅ CORREGIDO: Navegación del carrusel desktop (cambia vista en vez de navegar)
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -400,6 +401,15 @@ const VideoFeedDashboard = () => {
     setActiveOrientation(orientationId);
   }, []);
 
+  // ===============================
+  // ✅ NUEVO HANDLER: NAVEGACIÓN CARRUSEL DESKTOP
+  // ===============================
+  const handleReelClickDesktop = useCallback((reelIndex) => {
+    console.log('🎯 Desktop: Cambiando a vista Reels desde carrusel, índice:', reelIndex);
+    // Cambiar a vista "Reels" (vertical) en el mismo dashboard
+    setActiveOrientation('vertical');
+  }, []);
+
   const handleLayoutChange = useCallback(() => {
     setLayout(prev => prev === 'grid' ? 'list' : 'grid');
   }, []);
@@ -561,11 +571,12 @@ const VideoFeedDashboard = () => {
                   />
                 </div>
 
-                {/* ✅ CARRUSEL DE REELS DESKTOP - SOLO VISIBLE EN DESKTOP Y CUANDO NO ESTÁ FILTRADO POR ORIENTACIÓN */}
+                {/* ✅ CARRUSEL DE REELS DESKTOP - CON HANDLER CORREGIDO */}
                 {!isMobile && activeOrientation === 'all' && orientationStats.vertical > 0 && (
                   <div className="hidden md:block mb-6">
                     <ReelsCarouselDesktop
                       videos={filteredVideos.filter(v => v.orientation === 'vertical')}
+                      onReelClick={handleReelClickDesktop}
                       onLoadMore={handleLoadMore}
                       hasMore={hasMore}
                       loading={loading}
@@ -655,7 +666,7 @@ const VideoFeedDashboard = () => {
         {/* Debug Info for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">✅ Dashboard v2.0 - CON CARRUSEL</div>
+            <div className="text-green-400 font-bold mb-1">✅ Dashboard v2.1 - NAVEGACIÓN CORREGIDA</div>
             <div>📱 isMobile: {isMobile.toString()}</div>
             <div>🎬 activeOrientation: {activeOrientation}</div>
             <div>🎯 originalLayout: {layout}</div>
