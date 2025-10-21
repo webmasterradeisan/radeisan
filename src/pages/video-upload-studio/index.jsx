@@ -1,6 +1,6 @@
 // src/pages/video-upload-studio/index.jsx
-// VideoUploadStudio con CARRUSEL de miniaturas y vista previa adaptada
-import React, { useState, useEffect, useCallback } from 'react';
+// VideoUploadStudio con VISTA PREVIA EN TIEMPO REAL según miniatura seleccionada
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -360,6 +360,9 @@ const VideoUploadStudio = () => {
   const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime, detectionResult } = useVideoUpload();
   const { recentVideos, loading: recentLoading } = useUserVideos();
 
+  // ✨ NUEVO: Ref para el video de preview
+  const videoPreviewRef = useRef(null);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedThumbnail, setSelectedThumbnail] = useState(null);
@@ -376,7 +379,7 @@ const VideoUploadStudio = () => {
   // Estado para orientación del video
   const [videoOrientation, setVideoOrientation] = useState('horizontal');
   
-  // ✨ NUEVO: Estado para el carrusel de miniaturas
+  // Estado para el carrusel de miniaturas
   const [carouselIndex, setCarouselIndex] = useState(0);
   
   const [formData, setFormData] = useState({
@@ -409,6 +412,15 @@ const VideoUploadStudio = () => {
     { value: 'unlisted', label: 'No listado' },
     { value: 'private', label: 'Privado' }
   ];
+
+  // ✨ NUEVO: Efecto para actualizar vista previa cuando cambia la miniatura seleccionada
+  useEffect(() => {
+    if (videoPreviewRef.current && selectedThumbnail && !useCustomThumbnail) {
+      // Saltar al segundo correspondiente de la miniatura seleccionada
+      videoPreviewRef.current.currentTime = selectedThumbnail.time;
+      console.log(`⏱️ Vista previa actualizada a ${selectedThumbnail.time.toFixed(2)}s`);
+    }
+  }, [selectedThumbnail, useCustomThumbnail]);
 
   // ===============================
   // FUNCIONES DEL CARRUSEL
@@ -447,7 +459,7 @@ const VideoUploadStudio = () => {
       
       setSelectedFile(file);
       setCurrentStep(2);
-      setCarouselIndex(0); // Reset carrusel
+      setCarouselIndex(0);
       
       const title = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
       setFormData(prev => ({
@@ -471,8 +483,10 @@ const VideoUploadStudio = () => {
     }
   };
 
+  // ✨ MEJORADO: Actualiza vista previa al seleccionar miniatura
   const handleThumbnailSelect = (thumbnail) => {
     setSelectedThumbnail(thumbnail);
+    // El useEffect se encargará de actualizar el video
   };
 
   const handleCustomThumbnailUpload = async (e) => {
@@ -862,12 +876,13 @@ const VideoUploadStudio = () => {
                         Vista previa
                       </h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* ✨ Vista previa ADAPTADA según orientación */}
+                        {/* ✨ Vista previa ADAPTADA con REF para actualización en tiempo real */}
                         <div>
                           <div className={`bg-black rounded-lg overflow-hidden mb-3 ${
                             videoOrientation === 'vertical' ? 'aspect-[9/16]' : 'aspect-video'
                           }`}>
                             <video 
+                              ref={videoPreviewRef}
                               src={URL.createObjectURL(selectedFile)}
                               controls
                               className="w-full h-full object-cover"
@@ -1049,8 +1064,8 @@ const VideoUploadStudio = () => {
                                     <div className="flex justify-center">
                                       <div className={`relative rounded-lg overflow-hidden border-2 border-primary ${
                                         videoOrientation === 'vertical' 
-                                          ? 'w-32 aspect-[9/16]' // Más pequeño para Reels
-                                          : 'w-48 aspect-video'   // Más pequeño para Videos
+                                          ? 'w-32 aspect-[9/16]'
+                                          : 'w-48 aspect-video'
                                       }`}>
                                         <img 
                                           src={customThumbnailPreview} 
@@ -1394,9 +1409,9 @@ const VideoUploadStudio = () => {
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
-                      <Icon name="Image" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <Icon name="Eye" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
-                        Usa el carrusel para elegir la mejor miniatura
+                        La vista previa se actualiza automáticamente al seleccionar miniaturas
                       </p>
                     </div>
                   </div>
