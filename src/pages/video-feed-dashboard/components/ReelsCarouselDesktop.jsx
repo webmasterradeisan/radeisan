@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsCarouselDesktop.jsx
-// ✅ CORREGIDO: onClick usa SOLO videoId para navegación correcta
+// ✅ ACTUALIZADO: Pasa ID del video además del índice para reproducción correcta
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -9,7 +9,6 @@ import Button from '../../../components/ui/Button';
  * 🖥️ CAROUSEL HORIZONTAL DE REELS PARA DESKTOP
  * Muestra 4-5 reels visibles + navegación con botones
  * Al hacer clic → Abre ReelsContainer con el reel correcto
- * ✅ CORREGIDO: Navega por videoId exclusivamente
  */
 const ReelsCarouselDesktop = ({ 
   videos = [], 
@@ -24,9 +23,9 @@ const ReelsCarouselDesktop = ({
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(false);
 
-  const ITEM_WIDTH = 200;
-  const GAP = 16;
-  const VISIBLE_ITEMS = 5;
+  const ITEM_WIDTH = 200; // Ancho de cada reel (px)
+  const GAP = 16; // Gap entre items (px)
+  const VISIBLE_ITEMS = 5; // Cantidad de items visibles
 
   console.log('🖥️ ReelsCarouselDesktop renderizado:', {
     totalReels: videos.length,
@@ -66,7 +65,7 @@ const ReelsCarouselDesktop = ({
   // Navegación con botones
   const scrollLeft = () => {
     if (scrollRef.current) {
-      const scrollAmount = (ITEM_WIDTH + GAP) * 2;
+      const scrollAmount = (ITEM_WIDTH + GAP) * 2; // Scroll 2 items
       scrollRef.current.scrollBy({ 
         left: -scrollAmount, 
         behavior: 'smooth' 
@@ -76,7 +75,7 @@ const ReelsCarouselDesktop = ({
 
   const scrollRight = () => {
     if (scrollRef.current) {
-      const scrollAmount = (ITEM_WIDTH + GAP) * 2;
+      const scrollAmount = (ITEM_WIDTH + GAP) * 2; // Scroll 2 items
       scrollRef.current.scrollBy({ 
         left: scrollAmount, 
         behavior: 'smooth' 
@@ -85,22 +84,21 @@ const ReelsCarouselDesktop = ({
   };
 
   // ===============================
-  // ✅ HANDLER CORREGIDO - Usa SOLO videoId
+  // ✅ HANDLER ACTUALIZADO: Pasa el reel completo para obtener su ID
   // ===============================
-  const handleReelClick = (reel) => {
+  const handleReelClick = (reel, reelIndex) => {
     console.log('🎯 Desktop Carousel: Click en reel');
+    console.log('   📍 Índice en carrusel:', reelIndex);
     console.log('   🆔 ID del video:', reel.id);
     console.log('   📹 Título:', reel.title);
     
     if (onReelClick) {
-      // ✅ CORREGIDO: Solo pasar el ID del video
-      console.log('✅ Usando callback onReelClick con ID:', reel.id);
-      onReelClick(reel.id);
+      // ✅ Pasar ÍNDICE Y ID al handler padre
+      onReelClick(reelIndex, reel.id);
     } else {
-      // ✅ Navegar con ID en lugar de índice
-      console.log('🎯 Navegando con ID:', reel.id);
-      navigate(`/reels?id=${reel.id}`);
-    }
+    // ✅ CORREGIDO: Navegar con ID en lugar de índice
+    navigate(`/reels?id=${reel.id}`);
+  }
   };
 
   // Navegar a página completa de reels
@@ -110,7 +108,7 @@ const ReelsCarouselDesktop = ({
 
   // Empty state
   if (!loading && videos.length === 0) {
-    return null;
+    return null; // No mostrar nada si no hay reels
   }
 
   return (
@@ -181,12 +179,12 @@ const ReelsCarouselDesktop = ({
               </div>
             ))
           ) : (
-            videos.map((reel) => (
+            videos.map((reel, index) => (
               <div
                 key={reel.id}
                 className="flex-shrink-0 cursor-pointer group/reel"
                 style={{ width: ITEM_WIDTH }}
-                onClick={() => handleReelClick(reel)}
+                onClick={() => handleReelClick(reel, index)}
               >
                 {/* Thumbnail Container (9:16 aspect ratio) */}
                 <div className="relative w-full aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-md">
@@ -260,7 +258,7 @@ const ReelsCarouselDesktop = ({
                   <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary rounded-lg transition-colors duration-200"></div>
                 </div>
 
-                {/* Info debajo del thumbnail */}
+                {/* Info debajo del thumbnail (opcional) */}
                 <div className="mt-2 px-1">
                   <p className="text-sm text-foreground font-medium line-clamp-1">
                     {reel.title || 'Sin título'}
@@ -302,7 +300,7 @@ const ReelsCarouselDesktop = ({
           </button>
         )}
 
-        {/* Gradientes laterales */}
+        {/* Gradientes laterales para indicar más contenido */}
         {showLeftButton && (
           <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-background to-transparent pointer-events-none"></div>
         )}
@@ -311,7 +309,7 @@ const ReelsCarouselDesktop = ({
         )}
       </div>
 
-      {/* Loading indicator */}
+      {/* Loading indicator para más contenido */}
       {loading && videos.length > 0 && (
         <div className="flex justify-center mt-4">
           <div className="flex items-center space-x-2 text-muted-foreground text-sm">
