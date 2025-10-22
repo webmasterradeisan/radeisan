@@ -160,13 +160,15 @@ const Routes = () => {
 
             {/* ✅ REELS FULLSCREEN - SIN MOBILELAYOUT (Sin Header) */}
             <Route 
-              path="/reels" 
-              element={
-                <ProtectedRoute>
-                  <ReelsPage />
-                </ProtectedRoute>
-              } 
-            />
+  path="/reels" 
+  element={
+    <ProtectedRoute>
+      <MobileLayoutWrapper>
+        <ReelsPage />
+      </MobileLayoutWrapper>
+    </ProtectedRoute>
+  } 
+/>
 
             {/* RUTAS NUEVAS CON PLACEHOLDERS */}
             <Route 
