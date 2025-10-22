@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// ✅ ACTUALIZADO: onClick usa videoId con depuración adicional
+// ✅ ACTUALIZADO: onClick usa videoId exclusivamente con depuración
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -8,7 +8,7 @@ import Button from '../../../components/ui/Button';
 /**
  * 📱 CAROUSEL HORIZONTAL DE REELS PARA MÓVIL
  * Muestra 3 reels visibles + scroll horizontal táctil
- * ✅ ACTUALIZADO: onClick usa videoId en lugar de start con logs
+ * ✅ ACTUALIZADO: onClick usa videoId en lugar de start
  */
 const ReelsGridMobile = ({ 
   videos = [], 
@@ -69,7 +69,7 @@ const ReelsGridMobile = ({
   const scrollRight = () => scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
 
   // ===============================
-  // ✅ HANDLER ACTUALIZADO - Usa videoId con depuración
+  // ✅ HANDLER ACTUALIZADO - Usa videoId exclusivamente
   // ===============================
   const handleReelClick = (reel, reelIndex) => {
     console.log('🎯 Mobile: Click en reel - Inicio:', {
@@ -79,14 +79,16 @@ const ReelsGridMobile = ({
       onReelClickDefined: !!onReelClick
     });
 
+    const navigationUrl = `/reels?videoId=${reel.id}`;
+    console.log('🎯 Intentando navegar a:', navigationUrl);
+
     if (onReelClick) {
-      console.log('✅ Abriendo visor de reels con índice y ID:', { reelIndex, reelId: reel.id });
+      console.log('✅ Usando callback onReelClick con índice y ID:', { reelIndex, reelId: reel.id });
       onReelClick(reelIndex, reel.id);
     } else {
-      const navigationUrl = `/reels?videoId=${reel.id}`;
-      console.log('🎯 Navegando a URL:', navigationUrl);
+      console.log('🎯 Navegando directamente con videoId:', navigationUrl);
       navigate(navigationUrl);
-      console.log('🎯 Navegación ejecutada, URL esperada:', window.location.href);
+      console.log('🎯 Navegación ejecutada, URL actual:', window.location.href);
     }
   };
 
@@ -209,7 +211,7 @@ const ReelsGridMobile = ({
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/20">
                   <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30">
-                    <Icon name="Play" size={20} color="white" />
+                    <Icon name="Play" size={20) color="white" />
                   </div>
                 </div>
                 <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary/50 rounded-lg transition-colors duration-200"></div>
