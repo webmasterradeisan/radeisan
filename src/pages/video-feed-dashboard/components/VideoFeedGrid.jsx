@@ -1,4 +1,5 @@
 // src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
+// ✅ CORREGIDO: handleReelClick usa videoId en lugar de start (línea 173)
 // ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
 // ✅ ACTUALIZADO: Recibe arrays aleatorizados del dashboard
 // ✅ CORREGIDO: Usa estados internos para evitar conflicto de nombres
@@ -38,7 +39,7 @@ const VideoFeedGrid = ({
   const isMobile = useIsMobile();
   
   // 🎯 DEBUG: Console.logs para verificar cambios
-  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ARRAYS ALEATORIZADOS');
+  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CORREGIDA CON videoId');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
   console.log('🔍 orientation:', orientation);
@@ -174,12 +175,19 @@ const VideoFeedGrid = ({
   }, [loading]);
 
   // ===============================
-  // ✅ HANDLER PARA NAVEGACIÓN A /reels
+  // ✅ HANDLER PARA NAVEGACIÓN A /reels - CORREGIDO
+  // Ahora usa videoId en lugar de start para navegación mobile
   // ===============================
   
-  const handleReelClick = useCallback((reelIndex) => {
-    console.log('🎯 Navegando a /reels con índice:', reelIndex);
-    navigate(`/reels?start=${reelIndex}`);
+  const handleReelClick = useCallback((reelIndex, videoId) => {
+    console.log('🎯 VideoFeedGrid: Click en reel mobile:', { 
+      reelIndex, 
+      videoId,
+      navegandoA: `/reels?videoId=${videoId}`
+    });
+    
+    // ✅ CORRECCIÓN CRÍTICA: Usar videoId en lugar de start
+    navigate(`/reels?videoId=${videoId}`);
   }, [navigate]);
 
   // ===============================
@@ -474,7 +482,7 @@ const VideoFeedGrid = ({
       {/* 🛠 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v5.0</div>
+          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v5.1</div>
           <div>📱 isMobile: {isMobile.toString()}</div>
           <div>🎬 layout: {layout}</div>
           <div>📹 total videos: {videos.length}</div>
