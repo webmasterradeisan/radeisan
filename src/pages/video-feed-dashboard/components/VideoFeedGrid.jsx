@@ -1,6 +1,7 @@
 // src/pages/video-feed-dashboard/components/VideoFeedGrid.jsx
 // ✅ ACTUALIZADO: Navegación a /reels en mobile (sin visor modal)
-// ✅ ACTUALIZADO: Recibe ID del reel y lo convierte a índice correcto
+// ✅ ACTUALIZADO: Recibe arrays aleatorizados del dashboard
+// ✅ CORREGIDO: Usa estados internos para evitar conflicto de nombres
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import VideoCard from './VideoCard';
@@ -10,19 +11,6 @@ import ReelsGridMobile from './ReelsGridMobile';
 import useIsMobile from '../../../hooks/useIsMobile';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
-
-/**
- * ✅ FUNCIÓN DE ALEATORIZACIÓN
- * Mezcla un array sin mutar el original
- */
-const shuffleArray = (array) => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-};
 
 const VideoFeedGrid = ({ 
   videos = [], 
@@ -39,9 +27,9 @@ const VideoFeedGrid = ({
   const [displayVideos, setDisplayVideos] = useState(videos);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  // ✅ ESTADOS INTERNOS PARA REELS Y VIDEOS SEPARADOS
-const [internalReelsVideos, setInternalReelsVideos] = useState([]);
-const [internalHorizontalVideos, setInternalHorizontalVideos] = useState([]);
+  // ✅ ESTADOS INTERNOS PARA REELS Y VIDEOS SEPARADOS (renombrados para evitar conflicto)
+  const [internalReelsVideos, setInternalReelsVideos] = useState([]);
+  const [internalHorizontalVideos, setInternalHorizontalVideos] = useState([]);
   
   // ✅ NAVEGACIÓN CON REACT ROUTER (EN VEZ DE MODAL)
   const navigate = useNavigate();
@@ -50,84 +38,84 @@ const [internalHorizontalVideos, setInternalHorizontalVideos] = useState([]);
   const isMobile = useIsMobile();
   
   // 🎯 DEBUG: Console.logs para verificar cambios
-  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ID DE REEL');
+  console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ARRAYS ALEATORIZADOS');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
   console.log('📐 orientation:', orientation);
-  console.log('🆔 selectedReelId:', selectedReelId); // ✅ ACTUALIZADO
+  console.log('🆔 selectedReelId:', selectedReelId);
   console.log('📹 videos count:', videos.length);
-  console.log('🎥 reels count:', reelsVideos.length);
-  console.log('🎬 horizontal videos count:', horizontalVideos.length);
+  console.log('🎥 reels count (prop):', reelsVideos?.length || 0);
+  console.log('🎬 horizontal videos count (prop):', horizontalVideos?.length || 0);
   console.log('🔄 loading:', loading);
   console.log('⚡ hasMore:', hasMore);
 
   // ===============================
-// ✅ USAR ARRAYS ALEATORIZADOS DEL DASHBOARD
-// ===============================
-useEffect(() => {
-  console.log('📊 VideoFeedGrid: Procesando videos');
-  console.log('   📥 Props recibidos:', {
-    reelsVideosProp: reelsVideos?.length || 0,
-    horizontalVideosProp: horizontalVideos?.length || 0,
-    videosProp: videos.length,
-    orientation
-  });
+  // ✅ USAR ARRAYS ALEATORIZADOS DEL DASHBOARD
+  // ===============================
+  useEffect(() => {
+    console.log('📊 VideoFeedGrid: Procesando videos');
+    console.log('   📥 Props recibidos:', {
+      reelsVideosProp: reelsVideos?.length || 0,
+      horizontalVideosProp: horizontalVideos?.length || 0,
+      videosProp: videos.length,
+      orientation
+    });
 
-  // Si vienen arrays ya aleatorizados del dashboard, usarlos directamente
-  if (reelsVideos !== null && horizontalVideos !== null) {
-    console.log('✅ Usando arrays ya aleatorizados del dashboard');
-    setInternalReelsVideos(reelsVideos);
-    setInternalHorizontalVideos(horizontalVideos);
+    // Si vienen arrays ya aleatorizados del dashboard, usarlos directamente
+    if (reelsVideos !== null && horizontalVideos !== null) {
+      console.log('✅ Usando arrays ya aleatorizados del dashboard');
+      setInternalReelsVideos(reelsVideos);
+      setInternalHorizontalVideos(horizontalVideos);
+      
+      // Actualizar displayVideos según la orientación activa
+      if (orientation === 'vertical') {
+        setDisplayVideos(reelsVideos);
+      } else if (orientation === 'horizontal') {
+        setDisplayVideos(horizontalVideos);
+      } else {
+        // Si es 'all', mostrar todos
+        setDisplayVideos(videos);
+      }
+      return;
+    }
+
+    // Fallback: separar localmente SI NO vienen del dashboard (sin aleatorizar)
+    console.log('⚠️ Fallback: Separando videos localmente');
+    
+    if (videos.length === 0) {
+      setInternalReelsVideos([]);
+      setInternalHorizontalVideos([]);
+      setDisplayVideos([]);
+      return;
+    }
+
+    const reels = videos.filter(video => {
+      if (video.orientation === 'vertical') return true;
+      if (!video.width || !video.height) return false;
+      const aspectRatio = video.width / video.height;
+      return aspectRatio <= 0.8;
+    });
+
+    const horizontals = videos.filter(video => {
+      if (video.orientation === 'horizontal' || video.orientation === 'square') return true;
+      if (!video.width || !video.height) return true;
+      const aspectRatio = video.width / video.height;
+      return aspectRatio > 0.8;
+    });
+
+    setInternalReelsVideos(reels);
+    setInternalHorizontalVideos(horizontals);
     
     // Actualizar displayVideos según la orientación activa
     if (orientation === 'vertical') {
-      setDisplayVideos(reelsVideos);
+      setDisplayVideos(reels);
     } else if (orientation === 'horizontal') {
-      setDisplayVideos(horizontalVideos);
+      setDisplayVideos(horizontals);
     } else {
-      // Si es 'all', mostrar todos
       setDisplayVideos(videos);
     }
-    return;
-  }
-
-  // Fallback: separar localmente SI NO vienen del dashboard (sin aleatorizar)
-  console.log('⚠️ Fallback: Separando videos localmente');
-  
-  if (videos.length === 0) {
-    setInternalReelsVideos([]);
-    setInternalHorizontalVideos([]);
-    setDisplayVideos([]);
-    return;
-  }
-
-  const reels = videos.filter(video => {
-    if (video.orientation === 'vertical') return true;
-    if (!video.width || !video.height) return false;
-    const aspectRatio = video.width / video.height;
-    return aspectRatio <= 0.8;
-  });
-
-  const horizontals = videos.filter(video => {
-    if (video.orientation === 'horizontal' || video.orientation === 'square') return true;
-    if (!video.width || !video.height) return true;
-    const aspectRatio = video.width / video.height;
-    return aspectRatio > 0.8;
-  });
-
-  setInternalReelsVideos(reels);
-  setInternalHorizontalVideos(horizontals);
-  
-  // Actualizar displayVideos según la orientación activa
-  if (orientation === 'vertical') {
-    setDisplayVideos(reels);
-  } else if (orientation === 'horizontal') {
-    setDisplayVideos(horizontals);
-  } else {
-    setDisplayVideos(videos);
-  }
-  
-}, [videos, orientation, reelsVideos, horizontalVideos]);
+    
+  }, [videos, orientation, reelsVideos, horizontalVideos]);
 
   // ===============================
   // ✅ FUNCIÓN NUEVA: Convierte ID del video a índice en array aleatorizado
@@ -139,14 +127,14 @@ useEffect(() => {
       return 0;
     }
     
-    // Buscar el índice del video por su ID en el array aleatorizado
-    const index = reelsVideos.findIndex(video => video.id === selectedReelId);
+    // Buscar el índice del video por su ID en el array aleatorizado INTERNO
+    const index = internalReelsVideos.findIndex(video => video.id === selectedReelId);
     
     console.log('🔍 VideoFeedGrid: Búsqueda de video por ID');
     console.log('   🆔 ID buscado:', selectedReelId);
     console.log('   📍 Índice encontrado:', index);
-    console.log('   📹 Video:', index >= 0 ? reelsVideos[index]?.title : 'No encontrado');
-    console.log('   📊 Total reels en array:', reelsVideos.length);
+    console.log('   📹 Video:', index >= 0 ? internalReelsVideos[index]?.title : 'No encontrado');
+    console.log('   📊 Total reels en array:', internalReelsVideos.length);
     
     // Si no se encuentra, iniciar en 0 (fallback)
     if (index < 0) {
@@ -155,7 +143,7 @@ useEffect(() => {
     }
     
     return index;
-  }, [selectedReelId, reelsVideos]);
+  }, [selectedReelId, internalReelsVideos]);
 
   const handleScroll = useCallback(() => {
     // Solo manejar scroll si NO estamos en modo reels
@@ -226,48 +214,49 @@ useEffect(() => {
     if (navigator.share) {
       navigator.share({
         title: video?.title,
-        text: `Mira este ${layout === 'reels' ? 'reel' : 'video'} de ${video?.creator?.name}`,
-        url: shareUrl
+        text: video?.description,
+        url: shareUrl,
       });
     } else {
-      // Fallback to clipboard
       navigator.clipboard?.writeText(shareUrl);
+      alert('¡Enlace copiado al portapapeles!');
     }
   };
+
+  // ===============================
+  // UTILIDADES DE RENDERIZADO
+  // ===============================
 
   const getGridClasses = () => {
-    switch (layout) {
-      case 'list':
-        return 'space-y-4';
-      case 'grid':
-      default:
-        return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6';
+    if (layout === 'list') {
+      return 'space-y-4';
     }
+    return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
   };
 
-  // ===============================
-  // ✅ DETERMINAR QUÉ VIDEOS MOSTRAR EN EL GRID
-  // ===============================
-  
   const getGridVideos = () => {
-    console.log('🎬 getGridVideos:', { 
-      isMobile, 
-      orientation, 
-      reelsCount: reelsVideos.length,
-      horizontalsCount: horizontalVideos.length,
-      displayCount: displayVideos.length
-    });
-    
-    // En mobile: siempre solo videos horizontales
+    // En mobile: mostrar siempre displayVideos (ya filtrados correctamente)
     if (isMobile) {
-      console.log('📱 Mobile: mostrando horizontales');
-      return horizontalVideos;
+      console.log('📱 Mobile: mostrando displayVideos');
+      return displayVideos;
+    }
+    
+    // En desktop con vista de reels específicos: usar reels
+    if (orientation === 'vertical') {
+      console.log('🖥️ Desktop + vertical: mostrando reels internos');
+      return internalReelsVideos;
+    }
+    
+    // En desktop con vista de horizontales: usar horizontales
+    if (orientation === 'horizontal') {
+      console.log('🖥️ Desktop + horizontal: mostrando horizontales internos');
+      return internalHorizontalVideos;
     }
     
     // En desktop con vista 'all': solo horizontales (reels ya en carrusel arriba)
     if (orientation === 'all') {
-      console.log('🖥️ Desktop + all: mostrando horizontales (reels en carrusel)');
-      return horizontalVideos;
+      console.log('🖥️ Desktop + all: mostrando horizontales internos (reels en carrusel)');
+      return internalHorizontalVideos;
     }
     
     // En desktop con filtro específico: usar displayVideos
@@ -345,13 +334,13 @@ useEffect(() => {
     console.log('🎬 Renderizando ReelsContainer:');
     console.log('   🆔 selectedReelId recibido:', selectedReelId);
     console.log('   📍 initialIndex calculado:', initialIndex);
-    console.log('   📊 Total reels:', reelsVideos.length);
-    console.log('   📹 Video a reproducir:', reelsVideos[initialIndex]?.title || 'No encontrado');
+    console.log('   📊 Total reels:', internalReelsVideos.length);
+    console.log('   📹 Video a reproducir:', internalReelsVideos[initialIndex]?.title || 'No encontrado');
     
     return (
       <ReelsContainer
-        videos={reelsVideos}
-        initialIndex={initialIndex}
+        videos={internalReelsVideos}
+        selectedReelId={selectedReelId}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
         hasMore={hasMore}
@@ -367,7 +356,7 @@ useEffect(() => {
     console.log('🎬 Renderizando HorizontalVideoGrid');
     return (
       <HorizontalVideoGrid
-        videos={horizontalVideos}
+        videos={internalHorizontalVideos}
         onLoadMore={onLoadMore}
         onPointsEarned={onPointsEarned}
         hasMore={hasMore}
@@ -383,8 +372,8 @@ useEffect(() => {
     isMobile, 
     layout, 
     videosCount: displayVideos.length,
-    reelsCount: reelsVideos.length,
-    horizontalsCount: horizontalVideos.length,
+    reelsCount: internalReelsVideos.length,
+    horizontalsCount: internalHorizontalVideos.length,
     gridWillShow: getGridVideos().length,
     showCarousel: isMobile && layout !== 'reels'
   });
@@ -392,11 +381,11 @@ useEffect(() => {
   return (
     <div className="space-y-6">
       {/* ✅ CAROUSEL HORIZONTAL DE REELS - SOLO EN MÓVIL */}
-      {isMobile && reelsVideos.length > 0 && (
+      {isMobile && internalReelsVideos.length > 0 && (
         <>
           <div className="block md:hidden">
             <ReelsGridMobile
-              videos={reelsVideos}
+              videos={internalReelsVideos}
               onLoadMore={onLoadMore}
               hasMore={hasMore}
               loading={loading}
@@ -468,18 +457,18 @@ useEffect(() => {
       {/* 🐛 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v4.0</div>
+          <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v5.0</div>
           <div>📱 isMobile: {isMobile.toString()}</div>
           <div>🎬 layout: {layout}</div>
           <div>📹 total videos: {videos.length}</div>
-          <div>🎥 reels: {reelsVideos.length}</div>
-          <div>🎬 horizontals: {horizontalVideos.length}</div>
+          <div>🎥 reels internos: {internalReelsVideos.length}</div>
+          <div>🎬 horizontales internos: {internalHorizontalVideos.length}</div>
           <div>📺 displaying: {displayVideos.length}</div>
           <div>🔄 loading: {loading.toString()}</div>
           <div>⚡ hasMore: {hasMore.toString()}</div>
           <div>📐 orientation: {orientation}</div>
           <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
-          <div>🎯 Carousel: {(isMobile && reelsVideos.length > 0).toString()}</div>
+          <div>🎯 Carousel: {(isMobile && internalReelsVideos.length > 0).toString()}</div>
         </div>
       )}
     </div>
