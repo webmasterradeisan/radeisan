@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// ✅ ACTUALIZADO: onClick usa videoId exclusivamente con depuración
+// ✅ ACTUALIZADO: onClick usa videoId exclusivamente con depuración y corrección sintáctica
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -211,7 +211,7 @@ const ReelsGridMobile = ({
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/20">
                   <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30">
-                    <Icon name="Play" size={20) color="white" />
+                    <Icon name="Play" size={20} color="white" />
                   </div>
                 </div>
                 <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary/50 rounded-lg transition-colors duration-200"></div>
