@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ✅ CORREGIDO: Reproducción correcta del reel seleccionado en móviles
-// ✅ CORREGIDO: Sin franjas negras en desktop + scroll funcional
+// ✅ CORREGIDO: Sin franjas negras + Deslizamiento funcional
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
