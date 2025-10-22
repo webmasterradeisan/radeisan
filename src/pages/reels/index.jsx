@@ -255,44 +255,32 @@ const ReelsPage = () => {
   }, [processVideos, loadSpecificVideo, initialVideoLoaded]);
 
   // ===============================
-  // ✅ CARGAR VIDEOS AL MONTAR
+  // ✅ CARGAR VIDEOS AL MONTAR - FIXED
   // ===============================
   useEffect(() => {
-    const idParam = searchParams.get('id');
-    const startParam = searchParams.get('start');
+    // Leer el parámetro ID directamente y SÍNCRONAMENTE
+    const urlParams = new URLSearchParams(window.location.search);
+    const idParam = urlParams.get('id');
+    const startParam = urlParams.get('start');
     
-    console.log('🎯 Montando ReelsPage con params:', { idParam, startParam });
+    console.log('🎯 Montando ReelsPage - Params capturados síncronamente:', { 
+      idParam, 
+      startParam,
+      fullUrl: window.location.href
+    });
     
-    // Establecer selectedReelId PRIMERO
     if (idParam) {
+      console.log('✅ ID detectado, estableciendo selectedReelId:', idParam);
       setSelectedReelId(idParam);
-      console.log('✅ selectedReelId establecido:', idParam);
-    }
-    
-    // Luego cargar videos con el ID específico
-    if (idParam) {
-      console.log('🎯 Cargando videos con ID específico:', idParam);
+      console.log('🎯 Llamando loadVideos CON ID específico:', idParam);
       loadVideos(0, true, idParam);
     } else {
-      console.log('🎯 Cargando videos sin ID específico');
-      loadVideos(0, true);
+      console.log('🎯 Sin ID, cargando videos normalmente');
+      loadVideos(0, true, null);
     }
-  }, []); // Solo al montar
-  
-  // ===============================
-  // ✅ REACT A CAMBIOS EN SEARCH PARAMS (Navegación posterior)
-  // ===============================
-  useEffect(() => {
-    // Ignorar el primer render (ya lo manejamos arriba)
-    if (videos.length === 0) return;
     
-    const idParam = searchParams.get('id');
-    
-    if (idParam && idParam !== selectedReelId) {
-      console.log('🔄 Parámetro ID cambió, actualizando:', idParam);
-      setSelectedReelId(idParam);
-    }
-  }, [searchParams]); // Removemos videos y selectedReelId de dependencias
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo ejecutar al montar
 
   // ===============================
   // ✅ ACTUALIZAR selectedReelId cuando cambien los params (navegación)
