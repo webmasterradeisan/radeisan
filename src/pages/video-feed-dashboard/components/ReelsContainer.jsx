@@ -640,7 +640,7 @@ const ReelsContainer = ({
     <div className={`
       relative overflow-hidden bg-black
       ${isDesktop 
-        ? 'max-w-[500px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
+        ? 'max-w-[450px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
         : 'w-full h-full'
       }
     `}>
