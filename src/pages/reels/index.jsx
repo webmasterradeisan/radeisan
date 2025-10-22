@@ -13,7 +13,7 @@ import Button from '../../components/ui/Button';
  * 📱 PÁGINA FULLSCREEN DE REELS
  * - Sin Header ni navegación
  * - Estilo TikTok/YouTube Shorts
- * - Lee parámetro ?start=X para comenzar en reel específico
+ * - Lee parámetro ?start=X o ?videoId= para comenzar en reel específico
  */
 const ReelsPage = () => {
   const navigate = useNavigate();
@@ -32,6 +32,7 @@ const ReelsPage = () => {
     videosCount: videos.length,
     loading,
     selectedReelId,
+    videoIdParam: searchParams.get('videoId'),
     startParam: searchParams.get('start')
   });
 
@@ -39,28 +40,19 @@ const ReelsPage = () => {
   // ✅ DETERMINAR ORIENTACIÓN DEL VIDEO
   // ===============================
   const determineOrientation = useCallback((video) => {
-    // PRIORIDAD 1: Si tiene campo orientation en BD, usarlo
-    if (video.orientation) {
-      return video.orientation;
-    }
-
-    // PRIORIDAD 2: Si hay dimensiones, usarlas
+    if (video.orientation) return video.orientation;
     if (video.width && video.height) {
       const aspectRatio = video.width / video.height;
       if (aspectRatio <= 0.8) return 'vertical';
       if (aspectRatio >= 1.3) return 'horizontal'; 
       return 'square';
     }
-
-    // PRIORIDAD 3: Si tiene video_width y video_height, usarlos
     if (video.video_width && video.video_height) {
       const aspectRatio = video.video_width / video.video_height;
       if (aspectRatio <= 0.8) return 'vertical';
       if (aspectRatio >= 1.3) return 'horizontal'; 
       return 'square';
     }
-    
-    // Por defecto, vertical (estamos en página de reels)
     return 'vertical';
   }, []);
 
@@ -69,7 +61,6 @@ const ReelsPage = () => {
   // ===============================
   const processVideos = useCallback((rawVideos) => {
     return rawVideos.map(video => {
-      // Generar avatar con UI Avatars si no existe
       const username = video.user_profiles?.username || 'usuario';
       const avatarUrl = video.user_profiles?.avatar_url || 
         `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=6366f1&color=ffffff&size=128`;
@@ -77,15 +68,12 @@ const ReelsPage = () => {
       return {
         ...video,
         orientation: determineOrientation(video),
-        // Normalizar datos
         views: video.views_count || video.views || 0,
         likes: video.likes_count || video.likes || 0,
         comments: video.comments_count || video.comments || 0,
         duration: video.duration_seconds || video.duration || 30,
         thumbnail: video.thumbnail_url || video.thumbnail || '/api/placeholder/320/180',
-        // Normalizar videoUrl
         videoUrl: video.video_url || video.videoUrl,
-        // Datos del creador
         creator: {
           id: video.user_profiles?.id || video.user_id,
           username: video.user_profiles?.username || `user_${video.user_id?.substring(0, 8)}`,
@@ -111,7 +99,6 @@ const ReelsPage = () => {
 
       console.log('🎬 Cargando reels:', { pageNum, reset });
 
-      // ✅ PASO 1: Obtener videos sin JOIN
       const ITEMS_PER_PAGE = 20;
       let query = supabase
         .from('videos')
@@ -128,20 +115,14 @@ const ReelsPage = () => {
         return;
       }
 
-      console.log('✅ Videos obtenidos:', videoData?.length || 0);
-
-      // ✅ PASO 2: Obtener user_ids únicos
       const userIds = [...new Set(videoData?.map(v => v.user_id).filter(Boolean))];
-
-      // ✅ PASO 3: Obtener perfiles de usuarios
       let userProfilesMap = {};
-      
+
       if (userIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
           .from('user_profiles')
           .select('id, username, avatar_url')
           .in('id', userIds);
-
         if (!profilesError && profiles) {
           userProfilesMap = profiles.reduce((acc, profile) => {
             acc[profile.id] = profile;
@@ -150,21 +131,13 @@ const ReelsPage = () => {
         }
       }
 
-      // ✅ PASO 4: Combinar videos con perfiles
       const videosWithProfiles = (videoData || []).map(video => ({
         ...video,
         user_profiles: userProfilesMap[video.user_id] || null
       }));
 
       const processedVideos = processVideos(videosWithProfiles);
-
-      // ✅ PASO 5: Filtrar SOLO videos verticales
       const reelsOnly = processedVideos.filter(v => v.orientation === 'vertical');
-
-      console.log('✅ Reels filtrados:', {
-        total: processedVideos.length,
-        reels: reelsOnly.length
-      });
 
       if (reset) {
         setVideos(reelsOnly);
@@ -174,7 +147,6 @@ const ReelsPage = () => {
 
       setHasMore((videoData || []).length === ITEMS_PER_PAGE);
       setPage(pageNum);
-
     } catch (err) {
       console.error('💥 Error en loadVideos:', err);
       setError(err.message);
@@ -191,29 +163,48 @@ const ReelsPage = () => {
   }, [loadVideos]);
 
   // ===============================
-// ✅ LEER PARÁMETROS ?start=X o ?id=... Y CONFIGURAR REEL INICIAL
-useEffect(() => {
-  if (videos.length === 0) return;
+  // ✅ LEER PARÁMETROS ?start=X o ?videoId= Y CONFIGURAR REEL INICIAL
+  // ===============================
+  useEffect(() => {
+    if (videos.length === 0) return;
 
-  // PRIORIDAD 1: Si viene ?id=..., usarlo directamente
-  const idParam = searchParams.get('id');
-  if (idParam) {
-    console.log('🎯 ID directo desde URL:', idParam);
-    setSelectedReelId(idParam);
-    return;
-  }
-
-  // PRIORIDAD 2: Si viene ?start=X, convertir índice a ID (backward compatibility)
-  const startParam = searchParams.get('start');
-  if (startParam) {
-    const index = parseInt(startParam, 10);
-    if (!isNaN(index) && index >= 0 && videos[index]) {
-      const videoId = videos[index].id;
-      console.log('🎯 Iniciando en reel por índice:', { index, videoId, title: videos[index].title });
-      setSelectedReelId(videoId);
+    const videoIdParam = searchParams.get('videoId');
+    if (videoIdParam) {
+      console.log('🎯 videoId directo desde URL:', videoIdParam);
+      const index = videos.findIndex(video => video.id === videoIdParam);
+      if (index >= 0) {
+        console.log('🎯 Índice encontrado para videoId:', { index, title: videos[index]?.title });
+        setSelectedReelId(videoIdParam);
+      } else {
+        console.warn('⚠️ videoId no encontrado en videos cargados, usando índice 0');
+        setSelectedReelId(videos[0]?.id);
+      }
+      return;
     }
-  }
-}, [searchParams, videos]);
+
+    const idParam = searchParams.get('id');
+    if (idParam) {
+      console.log('🎯 id como respaldo desde URL:', idParam);
+      const index = videos.findIndex(video => video.id === idParam);
+      if (index >= 0) {
+        setSelectedReelId(idParam);
+      } else {
+        console.warn('⚠️ id no encontrado en videos cargados, usando índice 0');
+        setSelectedReelId(videos[0]?.id);
+      }
+      return;
+    }
+
+    const startParam = searchParams.get('start');
+    if (startParam) {
+      const index = parseInt(startParam, 10);
+      if (!isNaN(index) && index >= 0 && videos[index]) {
+        const videoId = videos[index].id;
+        console.log('🎯 Iniciando en reel por índice:', { index, videoId, title: videos[index].title });
+        setSelectedReelId(videoId);
+      }
+    }
+  }, [searchParams, videos]);
 
   // ===============================
   // ✅ HANDLERS
@@ -231,7 +222,6 @@ useEffect(() => {
 
   const handlePointsEarned = useCallback((pointsData) => {
     console.log('⭐ Puntos ganados:', pointsData);
-    // Aquí podrías actualizar el balance de puntos del usuario
   }, []);
 
   // ===============================
@@ -318,17 +308,7 @@ useEffect(() => {
         <meta name="description" content="Explora videos verticales increíbles en formato fullscreen" />
       </Helmet>
 
-      {/* 
-        ✅ CONTENEDOR FULLSCREEN SIN HEADER 
-        - position: fixed para ocupar toda la pantalla
-        - z-index alto para estar sobre todo
-        - bg-black para fondo negro estilo TikTok
-      */}
-      <div className="relative h-[calc(100vh-64px)] md:h-screen bg-black overflow-hidden">
-        
-        
-
-        {/* ✅ REELS CONTAINER - FULLSCREEN */}
+      <div className="fixed top-0 left-0 w-full h-screen bg-black overflow-hidden">
         <ReelsContainer
           videos={videos}
           selectedReelId={selectedReelId}
@@ -336,9 +316,10 @@ useEffect(() => {
           onPointsEarned={handlePointsEarned}
           hasMore={hasMore}
           loading={loading}
+          isFullscreen={true}
+          onReelChange={(newReelId) => setSelectedReelId(newReelId)}
         />
 
-        {/* 🐛 DEBUG INFO - Solo en desarrollo */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black/90 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
             <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsPage</div>
@@ -348,6 +329,7 @@ useEffect(() => {
             <div>⚡ hasMore: {hasMore.toString()}</div>
             <div>📄 page: {page}</div>
             <div>👤 user: {user?.id?.substring(0, 8) || 'none'}</div>
+            <div>🔗 videoId param: {searchParams.get('videoId') || 'none'}</div>
             <div>🔗 start param: {searchParams.get('start') || 'none'}</div>
           </div>
         )}
