@@ -75,19 +75,20 @@ const ReelsGridMobile = ({
   // ===============================
   // ✅ HANDLER ACTUALIZADO - Abre visor en lugar de navegar
   // ===============================
-  const handleReelClick = (reelIndex) => {
-    console.log('🎯 Click en reel:', reelIndex);
-    
-    // Si existe el callback onReelClick, usarlo (NUEVO COMPORTAMIENTO)
-    if (onReelClick) {
-      console.log('✅ Abriendo visor de reels con índice:', reelIndex);
-      onReelClick(reelIndex);
-    } else {
-      // Fallback: Navegar a página de reels (COMPORTAMIENTO ANTERIOR)
-      console.log('⚠️ No hay onReelClick, navegando a /reels');
-      navigate(`/reels?start=${reelIndex}`);
-    }
-  };
+  const handleReelClick = (reel, reelIndex) => {
+  console.log('🎯 Mobile: Click en reel:', reelIndex);
+  console.log('   🆔 ID del video:', reel.id);
+  
+  // Si existe el callback onReelClick, usarlo (para dashboard)
+  if (onReelClick) {
+    console.log('✅ Abriendo visor de reels con índice:', reelIndex);
+    onReelClick(reelIndex, reel.id);
+  } else {
+    // ✅ CORREGIDO: Navegar con ID en lugar de índice
+    console.log('🎯 Navegando a /reels con ID:', reel.id);
+    navigate(`/reels?id=${reel.id}`);
+  }
+};
 
   // Navegar a página completa de reels
   const handleVerTodos = () => {
@@ -170,7 +171,7 @@ const ReelsGridMobile = ({
               key={reel.id}
               className="flex-shrink-0 w-32 cursor-pointer group/reel"
               style={{ scrollSnapAlign: 'start' }}
-              onClick={() => handleReelClick(index)}
+              onClick={() => handleReelClick(reel, index)}
             >
               {/* Thumbnail Container */}
               <div className="relative w-32 h-56 bg-black rounded-lg overflow-hidden shadow-md">
