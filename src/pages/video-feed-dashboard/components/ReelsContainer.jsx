@@ -462,7 +462,7 @@ const ReelsContainer = ({
         <video
           ref={el => videoRefs.current[index] = el}
           src={videoUrl}
-          className="w-full h-full object-cover"
+          className="object-cover"
           loop
           playsInline
           preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
@@ -644,9 +644,9 @@ const ReelsContainer = ({
     <div className={`
   relative overflow-hidden bg-black
   ${isDesktop 
-    ? 'w-full h-[80vh]' 
-    : 'w-full h-full'
-  }
+  ? 'max-w-[500px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
+  : 'w-full h-full'
+}
 `}>
       
       {/* CONTENEDOR DE REELS */}
