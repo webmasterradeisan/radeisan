@@ -109,6 +109,16 @@ const useVideos = () => {
     return 'horizontal';
   }, []);
 
+  // ✅ FUNCIÓN DE ALEATORIZACIÓN
+  const shuffleArray = useCallback((array) => {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  }, []);
+
   // ✅ FUNCIÓN ACTUALIZADA: Procesa videos con datos de user_profiles
   const processVideos = useCallback((rawVideos) => {
     const processed = rawVideos.map(video => {
@@ -327,6 +337,8 @@ const VideoFeedDashboard = () => {
   const isMobile = useIsMobile();
 
   const [filteredVideos, setFilteredVideos] = useState([]);
+  const [shuffledReels, setShuffledReels] = useState([]);
+  const [shuffledHorizontals, setShuffledHorizontals] = useState([]);
   const [activeFilter, setActiveFilter] = useState('todos');
   const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
@@ -345,6 +357,7 @@ const VideoFeedDashboard = () => {
   });
 
   // Filtrar videos cuando cambian los datos, filtro o orientación
+  // ✅ Filtrar Y ALEATORIZAR videos cuando cambian los datos
   useEffect(() => {
     let filtered = videos;
 
@@ -365,8 +378,24 @@ const VideoFeedDashboard = () => {
       activeOrientation
     });
 
+    // ✅ SEPARAR Y ALEATORIZAR reels y horizontales
+    const reels = filtered.filter(v => v.orientation === 'vertical');
+    const horizontals = filtered.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
+    
+    const shuffledR = shuffleArray(reels);
+    const shuffledH = shuffleArray(horizontals);
+    
+    console.log('🎲 Videos aleatorizados en dashboard:', {
+      reelsOriginal: reels.length,
+      reelsShuffled: shuffledR.length,
+      horizontalsOriginal: horizontals.length,
+      horizontalsShuffled: shuffledH.length
+    });
+    
+    setShuffledReels(shuffledR);
+    setShuffledHorizontals(shuffledH);
     setFilteredVideos(filtered);
-  }, [videos, activeFilter, activeOrientation]);
+  }, [videos, activeFilter, activeOrientation, shuffleArray]);
 
   // ===============================
   // LÓGICA DE LAYOUT
@@ -581,7 +610,7 @@ const VideoFeedDashboard = () => {
                 {!isMobile && activeOrientation === 'all' && orientationStats.vertical > 0 && (
                   <div className="hidden md:block mb-6">
                     <ReelsCarouselDesktop
-                      videos={filteredVideos.filter(v => v.orientation === 'vertical')}
+                      videos={shuffledReels}
                       onReelClick={handleReelClickDesktop}
                       onLoadMore={handleLoadMore}
                       hasMore={hasMore}
