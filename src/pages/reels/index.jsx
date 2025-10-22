@@ -25,13 +25,13 @@ const ReelsPage = () => {
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
-  const [initialIndex, setInitialIndex] = useState(0);
+  const [selectedReelId, setSelectedReelId] = useState(null);
 
   console.log('🎬 ReelsPage renderizada:', {
     userId: user?.id,
     videosCount: videos.length,
     loading,
-    initialIndex,
+    selectedReelId,
     startParam: searchParams.get('start')
   });
 
@@ -191,18 +191,19 @@ const ReelsPage = () => {
   }, [loadVideos]);
 
   // ===============================
-  // ✅ LEER PARÁMETRO ?start=X
-  // ===============================
-  useEffect(() => {
-    const startParam = searchParams.get('start');
-    if (startParam) {
-      const index = parseInt(startParam, 10);
-      if (!isNaN(index) && index >= 0) {
-        console.log('🎯 Iniciando en índice:', index);
-        setInitialIndex(index);
-      }
+// ✅ LEER PARÁMETRO ?start=X Y CONVERTIR A ID
+// ===============================
+useEffect(() => {
+  const startParam = searchParams.get('start');
+  if (startParam && videos.length > 0) {
+    const index = parseInt(startParam, 10);
+    if (!isNaN(index) && index >= 0 && videos[index]) {
+      const videoId = videos[index].id;
+      console.log('🎯 Iniciando en reel:', { index, videoId, title: videos[index].title });
+      setSelectedReelId(videoId);
     }
-  }, [searchParams]);
+  }
+}, [searchParams, videos]);
 
   // ===============================
   // ✅ HANDLERS
@@ -313,21 +314,21 @@ const ReelsPage = () => {
         - z-index alto para estar sobre todo
         - bg-black para fondo negro estilo TikTok
       */}
-      <div className="fixed inset-0 z-50 bg-black">
+      <div className="relative min-h-[calc(100vh-64px)] bg-black">
         
-        {/* ✅ BOTÓN CERRAR (X) - ESQUINA SUPERIOR IZQUIERDA */}
-        <button
-          onClick={handleClose}
-          className="absolute top-4 left-4 z-50 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors"
-          aria-label="Cerrar reels"
-        >
-          <Icon name="X" size={20} />
-        </button>
+        {/* ✅ BOTÓN CERRAR (X) - SOLO DESKTOP */}
+<button
+  onClick={handleClose}
+  className="hidden md:flex absolute top-4 left-4 z-50 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full items-center justify-center text-white hover:bg-black/70 transition-colors"
+  aria-label="Cerrar reels"
+>
+  <Icon name="X" size={20} />
+</button>
 
         {/* ✅ REELS CONTAINER - FULLSCREEN */}
         <ReelsContainer
           videos={videos}
-          initialIndex={initialIndex}
+          selectedReelId={selectedReelId}
           onLoadMore={handleLoadMore}
           onPointsEarned={handlePointsEarned}
           hasMore={hasMore}
@@ -339,7 +340,7 @@ const ReelsPage = () => {
           <div className="fixed bottom-4 left-4 bg-black/90 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
             <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsPage</div>
             <div>📹 videos: {videos.length}</div>
-            <div>🎯 initialIndex: {initialIndex}</div>
+            <div>🎯 selectedReelId: {selectedReelId || 'null'}</div>
             <div>🔄 loading: {loading.toString()}</div>
             <div>⚡ hasMore: {hasMore.toString()}</div>
             <div>📄 page: {page}</div>
