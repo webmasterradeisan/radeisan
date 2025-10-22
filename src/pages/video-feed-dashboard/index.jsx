@@ -4,6 +4,7 @@
 // ✅ CORREGIDO: Navegación del carrusel desktop (cambia vista en vez de navegar)
 // ✅ CORREGIDO: Pasa ID del video en lugar de índice para reproducción correcta
 // ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
+// ✅ CORREGIDO: Carrusel desktop no desaparece - usa videos sin filtrar por orientación
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -366,10 +367,35 @@ const VideoFeedDashboard = () => {
     error
   });
 
-  // ✅ Filtrar Y ALEATORIZAR videos cuando cambian los datos
+  // ✅ CORREGIDO: Filtrar Y ALEATORIZAR videos cuando cambian los datos
+  // SOLUCIÓN: Separar reels/horizontales ANTES de aplicar filtro de orientación
   useEffect(() => {
-    let filtered = videos;
+    // ✅ PASO 1: Aplicar solo filtro de CATEGORÍA (NO orientación) para los arrays de carrusel
+    let videosForCarousel = videos;
+    if (activeFilter !== 'todos' && activeFilter !== 'all') {
+      videosForCarousel = videos.filter(video => video.category === activeFilter);
+    }
 
+    // ✅ PASO 2: Separar y aleatorizar reels y horizontales DEL ARRAY COMPLETO (sin filtro de orientación)
+    const allReels = videosForCarousel.filter(v => v.orientation === 'vertical');
+    const allHorizontals = videosForCarousel.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
+    
+    const shuffledR = shuffleArray(allReels);
+    const shuffledH = shuffleArray(allHorizontals);
+    
+    console.log('🎲 Arrays para carrusel (sin filtro de orientación):', {
+      reelsCount: shuffledR.length,
+      horizontalsCount: shuffledH.length,
+      activeFilter
+    });
+    
+    // ✅ PASO 3: Guardar arrays aleatorizados (estos siempre tendrán datos cuando hay videos)
+    setShuffledReels(shuffledR);
+    setShuffledHorizontals(shuffledH);
+
+    // ✅ PASO 4: Aplicar TODOS los filtros (categoría + orientación) para el grid
+    let filtered = videos;
+    
     // Filtrar por categoría
     if (activeFilter !== 'todos' && activeFilter !== 'all') {
       filtered = filtered.filter(video => video.category === activeFilter);
@@ -380,29 +406,13 @@ const VideoFeedDashboard = () => {
       filtered = filtered.filter(video => video.orientation === activeOrientation);
     }
 
-    console.log('🔍 Filtrado de videos:', {
+    console.log('🔍 Filtrado final para grid:', {
       original: videos.length,
       afterFilters: filtered.length,
       activeFilter,
       activeOrientation
     });
-
-    // ✅ SEPARAR Y ALEATORIZAR reels y horizontales
-    const reels = filtered.filter(v => v.orientation === 'vertical');
-    const horizontals = filtered.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
     
-    const shuffledR = shuffleArray(reels);
-    const shuffledH = shuffleArray(horizontals);
-    
-    console.log('🎲 Videos aleatorizados en dashboard:', {
-      reelsOriginal: reels.length,
-      reelsShuffled: shuffledR.length,
-      horizontalsOriginal: horizontals.length,
-      horizontalsShuffled: shuffledH.length
-    });
-    
-    setShuffledReels(shuffledR);
-    setShuffledHorizontals(shuffledH);
     setFilteredVideos(filtered);
   }, [videos, activeFilter, activeOrientation]);
 
@@ -513,27 +523,24 @@ const VideoFeedDashboard = () => {
   return (
     <>
       <Helmet>
-        <title>Dashboard - RADEISAN</title>
-        <meta name="description" content="Explora videos increíbles en RADEISAN" />
+        <title>RADEISAN - Red Social de Videos</title>
+        <meta name="description" content="Descubre y comparte videos increíbles en RADEISAN" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
         <Header />
         <PrimaryNavigation />
         
-        <main className="pt-20 pb-20 lg:pb-8">
-          <div className="container mx-auto px-4 max-w-7xl">
-            <div className="flex gap-6">
-              {/* Main Content Column */}
-              <div className="flex-1 min-w-0">
-                {/* Page Header */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-4">
+        <main className="container mx-auto px-4 pt-20 pb-20 md:pt-24 md:pb-8">
+          <div className="max-w-[1400px] mx-auto">
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+              {/* Main Content */}
+              <div className="min-w-0">
+                {/* Header con puntos y controles */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-4">
                     <h1 className="text-2xl font-bold text-foreground">
-                      {activeFilter === 'todos' 
-                       ? 'Explorar Videos' 
-                       : VIDEO_CATEGORIES.find(c => c.id === activeFilter)?.label || 'Contenido'
-                      }
+                      Descubre
                     </h1>
                     <div className="hidden sm:block">
                       <PointsBalanceIndicator 
@@ -612,8 +619,8 @@ const VideoFeedDashboard = () => {
                   />
                 </div>
 
-                {/* ✅ CARRUSEL DE REELS DESKTOP - CON HANDLER CORREGIDO */}
-                {!isMobile && activeOrientation === 'all' && orientationStats.vertical > 0 && (
+                {/* ✅ CARRUSEL DE REELS DESKTOP - CORREGIDO: Usa shuffledReels.length */}
+                {!isMobile && activeOrientation === 'all' && shuffledReels.length > 0 && (
                   <div className="hidden md:block mb-6">
                     <ReelsCarouselDesktop
                       videos={shuffledReels}
@@ -710,7 +717,7 @@ const VideoFeedDashboard = () => {
         {/* Debug Info for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">✅ Dashboard v4.0 - CORREGIDO</div>
+            <div className="text-green-400 font-bold mb-1">✅ Dashboard v4.1 - CARRUSEL CORREGIDO</div>
             <div>📱 isMobile: {isMobile.toString()}</div>
             <div>🎬 activeOrientation: {activeOrientation}</div>
             <div>🎯 originalLayout: {layout}</div>
@@ -721,7 +728,7 @@ const VideoFeedDashboard = () => {
             <div>🎬 shuffled horizontals: {shuffledHorizontals.length}</div>
             <div>🔄 loading: {loading.toString()}</div>
             <div>🎠 Mobile Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
-            <div>🖥️ Desktop Carousel: {(!isMobile && activeOrientation === 'all').toString()}</div>
+            <div>🖥️ Desktop Carousel: {(!isMobile && activeOrientation === 'all' && shuffledReels.length > 0).toString()}</div>
             <div>📊 Stats: V:{orientationStats.vertical} H:{orientationStats.horizontal}</div>
             <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
             <div>❌ error: {error || 'none'}</div>
