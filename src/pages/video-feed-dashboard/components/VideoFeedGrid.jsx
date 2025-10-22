@@ -41,7 +41,7 @@ const VideoFeedGrid = ({
   console.log('🚨 VIDEOFEEDGRID - VERSIÓN CON ARRAYS ALEATORIZADOS');
   console.log('📱 isMobile:', isMobile);
   console.log('🎬 layout:', layout);
-  console.log('📐 orientation:', orientation);
+  console.log('🔍 orientation:', orientation);
   console.log('🆔 selectedReelId:', selectedReelId);
   console.log('📹 videos count:', videos.length);
   console.log('🎥 reels count (prop):', reelsVideos?.length || 0);
@@ -132,7 +132,7 @@ const VideoFeedGrid = ({
     
     console.log('🔍 VideoFeedGrid: Búsqueda de video por ID');
     console.log('   🆔 ID buscado:', selectedReelId);
-    console.log('   📍 Índice encontrado:', index);
+    console.log('   🔢 Índice encontrado:', index);
     console.log('   📹 Video:', index >= 0 ? internalReelsVideos[index]?.title : 'No encontrado');
     console.log('   📊 Total reels en array:', internalReelsVideos.length);
     
@@ -235,34 +235,51 @@ const VideoFeedGrid = ({
   };
 
   const getGridVideos = () => {
-    // En mobile: mostrar siempre displayVideos (ya filtrados correctamente)
+    // ✅ MOBILE: Lógica especial para carrusel
     if (isMobile) {
-      console.log('📱 Mobile: mostrando displayVideos');
+      // Si orientation es 'all' y hay reels en el carrusel, mostrar SOLO horizontales en el grid
+      if (orientation === 'all' && internalReelsVideos.length > 0) {
+        console.log('📱 Mobile + orientation=all: Carrusel de reels arriba, SOLO horizontales en grid');
+        return internalHorizontalVideos;
+      }
+      
+      // Si orientation es 'vertical', mostrar solo reels (sin carrusel)
+      if (orientation === 'vertical') {
+        console.log('📱 Mobile + orientation=vertical: mostrando solo reels');
+        return internalReelsVideos;
+      }
+      
+      // Si orientation es 'horizontal', mostrar solo horizontales
+      if (orientation === 'horizontal') {
+        console.log('📱 Mobile + orientation=horizontal: mostrando solo horizontales');
+        return internalHorizontalVideos;
+      }
+      
+      // Fallback: mostrar displayVideos
+      console.log('📱 Mobile fallback: mostrando displayVideos');
       return displayVideos;
     }
     
-    // En desktop con vista de reels específicos: usar reels
+    // ✅ DESKTOP: Lógica existente (NO MODIFICAR)
     if (orientation === 'vertical') {
       console.log('🖥️ Desktop + vertical: mostrando reels internos');
       return internalReelsVideos;
     }
     
-    // En desktop con vista de horizontales: usar horizontales
     if (orientation === 'horizontal') {
       console.log('🖥️ Desktop + horizontal: mostrando horizontales internos');
       return internalHorizontalVideos;
     }
     
-    // En desktop con vista 'all': solo horizontales (reels ya en carrusel arriba)
     if (orientation === 'all') {
       console.log('🖥️ Desktop + all: mostrando horizontales internos (reels en carrusel)');
       return internalHorizontalVideos;
     }
     
-    // En desktop con filtro específico: usar displayVideos
     console.log('🖥️ Desktop + filtrado: mostrando displayVideos');
     return displayVideos;
   };
+
 
   // ===============================
   // LOADING STATE
@@ -285,7 +302,7 @@ const VideoFeedGrid = ({
   // EMPTY STATE
   // ===============================
   if (displayVideos?.length === 0) {
-    console.log('📭 Mostrando empty state');
+    console.log('🔭 Mostrando empty state');
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -333,7 +350,7 @@ const VideoFeedGrid = ({
     
     console.log('🎬 Renderizando ReelsContainer:');
     console.log('   🆔 selectedReelId recibido:', selectedReelId);
-    console.log('   📍 initialIndex calculado:', initialIndex);
+    console.log('   🔢 initialIndex calculado:', initialIndex);
     console.log('   📊 Total reels:', internalReelsVideos.length);
     console.log('   📹 Video a reproducir:', internalReelsVideos[initialIndex]?.title || 'No encontrado');
     
@@ -381,7 +398,7 @@ const VideoFeedGrid = ({
   return (
     <div className="space-y-6">
       {/* ✅ CAROUSEL HORIZONTAL DE REELS - SOLO EN MÓVIL */}
-      {isMobile && internalReelsVideos.length > 0 && (
+      {isMobile && internalReelsVideos.length > 0 && orientation === 'all' && (
         <>
           <div className="block md:hidden">
             <ReelsGridMobile
@@ -454,7 +471,7 @@ const VideoFeedGrid = ({
         </div>
       )}
 
-      {/* 🐛 DEBUG INFO - Solo en desarrollo */}
+      {/* 🛠 DEBUG INFO - Solo en desarrollo */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-20 left-4 bg-black text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50">
           <div className="text-green-400 font-bold mb-1">✅ DEBUG VideoFeedGrid v5.0</div>
@@ -466,7 +483,7 @@ const VideoFeedGrid = ({
           <div>📺 displaying: {displayVideos.length}</div>
           <div>🔄 loading: {loading.toString()}</div>
           <div>⚡ hasMore: {hasMore.toString()}</div>
-          <div>📐 orientation: {orientation}</div>
+          <div>🔍 orientation: {orientation}</div>
           <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
           <div>🎯 Carousel: {(isMobile && internalReelsVideos.length > 0).toString()}</div>
         </div>
