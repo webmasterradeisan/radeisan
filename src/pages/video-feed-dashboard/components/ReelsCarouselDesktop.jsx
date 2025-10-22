@@ -96,9 +96,9 @@ const ReelsCarouselDesktop = ({
       // ✅ Pasar ÍNDICE Y ID al handler padre
       onReelClick(reelIndex, reel.id);
     } else {
-      // Fallback: navegar a /reels
-      navigate(`/reels?start=${reelIndex}`);
-    }
+    // ✅ CORREGIDO: Navegar con ID en lugar de índice
+    navigate(`/reels?id=${reel.id}`);
+  }
   };
 
   // Navegar a página completa de reels
