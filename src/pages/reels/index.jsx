@@ -316,14 +316,7 @@ useEffect(() => {
       */}
       <div className="relative min-h-[calc(100vh-64px)] bg-black">
         
-        {/* ✅ BOTÓN CERRAR (X) - SOLO DESKTOP */}
-<button
-  onClick={handleClose}
-  className="hidden md:flex absolute top-4 left-4 z-50 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full items-center justify-center text-white hover:bg-black/70 transition-colors"
-  aria-label="Cerrar reels"
->
-  <Icon name="X" size={20} />
-</button>
+        
 
         {/* ✅ REELS CONTAINER - FULLSCREEN */}
         <ReelsContainer
