@@ -1,5 +1,5 @@
 // src/pages/reels/index.jsx
-// ✅ PÁGINA FULLSCREEN DE REELS - SIN HEADER (Estilo TikTok/YouTube)
+// ✅ ACTUALIZADO: Prioriza videoId y corrige navegación aleatoria
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -13,7 +13,7 @@ import Button from '../../components/ui/Button';
  * 📱 PÁGINA FULLSCREEN DE REELS
  * - Sin Header ni navegación
  * - Estilo TikTok/YouTube Shorts
- * - Lee parámetro ?start=X o ?videoId= para comenzar en reel específico
+ * - ✅ CORREGIDO: Prioriza videoId sobre start para evitar reproducción aleatoria
  */
 const ReelsPage = () => {
   const navigate = useNavigate();
@@ -33,7 +33,8 @@ const ReelsPage = () => {
     loading,
     selectedReelId,
     videoIdParam: searchParams.get('videoId'),
-    startParam: searchParams.get('start')
+    startParam: searchParams.get('start'),
+    idParam: searchParams.get('id')
   });
 
   // ===============================
@@ -163,47 +164,113 @@ const ReelsPage = () => {
   }, [loadVideos]);
 
   // ===============================
-  // ✅ LEER PARÁMETROS ?start=X o ?videoId= Y CONFIGURAR REEL INICIAL
+  // ✅ CORREGIDO: LEER PARÁMETROS Y SELECCIONAR REEL CORRECTO
+  // Prioridad: videoId > id > start
   // ===============================
   useEffect(() => {
-    if (videos.length === 0) return;
+    if (videos.length === 0) {
+      console.log('⏸️ Sin videos cargados aún, esperando...');
+      return;
+    }
 
+    console.log('🔍 Iniciando selección de reel:', {
+      videosDisponibles: videos.length,
+      primerVideoId: videos[0]?.id,
+      primerVideoTitle: videos[0]?.title
+    });
+
+    // ============================================
+    // PRIORIDAD 1: videoId (navegación desde carrusel)
+    // ============================================
     const videoIdParam = searchParams.get('videoId');
     if (videoIdParam) {
-      console.log('🎯 videoId directo desde URL:', videoIdParam);
-      const index = videos.findIndex(video => video.id === videoIdParam);
-      if (index >= 0) {
-        console.log('🎯 Índice encontrado para videoId:', { index, title: videos[index]?.title });
-        setSelectedReelId(videoIdParam);
+      console.log('🎯 PRIORIDAD 1: Buscando por videoId:', videoIdParam);
+      
+      const foundVideo = videos.find(video => video.id === videoIdParam);
+      
+      if (foundVideo) {
+        console.log('✅ Video encontrado por videoId:', {
+          id: foundVideo.id,
+          title: foundVideo.title,
+          index: videos.indexOf(foundVideo)
+        });
+        setSelectedReelId(foundVideo.id);
+        return;
       } else {
-        console.warn('⚠️ videoId no encontrado en videos cargados, usando índice 0');
+        console.warn('⚠️ videoId no encontrado en lista cargada:', {
+          buscado: videoIdParam,
+          disponibles: videos.map(v => v.id).slice(0, 5),
+          totalVideos: videos.length
+        });
+        // Fallback al primer video
         setSelectedReelId(videos[0]?.id);
+        return;
       }
-      return;
     }
 
+    // ============================================
+    // PRIORIDAD 2: id (respaldo alternativo)
+    // ============================================
     const idParam = searchParams.get('id');
     if (idParam) {
-      console.log('🎯 id como respaldo desde URL:', idParam);
-      const index = videos.findIndex(video => video.id === idParam);
-      if (index >= 0) {
-        setSelectedReelId(idParam);
+      console.log('🎯 PRIORIDAD 2: Buscando por id:', idParam);
+      
+      const foundVideo = videos.find(video => video.id === idParam);
+      
+      if (foundVideo) {
+        console.log('✅ Video encontrado por id:', {
+          id: foundVideo.id,
+          title: foundVideo.title
+        });
+        setSelectedReelId(foundVideo.id);
+        return;
       } else {
-        console.warn('⚠️ id no encontrado en videos cargados, usando índice 0');
+        console.warn('⚠️ id no encontrado, usando primer video');
         setSelectedReelId(videos[0]?.id);
+        return;
       }
-      return;
     }
 
+    // ============================================
+    // PRIORIDAD 3: start (índice numérico - menos confiable)
+    // ============================================
     const startParam = searchParams.get('start');
     if (startParam) {
       const index = parseInt(startParam, 10);
-      if (!isNaN(index) && index >= 0 && videos[index]) {
-        const videoId = videos[index].id;
-        console.log('🎯 Iniciando en reel por índice:', { index, videoId, title: videos[index].title });
-        setSelectedReelId(videoId);
+      
+      console.log('🎯 PRIORIDAD 3: Usando índice start:', {
+        startParam,
+        indexParsed: index,
+        isValid: !isNaN(index) && index >= 0 && index < videos.length
+      });
+
+      if (!isNaN(index) && index >= 0 && index < videos.length) {
+        const selectedVideo = videos[index];
+        console.log('✅ Video seleccionado por índice:', {
+          index,
+          id: selectedVideo.id,
+          title: selectedVideo.title
+        });
+        setSelectedReelId(selectedVideo.id);
+        return;
+      } else {
+        console.warn('⚠️ Índice start inválido, usando primer video:', {
+          startParam,
+          index,
+          videosLength: videos.length
+        });
       }
     }
+
+    // ============================================
+    // FALLBACK: Sin parámetros, usar primer video
+    // ============================================
+    console.log('📍 Sin parámetros válidos, usando primer video:', {
+      id: videos[0]?.id,
+      title: videos[0]?.title
+    });
+    setSelectedReelId(videos[0]?.id);
+
   }, [searchParams, videos]);
 
   // ===============================
@@ -322,15 +389,15 @@ const ReelsPage = () => {
 
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black/90 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
-            <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsPage</div>
+            <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsPage v2</div>
             <div>📹 videos: {videos.length}</div>
             <div>🎯 selectedReelId: {selectedReelId || 'null'}</div>
+            <div className="text-yellow-400">🔗 videoId: {searchParams.get('videoId') || 'none'}</div>
+            <div>🔗 id: {searchParams.get('id') || 'none'}</div>
+            <div>🔗 start: {searchParams.get('start') || 'none'}</div>
             <div>🔄 loading: {loading.toString()}</div>
             <div>⚡ hasMore: {hasMore.toString()}</div>
             <div>📄 page: {page}</div>
-            <div>👤 user: {user?.id?.substring(0, 8) || 'none'}</div>
-            <div>🔗 videoId param: {searchParams.get('videoId') || 'none'}</div>
-            <div>🔗 start param: {searchParams.get('start') || 'none'}</div>
           </div>
         )}
       </div>
