@@ -696,22 +696,15 @@ const ReelsContainer = ({
         </div>
       )}
 
-      {/* CONTADOR E INDICADORES DE ESTADO */}
-      <div className={`
-        absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none
-        ${isDesktop ? 'text-base' : 'text-sm'}
-      `}>
-        <div className="text-white font-medium bg-black/30 rounded-full px-3 py-1">
-          {currentIndex + 1} / {videos.length}
-        </div>
-        
-        {loading && (
+      {/* INDICADOR DE CARGA */}
+      {loading && (
+        <div className="absolute top-4 right-4 pointer-events-none">
           <div className="text-white flex items-center space-x-2 bg-black/30 rounded-full px-3 py-1">
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span>Cargando más...</span>
+            <span className={isDesktop ? 'text-base' : 'text-sm'}>Cargando más...</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* INSTRUCCIONES DESKTOP/MÓVIL */}
       {currentIndex === 0 && (
