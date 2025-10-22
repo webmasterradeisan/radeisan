@@ -83,23 +83,30 @@ const ReelsContainer = ({
     console.log('   📹 Video a reproducir:', videos[correctIndex]?.title || 'No existe');
     console.log('   📊 Total videos:', videos.length);
     console.log('   🎬 Es montaje inicial:', isInitialMount.current);
+    console.log('   📍 Índice actual:', currentIndex);
     
-    // Si es el montaje inicial, saltar directamente SIN transición
-    if (isInitialMount.current) {
-      setCurrentIndex(correctIndex);
-      setEnableTransition(false);
-      
-      // Después de renderizar, habilitar transiciones para navegación manual
-      setTimeout(() => {
-        setEnableTransition(true);
-        isInitialMount.current = false;
-        console.log('✅ Transiciones habilitadas para navegación manual');
-      }, 100);
-    } else {
-      // Para cambios posteriores, usar transición
-      setCurrentIndex(correctIndex);
+    // ✅ SIEMPRE actualizar si el índice calculado es diferente al actual
+    if (correctIndex !== currentIndex) {
+      // Si es el montaje inicial, saltar directamente SIN transición
+      if (isInitialMount.current) {
+        setCurrentIndex(correctIndex);
+        setEnableTransition(false);
+        hasPlayedInitial.current = false; // Reset para forzar reproducción
+        
+        // Después de renderizar, habilitar transiciones para navegación manual
+        setTimeout(() => {
+          setEnableTransition(true);
+          isInitialMount.current = false;
+          console.log('✅ Transiciones habilitadas para navegación manual');
+        }, 100);
+      } else {
+        // Para cambios posteriores (como navegación desde carrusel), usar transición
+        console.log('🔄 Actualizando índice por cambio de selectedReelId');
+        setCurrentIndex(correctIndex);
+        hasPlayedInitial.current = false; // Reset para forzar reproducción del nuevo video
+      }
     }
-  }, [selectedReelId, videos, getInitialReelIndex]);
+  }, [selectedReelId, videos, getInitialReelIndex, currentIndex]);
 
   // ===============================
   // ✅ FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
