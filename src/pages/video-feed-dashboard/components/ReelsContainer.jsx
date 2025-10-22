@@ -426,15 +426,7 @@ const ReelsContainer = ({
         {/* OVERLAY GRADIENTE */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
 
-        {/* BOTÓN DE CIERRE (Solo Desktop) */}
-        {isDesktop && (
-          <Link
-            to="/"
-            className="absolute top-4 right-4 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/70 transition-colors z-20"
-          >
-            <Icon name="X" size={20} color="white" />
-          </Link>
-        )}
+      
 
         {/* CONTROLES LATERALES (Derecha) */}
         <div className={`
