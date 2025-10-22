@@ -79,7 +79,6 @@ const ReelsGridMobile = ({
   console.log('🎯 Mobile: Click en reel:', reelIndex);
   console.log('   🆔 ID del video:', reel.id);
   
-  // Si existe el callback onReelClick, usarlo (para dashboard)
   if (onReelClick) {
     console.log('✅ Abriendo visor de reels con índice:', reelIndex);
     onReelClick(reelIndex, reel.id);
