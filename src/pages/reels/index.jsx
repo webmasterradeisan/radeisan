@@ -314,7 +314,7 @@ useEffect(() => {
         - z-index alto para estar sobre todo
         - bg-black para fondo negro estilo TikTok
       */}
-      <div className="relative min-h-[calc(100vh-64px)] bg-black">
+      <div className="relative h-[calc(100vh-64px)] md:h-screen bg-black overflow-hidden">
         
         
 
