@@ -255,18 +255,21 @@ const ReelsPage = () => {
   }, [processVideos, loadSpecificVideo, initialVideoLoaded]);
 
   // ===============================
-  // ✅ CARGAR VIDEOS AL MONTAR - FIXED
+  // ✅ CARGAR VIDEOS AL MONTAR - FIXED (Soporta ?id= y ?videoId=)
   // ===============================
   useEffect(() => {
     // Leer el parámetro ID directamente y SÍNCRONAMENTE
     const urlParams = new URLSearchParams(window.location.search);
-    const idParam = urlParams.get('id');
+    
+    // ✅ SOPORTAR AMBOS: ?id= y ?videoId= (por compatibilidad)
+    const idParam = urlParams.get('id') || urlParams.get('videoId');
     const startParam = urlParams.get('start');
     
     console.log('🎯 Montando ReelsPage - Params capturados síncronamente:', { 
       idParam, 
       startParam,
-      fullUrl: window.location.href
+      fullUrl: window.location.href,
+      allParams: Object.fromEntries(urlParams.entries())
     });
     
     if (idParam) {
@@ -286,7 +289,8 @@ const ReelsPage = () => {
   // ✅ ACTUALIZAR selectedReelId cuando cambien los params (navegación)
   // ===============================
   useEffect(() => {
-    const idParam = searchParams.get('id');
+    // ✅ SOPORTAR AMBOS: ?id= y ?videoId=
+    const idParam = searchParams.get('id') || searchParams.get('videoId');
     const startParam = searchParams.get('start');
 
     if (videos.length === 0) return;
@@ -432,8 +436,9 @@ const ReelsPage = () => {
             <div>🔄 loading: {loading.toString()}</div>
             <div>⚡ hasMore: {hasMore.toString()}</div>
             <div>📄 page: {page}</div>
-            <div>🆔 ID param: {searchParams.get('id') || 'none'}</div>
-            <div>📍 Start param: {searchParams.get('start') || 'none'}</div>
+            <div>🆔 id param: {searchParams.get('id') || 'none'}</div>
+            <div>🆔 videoId param: {searchParams.get('videoId') || 'none'}</div>
+            <div>📍 start param: {searchParams.get('start') || 'none'}</div>
             <div>🎬 initialLoaded: {initialVideoLoaded.toString()}</div>
             {videos.length > 0 && (
               <>
