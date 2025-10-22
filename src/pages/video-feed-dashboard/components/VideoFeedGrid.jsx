@@ -26,9 +26,11 @@ const shuffleArray = (array) => {
 
 const VideoFeedGrid = ({ 
   videos = [], 
+  reelsVideos = null,        // ✅ NUEVO: Reels ya aleatorizados del dashboard
+  horizontalVideos = null,   // ✅ NUEVO: Horizontales ya aleatorizados del dashboard
   layout = 'grid', 
   orientation = 'all',
-  selectedReelId = null, // ✅ CAMBIADO: De selectedReelIndex a selectedReelId
+  selectedReelId = null,
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
@@ -60,69 +62,72 @@ const VideoFeedGrid = ({
   console.log('⚡ hasMore:', hasMore);
 
   // ===============================
-  // ✅ SEPARACIÓN Y ALEATORIZACIÓN DE VIDEOS
-  // ===============================
-  useEffect(() => {
-    console.log('🔄 Procesando videos:', videos.length);
-    
-    // Separar videos por orientación
-    const reels = videos.filter(video => {
-      // Si tiene orientation definida, usarla
-      if (video.orientation) {
-        return video.orientation === 'vertical';
-      }
-      
-      // Si no, usar aspect ratio
-      if (video.width && video.height) {
-        const aspectRatio = video.width / video.height;
-        return aspectRatio <= 0.8; // Vertical
-      }
-      
-      // Por defecto, asumir que es video horizontal
-      return false;
-    });
-    
-    const horizontals = videos.filter(video => {
-      // Si tiene orientation definida, usarla
-      if (video.orientation) {
-        return video.orientation === 'horizontal';
-      }
-      
-      // Si no, usar aspect ratio
-      if (video.width && video.height) {
-        const aspectRatio = video.width / video.height;
-        return aspectRatio >= 1.3; // Horizontal
-      }
-      
-      // Por defecto, asumir que es video horizontal
-      return true;
-    });
-    
-    // ✅ ALEATORIZAR AMBOS ARRAYS
-    const shuffledReels = shuffleArray(reels);
-    const shuffledHorizontals = shuffleArray(horizontals);
-    
-    console.log('✅ Videos separados y aleatorizados:', {
-      reelsOriginal: reels.length,
-      reelsShuffled: shuffledReels.length,
-      horizontalsOriginal: horizontals.length,
-      horizontalsShuffled: shuffledHorizontals.length
-    });
-    
-    setReelsVideos(shuffledReels);
-    setHorizontalVideos(shuffledHorizontals);
+// ✅ USAR ARRAYS ALEATORIZADOS DEL DASHBOARD
+// ===============================
+useEffect(() => {
+  console.log('📊 VideoFeedGrid: Procesando videos');
+  console.log('   📥 Props recibidos:', {
+    reelsVideosProp: reelsVideos?.length || 0,
+    horizontalVideosProp: horizontalVideos?.length || 0,
+    videosProp: videos.length,
+    orientation
+  });
+
+  // Si vienen arrays ya aleatorizados del dashboard, usarlos directamente
+  if (reelsVideos !== null && horizontalVideos !== null) {
+    console.log('✅ Usando arrays ya aleatorizados del dashboard');
+    setReelsVideos(reelsVideos);
+    setHorizontalVideos(horizontalVideos);
     
     // Actualizar displayVideos según la orientación activa
     if (orientation === 'vertical') {
-      setDisplayVideos(shuffledReels);
+      setDisplayVideos(reelsVideos);
     } else if (orientation === 'horizontal') {
-      setDisplayVideos(shuffledHorizontals);
+      setDisplayVideos(horizontalVideos);
     } else {
-      // Si es 'all', mostrar todos mezclados
+      // Si es 'all', mostrar todos
       setDisplayVideos(videos);
     }
-    
-  }, [videos, orientation]);
+    return;
+  }
+
+  // Fallback: separar localmente SI NO vienen del dashboard (sin aleatorizar)
+  console.log('⚠️ Fallback: Separando videos localmente');
+  
+  if (videos.length === 0) {
+    setReelsVideos([]);
+    setHorizontalVideos([]);
+    setDisplayVideos([]);
+    return;
+  }
+
+  const reels = videos.filter(video => {
+    if (video.orientation === 'vertical') return true;
+    if (!video.width || !video.height) return false;
+    const aspectRatio = video.width / video.height;
+    return aspectRatio <= 0.8;
+  });
+
+  const horizontals = videos.filter(video => {
+    if (video.orientation === 'horizontal' || video.orientation === 'square') return true;
+    if (!video.width || !video.height) return true;
+    const aspectRatio = video.width / video.height;
+    return aspectRatio > 0.8;
+  });
+
+  setReelsVideos(reels);
+  setHorizontalVideos(horizontals);
+  
+  // Actualizar displayVideos según la orientación activa
+  if (orientation === 'vertical') {
+    setDisplayVideos(reels);
+  } else if (orientation === 'horizontal') {
+    setDisplayVideos(horizontals);
+  } else {
+    setDisplayVideos(videos);
+  }
+  
+}, [videos, orientation, reelsVideos, horizontalVideos]);
 
   // ===============================
   // ✅ FUNCIÓN NUEVA: Convierte ID del video a índice en array aleatorizado
