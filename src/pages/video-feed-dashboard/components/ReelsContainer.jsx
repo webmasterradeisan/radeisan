@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ✅ CORREGIDO: Reproducción correcta del reel seleccionado en móviles
-// ✅ CORREGIDO: Sin franjas negras + Deslizamiento funcional en móviles
+// ✅ CORREGIDO: Sin franjas negras + Deslizamiento funcional
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -269,16 +269,14 @@ const ReelsContainer = ({
   }, [currentIndex, videos.length, hasMore, loading, onLoadMore]);
 
   // ===============================
-  // ✅ NAVEGACIÓN POR SCROLL/TOUCH - MEJORADO PARA MÓVILES
+  // NAVEGACIÓN POR SCROLL/TOUCH
   // ===============================
   const [startY, setStartY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const touchStartTime = useRef(0);
 
   const handleTouchStart = (e) => {
     setStartY(e.touches[0].clientY);
     setIsDragging(true);
-    touchStartTime.current = Date.now();
   };
 
   const handleTouchMove = (e) => {
@@ -286,11 +284,6 @@ const ReelsContainer = ({
     
     const currentY = e.touches[0].clientY;
     const diff = startY - currentY;
-    
-    // Prevenir scroll nativo solo si el movimiento es significativo
-    if (Math.abs(diff) > 10) {
-      e.preventDefault();
-    }
     
     const container = containerRef.current;
     if (container && Math.abs(diff) > 50) {
@@ -304,18 +297,13 @@ const ReelsContainer = ({
 
     const currentY = e.changedTouches[0].clientY;
     const diff = startY - currentY;
-    const touchDuration = Date.now() - touchStartTime.current;
     const container = containerRef.current;
 
     if (container) {
       container.style.transform = 'translateY(0)';
     }
 
-    // Detectar swipe: movimiento mínimo de 80px o swipe rápido (< 300ms con 50px)
-    const isQuickSwipe = touchDuration < 300 && Math.abs(diff) > 50;
-    const isLongSwipe = Math.abs(diff) > 80;
-
-    if (isQuickSwipe || isLongSwipe) {
+    if (Math.abs(diff) > 100) {
       if (diff > 0 && currentIndex < videos.length - 1) {
         setCurrentIndex(prev => prev + 1);
         hasPlayedInitial.current = true;
@@ -348,8 +336,7 @@ const ReelsContainer = ({
   // ===============================
   // HANDLERS DE INTERACCIÓN
   // ===============================
-  const handlePlayPause = (e) => {
-    if (e) e.stopPropagation(); // Evitar conflicto con touch events
+  const handlePlayPause = () => {
     const currentVideo = videoRefs.current[currentIndex];
     if (!currentVideo) return;
 
@@ -455,17 +442,10 @@ const ReelsContainer = ({
           relative flex-shrink-0 bg-black
           ${isDesktop ? 'h-[80vh]' : 'h-screen'}
         `}
-        style={{ touchAction: 'pan-y' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-        {/* CAPA TOUCH OVERLAY para capturar gestos */}
-        <div
-          className="absolute inset-0 z-10"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onClick={handlePlayPause}
-        />
-
         {/* VIDEO - ✅ object-cover sin franjas negras */}
         <video
           ref={el => videoRefs.current[index] = el}
@@ -474,20 +454,17 @@ const ReelsContainer = ({
           loop
           playsInline
           preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
-          style={{ pointerEvents: 'none' }}
+          onClick={handlePlayPause}
         />
 
-        {/* CONTROLES LATERALES (Derecha) - Mayor z-index */}
+        {/* CONTROLES LATERALES (Derecha) */}
         <div className={`
-          absolute flex flex-col space-y-4 z-20
+          absolute flex flex-col space-y-4
           ${isDesktop ? 'bottom-16 right-6' : 'bottom-12 right-4'}
         `}>
           {/* Like */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleLike(video.id);
-            }}
+            onClick={() => handleLike(video.id)}
             className="flex flex-col items-center space-y-1"
           >
             <div className={`
@@ -513,7 +490,6 @@ const ReelsContainer = ({
           <Link 
             to={`/reel/${video.id}`}
             className="flex flex-col items-center space-y-1"
-            onClick={(e) => e.stopPropagation()}
           >
             <div className={`
               bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors
@@ -528,10 +504,7 @@ const ReelsContainer = ({
 
           {/* Guardar */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSave(video.id);
-            }}
+            onClick={() => handleSave(video.id)}
             className="flex flex-col items-center space-y-1"
           >
             <div className={`
@@ -552,10 +525,7 @@ const ReelsContainer = ({
 
           {/* Compartir */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleShare(video);
-            }}
+            onClick={() => handleShare(video)}
             className="flex flex-col items-center space-y-1"
           >
             <div className={`
@@ -568,10 +538,7 @@ const ReelsContainer = ({
 
           {/* Mute/Unmute */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleMuteToggle(video.id);
-            }}
+            onClick={() => handleMuteToggle(video.id)}
             className="flex flex-col items-center space-y-1"
           >
             <div className={`
@@ -587,9 +554,9 @@ const ReelsContainer = ({
           </button>
         </div>
 
-        {/* INFORMACIÓN DEL VIDEO (Abajo Izquierda) - Mayor z-index */}
+        {/* INFORMACIÓN DEL VIDEO (Abajo Izquierda) */}
         <div className={`
-          absolute text-white z-20
+          absolute text-white
           ${isDesktop ? 'bottom-12 left-6 right-24' : 'bottom-8 left-4 right-20'}
         `}>
           
@@ -598,7 +565,6 @@ const ReelsContainer = ({
             <Link 
               to={`/profile/${video.creator?.id}`}
               className={`font-semibold hover:underline ${isDesktop ? 'text-lg' : 'text-base'}`}
-              onClick={(e) => e.stopPropagation()}
             >
               {video.creator?.name || 'Usuario'}
             </Link>
@@ -635,7 +601,7 @@ const ReelsContainer = ({
 
         {/* INDICADOR DE PLAY/PAUSE */}
         {!isAutoPlaying && isActive && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`
               bg-black/50 rounded-full flex items-center justify-center
               ${isDesktop ? 'w-20 h-20' : 'w-16 h-16'}
@@ -646,7 +612,7 @@ const ReelsContainer = ({
         )}
 
         {/* PROGRESO DEL VIDEO */}
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20 z-20">
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
           <div 
             className="h-full bg-white transition-all duration-1000"
             style={{ 
@@ -691,7 +657,7 @@ const ReelsContainer = ({
 
       {/* FLECHAS DE NAVEGACIÓN DESKTOP */}
       {isDesktop && (
-        <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between pointer-events-none z-40">
+        <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between pointer-events-none">
           <button
             onClick={navigatePrevious}
             disabled={currentIndex === 0}
@@ -724,7 +690,7 @@ const ReelsContainer = ({
 
       {/* INDICADOR DE CARGA */}
       {loading && (
-        <div className="absolute top-4 right-4 pointer-events-none z-40">
+        <div className="absolute top-4 right-4 pointer-events-none">
           <div className="text-white flex items-center space-x-2 bg-black/30 rounded-full px-3 py-1">
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             <span className={isDesktop ? 'text-base' : 'text-sm'}>Cargando más...</span>
@@ -734,7 +700,7 @@ const ReelsContainer = ({
 
       {/* INSTRUCCIONES DESKTOP/MÓVIL */}
       {currentIndex === 0 && initialReelSet && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none z-40">
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none">
           <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
             <p className={isDesktop ? 'text-base' : 'text-sm'}>
               {isDesktop ? 'Usa flechas ↑↓ o rueda del mouse' : 'Desliza ↑↓ para navegar'}
