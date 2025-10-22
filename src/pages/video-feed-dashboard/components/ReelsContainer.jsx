@@ -1,5 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ✅ CORREGIDO: Reproducción correcta del reel seleccionado en móviles
+// ✅ CORREGIDO: Sin franjas negras en desktop + scroll funcional
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -21,7 +22,7 @@ const ReelsContainer = ({
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const [enableTransition, setEnableTransition] = useState(false);
-  const [initialReelSet, setInitialReelSet] = useState(false); // ✅ NUEVO
+  const [initialReelSet, setInitialReelSet] = useState(false);
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
   const hasPlayedInitial = useRef(false);
@@ -58,7 +59,6 @@ const ReelsContainer = ({
   // ✅ EFECTO PRINCIPAL: Establecer reel inicial cuando los videos estén listos
   // ===============================
   useEffect(() => {
-    // No hacer nada si no hay videos o ya se estableció el reel inicial
     if (videos.length === 0 || initialReelSet) return;
     
     console.log('🎯 Estableciendo reel inicial:', {
@@ -67,7 +67,6 @@ const ReelsContainer = ({
       initialReelSet
     });
 
-    // Calcular el índice correcto
     const targetIndex = findVideoIndexById(selectedReelId);
     
     console.log('✅ Configurando índice inicial:', {
@@ -76,13 +75,11 @@ const ReelsContainer = ({
       videoId: videos[targetIndex]?.id
     });
 
-    // Establecer índice sin transición
     setCurrentIndex(targetIndex);
     setEnableTransition(false);
-    setInitialReelSet(true); // ✅ Marcar como establecido
-    hasPlayedInitial.current = false; // Reset para forzar reproducción
+    setInitialReelSet(true);
+    hasPlayedInitial.current = false;
 
-    // Habilitar transiciones después de renderizar
     setTimeout(() => {
       setEnableTransition(true);
       console.log('✅ Transiciones habilitadas');
@@ -94,12 +91,10 @@ const ReelsContainer = ({
   // ✅ EFECTO: Actualizar cuando cambie selectedReelId (navegación desde carrusel)
   // ===============================
   useEffect(() => {
-    // Solo actualizar si ya se estableció el reel inicial y cambió el ID
     if (!initialReelSet || !selectedReelId || videos.length === 0) return;
 
     const targetIndex = findVideoIndexById(selectedReelId);
     
-    // Solo actualizar si es diferente al actual
     if (targetIndex !== currentIndex) {
       console.log('🔄 Cambiando a nuevo reel seleccionado:', {
         fromIndex: currentIndex,
@@ -109,7 +104,7 @@ const ReelsContainer = ({
       });
 
       setCurrentIndex(targetIndex);
-      hasPlayedInitial.current = false; // Reset para forzar reproducción
+      hasPlayedInitial.current = false;
     }
   }, [selectedReelId, initialReelSet, videos, currentIndex, findVideoIndexById]);
 
@@ -178,7 +173,6 @@ const ReelsContainer = ({
         readyState: currentVideo.readyState
       });
 
-      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
@@ -186,7 +180,6 @@ const ReelsContainer = ({
         }
       });
 
-      // Configurar y reproducir el video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -219,7 +212,6 @@ const ReelsContainer = ({
   useEffect(() => {
     if (videos.length === 0 || !initialReelSet) return;
     
-    // Si ya se reprodujo el inicial, no hacer nada en este efecto
     if (!hasPlayedInitial.current) {
       return;
     }
@@ -233,7 +225,6 @@ const ReelsContainer = ({
         videoTitle: videos[currentIndex]?.title
       });
 
-      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
@@ -241,7 +232,6 @@ const ReelsContainer = ({
         }
       });
 
-      // Reproducir video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -266,7 +256,6 @@ const ReelsContainer = ({
   useEffect(() => {
     if (videos.length === 0) return;
 
-    // Precargar video siguiente
     if (currentIndex < videos.length - 1) {
       const nextVideo = videoRefs.current[currentIndex + 1];
       if (nextVideo && nextVideo.readyState < 2) {
@@ -274,7 +263,6 @@ const ReelsContainer = ({
       }
     }
 
-    // Cargar más videos si estamos cerca del final
     if (currentIndex >= videos.length - 3 && hasMore && !loading) {
       onLoadMore && onLoadMore();
     }
@@ -318,7 +306,7 @@ const ReelsContainer = ({
     if (Math.abs(diff) > 100) {
       if (diff > 0 && currentIndex < videos.length - 1) {
         setCurrentIndex(prev => prev + 1);
-        hasPlayedInitial.current = true; // Ya no es el inicial
+        hasPlayedInitial.current = true;
       } else if (diff < 0 && currentIndex > 0) {
         setCurrentIndex(prev => prev - 1);
         hasPlayedInitial.current = true;
@@ -458,11 +446,11 @@ const ReelsContainer = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* VIDEO */}
+        {/* VIDEO - ✅ object-cover sin franjas negras */}
         <video
           ref={el => videoRefs.current[index] = el}
           src={videoUrl}
-          className="object-cover"
+          className="w-full h-full object-cover"
           loop
           playsInline
           preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
@@ -642,12 +630,12 @@ const ReelsContainer = ({
   // ===============================
   return (
     <div className={`
-  relative overflow-hidden bg-black
-  ${isDesktop 
-  ? 'max-w-[500px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
-  : 'w-full h-full'
-}
-`}>
+      relative overflow-hidden bg-black
+      ${isDesktop 
+        ? 'max-w-[600px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
+        : 'w-full h-full'
+      }
+    `}>
       
       {/* CONTENEDOR DE REELS */}
       <div
