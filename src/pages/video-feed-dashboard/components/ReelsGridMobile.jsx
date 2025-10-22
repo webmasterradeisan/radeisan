@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// ✅ ACTUALIZADO: onClick usa videoId para navegación fija
+// ✅ ACTUALIZADO: onClick usa videoId con depuración adicional
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -8,7 +8,7 @@ import Button from '../../../components/ui/Button';
 /**
  * 📱 CAROUSEL HORIZONTAL DE REELS PARA MÓVIL
  * Muestra 3 reels visibles + scroll horizontal táctil
- * ✅ ACTUALIZADO: onClick usa videoId en lugar de start
+ * ✅ ACTUALIZADO: onClick usa videoId en lugar de start con logs
  */
 const ReelsGridMobile = ({ 
   videos = [], 
@@ -69,21 +69,24 @@ const ReelsGridMobile = ({
   const scrollRight = () => scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
 
   // ===============================
-  // ✅ HANDLER ACTUALIZADO - Usa videoId para navegación
+  // ✅ HANDLER ACTUALIZADO - Usa videoId con depuración
   // ===============================
   const handleReelClick = (reel, reelIndex) => {
-    console.log('🎯 Mobile: Click en reel:', {
+    console.log('🎯 Mobile: Click en reel - Inicio:', {
       reelIndex,
       reelId: reel.id,
-      reelTitle: reel.title
+      reelTitle: reel.title,
+      onReelClickDefined: !!onReelClick
     });
-    
+
     if (onReelClick) {
       console.log('✅ Abriendo visor de reels con índice y ID:', { reelIndex, reelId: reel.id });
       onReelClick(reelIndex, reel.id);
     } else {
-      console.log('🎯 Navegando a /reels con videoId:', reel.id);
-      navigate(`/reels?videoId=${reel.id}`);
+      const navigationUrl = `/reels?videoId=${reel.id}`;
+      console.log('🎯 Navegando a URL:', navigationUrl);
+      navigate(navigationUrl);
+      console.log('🎯 Navegación ejecutada, URL esperada:', window.location.href);
     }
   };
 
