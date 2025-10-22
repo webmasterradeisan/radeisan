@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// ✅ CORREGIDO: onClick usa SOLO videoId (sin índice) para navegación correcta
+// ✅ ACTUALIZADO: onClick usa videoId exclusivamente con depuración y corrección sintáctica
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -8,7 +8,7 @@ import Button from '../../../components/ui/Button';
 /**
  * 📱 CAROUSEL HORIZONTAL DE REELS PARA MÓVIL
  * Muestra 3 reels visibles + scroll horizontal táctil
- * ✅ CORREGIDO: Navega por videoId exclusivamente
+ * ✅ ACTUALIZADO: onClick usa videoId en lugar de start
  */
 const ReelsGridMobile = ({ 
   videos = [], 
@@ -69,29 +69,27 @@ const ReelsGridMobile = ({
   const scrollRight = () => scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
 
   // ===============================
-  // ✅ HANDLER CORREGIDO - Usa SOLO videoId
+  // ✅ HANDLER ACTUALIZADO - Usa videoId exclusivamente
   // ===============================
-  const handleReelClick = (reel) => {
-    console.log('🎯 Mobile: Click en reel:', {
+  const handleReelClick = (reel, reelIndex) => {
+    console.log('🎯 Mobile: Click en reel - Inicio:', {
+      reelIndex,
       reelId: reel.id,
       reelTitle: reel.title,
       onReelClickDefined: !!onReelClick
     });
 
-    // ✅ NAVEGACIÓN UNIFICADA: Siempre con videoId
-    const navigationUrl = `/reels?id=${reel.id}`;
-    console.log('🎯 Navegando a:', navigationUrl);
+    const navigationUrl = `/reels?videoId=${reel.id}`;
+    console.log('🎯 Intentando navegar a:', navigationUrl);
 
     if (onReelClick) {
-      console.log('✅ Usando callback onReelClick con ID:', reel.id);
-      // ✅ CORREGIDO: Solo pasar el ID del video
-      onReelClick(reel.id);
+      console.log('✅ Usando callback onReelClick con índice y ID:', { reelIndex, reelId: reel.id });
+      onReelClick(reelIndex, reel.id);
     } else {
-      console.log('🎯 Navegando directamente con ID');
+      console.log('🎯 Navegando directamente con videoId:', navigationUrl);
       navigate(navigationUrl);
+      console.log('🎯 Navegación ejecutada, URL actual:', window.location.href);
     }
-    
-    console.log('🎯 Navegación ejecutada');
   };
 
   const handleVerTodos = () => {
@@ -162,12 +160,12 @@ const ReelsGridMobile = ({
           className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pb-2"
           style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
         >
-          {loading ? renderSkeleton() : reelsVideos.map((reel) => (
+          {loading ? renderSkeleton() : reelsVideos.map((reel, index) => (
             <div
               key={reel.id}
               className="flex-shrink-0 w-32 cursor-pointer group/reel"
               style={{ scrollSnapAlign: 'start' }}
-              onClick={() => handleReelClick(reel)}
+              onClick={() => handleReelClick(reel, index)}
             >
               <div className="relative w-32 h-56 bg-black rounded-lg overflow-hidden shadow-md">
                 <img
