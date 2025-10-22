@@ -1,9 +1,10 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
+// ✅ ACTUALIZADO: Notifica cambios de reel para registro de vistas
 // ✅ ARREGLADO: Videos se reproducen + Tamaño compacto responsive
 // ✅ CORREGIDO: Salta directamente al reel seleccionado sin iterar por todos
 // ✅ CORREGIDO: Video inicial se reproduce automáticamente
 // ✅ CORREGIDO: Solo un video se reproduce a la vez (sin audio duplicado)
-// ✅ NUEVO: Soporte para selectedReelId en mobile
+// ✅ NUEVO: Callback onReelChange para notificar cambio de video activo
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,7 +13,8 @@ import Button from '../../../components/ui/Button';
 
 const ReelsContainer = ({ 
   videos = [], 
-  selectedReelId = null, // ✅ NUEVO: Recibe ID del reel desde mobile
+  selectedReelId = null,
+  onReelChange, // ✅ NUEVO: Callback para notificar cambios de reel activo
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
@@ -32,34 +34,28 @@ const ReelsContainer = ({
 
   console.log('🎬 ReelsContainer render:', {
     videosCount: videos.length,
-    firstVideo: videos[0],
-    videoUrl: videos[0]?.videoUrl || videos[0]?.video_url,
     currentIndex,
     selectedReelId,
-    enableTransition,
-    hasPlayedInitial: hasPlayedInitial.current
+    currentVideoId: videos[currentIndex]?.id,
+    hasOnReelChange: !!onReelChange
   });
 
   // ===============================
-  // ✅ FUNCIÓN: Convertir ID del video a índice en array aleatorizado
+  // ✅ FUNCIÓN: Convertir ID del video a índice en array
   // ===============================
   const getInitialReelIndex = useCallback(() => {
-    // Si no hay ID seleccionado, iniciar en 0
     if (!selectedReelId) {
       console.log('🔍 ReelsContainer: No hay ID seleccionado, iniciando en índice 0');
       return 0;
     }
     
-    // Buscar el índice del video por su ID en el array aleatorizado
     const index = videos.findIndex(video => video.id === selectedReelId);
     
     console.log('🔍 ReelsContainer: Búsqueda de video por ID');
     console.log('   🆔 ID buscado:', selectedReelId);
     console.log('   📍 Índice encontrado:', index);
     console.log('   📹 Video:', index >= 0 ? videos[index]?.title : 'No encontrado');
-    console.log('   📊 Total reels en array:', videos.length);
     
-    // Si no se encuentra, iniciar en 0 (fallback)
     if (index < 0) {
       console.warn('⚠️ Video con ID', selectedReelId, 'no encontrado en array de reels');
       return 0;
@@ -74,43 +70,54 @@ const ReelsContainer = ({
   useEffect(() => {
     if (videos.length === 0) return;
     
-    // ✅ Calcular el índice correcto (por ID o por defecto 0)
     const correctIndex = getInitialReelIndex();
     
     console.log('🎯 ReelsContainer: Sincronizando estado inicial');
     console.log('   🆔 selectedReelId recibido:', selectedReelId);
     console.log('   🎯 Índice calculado:', correctIndex);
     console.log('   📹 Video a reproducir:', videos[correctIndex]?.title || 'No existe');
-    console.log('   📊 Total videos:', videos.length);
-    console.log('   🎬 Es montaje inicial:', isInitialMount.current);
     
-    // Si es el montaje inicial, saltar directamente SIN transición
     if (isInitialMount.current) {
       setCurrentIndex(correctIndex);
       setEnableTransition(false);
       
-      // Después de renderizar, habilitar transiciones para navegación manual
       setTimeout(() => {
         setEnableTransition(true);
         isInitialMount.current = false;
         console.log('✅ Transiciones habilitadas para navegación manual');
       }, 100);
     } else {
-      // Para cambios posteriores, usar transición
       setCurrentIndex(correctIndex);
     }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
   // ===============================
+  // ✅ NUEVO: Notificar cambio de reel activo (para registro de vistas)
+  // ===============================
+  useEffect(() => {
+    if (videos.length === 0 || !videos[currentIndex]) return;
+    
+    const currentVideo = videos[currentIndex];
+    console.log('🔔 ReelsContainer: Notificando cambio de reel activo:', {
+      index: currentIndex,
+      videoId: currentVideo.id,
+      title: currentVideo.title
+    });
+    
+    // Notificar al componente padre (ReelsPage) que el reel cambió
+    if (onReelChange) {
+      onReelChange(currentVideo.id);
+    }
+  }, [currentIndex, videos, onReelChange]);
+
+  // ===============================
   // ✅ FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
   // ===============================
   useEffect(() => {
-    // Solo ejecutar una vez cuando el componente se monta
     if (hasPlayedInitial.current || videos.length === 0) return;
 
     console.log('🎬 Intentando reproducir video inicial:', currentIndex);
     
-    // Esperar a que el video esté en el DOM y listo
     const attemptPlay = () => {
       const currentVideo = videoRefs.current[currentIndex];
       
@@ -126,7 +133,7 @@ const ReelsContainer = ({
         readyState: currentVideo.readyState
       });
 
-      // ✅ PRIMERO: PAUSAR TODOS LOS OTROS VIDEOS
+      // Pausar todos los otros videos
       console.log('⏸️ Pausando todos los videos excepto el índice:', currentIndex);
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
@@ -136,10 +143,9 @@ const ReelsContainer = ({
         }
       });
 
-      // ✅ SEGUNDO: CONFIGURAR Y REPRODUCIR EL VIDEO ACTUAL
+      // Configurar y reproducir el video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
-      // Intentar reproducir
       const playPromise = currentVideo.play();
       
       if (playPromise !== undefined) {
@@ -150,7 +156,6 @@ const ReelsContainer = ({
           })
           .catch(err => {
             console.error('❌ Error autoplay inicial:', err);
-            // Si falla, intentar con muted
             currentVideo.muted = true;
             currentVideo.play()
               .then(() => {
@@ -162,7 +167,6 @@ const ReelsContainer = ({
       }
     };
 
-    // Iniciar intento de reproducción
     setTimeout(attemptPlay, 250);
   }, [videos, currentIndex, mutedVideos]);
 
@@ -210,7 +214,6 @@ const ReelsContainer = ({
   useEffect(() => {
     if (videos.length === 0) return;
     
-    // ✅ Si es el video inicial y aún no se ha reproducido, dejar que el useEffect anterior lo maneje
     const initialIndex = getInitialReelIndex();
     if (!hasPlayedInitial.current && currentIndex === initialIndex) {
       console.log('⏭️ Skipping autoplay - el video inicial será manejado por useEffect dedicado');
@@ -222,9 +225,7 @@ const ReelsContainer = ({
       index: currentIndex,
       videoExists: !!currentVideo,
       videoSrc: currentVideo?.src,
-      isAutoPlaying,
-      isInitialVideo: currentIndex === initialIndex,
-      hasPlayedInitial: hasPlayedInitial.current
+      isAutoPlaying
     });
 
     if (currentVideo && isAutoPlaying) {
@@ -237,7 +238,7 @@ const ReelsContainer = ({
         }
       });
 
-      // ✅ REPRODUCIR VIDEO ACTUAL
+      // Reproducir video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -249,7 +250,6 @@ const ReelsContainer = ({
           })
           .catch(err => {
             console.error('❌ Error autoplay:', err);
-            // Si falla, intentar con muted
             currentVideo.muted = true;
             currentVideo.play()
               .then(() => console.log('✅ Video reproduciendo (muted)'))
@@ -294,7 +294,6 @@ const ReelsContainer = ({
     const currentY = e.touches[0].clientY;
     const diff = startY - currentY;
     
-    // Visual feedback durante el drag
     const container = containerRef.current;
     if (container && Math.abs(diff) > 50) {
       container.style.transform = `translateY(${-diff * 0.1}px)`;
@@ -313,13 +312,10 @@ const ReelsContainer = ({
       container.style.transform = 'translateY(0)';
     }
 
-    // Navegar si el swipe es suficientemente grande
     if (Math.abs(diff) > 100) {
       if (diff > 0 && currentIndex < videos.length - 1) {
-        // Swipe up - próximo video
         setCurrentIndex(prev => prev + 1);
       } else if (diff < 0 && currentIndex > 0) {
-        // Swipe down - video anterior  
         setCurrentIndex(prev => prev - 1);
       }
     }
@@ -408,7 +404,6 @@ const ReelsContainer = ({
         console.log('Error sharing:', error);
       }
     } else {
-      // Fallback: copiar al portapapeles
       try {
         await navigator.clipboard.writeText(`${window.location.origin}/reel/${video.id}`);
         alert('Enlace copiado al portapapeles');
