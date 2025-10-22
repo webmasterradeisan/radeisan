@@ -88,7 +88,7 @@ const ReelsPage = () => {
   // ===============================
   const loadSpecificVideo = useCallback(async (videoId) => {
     try {
-      console.log('🎯 Cargando video específico:', videoId);
+      console.log('🎯 loadSpecificVideo: Cargando video específico:', videoId);
 
       // Cargar el video específico
       const { data: videoData, error: fetchError } = await supabase
@@ -98,10 +98,23 @@ const ReelsPage = () => {
         .eq('is_published', true)
         .single();
 
-      if (fetchError || !videoData) {
-        console.error('❌ Error al cargar video específico:', fetchError);
+      if (fetchError) {
+        console.error('❌ Error Supabase al cargar video específico:', fetchError);
         return null;
       }
+
+      if (!videoData) {
+        console.error('❌ Video específico no encontrado en BD:', videoId);
+        return null;
+      }
+
+      console.log('✅ Video específico obtenido de BD:', {
+        id: videoData.id,
+        title: videoData.title,
+        width: videoData.width,
+        height: videoData.height,
+        orientation: videoData.orientation
+      });
 
       // Obtener perfil del usuario
       const { data: profile } = await supabase
@@ -117,10 +130,11 @@ const ReelsPage = () => {
 
       const processed = processVideos([videoWithProfile])[0];
       
-      console.log('✅ Video específico cargado:', {
+      console.log('✅ Video específico procesado:', {
         id: processed.id,
         title: processed.title,
-        orientation: processed.orientation
+        orientation: processed.orientation,
+        isVertical: processed.orientation === 'vertical'
       });
 
       return processed;
@@ -249,14 +263,36 @@ const ReelsPage = () => {
     
     console.log('🎯 Montando ReelsPage con params:', { idParam, startParam });
     
-    // Si hay ID específico, cargarlo
+    // Establecer selectedReelId PRIMERO
     if (idParam) {
-      loadVideos(0, true, idParam);
       setSelectedReelId(idParam);
+      console.log('✅ selectedReelId establecido:', idParam);
+    }
+    
+    // Luego cargar videos con el ID específico
+    if (idParam) {
+      console.log('🎯 Cargando videos con ID específico:', idParam);
+      loadVideos(0, true, idParam);
     } else {
+      console.log('🎯 Cargando videos sin ID específico');
       loadVideos(0, true);
     }
   }, []); // Solo al montar
+  
+  // ===============================
+  // ✅ REACT A CAMBIOS EN SEARCH PARAMS (Navegación posterior)
+  // ===============================
+  useEffect(() => {
+    // Ignorar el primer render (ya lo manejamos arriba)
+    if (videos.length === 0) return;
+    
+    const idParam = searchParams.get('id');
+    
+    if (idParam && idParam !== selectedReelId) {
+      console.log('🔄 Parámetro ID cambió, actualizando:', idParam);
+      setSelectedReelId(idParam);
+    }
+  }, [searchParams]); // Removemos videos y selectedReelId de dependencias
 
   // ===============================
   // ✅ ACTUALIZAR selectedReelId cuando cambien los params (navegación)
@@ -277,7 +313,7 @@ const ReelsPage = () => {
     if (idParam && idParam !== selectedReelId) {
       console.log('✅ Actualizando selectedReelId a:', idParam);
       setSelectedReelId(idParam);
-    } else if (startParam) {
+    } else if (startParam && !idParam) {
       const index = parseInt(startParam, 10);
       if (!isNaN(index) && index >= 0 && videos[index]) {
         const videoId = videos[index].id;
