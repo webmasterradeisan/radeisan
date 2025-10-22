@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsGridMobile.jsx
-// ✅ ACTUALIZADO: onClick usa videoId exclusivamente con depuración y corrección sintáctica
+// ✅ ACTUALIZADO: onClick abre ReelsContainer en lugar de navegar a /reels
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -8,14 +8,14 @@ import Button from '../../../components/ui/Button';
 /**
  * 📱 CAROUSEL HORIZONTAL DE REELS PARA MÓVIL
  * Muestra 3 reels visibles + scroll horizontal táctil
- * ✅ ACTUALIZADO: onClick usa videoId en lugar de start
+ * ✅ ACTUALIZADO: onClick abre visor en lugar de navegar
  */
 const ReelsGridMobile = ({ 
   videos = [], 
   onLoadMore, 
   hasMore = true, 
   loading = false,
-  onReelClick // Callback para abrir visor
+  onReelClick // ✅ NUEVO: Callback para abrir visor
 }) => {
   const navigate = useNavigate();
   const scrollRef = useRef(null);
@@ -26,24 +26,22 @@ const ReelsGridMobile = ({
     totalVideos: videos.length,
     hasMore,
     loading,
-    hasOnReelClick: !!onReelClick,
-    firstVideoId: videos[0]?.id
+    hasOnReelClick: !!onReelClick
   });
 
   // Filtrar solo videos verticales para reels (aspect ratio <= 0.8)
   const reelsVideos = videos.filter(video => {
-    if (!video.width || !video.height) return true;
+    if (!video.width || !video.height) return true; // Asumir vertical si no hay dimensiones
     const aspectRatio = video.width / video.height;
-    return aspectRatio <= 0.8;
+    return aspectRatio <= 0.8; // Videos verticales o cuadrados
   });
 
   console.log('📱 Videos filtrados para reels:', {
     original: videos.length,
-    filtered: reelsVideos.length,
-    firstFilteredId: reelsVideos[0]?.id
+    filtered: reelsVideos.length
   });
 
-  // Verificar posición del scroll para mostrar/ocultar botones
+  // Verificar posición del scroll para mostrar/ocultar botones de navegación
   const checkScrollPosition = () => {
     const container = scrollRef.current;
     if (!container) return;
@@ -65,33 +63,33 @@ const ReelsGridMobile = ({
     }
   }, [reelsVideos]);
 
-  const scrollLeft = () => scrollRef.current?.scrollBy({ left: -280, behavior: 'smooth' });
-  const scrollRight = () => scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
-
-  // ===============================
-  // ✅ HANDLER ACTUALIZADO - Usa videoId exclusivamente
-  // ===============================
-  const handleReelClick = (reel, reelIndex) => {
-    console.log('🎯 Mobile: Click en reel - Inicio:', {
-      reelIndex,
-      reelId: reel.id,
-      reelTitle: reel.title,
-      onReelClickDefined: !!onReelClick
-    });
-
-    const navigationUrl = `/reels?videoId=${reel.id}`;
-    console.log('🎯 Intentando navegar a:', navigationUrl);
-
-    if (onReelClick) {
-      console.log('✅ Usando callback onReelClick con índice y ID:', { reelIndex, reelId: reel.id });
-      onReelClick(reelIndex, reel.id);
-    } else {
-      console.log('🎯 Navegando directamente con videoId:', navigationUrl);
-      navigate(navigationUrl);
-      console.log('🎯 Navegación ejecutada, URL actual:', window.location.href);
-    }
+  // Navegación con botones (para desktop)
+  const scrollLeft = () => {
+    scrollRef.current?.scrollBy({ left: -280, behavior: 'smooth' });
   };
 
+  const scrollRight = () => {
+    scrollRef.current?.scrollBy({ left: 280, behavior: 'smooth' });
+  };
+
+  // ===============================
+  // ✅ HANDLER ACTUALIZADO - Abre visor en lugar de navegar
+  // ===============================
+  const handleReelClick = (reel, reelIndex) => {
+  console.log('🎯 Mobile: Click en reel:', reelIndex);
+  console.log('   🆔 ID del video:', reel.id);
+  
+  if (onReelClick) {
+    console.log('✅ Abriendo visor de reels con índice:', reelIndex);
+    onReelClick(reelIndex, reel.id);
+  } else {
+    // ✅ CORREGIDO: Navegar con ID en lugar de índice
+    console.log('🎯 Navegando a /reels con ID:', reel.id);
+    navigate(`/reels?id=${reel.id}`);
+  }
+};
+
+  // Navegar a página completa de reels
   const handleVerTodos = () => {
     console.log('🎯 Navegando a página completa de reels');
     navigate('/reels');
@@ -137,12 +135,14 @@ const ReelsGridMobile = ({
 
   return (
     <div className="mb-6">
+      {/* Header con título y botón "Ver todos" */}
       <div className="flex items-center justify-between px-4 mb-3">
         <div className="flex items-center space-x-2">
           <Icon name="Smartphone" size={20} color="var(--color-primary)" />
           <h2 className="text-lg font-semibold text-foreground">Reels</h2>
           <span className="text-sm text-muted-foreground">({reelsVideos.length})</span>
         </div>
+        
         <Button 
           variant="ghost" 
           size="sm" 
@@ -154,11 +154,16 @@ const ReelsGridMobile = ({
         </Button>
       </div>
 
+      {/* Carousel Container */}
       <div className="relative group">
+        {/* Scroll Container */}
         <div
           ref={scrollRef}
           className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pb-2"
-          style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+          style={{
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch'
+          }}
         >
           {loading ? renderSkeleton() : reelsVideos.map((reel, index) => (
             <div
@@ -167,25 +172,37 @@ const ReelsGridMobile = ({
               style={{ scrollSnapAlign: 'start' }}
               onClick={() => handleReelClick(reel, index)}
             >
+              {/* Thumbnail Container */}
               <div className="relative w-32 h-56 bg-black rounded-lg overflow-hidden shadow-md">
+                {/* Video Thumbnail */}
                 <img
                   src={reel.thumbnail || '/api/placeholder/128/224'}
                   alt={reel.title || 'Reel sin título'}
                   className="w-full h-full object-cover transition-transform duration-200 group-hover/reel:scale-105"
                   loading="lazy"
-                  onError={(e) => { e.target.src = '/api/placeholder/128/224'; }}
+                  onError={(e) => {
+                    e.target.src = '/api/placeholder/128/224';
+                  }}
                 />
+
+                {/* Overlay con gradiente */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20">
+                  {/* Duración del video (esquina superior derecha) */}
                   <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
                     {formatDuration(reel.duration || 30)}
                   </div>
+
+                  {/* Estadísticas principales (esquina superior izquierda) */}
                   <div className="absolute top-2 left-2 text-white text-xs">
                     <div className="flex items-center space-x-1 bg-black/50 px-2 py-1 rounded backdrop-blur-sm">
                       <Icon name="Eye" size={10} />
                       <span>{formatNumber(reel.views || 0)}</span>
                     </div>
                   </div>
+
+                  {/* Información inferior */}
                   <div className="absolute bottom-0 left-0 right-0 p-3">
+                    {/* Estadísticas completas */}
                     <div className="flex items-center justify-between text-white text-xs mb-2">
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-1">
@@ -198,9 +215,13 @@ const ReelsGridMobile = ({
                         </div>
                       </div>
                     </div>
+
+                    {/* Título truncado */}
                     <h3 className="text-white text-xs font-medium line-clamp-2 leading-tight mb-1">
                       {reel.title || 'Sin título'}
                     </h3>
+
+                    {/* Creador */}
                     <div className="flex items-center space-x-1">
                       <div className="w-3 h-3 bg-white/20 rounded-full flex-shrink-0"></div>
                       <p className="text-white/80 text-xs truncate">
@@ -209,16 +230,21 @@ const ReelsGridMobile = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Play Button Overlay - Solo visible en hover */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/20">
                   <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30">
                     <Icon name="Play" size={20} color="white" />
                   </div>
                 </div>
+
+                {/* Borde de selección */}
                 <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary/50 rounded-lg transition-colors duration-200"></div>
               </div>
             </div>
           ))}
 
+          {/* Load More Indicator */}
           {hasMore && !loading && reelsVideos.length > 0 && (
             <div className="flex-shrink-0 w-32 h-56 flex items-center justify-center">
               <Button
@@ -234,6 +260,7 @@ const ReelsGridMobile = ({
           )}
         </div>
 
+        {/* Navigation Buttons - Solo visibles en hover en desktop */}
         {showLeftButton && (
           <button
             onClick={scrollLeft}
@@ -255,6 +282,7 @@ const ReelsGridMobile = ({
         )}
       </div>
 
+      {/* Indicador de scroll en móvil */}
       {reelsVideos.length > 3 && (
         <div className="flex justify-center mt-3 md:hidden">
           <div className="flex space-x-1">
@@ -265,6 +293,7 @@ const ReelsGridMobile = ({
         </div>
       )}
 
+      {/* Loading indicator para más contenido */}
       {loading && reelsVideos.length > 0 && (
         <div className="flex justify-center mt-3">
           <div className="flex items-center space-x-2 text-muted-foreground text-sm">
@@ -280,6 +309,7 @@ const ReelsGridMobile = ({
 // ===============================
 // FUNCIONES HELPER
 // ===============================
+
 const formatDuration = (seconds) => {
   if (!seconds || seconds === 0) return '0:30';
   const mins = Math.floor(seconds / 60);
