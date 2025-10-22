@@ -39,9 +39,9 @@ const VideoFeedGrid = ({
   const [displayVideos, setDisplayVideos] = useState(videos);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  // ✅ ESTADOS PARA REELS Y VIDEOS SEPARADOS
-  const [reelsVideos, setReelsVideos] = useState([]);
-  const [horizontalVideos, setHorizontalVideos] = useState([]);
+  // ✅ ESTADOS INTERNOS PARA REELS Y VIDEOS SEPARADOS
+const [internalReelsVideos, setInternalReelsVideos] = useState([]);
+const [internalHorizontalVideos, setInternalHorizontalVideos] = useState([]);
   
   // ✅ NAVEGACIÓN CON REACT ROUTER (EN VEZ DE MODAL)
   const navigate = useNavigate();
@@ -76,8 +76,8 @@ useEffect(() => {
   // Si vienen arrays ya aleatorizados del dashboard, usarlos directamente
   if (reelsVideos !== null && horizontalVideos !== null) {
     console.log('✅ Usando arrays ya aleatorizados del dashboard');
-    setReelsVideos(reelsVideos);
-    setHorizontalVideos(horizontalVideos);
+    setInternalReelsVideos(reelsVideos);
+    setInternalHorizontalVideos(horizontalVideos);
     
     // Actualizar displayVideos según la orientación activa
     if (orientation === 'vertical') {
@@ -95,8 +95,8 @@ useEffect(() => {
   console.log('⚠️ Fallback: Separando videos localmente');
   
   if (videos.length === 0) {
-    setReelsVideos([]);
-    setHorizontalVideos([]);
+    setInternalReelsVideos([]);
+    setInternalHorizontalVideos([]);
     setDisplayVideos([]);
     return;
   }
@@ -115,8 +115,8 @@ useEffect(() => {
     return aspectRatio > 0.8;
   });
 
-  setReelsVideos(reels);
-  setHorizontalVideos(horizontals);
+  setInternalReelsVideos(reels);
+  setInternalHorizontalVideos(horizontals);
   
   // Actualizar displayVideos según la orientación activa
   if (orientation === 'vertical') {
