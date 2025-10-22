@@ -3,6 +3,7 @@
 // ✅ CORREGIDO: Salta directamente al reel seleccionado sin iterar por todos
 // ✅ CORREGIDO: Video inicial se reproduce automáticamente
 // ✅ CORREGIDO: Solo un video se reproduce a la vez (sin audio duplicado)
+// ✅ NUEVO: Soporte para selectedReelId en mobile
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -11,13 +12,13 @@ import Button from '../../../components/ui/Button';
 
 const ReelsContainer = ({ 
   videos = [], 
-  initialIndex = 0,
+  selectedReelId = null, // ✅ NUEVO: Recibe ID del reel desde mobile
   onLoadMore, 
   onPointsEarned,
   hasMore = true,
   loading = false 
 }) => {
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
@@ -34,25 +35,58 @@ const ReelsContainer = ({
     firstVideo: videos[0],
     videoUrl: videos[0]?.videoUrl || videos[0]?.video_url,
     currentIndex,
-    initialIndex,
+    selectedReelId,
     enableTransition,
     hasPlayedInitial: hasPlayedInitial.current
   });
 
   // ===============================
-  // ✅ SINCRONIZAR CON initialIndex - SIN TRANSICIÓN INICIAL
+  // ✅ FUNCIÓN: Convertir ID del video a índice en array aleatorizado
+  // ===============================
+  const getInitialReelIndex = useCallback(() => {
+    // Si no hay ID seleccionado, iniciar en 0
+    if (!selectedReelId) {
+      console.log('🔍 ReelsContainer: No hay ID seleccionado, iniciando en índice 0');
+      return 0;
+    }
+    
+    // Buscar el índice del video por su ID en el array aleatorizado
+    const index = videos.findIndex(video => video.id === selectedReelId);
+    
+    console.log('🔍 ReelsContainer: Búsqueda de video por ID');
+    console.log('   🆔 ID buscado:', selectedReelId);
+    console.log('   📍 Índice encontrado:', index);
+    console.log('   📹 Video:', index >= 0 ? videos[index]?.title : 'No encontrado');
+    console.log('   📊 Total reels en array:', videos.length);
+    
+    // Si no se encuentra, iniciar en 0 (fallback)
+    if (index < 0) {
+      console.warn('⚠️ Video con ID', selectedReelId, 'no encontrado en array de reels');
+      return 0;
+    }
+    
+    return index;
+  }, [selectedReelId, videos]);
+
+  // ===============================
+  // 🎯 SINCRONIZACIÓN INICIAL: Convertir selectedReelId a índice
   // ===============================
   useEffect(() => {
-    console.log('🎯 ReelsContainer: Sincronizando');
-    console.log('   📍 initialIndex recibido:', initialIndex);
-    console.log('   📹 Video en ese índice:', videos[initialIndex]?.title || 'No existe');
-    console.log('   🆔 ID del video:', videos[initialIndex]?.id || 'No existe');
+    if (videos.length === 0) return;
+    
+    // ✅ Calcular el índice correcto (por ID o por defecto 0)
+    const correctIndex = getInitialReelIndex();
+    
+    console.log('🎯 ReelsContainer: Sincronizando estado inicial');
+    console.log('   🆔 selectedReelId recibido:', selectedReelId);
+    console.log('   🎯 Índice calculado:', correctIndex);
+    console.log('   📹 Video a reproducir:', videos[correctIndex]?.title || 'No existe');
     console.log('   📊 Total videos:', videos.length);
     console.log('   🎬 Es montaje inicial:', isInitialMount.current);
     
     // Si es el montaje inicial, saltar directamente SIN transición
     if (isInitialMount.current) {
-      setCurrentIndex(initialIndex);
+      setCurrentIndex(correctIndex);
       setEnableTransition(false);
       
       // Después de renderizar, habilitar transiciones para navegación manual
@@ -62,13 +96,13 @@ const ReelsContainer = ({
         console.log('✅ Transiciones habilitadas para navegación manual');
       }, 100);
     } else {
-      // Para cambios posteriores de initialIndex, usar transición
-      setCurrentIndex(initialIndex);
+      // Para cambios posteriores, usar transición
+      setCurrentIndex(correctIndex);
     }
-  }, [initialIndex, videos]);
+  }, [selectedReelId, videos, getInitialReelIndex]);
 
   // ===============================
-  // ✅ NUEVO: FORZAR REPRODUCCIÓN DEL VIDEO INICIAL (CORREGIDO)
+  // ✅ FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
   // ===============================
   useEffect(() => {
     // Solo ejecutar una vez cuando el componente se monta
@@ -171,13 +205,13 @@ const ReelsContainer = ({
   }, [isDesktop, currentIndex, videos.length]);
 
   // ===============================
-  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS - ARREGLADO
+  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS
   // ===============================
-
   useEffect(() => {
     if (videos.length === 0) return;
     
     // ✅ Si es el video inicial y aún no se ha reproducido, dejar que el useEffect anterior lo maneje
+    const initialIndex = getInitialReelIndex();
     if (!hasPlayedInitial.current && currentIndex === initialIndex) {
       console.log('⏭️ Skipping autoplay - el video inicial será manejado por useEffect dedicado');
       return;
@@ -217,16 +251,19 @@ const ReelsContainer = ({
             console.error('❌ Error autoplay:', err);
             // Si falla, intentar con muted
             currentVideo.muted = true;
-            currentVideo.play().catch(e => console.error('❌ Error crítico:', e));
+            currentVideo.play()
+              .then(() => console.log('✅ Video reproduciendo (muted)'))
+              .catch(e => console.error('❌ Error crítico autoplay:', e));
           });
       }
     }
-  }, [currentIndex, videos, isAutoPlaying, mutedVideos, initialIndex]);
+  }, [currentIndex, videos, isAutoPlaying, mutedVideos, getInitialReelIndex]);
 
   // Precargar videos adyacentes
   useEffect(() => {
     if (videos.length === 0) return;
 
+    // Precargar video siguiente
     if (currentIndex < videos.length - 1) {
       const nextVideo = videoRefs.current[currentIndex + 1];
       if (nextVideo && nextVideo.readyState < 2) {
@@ -234,30 +271,30 @@ const ReelsContainer = ({
       }
     }
 
+    // Cargar más videos si estamos cerca del final
     if (currentIndex >= videos.length - 3 && hasMore && !loading) {
       onLoadMore && onLoadMore();
     }
   }, [currentIndex, videos.length, hasMore, loading, onLoadMore]);
 
   // ===============================
-  // NAVEGACIÓN MÓVIL (TOUCH)
+  // NAVEGACIÓN POR SCROLL/TOUCH
   // ===============================
-
   const [startY, setStartY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleTouchStart = (e) => {
-    if (isDesktop) return;
     setStartY(e.touches[0].clientY);
     setIsDragging(true);
   };
 
   const handleTouchMove = (e) => {
-    if (!isDragging || isDesktop) return;
+    if (!isDragging) return;
     
     const currentY = e.touches[0].clientY;
     const diff = startY - currentY;
     
+    // Visual feedback durante el drag
     const container = containerRef.current;
     if (container && Math.abs(diff) > 50) {
       container.style.transform = `translateY(${-diff * 0.1}px)`;
@@ -265,7 +302,7 @@ const ReelsContainer = ({
   };
 
   const handleTouchEnd = (e) => {
-    if (!isDragging || isDesktop) return;
+    if (!isDragging) return;
     setIsDragging(false);
 
     const currentY = e.changedTouches[0].clientY;
@@ -276,37 +313,25 @@ const ReelsContainer = ({
       container.style.transform = 'translateY(0)';
     }
 
+    // Navegar si el swipe es suficientemente grande
     if (Math.abs(diff) > 100) {
       if (diff > 0 && currentIndex < videos.length - 1) {
+        // Swipe up - próximo video
         setCurrentIndex(prev => prev + 1);
       } else if (diff < 0 && currentIndex > 0) {
+        // Swipe down - video anterior  
         setCurrentIndex(prev => prev - 1);
       }
     }
   };
 
-  // ===============================
-  // NAVEGACIÓN CON FLECHAS Y TECLADO
-  // ===============================
-  
-  const navigateNext = () => {
-    if (currentIndex < videos.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    }
-  };
-
-  const navigatePrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-    }
-  };
-
+  // Navegación con teclas
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowUp') {
-        navigatePrevious();
-      } else if (e.key === 'ArrowDown') {
-        navigateNext();
+      if (e.key === 'ArrowUp' && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      } else if (e.key === 'ArrowDown' && currentIndex < videos.length - 1) {
+        setCurrentIndex(prev => prev + 1);
       } else if (e.key === ' ') {
         e.preventDefault();
         handlePlayPause();
@@ -320,7 +345,6 @@ const ReelsContainer = ({
   // ===============================
   // HANDLERS DE INTERACCIÓN
   // ===============================
-
   const handlePlayPause = () => {
     const currentVideo = videoRefs.current[currentIndex];
     if (!currentVideo) return;
@@ -355,7 +379,7 @@ const ReelsContainer = ({
       newLikedVideos.delete(videoId);
     } else {
       newLikedVideos.add(videoId);
-      onPointsEarned && onPointsEarned({ points: 2, action: 'like' });
+      onPointsEarned && onPointsEarned(5);
     }
     setLikedVideos(newLikedVideos);
   };
@@ -366,91 +390,86 @@ const ReelsContainer = ({
       newSavedVideos.delete(videoId);
     } else {
       newSavedVideos.add(videoId);
+      onPointsEarned && onPointsEarned(2);
     }
     setSavedVideos(newSavedVideos);
   };
 
-  const handleShare = (video) => {
+  const handleShare = async (video) => {
     if (navigator.share) {
-      navigator.share({
-        title: video.title,
-        text: `Mira este reel de ${video.creator?.name}`,
-        url: `${window.location.origin}/reel/${video.id}`
-      });
+      try {
+        await navigator.share({
+          title: video.title,
+          text: `Mira este reel de ${video.creator.name}`,
+          url: `${window.location.origin}/reel/${video.id}`
+        });
+        onPointsEarned && onPointsEarned(3);
+      } catch (error) {
+        console.log('Error sharing:', error);
+      }
+    } else {
+      // Fallback: copiar al portapapeles
+      try {
+        await navigator.clipboard.writeText(`${window.location.origin}/reel/${video.id}`);
+        alert('Enlace copiado al portapapeles');
+        onPointsEarned && onPointsEarned(3);
+      } catch (error) {
+        console.log('Error copying:', error);
+      }
     }
   };
 
   // ===============================
-  // FORMATEO DE NÚMEROS
+  // NAVEGACIÓN CON BOTONES
   // ===============================
-  const formatCount = (count) => {
-    if (!count || count === 0) return '0';
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
+  const navigateNext = () => {
+    if (currentIndex < videos.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    }
+  };
+
+  const navigatePrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+    }
   };
 
   // ===============================
-  // COMPONENTE INDIVIDUAL DE REEL
+  // ✅ COMPONENTE INDIVIDUAL DE REEL
   // ===============================
   const ReelItem = ({ video, index, isActive }) => {
     const videoUrl = video.videoUrl || video.video_url;
-    const isMuted = mutedVideos.has(video.id);
     const isLiked = likedVideos.has(video.id);
     const isSaved = savedVideos.has(video.id);
+    const isMuted = mutedVideos.has(video.id);
 
     return (
-      <div
+      <div 
+        key={video.id}
+        className={`
+          relative flex-shrink-0 bg-black
+          ${isDesktop ? 'h-[80vh]' : 'h-screen'}
+        `}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`
-          relative flex-shrink-0
-          ${isDesktop ? 'h-[80vh]' : 'h-screen w-screen'}
-        `}
-        style={{
-          scrollSnapAlign: 'start'
-        }}
       >
-        {/* VIDEO ELEMENT */}
+        {/* VIDEO */}
         <video
-          ref={(el) => (videoRefs.current[index] = el)}
+          ref={el => videoRefs.current[index] = el}
           src={videoUrl}
-          className="w-full h-full object-cover bg-black"
+          className="w-full h-full object-contain"
           loop
           playsInline
-          preload={Math.abs(index - currentIndex) <= 1 ? 'auto' : 'none'}
+          preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
           onClick={handlePlayPause}
         />
 
-        {/* OVERLAY GRADIENTE */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70 pointer-events-none" />
-
-      
-
         {/* CONTROLES LATERALES (Derecha) */}
         <div className={`
-          absolute right-4 flex flex-col space-y-4
-          ${isDesktop ? 'bottom-16' : 'bottom-24'}
+          absolute flex flex-col space-y-4
+          ${isDesktop ? 'bottom-16 right-6' : 'bottom-12 right-4'}
         `}>
-          {/* Avatar del creador */}
-          <Link
-            to={`/profile/${video.creator?.id}`}
-            className="relative"
-          >
-            <img
-              src={video.creator?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(video.creator?.name || 'User')}`}
-              alt={video.creator?.name}
-              className={`
-                rounded-full border-2 border-white object-cover
-                ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
-              `}
-            />
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary rounded-full flex items-center justify-center border-2 border-black">
-              <Icon name="Plus" size={12} color="white" />
-            </div>
-          </Link>
-
           {/* Like */}
           <button
             onClick={() => handleLike(video.id)}
@@ -471,13 +490,13 @@ const ReelsContainer = ({
               />
             </div>
             <span className={`text-white font-medium ${isDesktop ? 'text-sm' : 'text-xs'}`}>
-              {formatCount(video.likes || 0)}
+              {video.likes || 0}
             </span>
           </button>
 
           {/* Comentarios */}
-          <button
-            onClick={() => {/* TODO: Abrir comentarios */}}
+          <Link 
+            to={`/reel/${video.id}`}
             className="flex flex-col items-center space-y-1"
           >
             <div className={`
@@ -487,9 +506,9 @@ const ReelsContainer = ({
               <Icon name="MessageCircle" size={isDesktop ? 26 : 24} color="white" />
             </div>
             <span className={`text-white font-medium ${isDesktop ? 'text-sm' : 'text-xs'}`}>
-              {formatCount(video.comments || 0)}
+              {video.comments || 0}
             </span>
-          </button>
+          </Link>
 
           {/* Guardar */}
           <button
@@ -615,14 +634,14 @@ const ReelsContainer = ({
   };
 
   // ===============================
-  // ✅ RENDER PRINCIPAL - CON CONTROL DE TRANSICIÓN
+  // ✅ RENDER PRINCIPAL
   // ===============================
   return (
     <div className={`
       relative overflow-hidden bg-black
       ${isDesktop 
         ? 'max-w-[500px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
-        : 'w-full h-screen'
+        : 'w-full h-full'
       }
     `}>
       
