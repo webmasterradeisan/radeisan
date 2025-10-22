@@ -76,18 +76,18 @@ const ReelsGridMobile = ({
   // ✅ HANDLER ACTUALIZADO - Abre visor en lugar de navegar
   // ===============================
   const handleReelClick = (reel, reelIndex) => {
-  console.log('🎯 Mobile: Click en reel:', reelIndex);
-  console.log('   🆔 ID del video:', reel.id);
-  
-  if (onReelClick) {
-    console.log('✅ Abriendo visor de reels con índice:', reelIndex);
-    onReelClick(reelIndex, reel.id);
-  } else {
-    // ✅ CORREGIDO: Navegar con ID en lugar de índice
-    console.log('🎯 Navegando a /reels con ID:', reel.id);
-    navigate(`/reels?id=${reel.id}`);
-  }
-};
+    console.log('🎯 Mobile: Click en reel:', reelIndex);
+    console.log('   🆔 ID del video:', reel.id);
+    
+    if (onReelClick) {
+      console.log('✅ Abriendo visor de reels con índice:', reelIndex);
+      onReelClick(reelIndex, reel.id);
+    } else {
+      // ✅ CORREGIDO: Navegar con ID en lugar de índice
+      console.log('🎯 Navegando a /reels con ID:', reel.id);
+      navigate(`/reels?videoId=${reel.id}`);
+    }
+  };
 
   // Navegar a página completa de reels
   const handleVerTodos = () => {
