@@ -191,15 +191,25 @@ const ReelsPage = () => {
   }, [loadVideos]);
 
   // ===============================
-// ✅ LEER PARÁMETRO ?start=X Y CONVERTIR A ID
-// ===============================
+// ✅ LEER PARÁMETROS ?start=X o ?id=... Y CONFIGURAR REEL INICIAL
 useEffect(() => {
+  if (videos.length === 0) return;
+
+  // PRIORIDAD 1: Si viene ?id=..., usarlo directamente
+  const idParam = searchParams.get('id');
+  if (idParam) {
+    console.log('🎯 ID directo desde URL:', idParam);
+    setSelectedReelId(idParam);
+    return;
+  }
+
+  // PRIORIDAD 2: Si viene ?start=X, convertir índice a ID
   const startParam = searchParams.get('start');
-  if (startParam && videos.length > 0) {
+  if (startParam) {
     const index = parseInt(startParam, 10);
     if (!isNaN(index) && index >= 0 && videos[index]) {
       const videoId = videos[index].id;
-      console.log('🎯 Iniciando en reel:', { index, videoId, title: videos[index].title });
+      console.log('🎯 Iniciando en reel por índice:', { index, videoId, title: videos[index].title });
       setSelectedReelId(videoId);
     }
   }
