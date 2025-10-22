@@ -458,7 +458,7 @@ const ReelsContainer = ({
         <video
           ref={el => videoRefs.current[index] = el}
           src={videoUrl}
-          className="w-full h-full object-contain"
+          className="w-full h-full object-cover"
           loop
           playsInline
           preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
