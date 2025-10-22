@@ -658,15 +658,17 @@ const VideoFeedDashboard = () => {
                       
                       <PullToRefresh onRefresh={handleRefresh}>
                         <VideoFeedGrid
-                          videos={filteredVideos}
-                          layout={effectiveLayout}
-                          orientation={activeOrientation}
-                          selectedReelId={selectedReelId}
-                          onLoadMore={handleLoadMore}
-                          onPointsEarned={handlePointsEarned}
-                          hasMore={hasMore}
-                          loading={loading}
-                        />
+  videos={filteredVideos}
+  reelsVideos={shuffledReels}
+  horizontalVideos={shuffledHorizontals}
+  layout={effectiveLayout}
+  orientation={activeOrientation}
+  selectedReelId={selectedReelId}
+  onLoadMore={handleLoadMore}
+  onPointsEarned={handlePointsEarned}
+  hasMore={hasMore}
+  loading={loading}
+/>
                       </PullToRefresh>
                     </div>
                   )}
