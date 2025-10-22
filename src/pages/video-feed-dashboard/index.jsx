@@ -3,6 +3,7 @@
 // ✅ ACTUALIZADO: Con carrusel de reels para desktop + aleatorización completa
 // ✅ CORREGIDO: Navegación del carrusel desktop (cambia vista en vez de navegar)
 // ✅ CORREGIDO: Pasa ID del video en lugar de índice para reproducción correcta
+// ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -53,6 +54,18 @@ const ORIENTATION_TABS = [
     color: '#3B82F6'
   }
 ];
+
+// ===============================
+// ✅ FUNCIÓN DE ALEATORIZACIÓN GLOBAL
+// ===============================
+const shuffleArray = (array) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -107,16 +120,6 @@ const useVideos = () => {
 
     // Por defecto, horizontal
     return 'horizontal';
-  }, []);
-
-  // ✅ FUNCIÓN DE ALEATORIZACIÓN
-  const shuffleArray = useCallback((array) => {
-    const newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
   }, []);
 
   // ✅ FUNCIÓN ACTUALIZADA: Procesa videos con datos de user_profiles
@@ -198,44 +201,33 @@ const useVideos = () => {
       // ✅ PASO 2: Obtener user_ids únicos
       const userIds = [...new Set(videoData?.map(v => v.user_id).filter(Boolean))];
       
-      console.log('👥 User IDs a buscar:', userIds);
+      console.log('👥 Usuarios únicos:', userIds.length);
 
-      // ✅ PASO 3: Obtener perfiles de usuarios
-      let userProfilesMap = {};
-      
+      // ✅ PASO 3: Fetch user profiles por lote
+      let userProfiles = {};
       if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
+        const { data: profilesData, error: profileError } = await supabase
           .from('user_profiles')
           .select('id, username, avatar_url')
           .in('id', userIds);
 
-        if (profilesError) {
-          console.error('⚠️ Error fetching profiles:', profilesError);
-          // Continuar sin perfiles si hay error
+        if (profileError) {
+          console.warn('⚠️ Error fetching profiles:', profileError);
         } else {
-          console.log('✅ Perfiles obtenidos:', profiles?.length || 0);
-          // Crear mapa de perfiles por ID
-          userProfilesMap = (profiles || []).reduce((acc, profile) => {
+          // Crear un mapa de user_id -> profile
+          userProfiles = (profilesData || []).reduce((acc, profile) => {
             acc[profile.id] = profile;
             return acc;
           }, {});
+          console.log('✅ Perfiles cargados:', Object.keys(userProfiles).length);
         }
       }
 
-      // ✅ PASO 4: Combinar videos con perfiles
+      // ✅ PASO 4: Combinar videos con profiles
       const videosWithProfiles = (videoData || []).map(video => ({
         ...video,
-        user_profiles: userProfilesMap[video.user_id] || null
+        user_profiles: userProfiles[video.user_id] || null
       }));
-
-      console.log('✅ Videos con perfiles combinados:', {
-        total: videosWithProfiles.length,
-        sample: {
-          id: videosWithProfiles[0]?.id,
-          title: videosWithProfiles[0]?.title,
-          username: videosWithProfiles[0]?.user_profiles?.username
-        }
-      });
 
       const processedVideos = processVideos(videosWithProfiles);
 
@@ -288,21 +280,39 @@ const useUserPoints = () => {
 
   useEffect(() => {
     if (user?.id) {
-      const loadUserPoints = async () => {
-        try {
-          const { data } = await supabase
-            .from('user_profiles')
-            .select('points')
-            .eq('id', user.id)
-            .single();
-          
-          setPoints(data?.points || 0);
-        } catch (error) {
-          console.error('Error loading points:', error);
+      const fetchPoints = async () => {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('points')
+          .eq('id', user.id)
+          .single();
+        
+        if (data) {
+          setPoints(data.points || 0);
         }
       };
-      
-      loadUserPoints();
+
+      fetchPoints();
+
+      // Suscribirse a cambios en tiempo real
+      const subscription = supabase
+        .channel('user-points')
+        .on('postgres_changes', 
+          { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'user_profiles',
+            filter: `id=eq.${user.id}`
+          }, 
+          (payload) => {
+            setPoints(payload.new.points || 0);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
     }
   }, [user]);
 
@@ -313,17 +323,17 @@ const useUserPoints = () => {
   return { points, addPoints };
 };
 
-// Constantes para categorías
+// Configuración de categorías
 const VIDEO_CATEGORIES = [
-  { id: 'todos', label: 'Todos', icon: 'Grid3X3' },
-  { id: 'entertainment', label: 'Entretenimiento', icon: 'Smile' },
-  { id: 'education', label: 'Educación', icon: 'BookOpen' },
-  { id: 'technology', label: 'Tecnología', icon: 'Smartphone' },
-  { id: 'lifestyle', label: 'Estilo de vida', icon: 'Heart' },
-  { id: 'sports', label: 'Deportes', icon: 'Zap' },
-  { id: 'music', label: 'Música', icon: 'Music' },
-  { id: 'cooking', label: 'Cocina', icon: 'ChefHat' },
-  { id: 'travel', label: 'Viajes', icon: 'MapPin' }
+  { id: 'todos', label: 'Todo', icon: 'Grid3X3' },
+  { id: 'tendencias', label: 'Tendencias', icon: 'TrendingUp' },
+  { id: 'educacion', label: 'Educación', icon: 'GraduationCap' },
+  { id: 'entretenimiento', label: 'Entretenimiento', icon: 'Tv' },
+  { id: 'musica', label: 'Música', icon: 'Music' },
+  { id: 'deportes', label: 'Deportes', icon: 'Trophy' },
+  { id: 'gaming', label: 'Gaming', icon: 'Gamepad2' },
+  { id: 'tecnologia', label: 'Tecnología', icon: 'Cpu' },
+  { id: 'comedia', label: 'Comedia', icon: 'Laugh' },
 ];
 
 // ===============================
@@ -343,7 +353,7 @@ const VideoFeedDashboard = () => {
   const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
-  const [selectedReelId, setSelectedReelId] = useState(null); // ✅ CAMBIADO: De selectedReelIndex a selectedReelId
+  const [selectedReelId, setSelectedReelId] = useState(null);
 
   console.log('🏠 VideoFeedDashboard rendered:', {
     isMobile,
@@ -352,11 +362,10 @@ const VideoFeedDashboard = () => {
     videosCount: videos.length,
     filteredCount: filteredVideos.length,
     orientationStats,
-    selectedReelId, // ✅ DEBUG ACTUALIZADO
+    selectedReelId,
     error
   });
 
-  // Filtrar videos cuando cambian los datos, filtro o orientación
   // ✅ Filtrar Y ALEATORIZAR videos cuando cambian los datos
   useEffect(() => {
     let filtered = videos;
@@ -395,7 +404,7 @@ const VideoFeedDashboard = () => {
     setShuffledReels(shuffledR);
     setShuffledHorizontals(shuffledH);
     setFilteredVideos(filtered);
-  }, [videos, activeFilter, activeOrientation, shuffleArray]);
+  }, [videos, activeFilter, activeOrientation]);
 
   // ===============================
   // LÓGICA DE LAYOUT
@@ -428,21 +437,9 @@ const VideoFeedDashboard = () => {
     refresh(filterId);
   }, [refresh]);
 
-  const handleOrientationChange = useCallback((orientationId) => {
-    console.log(`🎬 Cambiando orientación a: ${orientationId}`);
-    setActiveOrientation(orientationId);
-  }, []);
-
-  // ===============================
-  // ✅ HANDLER ACTUALIZADO: GUARDA ID DEL REEL SELECCIONADO (NO ÍNDICE)
-  // ===============================
-  const handleReelClickDesktop = useCallback((reelIndex, videoId) => {
-    console.log('🎯 Desktop: Reel clickeado desde carrusel');
-    console.log('   📍 Índice en carrusel:', reelIndex);
-    console.log('   🆔 ID del video:', videoId);
-    
-    setSelectedReelId(videoId); // ✅ GUARDAR ID EN VEZ DE ÍNDICE
-    setActiveOrientation('vertical');
+  const handleOrientationChange = useCallback((orientation) => {
+    console.log(`🔄 Cambiando orientación a: ${orientation}`);
+    setActiveOrientation(orientation);
   }, []);
 
   const handleLayoutChange = useCallback(() => {
@@ -450,20 +447,37 @@ const VideoFeedDashboard = () => {
   }, []);
 
   const handleRefresh = useCallback(() => {
+    console.log('🔄 Refrescando feed');
     refresh(activeFilter);
   }, [refresh, activeFilter]);
 
   const handleLoadMore = useCallback(() => {
+    console.log('⬇️ Cargando más videos');
     loadMore();
   }, [loadMore]);
 
-  const handlePointsEarned = useCallback((pointsData) => {
-    addPoints(pointsData.points);
-    setPointsAnimation(pointsData);
+  const handlePointsEarned = useCallback((points) => {
+    console.log(`⭐ Puntos ganados: ${points}`);
+    addPoints(points);
+    setPointsAnimation({ points });
   }, [addPoints]);
 
   const handleAnimationComplete = useCallback(() => {
+    console.log('✅ Animación de puntos completada');
     setPointsAnimation(null);
+  }, []);
+
+  // ===============================
+  // ✅ HANDLER PARA REELS EN DESKTOP - CAMBIA VISTA EN LUGAR DE NAVEGAR
+  // ===============================
+  const handleReelClickDesktop = useCallback((reelIndex, reelId) => {
+    console.log('🖥️ Desktop: Click en reel del carrusel');
+    console.log('   📍 Índice:', reelIndex);
+    console.log('   🆔 ID del video:', reelId);
+    
+    // Cambiar vista a reels mode con el ID específico
+    setActiveOrientation('vertical');
+    setSelectedReelId(reelId);
   }, []);
 
   // ===============================
@@ -474,21 +488,19 @@ const VideoFeedDashboard = () => {
       <div className="min-h-screen bg-background">
         <Header />
         <PrimaryNavigation />
-        <main className="pt-32">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-center py-16">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
-                </div>
-                <h2 className="text-xl font-semibold text-foreground mb-2">Error al cargar videos</h2>
-                <p className="text-muted-foreground mb-4">{error}</p>
-                <Button onClick={() => window.location.reload()}>
-                  <Icon name="RefreshCw" size={16} className="mr-2" />
-                  Intentar de nuevo
-                </Button>
-              </div>
+        <main className="container mx-auto px-4 pt-24 pb-16">
+          <div className="max-w-md mx-auto text-center py-12">
+            <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
             </div>
+            <h3 className="text-xl font-semibold text-foreground mb-2">
+              Error al cargar videos
+            </h3>
+            <p className="text-muted-foreground mb-6">{error}</p>
+            <Button onClick={handleRefresh}>
+              <Icon name="RefreshCw" size={16} className="mr-2" />
+              Reintentar
+            </Button>
           </div>
         </main>
       </div>
@@ -501,32 +513,26 @@ const VideoFeedDashboard = () => {
   return (
     <>
       <Helmet>
-        <title>
-          {activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Reels - ' : 
-           activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Videos - ' : 
-           'Dashboard - '}Descubre Contenido | RADEISAN
-        </title>
+        <title>Dashboard - RADEISAN</title>
+        <meta name="description" content="Explora videos increíbles en RADEISAN" />
       </Helmet>
 
       <div className="min-h-screen bg-background">
         <Header />
         <PrimaryNavigation />
         
-        <main className="pt-32">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col xl:flex-row gap-8">
-              
-              {/* Main Content */}
+        <main className="pt-20 pb-20 lg:pb-8">
+          <div className="container mx-auto px-4 max-w-7xl">
+            <div className="flex gap-6">
+              {/* Main Content Column */}
               <div className="flex-1 min-w-0">
-                
-                {/* Header Section */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                  <div className="flex items-center space-x-4 mb-4 sm:mb-0">
+                {/* Page Header */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
                     <h1 className="text-2xl font-bold text-foreground">
-                      {activeOrientation === VIDEO_ORIENTATIONS.VERTICAL ? 'Reels' :
-                       activeOrientation === VIDEO_ORIENTATIONS.HORIZONTAL ? 'Videos' :
-                       activeFilter === 'todos' ? 'Para ti' : 
-                       VIDEO_CATEGORIES.find(c => c.id === activeFilter)?.label || 'Contenido'
+                      {activeFilter === 'todos' 
+                       ? 'Explorar Videos' 
+                       : VIDEO_CATEGORIES.find(c => c.id === activeFilter)?.label || 'Contenido'
                       }
                     </h1>
                     <div className="hidden sm:block">
@@ -658,17 +664,17 @@ const VideoFeedDashboard = () => {
                       
                       <PullToRefresh onRefresh={handleRefresh}>
                         <VideoFeedGrid
-  videos={filteredVideos}
-  reelsVideos={shuffledReels}
-  horizontalVideos={shuffledHorizontals}
-  layout={effectiveLayout}
-  orientation={activeOrientation}
-  selectedReelId={selectedReelId}
-  onLoadMore={handleLoadMore}
-  onPointsEarned={handlePointsEarned}
-  hasMore={hasMore}
-  loading={loading}
-/>
+                          videos={filteredVideos}
+                          reelsVideos={shuffledReels}
+                          horizontalVideos={shuffledHorizontals}
+                          layout={effectiveLayout}
+                          orientation={activeOrientation}
+                          selectedReelId={selectedReelId}
+                          onLoadMore={handleLoadMore}
+                          onPointsEarned={handlePointsEarned}
+                          hasMore={hasMore}
+                          loading={loading}
+                        />
                       </PullToRefresh>
                     </div>
                   )}
@@ -704,13 +710,15 @@ const VideoFeedDashboard = () => {
         {/* Debug Info for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">✅ Dashboard v3.0 - CON ID</div>
+            <div className="text-green-400 font-bold mb-1">✅ Dashboard v4.0 - CORREGIDO</div>
             <div>📱 isMobile: {isMobile.toString()}</div>
             <div>🎬 activeOrientation: {activeOrientation}</div>
             <div>🎯 originalLayout: {layout}</div>
             <div>✨ effectiveLayout: {effectiveLayout}</div>
             <div>📹 videos: {videos.length}</div>
             <div>🔍 filtered: {filteredVideos.length}</div>
+            <div>🎥 shuffled reels: {shuffledReels.length}</div>
+            <div>🎬 shuffled horizontals: {shuffledHorizontals.length}</div>
             <div>🔄 loading: {loading.toString()}</div>
             <div>🎠 Mobile Carousel: {(isMobile && effectiveLayout === 'grid').toString()}</div>
             <div>🖥️ Desktop Carousel: {(!isMobile && activeOrientation === 'all').toString()}</div>
