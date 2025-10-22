@@ -203,7 +203,7 @@ useEffect(() => {
     return;
   }
 
-  // PRIORIDAD 2: Si viene ?start=X, convertir índice a ID
+  // PRIORIDAD 2: Si viene ?start=X, convertir índice a ID (backward compatibility)
   const startParam = searchParams.get('start');
   if (startParam) {
     const index = parseInt(startParam, 10);
