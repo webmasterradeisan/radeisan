@@ -5,7 +5,6 @@ import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
-import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import RewardCard from './components/RewardCard';
 import PointsBalanceCard from './components/PointsBalanceCard';
 import TransactionHistory from './components/TransactionHistory';
@@ -660,7 +659,6 @@ const PointsRewardsStore = () => {
 
       <div className="min-h-screen bg-background">
         <Header />
-        <PrimaryNavigation />
         
         <main className="pt-32 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
