@@ -25,6 +25,39 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
 // ===============================
+// CONSTANTES DE ORIENTACIÓN
+// ===============================
+const VIDEO_ORIENTATIONS = {
+  HORIZONTAL: 'horizontal',
+  VERTICAL: 'vertical',
+  SQUARE: 'square'
+};
+
+const ORIENTATION_TABS = [
+  {
+    id: 'all',
+    label: 'Todo',
+    icon: 'Grid3X3',
+    description: 'Todos los videos',
+    color: '#6B7280'
+  },
+  {
+    id: VIDEO_ORIENTATIONS.VERTICAL,
+    label: 'Reels',
+    icon: 'Smartphone',
+    description: 'Videos verticales',
+    color: '#EF4444'
+  },
+  {
+    id: VIDEO_ORIENTATIONS.HORIZONTAL,
+    label: 'Videos',
+    icon: 'Monitor',
+    description: 'Videos horizontales',
+    color: '#3B82F6'
+  }
+];
+
+// ===============================
 // ✅ FUNCIÓN DE ALEATORIZACIÓN GLOBAL
 // ===============================
 const shuffleArray = (array) => {
