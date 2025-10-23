@@ -23,6 +23,7 @@ const ReelsContainer = ({
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const [enableTransition, setEnableTransition] = useState(false);
   const [initialReelSet, setInitialReelSet] = useState(false);
+  const [lastSelectedReelId, setLastSelectedReelId] = useState(null);
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
   const hasPlayedInitial = useRef(false);
@@ -32,9 +33,10 @@ const ReelsContainer = ({
     videosCount: videos.length,
     currentIndex,
     selectedReelId,
+    lastSelectedReelId,
     initialReelSet,
-    enableTransition,
-    videoIds: videos.map(v => v.id).slice(0, 3)
+    currentVideoId: videos[currentIndex]?.id,
+    currentVideoTitle: videos[currentIndex]?.title
   });
 
   // ===============================
@@ -699,13 +701,16 @@ const ReelsContainer = ({
   }
 
   return (
-    <div className={`
-      relative overflow-hidden bg-black
-      ${isDesktop 
-        ? 'max-w-[450px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
-        : 'w-full h-full'
-      }
-    `}>
+    <div 
+      data-reels-container
+      className={`
+        relative overflow-hidden bg-black
+        ${isDesktop 
+          ? 'max-w-[450px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
+          : 'w-full h-full'
+        }
+      `}
+    >
       
       {/* CONTENEDOR DE REELS */}
       <div
@@ -792,6 +797,7 @@ const ReelsContainer = ({
         <div>🎬 Video actual: {videos[currentIndex]?.title || 'N/A'}</div>
         <div>🆔 ID actual: {videos[currentIndex]?.id || 'N/A'}</div>
         <div>🖥️ isDesktop: {isDesktop.toString()}</div>
+        <div>📏 Window width: {window.innerWidth}px</div>
         <div>▶️ isAutoPlaying: {isAutoPlaying.toString()}</div>
         <div>🔄 enableTransition: {enableTransition.toString()}</div>
         <div className="mt-2 pt-2 border-t border-white/20">
