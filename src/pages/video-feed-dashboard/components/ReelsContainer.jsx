@@ -206,7 +206,7 @@ const ReelsContainer = ({
   }, [isDesktop, currentIndex, videos.length]);
 
   // ===============================
-  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS
+  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS - Solo cuando cambia el índice
   // ===============================
   useEffect(() => {
     if (videos.length === 0) return;
@@ -219,26 +219,23 @@ const ReelsContainer = ({
     }
 
     const currentVideo = videoRefs.current[currentIndex];
-    console.log('🎮 Autoplay - Intentando reproducir video:', {
+    console.log('🎮 Cambio de índice - Gestionando videos:', {
       index: currentIndex,
       videoExists: !!currentVideo,
-      videoSrc: currentVideo?.src,
-      isAutoPlaying,
-      isInitialVideo: currentIndex === initialIndex,
-      hasPlayedInitial: hasPlayedInitial.current
+      videoSrc: currentVideo?.src
     });
 
-    if (currentVideo && isAutoPlaying) {
-      // Pausar todos los otros videos
-      console.log('⏸️ Autoplay - Pausando todos excepto:', currentIndex);
-      videoRefs.current.forEach((video, index) => {
-        if (video && index !== currentIndex) {
-          video.pause();
-          video.currentTime = 0;
-        }
-      });
+    // Pausar todos los otros videos Y REINICIARLOS
+    console.log('⏸️ Pausando todos excepto:', currentIndex);
+    videoRefs.current.forEach((video, index) => {
+      if (video && index !== currentIndex) {
+        video.pause();
+        video.currentTime = 0;
+      }
+    });
 
-      // ✅ REPRODUCIR VIDEO ACTUAL
+    // ✅ REPRODUCIR VIDEO ACTUAL (solo si isAutoPlaying está activo)
+    if (currentVideo && isAutoPlaying) {
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -246,11 +243,10 @@ const ReelsContainer = ({
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log('✅ Video reproduciendo correctamente (autoplay)');
+            console.log('✅ Video reproduciendo correctamente');
           })
           .catch(err => {
             console.error('❌ Error autoplay:', err);
-            // Si falla, intentar con muted
             currentVideo.muted = true;
             currentVideo.play()
               .then(() => console.log('✅ Video reproduciendo (muted)'))
@@ -258,7 +254,7 @@ const ReelsContainer = ({
           });
       }
     }
-  }, [currentIndex, videos, isAutoPlaying, mutedVideos, getInitialReelIndex]);
+  }, [currentIndex, videos, mutedVideos, getInitialReelIndex]); // ✅ REMOVIDO isAutoPlaying de las dependencias
 
   // Precargar videos adyacentes
   useEffect(() => {
