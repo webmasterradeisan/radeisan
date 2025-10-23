@@ -121,39 +121,35 @@ const ReelsContainer = ({
   }, []);
 
   // ===============================
-  // ✅ MOUSE WHEEL NAVIGATION (DESKTOP) - CORREGIDO
+  // ✅ MOUSE WHEEL NAVIGATION (DESKTOP) - CORREGIDO V2
   // ===============================
   useEffect(() => {
     if (!isDesktop) return;
 
     const handleWheel = (e) => {
       e.preventDefault();
+      e.stopPropagation();
       
-      // Limpiar timeout anterior
-      if (wheelTimeout.current) {
-        clearTimeout(wheelTimeout.current);
+      console.log('🖱️ Wheel event:', e.deltaY, 'currentIndex:', currentIndex);
+      
+      // Navegación inmediata sin timeout
+      if (e.deltaY > 0 && currentIndex < videos.length - 1) {
+        console.log('⬇️ Next video');
+        setCurrentIndex(prev => prev + 1);
+        hasPlayedInitial.current = true;
+      } else if (e.deltaY < 0 && currentIndex > 0) {
+        console.log('⬆️ Previous video');
+        setCurrentIndex(prev => prev - 1);
+        hasPlayedInitial.current = true;
       }
-      
-      // Crear nuevo timeout
-      wheelTimeout.current = setTimeout(() => {
-        if (e.deltaY > 0 && currentIndex < videos.length - 1) {
-          setCurrentIndex(prev => prev + 1);
-        } else if (e.deltaY < 0 && currentIndex > 0) {
-          setCurrentIndex(prev => prev - 1);
-        }
-      }, 150);
     };
 
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-      return () => {
-        container.removeEventListener('wheel', handleWheel);
-        if (wheelTimeout.current) {
-          clearTimeout(wheelTimeout.current);
-        }
-      };
-    }
+    // Agregar listener a window en lugar del contenedor
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+    };
   }, [isDesktop, currentIndex, videos.length]);
 
   // ===============================
@@ -456,15 +452,17 @@ const ReelsContainer = ({
           ${isDesktop ? 'h-[80vh]' : 'h-screen'}
         `}
       >
-        {/* CAPA TOUCH OVERLAY para capturar gestos - z-10 */}
-        <div
-          className="absolute inset-0 z-10"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onClick={handlePlayPause}
-          style={{ touchAction: 'none' }}
-        />
+        {/* CAPA TOUCH OVERLAY para capturar gestos - z-10 (solo móvil) */}
+        {!isDesktop && (
+          <div
+            className="absolute inset-0 z-10"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onClick={handlePlayPause}
+            style={{ touchAction: 'none' }}
+          />
+        )}
 
         {/* VIDEO - ✅ object-cover sin franjas negras */}
         <video
@@ -474,7 +472,8 @@ const ReelsContainer = ({
           loop
           playsInline
           preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
-          style={{ pointerEvents: 'none' }}
+          onClick={isDesktop ? handlePlayPause : undefined}
+          style={{ pointerEvents: isDesktop ? 'auto' : 'none' }}
         />
 
         {/* CONTROLES LATERALES (Derecha) - z-20 */}
