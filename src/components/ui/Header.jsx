@@ -46,6 +46,18 @@ const Header = () => {
     }
   };
 
+  // ✅ NUEVA FUNCIÓN: Navegar al dashboard con orientación específica
+  const handleOrientationNavigate = (orientation) => {
+    navigate('/dashboard', { 
+      state: { orientation } 
+    });
+  };
+
+  // ✅ FUNCIÓN AUXILIAR: Verificar si estamos en dashboard con orientación activa
+  const isOrientationActive = (orientation) => {
+    return location.pathname === '/dashboard' && location.state?.orientation === orientation;
+  };
+
   const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
     return <AppIcon name={name} size={size} color={color} className={className} />;
   };
@@ -71,7 +83,7 @@ const Header = () => {
               <Link
                 to="/dashboard"
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/dashboard' 
+                  location.pathname === '/dashboard' && !location.state?.orientation
                     ? 'bg-primary/10 text-primary' 
                     : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                 }`}
@@ -80,29 +92,31 @@ const Header = () => {
                 <span>Inicio</span>
               </Link>
 
-              <Link
-                to="/reels"
+              {/* ✅ ACTUALIZADO: Reels ahora navega al dashboard con orientación vertical */}
+              <button
+                onClick={() => handleOrientationNavigate('vertical')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/reels' 
+                  isOrientationActive('vertical')
                     ? 'bg-primary/10 text-primary' 
                     : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                 }`}
               >
                 <Icon name="Smartphone" size={18} />
                 <span>Reels</span>
-              </Link>
+              </button>
 
-              <Link
-                to="/videos"
+              {/* ✅ ACTUALIZADO: Videos ahora navega al dashboard con orientación horizontal */}
+              <button
+                onClick={() => handleOrientationNavigate('horizontal')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/videos' 
+                  isOrientationActive('horizontal')
                     ? 'bg-primary/10 text-primary' 
                     : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                 }`}
               >
                 <Icon name="Monitor" size={18} />
                 <span>Videos</span>
-              </Link>
+              </button>
 
               <Link
                 to="/marketplace"
