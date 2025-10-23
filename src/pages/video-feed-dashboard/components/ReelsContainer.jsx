@@ -4,6 +4,7 @@
 // ✅ CORREGIDO: Video inicial se reproduce automáticamente
 // ✅ CORREGIDO: Solo un video se reproduce a la vez (sin audio duplicado)
 // ✅ NUEVO: Soporte para selectedReelId en mobile
+// ✅ CORREGIDO: Play/Pause funciona correctamente sin reiniciar el video
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -349,12 +350,15 @@ const ReelsContainer = ({
     const currentVideo = videoRefs.current[currentIndex];
     if (!currentVideo) return;
 
-    if (currentVideo.paused) {
-      currentVideo.play();
-      setIsAutoPlaying(true);
-    } else {
+    // ✅ SOLUCIÓN: Usar el estado interno en lugar de currentVideo.paused
+    // porque currentVideo.paused puede ser inconsistente al hacer clic
+    if (isAutoPlaying) {
       currentVideo.pause();
       setIsAutoPlaying(false);
+    } else {
+      currentVideo.play()
+        .catch(err => console.error('Error al reanudar:', err));
+      setIsAutoPlaying(true);
     }
   };
 
