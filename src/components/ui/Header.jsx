@@ -1,257 +1,279 @@
-// src/components/ui/Header.jsx
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import AppIcon from '../AppIcon';
-import Button from './Button';
+// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS + REELS FULLSCREEN
+import React from "react";
+import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
+import ScrollToTop from "components/ScrollToTop";
+import ErrorBoundary from "components/ErrorBoundary";
+import { AuthProvider } from "contexts/AuthContext";
 
-const Header = () => {
-  const { user, signOut, loading } = useAuth();
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const userMenuRef = useRef(null);
+// SISTEMA ORIGINAL MANTENIDO
+import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setIsUserMenuOpen(false);
-      }
-    };
+// MOBILE LAYOUT PARA APLICAR GRADUALMENTE
+import MobileLayout from "components/ui/MobileLayout";
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+// ===============================
+// PÁGINAS DE APLICACIÓN
+// ===============================
+import LandingPage from './pages/LandingPage';
+import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
+import VideoFeedDashboard from './pages/video-feed-dashboard';
+import VideoUploadStudio from './pages/video-upload-studio';
+import VideoPlayerPage from './pages/VideoPlayerPage';
+import ReelsPage from './pages/reels';
+import NotFound from "pages/NotFound";
 
-  // Close menu on route change
-  useEffect(() => {
-    setIsUserMenuOpen(false);
-  }, [location.pathname]);
+// ✅ PÁGINAS REALES (YA NO PLACEHOLDERS)
+import UserProfileSettings from './pages/user-profile-settings';
+import BusinessMarketplace from './pages/business-marketplace';
+import PointsRewardsStore from './pages/points-rewards-store';
 
-  const toggleUserMenu = () => {
-    setIsUserMenuOpen(prev => !prev);
-  };
+// ===============================
+// WRAPPER PARA MOBILELAYOUT
+// ===============================
+const MobileLayoutWrapper = ({ children }) => (
+  <MobileLayout>{children}</MobileLayout>
+);
 
-  const handleLogout = async () => {
-    setIsUserMenuOpen(false);
-    try {
-      await signOut();
-      // Redirigir a landing page después de logout
-      navigate('/', { replace: true });
-    } catch (error) {
-      console.error('Error during logout:', error);
-      // Aún así redirigir a landing page
-      navigate('/', { replace: true });
-    }
-  };
+// ===============================
+// COMPONENTES AUXILIARES
+// ===============================
+const AuthCallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center">
+      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-muted-foreground">Procesando autenticación...</p>
+    </div>
+  </div>
+);
 
-  const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
-    return <AppIcon name={name} size={size} color={color} className={className} />;
-  };
-
-  return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          
-          {/* ===============================
-              LOGO
-              =============================== */}
-          <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center">
-              <Icon name="Video" size={20} color="white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Radeisan
-            </span>
-          </Link>
-
-          {/* ===============================
-              NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS)
-              =============================== */}
-          {user && (
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link
-                to="/dashboard"
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === '/dashboard' 
-                    ? 'text-primary' 
-                    : 'text-muted-foreground'
-                }`}
-              >
-                Inicio
-              </Link>
-              <Link
-                to="/marketplace"
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === '/marketplace' 
-                    ? 'text-primary' 
-                    : 'text-muted-foreground'
-                }`}
-              >
-                Marketplace
-              </Link>
-              <Link
-                to="/rewards"
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === '/rewards' 
-                    ? 'text-primary' 
-                    : 'text-muted-foreground'
-                }`}
-              >
-                Tienda
-              </Link>
-            </nav>
-          )}
-
-          {/* ===============================
-              SECCIÓN DERECHA
-              =============================== */}
-          <div className="flex items-center space-x-4">
-            
-            {user ? (
-              // ============= USUARIO AUTENTICADO =============
-              <>
-                {/* Balance de Puntos */}
-                <div className="hidden sm:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full">
-                  <Icon name="Star" size={16} color="var(--color-accent)" />
-                  <span className="font-mono text-sm font-medium text-accent">
-                    {user.points?.toLocaleString() || '0'}
-                  </span>
-                </div>
-
-                {/* Botón de Subir Contenido */}
-                <Button size="sm" asChild className="hidden md:flex">
-                  <Link to="/upload">
-                    <Icon name="Plus" size={16} className="mr-2" />
-                    Subir
-                  </Link>
-                </Button>
-
-                {/* Notificaciones */}
-                <Button variant="ghost" size="icon" className="relative">
-                  <Icon name="Bell" size={20} />
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
-                </Button>
-
-                {/* Menú de Usuario */}
-                <div className="relative" ref={userMenuRef}>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleUserMenu}
-                    className="rounded-full"
-                  >
-                    <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
-                      {user.avatar_url ? (
-                        <img 
-                          src={user.avatar_url} 
-                          alt={user.name || 'Avatar'} 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Icon name="User" size={18} color="white" />
-                      )}
-                    </div>
-                  </Button>
-
-                  {/* Dropdown Menu */}
-                  {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
-                      <div className="py-1">
-                        {/* Información del Usuario */}
-                        <div className="px-4 py-2 border-b border-border">
-                          <div className="text-sm font-medium text-popover-foreground truncate">
-                            {user.name || 'Usuario'}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {user.email}
-                          </div>
-                        </div>
-
-                        {/* Enlaces del Menú */}
-                        <Link
-                          to="/profile"
-                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="User" size={16} className="mr-2" />
-                          Mi Perfil
-                        </Link>
-
-                        {user.is_business_account && (
-                          <Link
-                            to="/business"
-                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                            onClick={() => setIsUserMenuOpen(false)}
-                          >
-                            <Icon name="Building" size={16} className="mr-2" />
-                            Mi Negocio
-                          </Link>
-                        )}
-
-                        <Link
-                          to="/rewards"
-                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="Gift" size={16} className="mr-2" />
-                          Mis Recompensas
-                        </Link>
-
-                        <div className="border-t border-border my-1"></div>
-
-                        {/* Configuración */}
-                        <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
-                          <Icon name="Settings" size={16} className="mr-2" />
-                          Configuración
-                        </button>
-
-                        <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
-                          <Icon name="HelpCircle" size={16} className="mr-2" />
-                          Ayuda
-                        </button>
-
-                        <div className="border-t border-border my-1"></div>
-
-                        {/* Cerrar Sesión */}
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                          disabled={loading}
-                        >
-                          <Icon name="LogOut" size={16} className="mr-2" />
-                          {loading ? 'Cerrando...' : 'Cerrar Sesión'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              // ============= USUARIO NO AUTENTICADO =============
-              <div className="flex items-center space-x-4">
-                <Link
-                  to="/login"
-                  className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-                >
-                  Iniciar Sesión
-                </Link>
-                <Button size="sm" asChild>
-                  <Link to="/register">
-                    Registrarse
-                  </Link>
-                </Button>
-              </div>
-            )}
-          </div>
+const PlaceholderPage = ({ title, description }) => (
+  <div className="min-h-screen bg-background">
+    <div className="max-w-2xl mx-auto px-4 pt-32 pb-16">
+      <div className="text-center">
+        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
+        <h1 className="text-3xl font-bold text-foreground mb-4">{title}</h1>
+        <p className="text-muted-foreground mb-8">{description}</p>
+        <div className="bg-muted/50 rounded-lg p-6">
+          <p className="text-sm text-muted-foreground">
+            Esta página está en desarrollo. Pronto estará disponible con todas las funcionalidades.
+          </p>
         </div>
       </div>
-    </header>
+    </div>
+  </div>
+);
+
+// ===============================
+// COMPONENTE DE RUTAS PRINCIPAL
+// ===============================
+const Routes = () => {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <ErrorBoundary>
+          <ScrollToTop />
+          <RouterRoutes>
+            
+            {/* =================== RUTAS PÚBLICAS =================== */}
+            
+            <Route 
+              path="/" 
+              element={
+                <UniversalRoute>
+                  <LandingPage />
+                </UniversalRoute>
+              } 
+            />
+            
+            <Route 
+              path="/login" 
+              element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              } 
+            />
+            
+            <Route 
+              path="/register" 
+              element={
+                <PublicRoute>
+                  <Register />
+                </PublicRoute>
+              } 
+            />
+            
+            <Route 
+              path="/auth/callback" 
+              element={
+                <UniversalRoute>
+                  <AuthCallback />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== SISTEMA DE VIDEOS (NUEVO) =================== */}
+            
+            {/* Página de reproducción individual de video */}
+            <Route 
+              path="/video/:videoId" 
+              element={
+                <UniversalRoute>
+                  <VideoPlayerPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* Alias para reels - redirige a la página de video */}
+            <Route 
+              path="/reel/:videoId" 
+              element={
+                <UniversalRoute>
+                  <VideoPlayerPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== RUTAS PROTEGIDAS - CON MOBILELAYOUT =================== */}
+            
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <VideoFeedDashboard />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route 
+              path="/upload" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <VideoUploadStudio />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* ✅ REELS FULLSCREEN */}
+            <Route 
+              path="/reels" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <ReelsPage />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* ✅ VIDEOS PAGE - Redirect al dashboard con filtro de videos horizontales */}
+            <Route 
+              path="/videos" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <VideoFeedDashboard defaultOrientation="horizontal" />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* ✅ PÁGINAS REALES - ACTUALIZADAS */}
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <UserProfileSettings />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route 
+              path="/marketplace" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <BusinessMarketplace />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route 
+              path="/rewards" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <PointsRewardsStore />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* CONTENIDO GUARDADO - AÚN PLACEHOLDER */}
+            <Route 
+              path="/saved" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <PlaceholderPage 
+                      title="Contenido Guardado" 
+                      description="Accede a todo el contenido que has guardado" 
+                    />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* CONFIGURACIÓN - AÚN PLACEHOLDER */}
+            <Route 
+              path="/settings" 
+              element={
+                <ProtectedRoute>
+                  <MobileLayoutWrapper>
+                    <PlaceholderPage 
+                      title="Configuración" 
+                      description="Personaliza tu experiencia en RADEISAN" 
+                    />
+                  </MobileLayoutWrapper>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* =================== REDIRECTS =================== */}
+            
+            <Route path="/create" element={<Navigate to="/upload" replace />} />
+            <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
+
+            {/* =================== 404 =================== */}
+            
+            <Route 
+              path="*" 
+              element={
+                <UniversalRoute>
+                  <NotFound />
+                </UniversalRoute>
+              } 
+            />
+            
+          </RouterRoutes>
+        </ErrorBoundary>
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 
-export default Header;
+export default Routes;
