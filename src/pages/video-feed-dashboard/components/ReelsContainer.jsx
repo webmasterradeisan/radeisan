@@ -652,31 +652,19 @@ const ReelsContainer = ({
   // ===============================
   // ✅ RENDER PRINCIPAL
   // ===============================
-  // Datos de demostración
-  const demoVideos = videos.length > 0 ? videos : [
-    {
-      id: '1',
-      title: 'Video Demo 1',
-      description: 'Este es un video de demostración',
-      creator: { name: 'Usuario Demo', id: '1' },
-      likes: 125,
-      comments: 45,
-      timeAgo: 'Hace 2 horas',
-      tags: ['demo', 'test'],
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-    },
-    {
-      id: '2',
-      title: 'Video Demo 2',
-      description: 'Segundo video de demostración',
-      creator: { name: 'Usuario Demo', id: '1' },
-      likes: 89,
-      comments: 23,
-      timeAgo: 'Hace 5 horas',
-      tags: ['demo', 'ejemplo'],
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
-    }
-  ];
+  if (videos.length === 0) {
+    return (
+      <div className={`
+        relative overflow-hidden bg-black flex items-center justify-center
+        ${isDesktop 
+          ? 'max-w-[450px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
+          : 'w-full h-full'
+        }
+      `}>
+        <p className="text-white text-lg">No hay videos disponibles</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`
@@ -695,7 +683,7 @@ const ReelsContainer = ({
           transform: `translateY(-${currentIndex * (isDesktop ? 80 : 100)}vh)`
         }}
       >
-        {demoVideos.map((video, index) => (
+        {videos.map((video, index) => (
           <ReelItem
             key={video.id}
             video={video}
@@ -724,13 +712,13 @@ const ReelsContainer = ({
 
           <button
             onClick={navigateNext}
-            disabled={currentIndex === demoVideos.length - 1}
+            disabled={currentIndex === videos.length - 1}
             className={`
               absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
               w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full 
               flex items-center justify-center transition-all duration-200
               hover:bg-black/70 hover:scale-110 active:scale-95
-              ${currentIndex === demoVideos.length - 1 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
+              ${currentIndex === videos.length - 1 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
             `}
           >
             <ChevronDown size={24} color="white" />
@@ -763,19 +751,22 @@ const ReelsContainer = ({
       )}
 
       {/* 🐛 DEBUG INFO */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 left-4 bg-black/95 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
-          <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsContainer</div>
-          <div>📹 Total videos: {demoVideos.length}</div>
-          <div>📍 currentIndex: {currentIndex}</div>
-          <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
-          <div>🎯 initialReelSet: {initialReelSet.toString()}</div>
-          <div>🎬 Video actual: {demoVideos[currentIndex]?.title || 'N/A'}</div>
-          <div>🆔 ID actual: {demoVideos[currentIndex]?.id || 'N/A'}</div>
-          <div>🖥️ isDesktop: {isDesktop.toString()}</div>
-          <div>▶️ isAutoPlaying: {isAutoPlaying.toString()}</div>
+      <div className="fixed bottom-4 left-4 bg-black/95 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
+        <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsContainer</div>
+        <div>📹 Total videos: {videos.length}</div>
+        <div>📍 currentIndex: {currentIndex}</div>
+        <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
+        <div>🎯 initialReelSet: {initialReelSet.toString()}</div>
+        <div>🎬 Video actual: {videos[currentIndex]?.title || 'N/A'}</div>
+        <div>🆔 ID actual: {videos[currentIndex]?.id || 'N/A'}</div>
+        <div>🖥️ isDesktop: {isDesktop.toString()}</div>
+        <div>▶️ isAutoPlaying: {isAutoPlaying.toString()}</div>
+        <div className="mt-2 pt-2 border-t border-white/20">
+          <div className="text-yellow-400 font-bold mb-1">🎮 Controles:</div>
+          <div>• Desktop: Rueda mouse / Flechas / Click botones</div>
+          <div>• Móvil: Swipe arriba/abajo</div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
