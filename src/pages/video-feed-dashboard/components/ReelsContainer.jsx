@@ -4,7 +4,6 @@
 // ✅ CORREGIDO: Video inicial se reproduce automáticamente
 // ✅ CORREGIDO: Solo un video se reproduce a la vez (sin audio duplicado)
 // ✅ NUEVO: Soporte para selectedReelId en mobile
-// ✅ CORREGIDO: Play/Pause funciona correctamente sin reiniciar el video
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -206,7 +205,7 @@ const ReelsContainer = ({
   }, [isDesktop, currentIndex, videos.length]);
 
   // ===============================
-  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS - Solo cuando cambia el índice
+  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS
   // ===============================
   useEffect(() => {
     if (videos.length === 0) return;
@@ -219,23 +218,26 @@ const ReelsContainer = ({
     }
 
     const currentVideo = videoRefs.current[currentIndex];
-    console.log('🎮 Cambio de índice - Gestionando videos:', {
+    console.log('🎮 Autoplay - Intentando reproducir video:', {
       index: currentIndex,
       videoExists: !!currentVideo,
-      videoSrc: currentVideo?.src
+      videoSrc: currentVideo?.src,
+      isAutoPlaying,
+      isInitialVideo: currentIndex === initialIndex,
+      hasPlayedInitial: hasPlayedInitial.current
     });
 
-    // Pausar todos los otros videos Y REINICIARLOS
-    console.log('⏸️ Pausando todos excepto:', currentIndex);
-    videoRefs.current.forEach((video, index) => {
-      if (video && index !== currentIndex) {
-        video.pause();
-        video.currentTime = 0;
-      }
-    });
+    if (currentVideo && isAutoPlaying) {
+      // Pausar todos los otros videos
+      console.log('⏸️ Autoplay - Pausando todos excepto:', currentIndex);
+      videoRefs.current.forEach((video, index) => {
+        if (video && index !== currentIndex) {
+          video.pause();
+          video.currentTime = 0;
+        }
+      });
 
-    // ✅ REPRODUCIR VIDEO ACTUAL (siempre que cambie de índice)
-    if (currentVideo) {
+      // ✅ REPRODUCIR VIDEO ACTUAL
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -243,22 +245,19 @@ const ReelsContainer = ({
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log('✅ Video reproduciendo correctamente');
-            setIsAutoPlaying(true); // Actualizar estado después de reproducir
+            console.log('✅ Video reproduciendo correctamente (autoplay)');
           })
           .catch(err => {
             console.error('❌ Error autoplay:', err);
+            // Si falla, intentar con muted
             currentVideo.muted = true;
             currentVideo.play()
-              .then(() => {
-                console.log('✅ Video reproduciendo (muted)');
-                setIsAutoPlaying(true);
-              })
+              .then(() => console.log('✅ Video reproduciendo (muted)'))
               .catch(e => console.error('❌ Error crítico autoplay:', e));
           });
       }
     }
-  }, [currentIndex, videos, mutedVideos, getInitialReelIndex]);
+  }, [currentIndex, videos, isAutoPlaying, mutedVideos, getInitialReelIndex]);
 
   // Precargar videos adyacentes
   useEffect(() => {
@@ -326,34 +325,6 @@ const ReelsContainer = ({
     }
   };
 
-  // ===============================
-  // HANDLERS DE INTERACCIÓN
-  // ===============================
-  const handlePlayPause = () => {
-    const currentVideo = videoRefs.current[currentIndex];
-    if (!currentVideo) return;
-
-    console.log('🎯 handlePlayPause llamado:', {
-      paused: currentVideo.paused,
-      currentTime: currentVideo.currentTime,
-      src: currentVideo.src
-    });
-
-    // ✅ IGUAL QUE VideoPlayer.jsx - Verificar estado real del video
-    if (currentVideo.paused) {
-      currentVideo.play().then(() => {
-        console.log('✅ Video reproduciendo desde:', currentVideo.currentTime);
-        setIsAutoPlaying(true);
-      }).catch(err => {
-        console.error('❌ Error al reproducir:', err);
-      });
-    } else {
-      currentVideo.pause();
-      console.log('⏸️ Video pausado en:', currentVideo.currentTime);
-      setIsAutoPlaying(false);
-    }
-  };
-
   // Navegación con teclas
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -370,6 +341,22 @@ const ReelsContainer = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentIndex, videos.length]);
+
+  // ===============================
+  // HANDLERS DE INTERACCIÓN
+  // ===============================
+  const handlePlayPause = () => {
+    const currentVideo = videoRefs.current[currentIndex];
+    if (!currentVideo) return;
+
+    if (currentVideo.paused) {
+      currentVideo.play();
+      setIsAutoPlaying(true);
+    } else {
+      currentVideo.pause();
+      setIsAutoPlaying(false);
+    }
+  };
 
   const handleMuteToggle = (videoId) => {
     const newMutedVideos = new Set(mutedVideos);
