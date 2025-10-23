@@ -23,6 +23,7 @@ const ReelsContainer = ({
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
   const [enableTransition, setEnableTransition] = useState(false);
   const [initialReelSet, setInitialReelSet] = useState(false);
+  const [lastSelectedReelId, setLastSelectedReelId] = useState(null);
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
   const hasPlayedInitial = useRef(false);
@@ -32,9 +33,10 @@ const ReelsContainer = ({
     videosCount: videos.length,
     currentIndex,
     selectedReelId,
+    lastSelectedReelId,
     initialReelSet,
-    enableTransition,
-    videoIds: videos.map(v => v.id).slice(0, 3)
+    currentVideoId: videos[currentIndex]?.id,
+    currentVideoTitle: videos[currentIndex]?.title
   });
 
   // ===============================
