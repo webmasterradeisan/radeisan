@@ -254,33 +254,7 @@ const ReelsContainer = ({
           });
       }
     }
-  }, [currentIndex, videos, mutedVideos, getInitialReelIndex]); // ✅ REMOVIDO isAutoPlaying de las dependencias
-
-  // ===============================
-  // ✅ NUEVO: Efecto separado para manejar play/pause sin reiniciar
-  // ===============================
-  useEffect(() => {
-    if (videos.length === 0) return;
-    
-    const currentVideo = videoRefs.current[currentIndex];
-    if (!currentVideo) return;
-
-    console.log('🎮 Play/Pause - Estado cambiado:', {
-      isAutoPlaying,
-      currentTime: currentVideo.currentTime,
-      paused: currentVideo.paused
-    });
-
-    // Solo actuar si el estado del video no coincide con isAutoPlaying
-    if (isAutoPlaying && currentVideo.paused) {
-      console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
-      currentVideo.play()
-        .catch(err => console.error('Error al reproducir:', err));
-    } else if (!isAutoPlaying && !currentVideo.paused) {
-      console.log('⏸️ Pausando en:', currentVideo.currentTime);
-      currentVideo.pause();
-    }
-  }, [isAutoPlaying, currentIndex, videos.length]);
+  }, [currentIndex, videos, mutedVideos, getInitialReelIndex]);
 
   // Precargar videos adyacentes
   useEffect(() => {
@@ -368,25 +342,27 @@ const ReelsContainer = ({
   // ===============================
   // HANDLERS DE INTERACCIÓN
   // ===============================
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     const currentVideo = videoRefs.current[currentIndex];
     if (!currentVideo) return;
 
     console.log('🎯 Click detectado - Estado actual:', {
-      isAutoPlaying,
       videoPaused: currentVideo.paused,
       currentTime: currentVideo.currentTime
     });
 
-    // ✅ Simplemente alternar el estado
-    if (isAutoPlaying) {
-      console.log('⏸️ Pausando video...');
-      setIsAutoPlaying(false);
+    // ✅ SOLUCIÓN: Verificar el estado REAL del video (como VideoPlayer.jsx)
+    if (currentVideo.paused) {
+      console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
+      currentVideo.play().then(() => {
+        setIsAutoPlaying(true);
+      }).catch(err => console.error('Error al reproducir:', err));
     } else {
-      console.log('▶️ Reproduciendo video...');
-      setIsAutoPlaying(true);
+      console.log('⏸️ Pausando en:', currentVideo.currentTime);
+      currentVideo.pause();
+      setIsAutoPlaying(false);
     }
-  };
+  }, [currentIndex]);
 
   const handleMuteToggle = (videoId) => {
     const newMutedVideos = new Set(mutedVideos);
