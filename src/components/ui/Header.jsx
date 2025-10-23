@@ -80,17 +80,20 @@ const Header = () => {
           {/* NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS) */}
           {user && (
             <nav className="hidden md:flex items-center space-x-1">
-              <Link
-                to="/dashboard"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/dashboard' && !location.state?.orientation
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
-              >
-                <Icon name="Home" size={18} />
-                <span>Inicio</span>
-              </Link>
+              <button
+  onClick={() => {
+    navigate('/dashboard', { replace: true });
+    window.history.replaceState({}, document.title);
+  }}
+  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+    location.pathname === '/dashboard' && !location.state?.orientation
+      ? 'bg-primary/10 text-primary' 
+      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+  }`}
+>
+  <Icon name="Home" size={18} />
+  <span>Inicio</span>
+</button>
 
               {/* ✅ ACTUALIZADO: Reels ahora navega al dashboard con orientación vertical */}
               <button
