@@ -1,7 +1,8 @@
 // src/pages/LandingPage/index.jsx
 import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../components/AppIcon';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ===============================
 // HEADER PÚBLICO
@@ -420,6 +421,17 @@ const PublicFooter = () => (
 // COMPONENTE PRINCIPAL
 // ===============================
 const LandingPage = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated, loading } = useAuth();
+
+  // ✅ REDIRECCIÓN AUTOMÁTICA SI ESTÁ AUTENTICADO
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      console.log('✅ Usuario autenticado detectado en landing, redirigiendo al dashboard...');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
+
   // SEO nativo sin dependencias externas
   useEffect(() => {
     document.title = 'Radeisan - Crea, comparte y gana con tu contenido';
@@ -447,6 +459,19 @@ const LandingPage = () => {
     }
   }, []);
 
+  // Mostrar loading mientras verifica autenticación
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Solo mostrar landing si NO está autenticado
   return (
     <div className="min-h-screen">
       <PublicHeader />
