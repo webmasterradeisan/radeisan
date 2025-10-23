@@ -326,23 +326,6 @@ const ReelsContainer = ({
     }
   };
 
-  // Navegación con teclas
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'ArrowUp' && currentIndex > 0) {
-        setCurrentIndex(prev => prev - 1);
-      } else if (e.key === 'ArrowDown' && currentIndex < videos.length - 1) {
-        setCurrentIndex(prev => prev + 1);
-      } else if (e.key === ' ') {
-        e.preventDefault();
-        handlePlayPause();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, videos.length, handlePlayPause]);
-
   // ===============================
   // HANDLERS DE INTERACCIÓN
   // ===============================
@@ -370,6 +353,23 @@ const ReelsContainer = ({
       setIsAutoPlaying(false);
     }
   };
+
+  // Navegación con teclas
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowUp' && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      } else if (e.key === 'ArrowDown' && currentIndex < videos.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        handlePlayPause();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, videos.length]);
 
   const handleMuteToggle = (videoId) => {
     const newMutedVideos = new Set(mutedVideos);
