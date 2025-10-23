@@ -5,9 +5,11 @@
 // ✅ CORREGIDO: Pasa ID del video en lugar de índice para reproducción correcta
 // ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
 // ✅ CORREGIDO: Carrusel desktop no desaparece - usa videos sin filtrar por orientación
+// ✅ NUEVO: Recibe orientación desde Header para navegación directa a Reels/Videos
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
@@ -346,6 +348,7 @@ const VideoFeedDashboard = () => {
   const { points: userPoints, addPoints } = useUserPoints();
   
   const isMobile = useIsMobile();
+  const location = useLocation(); // ✅ AGREGADO: Para recibir el state de navegación
 
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [shuffledReels, setShuffledReels] = useState([]);
@@ -355,6 +358,16 @@ const VideoFeedDashboard = () => {
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
   const [selectedReelId, setSelectedReelId] = useState(null);
+
+  // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
+  useEffect(() => {
+    if (location.state?.orientation) {
+      console.log('🎯 Orientación recibida desde Header:', location.state.orientation);
+      setActiveOrientation(location.state.orientation);
+      // Limpiar el state para evitar que persista en futuras navegaciones
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   console.log('🏠 VideoFeedDashboard rendered:', {
     isMobile,
@@ -717,7 +730,7 @@ const VideoFeedDashboard = () => {
         {/* Debug Info for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 left-4 bg-black text-white p-3 rounded text-xs font-mono max-w-sm z-50">
-            <div className="text-green-400 font-bold mb-1">✅ Dashboard v4.1 - CARRUSEL CORREGIDO</div>
+            <div className="text-green-400 font-bold mb-1">✅ Dashboard v4.2 - NAVEGACIÓN HEADER</div>
             <div>📱 isMobile: {isMobile.toString()}</div>
             <div>🎬 activeOrientation: {activeOrientation}</div>
             <div>🎯 originalLayout: {layout}</div>
