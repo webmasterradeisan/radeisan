@@ -234,8 +234,8 @@ const ReelsContainer = ({
       }
     });
 
-    // ✅ REPRODUCIR VIDEO ACTUAL (solo si isAutoPlaying está activo)
-    if (currentVideo && isAutoPlaying) {
+    // ✅ REPRODUCIR VIDEO ACTUAL (siempre que cambie de índice)
+    if (currentVideo) {
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -244,12 +244,16 @@ const ReelsContainer = ({
         playPromise
           .then(() => {
             console.log('✅ Video reproduciendo correctamente');
+            setIsAutoPlaying(true); // Actualizar estado después de reproducir
           })
           .catch(err => {
             console.error('❌ Error autoplay:', err);
             currentVideo.muted = true;
             currentVideo.play()
-              .then(() => console.log('✅ Video reproduciendo (muted)'))
+              .then(() => {
+                console.log('✅ Video reproduciendo (muted)');
+                setIsAutoPlaying(true);
+              })
               .catch(e => console.error('❌ Error crítico autoplay:', e));
           });
       }
@@ -337,32 +341,35 @@ const ReelsContainer = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, videos.length]);
+  }, [currentIndex, videos.length, handlePlayPause]);
 
   // ===============================
   // HANDLERS DE INTERACCIÓN
   // ===============================
-  const handlePlayPause = useCallback(() => {
+  const handlePlayPause = () => {
     const currentVideo = videoRefs.current[currentIndex];
     if (!currentVideo) return;
 
-    console.log('🎯 Click detectado - Estado actual:', {
-      videoPaused: currentVideo.paused,
-      currentTime: currentVideo.currentTime
+    console.log('🎯 handlePlayPause llamado:', {
+      paused: currentVideo.paused,
+      currentTime: currentVideo.currentTime,
+      src: currentVideo.src
     });
 
-    // ✅ SOLUCIÓN: Verificar el estado REAL del video (como VideoPlayer.jsx)
+    // ✅ IGUAL QUE VideoPlayer.jsx - Verificar estado real del video
     if (currentVideo.paused) {
-      console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
       currentVideo.play().then(() => {
+        console.log('✅ Video reproduciendo desde:', currentVideo.currentTime);
         setIsAutoPlaying(true);
-      }).catch(err => console.error('Error al reproducir:', err));
+      }).catch(err => {
+        console.error('❌ Error al reproducir:', err);
+      });
     } else {
-      console.log('⏸️ Pausando en:', currentVideo.currentTime);
       currentVideo.pause();
+      console.log('⏸️ Video pausado en:', currentVideo.currentTime);
       setIsAutoPlaying(false);
     }
-  }, [currentIndex]);
+  };
 
   const handleMuteToggle = (videoId) => {
     const newMutedVideos = new Set(mutedVideos);
