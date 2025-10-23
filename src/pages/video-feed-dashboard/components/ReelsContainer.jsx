@@ -372,14 +372,18 @@ const ReelsContainer = ({
     const currentVideo = videoRefs.current[currentIndex];
     if (!currentVideo) return;
 
-    // ✅ SOLUCIÓN: Usar el estado interno en lugar de currentVideo.paused
-    // porque currentVideo.paused puede ser inconsistente al hacer clic
+    console.log('🎯 Click detectado - Estado actual:', {
+      isAutoPlaying,
+      videoPaused: currentVideo.paused,
+      currentTime: currentVideo.currentTime
+    });
+
+    // ✅ Simplemente alternar el estado
     if (isAutoPlaying) {
-      currentVideo.pause();
+      console.log('⏸️ Pausando video...');
       setIsAutoPlaying(false);
     } else {
-      currentVideo.play()
-        .catch(err => console.error('Error al reanudar:', err));
+      console.log('▶️ Reproduciendo video...');
       setIsAutoPlaying(true);
     }
   };
