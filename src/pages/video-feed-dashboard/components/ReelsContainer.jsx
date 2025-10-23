@@ -2,11 +2,10 @@
 // ✅ VERSIÓN FINAL: Combinación perfecta de ambos archivos
 // ✅ Deslizamiento funcional en móviles + Player sin franjas negras
 // ✅ Navegación con rueda del mouse en desktop + Touch gestures óptimos
-// ✅ Menú de navegación inferior integrado (solo móviles)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Heart, MessageCircle, Bookmark, Share, Volume2, VolumeX, Play, ChevronUp, ChevronDown, Home, Video, ShoppingBag, Gift, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Heart, MessageCircle, Bookmark, Share, Volume2, VolumeX, Play, ChevronUp, ChevronDown } from 'lucide-react';
 
 const ReelsContainer = ({ 
   videos = [], 
@@ -314,7 +313,8 @@ const ReelsContainer = ({
     
     console.log('👉 Touch move:', diff);
     
-    // NO prevenir el comportamiento por defecto aquí
+    // Prevenir scroll nativo
+    e.preventDefault();
   }, [isDragging, startY]);
 
   const handleTouchEnd = useCallback((e) => {
@@ -494,12 +494,8 @@ const ReelsContainer = ({
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            style={{ 
-              touchAction: 'pan-y',
-              WebkitTouchCallout: 'none',
-              WebkitUserSelect: 'none',
-              userSelect: 'none'
-            }}
+            onClick={handlePlayPause}
+            style={{ touchAction: 'none' }}
           />
         )}
 
@@ -515,10 +511,10 @@ const ReelsContainer = ({
           style={{ pointerEvents: isDesktop ? 'auto' : 'none' }}
         />
 
-        {/* CONTROLES LATERALES (Derecha) - z-50 */}
+        {/* CONTROLES LATERALES (Derecha) - z-20 */}
         <div className={`
-          absolute flex flex-col space-y-4 z-50 pointer-events-none
-          ${isDesktop ? 'bottom-16 right-6' : 'bottom-24 right-4'}
+          absolute flex flex-col space-y-4 z-20
+          ${isDesktop ? 'bottom-16 right-6' : 'bottom-12 right-4'}
         `}>
           {/* Like */}
           <button
@@ -526,7 +522,7 @@ const ReelsContainer = ({
               e.stopPropagation();
               handleLike(video.id);
             }}
-            className="flex flex-col items-center space-y-1 pointer-events-auto"
+            className="flex flex-col items-center space-y-1"
           >
             <div className={`
               rounded-full flex items-center justify-center transition-all duration-200
@@ -547,7 +543,7 @@ const ReelsContainer = ({
           </button>
 
           {/* Comentarios */}
-          <div className="flex flex-col items-center space-y-1 pointer-events-auto">
+          <div className="flex flex-col items-center space-y-1">
             <div className={`
               bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors cursor-pointer
               ${isDesktop ? 'w-14 h-14' : 'w-12 h-12'}
@@ -565,7 +561,7 @@ const ReelsContainer = ({
               e.stopPropagation();
               handleSave(video.id);
             }}
-            className="flex flex-col items-center space-y-1 pointer-events-auto"
+            className="flex flex-col items-center space-y-1"
           >
             <div className={`
               rounded-full flex items-center justify-center transition-all duration-200
@@ -588,7 +584,7 @@ const ReelsContainer = ({
               e.stopPropagation();
               handleShare(video);
             }}
-            className="flex flex-col items-center space-y-1 pointer-events-auto"
+            className="flex flex-col items-center space-y-1"
           >
             <div className={`
               bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors
@@ -604,7 +600,7 @@ const ReelsContainer = ({
               e.stopPropagation();
               handleMuteToggle(video.id);
             }}
-            className="flex flex-col items-center space-y-1 pointer-events-auto"
+            className="flex flex-col items-center space-y-1"
           >
             <div className={`
               bg-black/30 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors
@@ -619,10 +615,10 @@ const ReelsContainer = ({
           </button>
         </div>
 
-        {/* INFORMACIÓN DEL VIDEO (Abajo Izquierda) - z-50 */}
+        {/* INFORMACIÓN DEL VIDEO (Abajo Izquierda) - z-20 */}
         <div className={`
-          absolute text-white z-50 pointer-events-none
-          ${isDesktop ? 'bottom-12 left-6 right-24' : 'bottom-24 left-4 right-20'}
+          absolute text-white z-20
+          ${isDesktop ? 'bottom-12 left-6 right-24' : 'bottom-8 left-4 right-20'}
         `}>
           
           {/* Información del creador */}
@@ -696,7 +692,8 @@ const ReelsContainer = ({
         relative overflow-hidden bg-black flex items-center justify-center
         ${isDesktop 
           ? 'max-w-[450px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
-          : 'w-full h-full'}
+          : 'w-full h-full'
+        }
       `}>
         <p className="text-white text-lg">No hay videos disponibles</p>
       </div>
@@ -710,7 +707,8 @@ const ReelsContainer = ({
         relative overflow-hidden bg-black
         ${isDesktop 
           ? 'max-w-[450px] mx-auto rounded-lg shadow-2xl h-[80vh]' 
-          : 'w-full h-full'}
+          : 'w-full h-full'
+        }
       `}
     >
       
@@ -790,7 +788,7 @@ const ReelsContainer = ({
       )}
 
       {/* 🐛 DEBUG INFO */}
-      <div className="fixed bottom-20 left-4 bg-black/95 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
+      <div className="fixed bottom-4 left-4 bg-black/95 text-white p-3 rounded-lg text-xs font-mono max-w-xs z-50 border border-white/20">
         <div className="text-green-400 font-bold mb-1">✅ DEBUG ReelsContainer</div>
         <div>📹 Total videos: {videos.length}</div>
         <div>📍 currentIndex: {currentIndex}</div>
