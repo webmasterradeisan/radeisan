@@ -1,5 +1,5 @@
 // src/components/MobileBottomNavigation.jsx
-// Menú de navegación inferior para móviles (como en la imagen)
+// Menú de navegación inferior para móviles (solo visible en pantallas pequeñas)
 
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -61,7 +61,7 @@ const MobileBottomNavigation = () => {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-[60] md:hidden safe-area-inset-bottom">
       <div className="flex items-center justify-around h-16 px-2">
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -71,7 +71,7 @@ const MobileBottomNavigation = () => {
             <button
               key={item.id}
               onClick={() => handleNavigation(item.path)}
-              className="flex flex-col items-center justify-center flex-1 h-full space-y-1 transition-colors"
+              className="flex flex-col items-center justify-center flex-1 h-full space-y-1 transition-colors active:scale-95"
             >
               <Icon 
                 size={24} 
