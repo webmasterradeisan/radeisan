@@ -589,8 +589,8 @@ const VideoFeedDashboard = () => {
                   </div>
                 </div>
 
-                {/* Orientation Tabs */}
-                <div className="flex items-center space-x-1 mb-6 overflow-x-auto scrollbar-hide">
+                {/* Orientation Tabs - Solo visible en móviles */}
+                <div className="flex md:hidden items-center space-x-1 mb-6 overflow-x-auto scrollbar-hide">
                   {ORIENTATION_TABS.map((tab) => (
                     <Button
                       key={tab.id}
