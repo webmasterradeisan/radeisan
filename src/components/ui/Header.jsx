@@ -53,6 +53,14 @@ const Header = () => {
     });
   };
 
+  // ✅ NUEVA FUNCIÓN: Navegar al inicio (dashboard sin filtros)
+const handleHomeNavigate = () => {
+  navigate('/dashboard', { 
+    replace: true,
+    state: { orientation: 'all' } 
+  });
+};
+
   // ✅ FUNCIÓN AUXILIAR: Verificar si estamos en dashboard con orientación activa
   const isOrientationActive = (orientation) => {
     return location.pathname === '/dashboard' && location.state?.orientation === orientation;
@@ -81,12 +89,9 @@ const Header = () => {
           {user && (
             <nav className="hidden md:flex items-center space-x-1">
               <button
-  onClick={() => {
-    navigate('/dashboard', { replace: true });
-    window.history.replaceState({}, document.title);
-  }}
+  onClick={handleHomeNavigate}
   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-    location.pathname === '/dashboard' && !location.state?.orientation
+    location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
       ? 'bg-primary/10 text-primary' 
       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
   }`}
