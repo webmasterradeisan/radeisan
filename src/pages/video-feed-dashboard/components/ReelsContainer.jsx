@@ -112,12 +112,16 @@ const ReelsContainer = ({
   // RESPONSIVE DETECTION
   // ===============================
   useEffect(() => {
-    const handleResize = () => {
-      setIsDesktop(window.innerWidth >= 768);
+    const checkDevice = () => {
+      const width = window.innerWidth;
+      const newIsDesktop = width >= 768;
+      console.log('📱 Device check:', { width, isDesktop: newIsDesktop });
+      setIsDesktop(newIsDesktop);
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    checkDevice(); // Ejecutar inmediatamente
+    window.addEventListener('resize', checkDevice);
+    return () => window.removeEventListener('resize', checkDevice);
   }, []);
 
   // ===============================
@@ -275,52 +279,64 @@ const ReelsContainer = ({
   }, [currentIndex, videos.length, hasMore, loading, onLoadMore]);
 
   // ===============================
-  // ✅ NAVEGACIÓN POR SCROLL/TOUCH - OPTIMIZADO
+  // ✅ NAVEGACIÓN POR SCROLL/TOUCH - OPTIMIZADO V2
   // ===============================
   const [startY, setStartY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartTime = useRef(0);
 
-  const handleTouchStart = (e) => {
+  const handleTouchStart = useCallback((e) => {
+    console.log('👆 Touch start:', e.touches[0].clientY);
     setStartY(e.touches[0].clientY);
     setIsDragging(true);
     touchStartTime.current = Date.now();
-  };
+  }, []);
 
-  const handleTouchMove = (e) => {
+  const handleTouchMove = useCallback((e) => {
     if (!isDragging) return;
     
     const currentY = e.touches[0].clientY;
     const diff = startY - currentY;
     
-    // Prevenir scroll nativo si el movimiento es significativo
-    if (Math.abs(diff) > 10) {
-      e.preventDefault();
-    }
-  };
+    console.log('👉 Touch move:', diff);
+    
+    // Prevenir scroll nativo
+    e.preventDefault();
+  }, [isDragging, startY]);
 
-  const handleTouchEnd = (e) => {
+  const handleTouchEnd = useCallback((e) => {
     if (!isDragging) return;
+    
+    console.log('👋 Touch end');
     setIsDragging(false);
 
     const currentY = e.changedTouches[0].clientY;
     const diff = startY - currentY;
     const touchDuration = Date.now() - touchStartTime.current;
 
-    // Detectar swipe: movimiento mínimo de 80px o swipe rápido (< 300ms con 50px)
-    const isQuickSwipe = touchDuration < 300 && Math.abs(diff) > 50;
-    const isLongSwipe = Math.abs(diff) > 80;
+    console.log('📊 Swipe stats:', {
+      diff,
+      duration: touchDuration,
+      currentIndex,
+      maxIndex: videos.length - 1
+    });
+
+    // Detectar swipe con umbral más bajo
+    const isQuickSwipe = touchDuration < 300 && Math.abs(diff) > 30;
+    const isLongSwipe = Math.abs(diff) > 60;
 
     if (isQuickSwipe || isLongSwipe) {
       if (diff > 0 && currentIndex < videos.length - 1) {
+        console.log('⬇️ Swipe UP - Next video');
         setCurrentIndex(prev => prev + 1);
         hasPlayedInitial.current = true;
       } else if (diff < 0 && currentIndex > 0) {
+        console.log('⬆️ Swipe DOWN - Previous video');
         setCurrentIndex(prev => prev - 1);
         hasPlayedInitial.current = true;
       }
     }
-  };
+  }, [isDragging, startY, currentIndex, videos.length]);
 
   // Navegación con teclas
   useEffect(() => {
@@ -760,10 +776,12 @@ const ReelsContainer = ({
         <div>🆔 ID actual: {videos[currentIndex]?.id || 'N/A'}</div>
         <div>🖥️ isDesktop: {isDesktop.toString()}</div>
         <div>▶️ isAutoPlaying: {isAutoPlaying.toString()}</div>
+        <div>🔄 enableTransition: {enableTransition.toString()}</div>
         <div className="mt-2 pt-2 border-t border-white/20">
           <div className="text-yellow-400 font-bold mb-1">🎮 Controles:</div>
           <div>• Desktop: Rueda mouse / Flechas / Click botones</div>
-          <div>• Móvil: Swipe arriba/abajo</div>
+          <div>• Móvil: Swipe arriba/abajo (60px min)</div>
+          <div className="text-cyan-400 mt-1">Mira la consola para logs detallados</div>
         </div>
       </div>
     </div>
