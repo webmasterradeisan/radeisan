@@ -13,7 +13,6 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
-import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import FilterChips from './components/FilterChips';
 import VideoFeedGrid from './components/VideoFeedGrid';
 import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
@@ -510,7 +509,6 @@ const VideoFeedDashboard = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <PrimaryNavigation />
         <main className="container mx-auto px-4 pt-24 pb-16">
           <div className="max-w-md mx-auto text-center py-12">
             <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -542,7 +540,6 @@ const VideoFeedDashboard = () => {
 
       <div className="min-h-screen bg-background">
         <Header />
-        <PrimaryNavigation />
         
         <main className="container mx-auto px-4 pt-20 pb-20 md:pt-24 md:pb-8">
           <div className="max-w-[1400px] mx-auto">
