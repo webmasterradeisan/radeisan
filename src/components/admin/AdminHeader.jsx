@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAdminRole } from '../../hooks/useAdminRole';
 
 // Componentes
-import { AppIcon } from '../AppIcon';
+import AppIcon from '../AppIcon';
 
 // ============================================
 // COMPONENTE PRINCIPAL
