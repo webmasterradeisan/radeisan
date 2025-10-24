@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS + REELS FULLSCREEN
+// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS + REELS FULLSCREEN + PANEL ADMIN
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -23,10 +23,12 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
-// ✅ PÁGINAS REALES (YA NO PLACEHOLDERS)
-import UserProfileSettings from './pages/user-profile-settings';
-import BusinessMarketplace from './pages/business-marketplace';
-import PointsRewardsStore from './pages/points-rewards-store';
+// ===============================
+// COMPONENTES DEL PANEL ADMIN
+// ===============================
+import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
+import AdminLayout from './components/admin/AdminLayout';
+import AdminDashboard from './pages/admin-dashboard';
 
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
@@ -62,6 +64,73 @@ const PlaceholderPage = ({ title, description }) => (
           <p className="text-sm text-muted-foreground">
             Esta página está en desarrollo. Pronto estará disponible con todas las funcionalidades.
           </p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// ===============================
+// PÁGINA DE ACCESO NO AUTORIZADO
+// ===============================
+const Unauthorized = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+      <div className="text-center">
+        {/* Icono de advertencia */}
+        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
+          <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+
+        {/* Título */}
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Acceso No Autorizado
+        </h2>
+
+        {/* Mensaje */}
+        <p className="text-gray-600 mb-6">
+          No tienes permisos suficientes para acceder a esta sección.
+        </p>
+
+        {/* Botón para volver */}
+        <a
+          href="/dashboard"
+          className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+        >
+          Volver al Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+);
+
+// ===============================
+// PLACEHOLDER PARA PÁGINAS ADMIN PENDIENTES
+// ===============================
+const AdminPlaceholder = ({ title, description, requiredPermission }) => (
+  <div className="p-6">
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">{title}</h2>
+          <p className="text-gray-600 mb-6">{description}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              Esta sección se implementará en los próximos sprints.
+            </p>
+            {requiredPermission && (
+              <p className="text-xs text-blue-600 mt-2 font-mono">
+                Permiso requerido: {requiredPermission}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -117,7 +186,7 @@ const Routes = () => {
               } 
             />
 
-            {/* =================== SISTEMA DE VIDEOS (NUEVO) =================== */}
+            {/* =================== SISTEMA DE VIDEOS =================== */}
             
             {/* Página de reproducción individual de video */}
             <Route 
@@ -163,7 +232,7 @@ const Routes = () => {
               } 
             />
 
-            {/* ✅ REELS FULLSCREEN - SIN MOBILELAYOUT (Sin Header) */}
+            {/* REELS FULLSCREEN - CON MOBILELAYOUT */}
             <Route 
               path="/reels" 
               element={
@@ -175,13 +244,16 @@ const Routes = () => {
               } 
             />
 
-            {/* ✅ PÁGINAS REALES - ACTUALIZADAS */}
+            {/* RUTAS CON PLACEHOLDERS */}
             <Route 
               path="/profile" 
               element={
                 <ProtectedRoute>
                   <MobileLayoutWrapper>
-                    <UserProfileSettings />
+                    <PlaceholderPage 
+                      title="Mi Perfil" 
+                      description="Gestiona tu perfil y ve tu actividad en RADEISAN" 
+                    />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
               } 
@@ -192,7 +264,10 @@ const Routes = () => {
               element={
                 <ProtectedRoute>
                   <MobileLayoutWrapper>
-                    <BusinessMarketplace />
+                    <PlaceholderPage 
+                      title="Marketplace" 
+                      description="Descubre negocios locales y oportunidades comerciales" 
+                    />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
               } 
@@ -203,13 +278,15 @@ const Routes = () => {
               element={
                 <ProtectedRoute>
                   <MobileLayoutWrapper>
-                    <PointsRewardsStore />
+                    <PlaceholderPage 
+                      title="Recompensas" 
+                      description="Canjea tus puntos por increíbles premios" 
+                    />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
               } 
             />
 
-            {/* CONTENIDO GUARDADO - AÚN PLACEHOLDER */}
             <Route 
               path="/saved" 
               element={
@@ -224,7 +301,6 @@ const Routes = () => {
               } 
             />
 
-            {/* CONFIGURACIÓN - AÚN PLACEHOLDER */}
             <Route 
               path="/settings" 
               element={
@@ -236,6 +312,157 @@ const Routes = () => {
                     />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
+              } 
+            />
+
+            {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
+            
+            {/* Ruta principal del admin - con rutas anidadas */}
+            <Route 
+              path="/admin" 
+              element={
+                <ProtectedAdminRoute>
+                  <AdminLayout />
+                </ProtectedAdminRoute>
+              }
+            >
+              {/* Dashboard principal del admin */}
+              <Route index element={<AdminDashboard />} />
+
+              {/* Gestión de Usuarios - Sprint 4 */}
+              <Route 
+                path="users" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="manage_users">
+                    <AdminPlaceholder 
+                      title="Gestión de Usuarios"
+                      description="Administra usuarios, permisos y actividad"
+                      requiredPermission="manage_users"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Gestión de Categorías - Sprint 4 */}
+              <Route 
+                path="categories" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="manage_categories">
+                    <AdminPlaceholder 
+                      title="Gestión de Categorías"
+                      description="Crea y administra categorías dinámicas"
+                      requiredPermission="manage_categories"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Sistema de Puntos - Sprint 5 */}
+              <Route 
+                path="points" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="manage_points">
+                    <AdminPlaceholder 
+                      title="Sistema de Puntos"
+                      description="Configura reglas de puntos y multiplicadores"
+                      requiredPermission="manage_points"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Misiones Diarias - Sprint 3 */}
+              <Route 
+                path="missions" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="manage_missions">
+                    <AdminPlaceholder 
+                      title="Misiones Diarias"
+                      description="Administra misiones y sistema de rachas"
+                      requiredPermission="manage_missions"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Recompensas - Sprint 5 */}
+              <Route 
+                path="rewards" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="manage_rewards">
+                    <AdminPlaceholder 
+                      title="Gestión de Recompensas"
+                      description="Administra el catálogo de recompensas y stock"
+                      requiredPermission="manage_rewards"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Moderación - Sprint 6 */}
+              <Route 
+                path="moderation" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="moderate_content">
+                    <AdminPlaceholder 
+                      title="Moderación de Contenido"
+                      description="Revisa reportes y modera contenido"
+                      requiredPermission="moderate_content"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Analytics - Sprint 6 */}
+              <Route 
+                path="analytics" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="view_analytics">
+                    <AdminPlaceholder 
+                      title="Analytics"
+                      description="Estadísticas avanzadas y métricas de engagement"
+                      requiredPermission="view_analytics"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Configuración del Sitio - Sprint 5 */}
+              <Route 
+                path="settings" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="manage_settings">
+                    <AdminPlaceholder 
+                      title="Configuración del Sitio"
+                      description="Personaliza branding, SEO y ajustes generales"
+                      requiredPermission="manage_settings"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+
+              {/* Logs de Administración - Sprint 4 */}
+              <Route 
+                path="logs" 
+                element={
+                  <ProtectedAdminRoute requiredPermission="view_logs">
+                    <AdminPlaceholder 
+                      title="Logs de Administración"
+                      description="Auditoría de acciones administrativas"
+                      requiredPermission="view_logs"
+                    />
+                  </ProtectedAdminRoute>
+                } 
+              />
+            </Route>
+
+            {/* Página de acceso no autorizado */}
+            <Route 
+              path="/unauthorized" 
+              element={
+                <UniversalRoute>
+                  <Unauthorized />
+                </UniversalRoute>
               } 
             />
 
