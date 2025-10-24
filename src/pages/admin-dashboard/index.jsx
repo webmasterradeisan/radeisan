@@ -21,7 +21,7 @@ import {
 } from '../../services/adminService';
 
 // Componentes
-import { AppIcon } from '../../components/AppIcon';
+import AppIcon from '../../components/AppIcon';
 
 // ============================================
 // COMPONENTE: StatsCard
