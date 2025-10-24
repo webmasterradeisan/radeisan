@@ -23,6 +23,11 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
+// ✅ PÁGINAS REALES DE USUARIO (YA NO PLACEHOLDERS)
+import UserProfileSettings from './pages/user-profile-settings';
+import BusinessMarketplace from './pages/business-marketplace';
+import PointsRewardsStore from './pages/points-rewards-store';
+
 // ===============================
 // COMPONENTES DEL PANEL ADMIN
 // ===============================
@@ -232,7 +237,7 @@ const Routes = () => {
               } 
             />
 
-            {/* REELS FULLSCREEN - CON MOBILELAYOUT */}
+            {/* ✅ REELS FULLSCREEN */}
             <Route 
               path="/reels" 
               element={
@@ -244,16 +249,13 @@ const Routes = () => {
               } 
             />
 
-            {/* RUTAS CON PLACEHOLDERS */}
+            {/* ✅ PÁGINAS REALES DE USUARIO - ACTUALIZADAS */}
             <Route 
               path="/profile" 
               element={
                 <ProtectedRoute>
                   <MobileLayoutWrapper>
-                    <PlaceholderPage 
-                      title="Mi Perfil" 
-                      description="Gestiona tu perfil y ve tu actividad en RADEISAN" 
-                    />
+                    <UserProfileSettings />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
               } 
@@ -264,10 +266,7 @@ const Routes = () => {
               element={
                 <ProtectedRoute>
                   <MobileLayoutWrapper>
-                    <PlaceholderPage 
-                      title="Marketplace" 
-                      description="Descubre negocios locales y oportunidades comerciales" 
-                    />
+                    <BusinessMarketplace />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
               } 
@@ -278,15 +277,13 @@ const Routes = () => {
               element={
                 <ProtectedRoute>
                   <MobileLayoutWrapper>
-                    <PlaceholderPage 
-                      title="Recompensas" 
-                      description="Canjea tus puntos por increíbles premios" 
-                    />
+                    <PointsRewardsStore />
                   </MobileLayoutWrapper>
                 </ProtectedRoute>
               } 
             />
 
+            {/* CONTENIDO GUARDADO - AÚN PLACEHOLDER */}
             <Route 
               path="/saved" 
               element={
@@ -301,6 +298,7 @@ const Routes = () => {
               } 
             />
 
+            {/* CONFIGURACIÓN - AÚN PLACEHOLDER */}
             <Route 
               path="/settings" 
               element={
