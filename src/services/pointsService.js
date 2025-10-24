@@ -1,7 +1,7 @@
 // src/services/pointsService.js
 // Servicio completo para el sistema de puntos dual (gratis + premium)
 
-import { supabase } from '../supabase';
+import { supabase } from '../lib/supabase';
 
 /**
  * ========================================
