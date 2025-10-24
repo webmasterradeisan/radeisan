@@ -12,7 +12,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAdminRole } from '../../hooks/useAdminRole';
 
 // Componentes
-import { AppIcon } from '../AppIcon';
+import AppIcon from '../AppIcon';
 
 // Servicios
 import { getContentReports } from '../../services/adminService';
