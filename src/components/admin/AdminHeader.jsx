@@ -1,19 +1,15 @@
-// ============================================
-// COMPONENTE: AdminHeader
-// ============================================
-// Header superior del panel de administración
+// AdminHeader.jsx - Header del panel de administración
+// Ruta: src/components/admin/AdminHeader.jsx
 // Incluye breadcrumbs, búsqueda y menú de usuario
-// ============================================
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
 // Contextos y Hooks
 import { useAuth } from '../../contexts/AuthContext';
-import { useAdminRole } from '../../hooks/useAdminRole';
 
 // Componentes
-import AppIcon from '../AppIcon';
+import Icon from '../AppIcon';
 
 // ============================================
 // COMPONENTE PRINCIPAL
@@ -30,7 +26,6 @@ import AppIcon from '../AppIcon';
 const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { roleType, roleName } = useAdminRole();
 
   // ============================================
   // ESTADO LOCAL
@@ -141,10 +136,26 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
   };
 
   /**
+   * Obtener nombre del rol formateado
+   */
+  const getRoleName = () => {
+    const role = user?.role || 'user';
+    const roleNames = {
+      super_admin: 'Super Admin',
+      admin: 'Administrador',
+      moderator: 'Moderador',
+      editor: 'Editor',
+      user: 'Usuario'
+    };
+    return roleNames[role] || 'Usuario';
+  };
+
+  /**
    * Obtener color del badge según rol
    */
   const getRoleBadgeColor = () => {
-    switch (roleType) {
+    const role = user?.role || 'user';
+    switch (role) {
       case 'super_admin':
         return 'bg-purple-100 text-purple-700 border-purple-200';
       case 'admin':
@@ -177,9 +188,10 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
             className="p-2 mr-2 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             aria-label={sidebarOpen ? 'Cerrar sidebar' : 'Abrir sidebar'}
           >
-            <AppIcon 
+            <Icon 
               name={sidebarOpen ? 'PanelLeftClose' : 'Menu'} 
-              className="w-5 h-5 text-gray-600" 
+              size={20}
+              className="text-gray-600" 
             />
           </button>
 
@@ -187,9 +199,9 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
           {breadcrumbs.length > 0 && (
             <nav className="hidden md:flex items-center space-x-2 ml-4" aria-label="Breadcrumb">
               {breadcrumbs.map((crumb, index) => (
-                <React.Fragment key={crumb.path}>
+                <React.Fragment key={`${crumb.path}-${index}`}>
                   {index > 0 && (
-                    <AppIcon name="ChevronRight" className="w-4 h-4 text-gray-400" />
+                    <Icon name="ChevronRight" size={16} className="text-gray-400" />
                   )}
                   {crumb.isLast ? (
                     <span className="text-sm font-medium text-gray-900 truncate max-w-[200px]">
@@ -235,7 +247,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors sm:hidden"
               aria-label="Buscar"
             >
-              <AppIcon name="Search" className="w-5 h-5 text-gray-600" />
+              <Icon name="Search" size={20} className="text-gray-600" />
             </button>
 
             {/* Input de búsqueda (Desktop) */}
@@ -248,9 +260,10 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                   placeholder="Buscar..."
                   className="w-64 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-                <AppIcon 
+                <Icon 
                   name="Search" 
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" 
+                  size={16}
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" 
                 />
               </div>
             </form>
@@ -263,7 +276,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <form onSubmit={handleSearch} className="flex items-center space-x-2">
-                    <AppIcon name="Search" className="w-5 h-5 text-gray-400" />
+                    <Icon name="Search" size={20} className="text-gray-400" />
                     <input
                       type="text"
                       value={searchQuery}
@@ -277,7 +290,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                       onClick={toggleSearch}
                       className="p-2 text-gray-600 hover:text-gray-900"
                     >
-                      <AppIcon name="X" className="w-5 h-5" />
+                      <Icon name="X" size={20} />
                     </button>
                   </form>
                 </div>
@@ -293,7 +306,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
             className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors hidden sm:block"
             aria-label="Notificaciones"
           >
-            <AppIcon name="Bell" className="w-5 h-5 text-gray-600" />
+            <Icon name="Bell" size={20} className="text-gray-600" />
             {/* Badge de notificaciones no leídas */}
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
@@ -329,19 +342,20 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
               {/* Info del usuario (Desktop) */}
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-900 leading-tight max-w-[120px] truncate">
-                  {user?.full_name || 'Usuario'}
+                  {user?.full_name || user?.username || 'Usuario'}
                 </p>
                 <div className="flex items-center space-x-1">
                   <span className={`text-xs px-2 py-0.5 rounded-full border ${getRoleBadgeColor()}`}>
-                    {roleName}
+                    {getRoleName()}
                   </span>
                 </div>
               </div>
 
               {/* Icono de dropdown */}
-              <AppIcon 
+              <Icon 
                 name={userMenuOpen ? 'ChevronUp' : 'ChevronDown'} 
-                className="w-4 h-4 text-gray-500 hidden md:block" 
+                size={16}
+                className="text-gray-500 hidden md:block" 
               />
             </button>
 
@@ -351,14 +365,14 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                 {/* Info del usuario */}
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">
-                    {user?.full_name || 'Usuario'}
+                    {user?.full_name || user?.username || 'Usuario'}
                   </p>
                   <p className="text-xs text-gray-500 truncate mt-0.5">
                     {user?.email}
                   </p>
                   <div className="mt-2">
                     <span className={`inline-flex text-xs px-2 py-1 rounded-full border ${getRoleBadgeColor()}`}>
-                      {roleName}
+                      {getRoleName()}
                     </span>
                   </div>
                 </div>
@@ -370,7 +384,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                     onClick={() => setUserMenuOpen(false)}
                     className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <AppIcon name="User" className="w-4 h-4 text-gray-500" />
+                    <Icon name="User" size={16} className="text-gray-500" />
                     <span>Ver perfil</span>
                   </Link>
 
@@ -379,7 +393,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                     onClick={() => setUserMenuOpen(false)}
                     className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <AppIcon name="Settings" className="w-4 h-4 text-gray-500" />
+                    <Icon name="Settings" size={16} className="text-gray-500" />
                     <span>Configuración</span>
                   </Link>
 
@@ -388,7 +402,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                     onClick={() => setUserMenuOpen(false)}
                     className="flex items-center space-x-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <AppIcon name="ArrowLeft" className="w-4 h-4 text-gray-500" />
+                    <Icon name="ArrowLeft" size={16} className="text-gray-500" />
                     <span>Volver al sitio</span>
                   </Link>
                 </div>
@@ -399,7 +413,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                     onClick={handleLogout}
                     className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    <AppIcon name="LogOut" className="w-4 h-4" />
+                    <Icon name="LogOut" size={16} />
                     <span>Cerrar sesión</span>
                   </button>
                 </div>
