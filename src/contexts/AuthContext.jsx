@@ -1,5 +1,6 @@
 // src/contexts/AuthContext.jsx
 // AuthContext HÍBRIDO - Mantiene funcionalidades pero elimina los timeouts problemáticos
+// ACTUALIZADO: Incluye soporte para admin_roles
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -31,7 +32,7 @@ export const AuthProvider = ({ children }) => {
   const CACHE_DURATION = 30000; // Solo mantener cache de perfil
 
   // ===============================
-  // GESTIÓN DE PERFIL - MANTENIDA PERO SIMPLIFICADA
+  // GESTIÓN DE PERFIL - ACTUALIZADO CON admin_roles
   // ===============================
 
   const fetchUserProfile = useCallback(async (userId, useCache = true) => {
@@ -50,9 +51,23 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔍 Obteniendo perfil de BD para:', userId);
       
+      // ⭐ CAMBIO PRINCIPAL: Agregar JOIN con admin_roles
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, avatar_url, email, full_name')
+        .select(`
+          id, 
+          username, 
+          avatar_url, 
+          email, 
+          full_name,
+          admin_role:admin_roles(
+            id,
+            role_name,
+            permissions,
+            is_active,
+            granted_at
+          )
+        `)
         .eq('id', userId)
         .maybeSingle();
 
@@ -71,9 +86,21 @@ export const AuthProvider = ({ children }) => {
           avatar_url: data.avatar_url,
           email: data.email,
           points: 0,
+          // ⭐ AGREGAR: Datos de admin_roles
+          role: data.admin_role?.role_name || 'user',
+          permissions: data.admin_role?.permissions || [],
+          isActive: data.admin_role?.is_active !== false,
+          admin_role: data.admin_role,
+          isAdmin: ['super_admin', 'admin', 'moderator'].includes(data.admin_role?.role_name) 
+                   && data.admin_role?.is_active !== false,
           _cacheTime: Date.now()
         };
-        console.log('✅ Perfil de BD:', profile.name);
+        console.log('✅ Perfil de BD cargado:', {
+          name: profile.name,
+          role: profile.role,
+          permissions: profile.permissions,
+          isAdmin: profile.isAdmin
+        });
       } else {
         // Crear perfil básico desde auth
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -86,6 +113,12 @@ export const AuthProvider = ({ children }) => {
             avatar_url: authUser.user_metadata?.avatar_url || null,
             email: authUser.email,
             points: 0,
+            // ⭐ AGREGAR: Valores por defecto para usuarios sin admin_role
+            role: 'user',
+            permissions: [],
+            isActive: true,
+            admin_role: null,
+            isAdmin: false,
             _cacheTime: Date.now()
           };
           console.log('✅ Perfil básico creado:', profile.name);
@@ -133,31 +166,35 @@ export const AuthProvider = ({ children }) => {
       if (session?.user && mountedRef.current) {
         console.log('✅ Sesión válida encontrada:', session.user.email);
         
-        // Crear usuario básico inmediatamente
-        const basicUser = {
-          id: session.user.id,
-          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-          full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-          username: session.user.email?.split('@')[0] || 'usuario',
-          avatar_url: session.user.user_metadata?.avatar_url || null,
-          email: session.user.email,
-          points: 0,
-          _cacheTime: Date.now()
-        };
-
-        setUser(basicUser);
-        setLoading(false); // Manual, controlado
-        console.log('✅ Usuario básico seteado:', basicUser.name);
-
-        // Background: enriquecer perfil (sin afectar loading)
-        fetchUserProfile(session.user.id, false).then(enriched => {
-          if (enriched && mountedRef.current && enriched.username !== basicUser.username) {
-            console.log('🎨 Perfil enriquecido');
-            setUser(enriched);
-          }
-        }).catch(err => {
-          console.log('ℹ️ No se pudo enriquecer perfil:', err.message);
-        });
+        // ⭐ MODIFICADO: Cargar perfil completo con admin_roles
+        const fullProfile = await fetchUserProfile(session.user.id, false);
+        
+        if (fullProfile) {
+          setUser(fullProfile);
+          console.log('✅ Usuario completo cargado:', {
+            email: fullProfile.email,
+            role: fullProfile.role,
+            isAdmin: fullProfile.isAdmin
+          });
+        } else {
+          // Fallback: usuario básico
+          const basicUser = {
+            id: session.user.id,
+            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+            username: session.user.email?.split('@')[0] || 'usuario',
+            avatar_url: session.user.user_metadata?.avatar_url || null,
+            email: session.user.email,
+            points: 0,
+            role: 'user',
+            permissions: [],
+            isAdmin: false,
+            _cacheTime: Date.now()
+          };
+          setUser(basicUser);
+        }
+        
+        setLoading(false);
 
       } else {
         console.log('ℹ️ No hay sesión activa');
@@ -184,7 +221,7 @@ export const AuthProvider = ({ children }) => {
   // ===============================
 
   useEffect(() => {
-    console.log('🎬 Iniciando AuthProvider HÍBRIDO...');
+    console.log('🎬 Iniciando AuthProvider HÍBRIDO con admin_roles...');
     mountedRef.current = true;
 
     // Inicialización
@@ -205,30 +242,32 @@ export const AuthProvider = ({ children }) => {
               if (session?.user) {
                 console.log('🔑 SIGNED_IN detectado');
                 
-                const immediateUser = {
-                  id: session.user.id,
-                  name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-                  full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-                  username: session.user.email?.split('@')[0] || 'usuario',
-                  avatar_url: session.user.user_metadata?.avatar_url || null,
-                  email: session.user.email,
-                  points: 0,
-                  _cacheTime: Date.now()
-                };
-
-                setUser(immediateUser);
+                // ⭐ MODIFICADO: Cargar perfil completo con admin_roles
+                const fullProfile = await fetchUserProfile(session.user.id, false);
+                
+                if (fullProfile) {
+                  setUser(fullProfile);
+                  console.log('✅ Usuario con admin_role cargado:', fullProfile.role);
+                } else {
+                  // Fallback
+                  const immediateUser = {
+                    id: session.user.id,
+                    name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+                    full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+                    username: session.user.email?.split('@')[0] || 'usuario',
+                    avatar_url: session.user.user_metadata?.avatar_url || null,
+                    email: session.user.email,
+                    points: 0,
+                    role: 'user',
+                    permissions: [],
+                    isAdmin: false,
+                    _cacheTime: Date.now()
+                  };
+                  setUser(immediateUser);
+                }
+                
                 setLoading(false);
                 setError(null);
-                console.log('✅ Usuario seteado en SIGNED_IN:', immediateUser.email);
-
-                // Background: enriquecer perfil
-                fetchUserProfile(session.user.id, false).then(enriched => {
-                  if (enriched && mountedRef.current) {
-                    setUser(enriched);
-                  }
-                }).catch(() => {
-                  // Silencioso
-                });
               }
               break;
 
@@ -244,7 +283,14 @@ export const AuthProvider = ({ children }) => {
 
             case 'TOKEN_REFRESHED':
               console.log('🔄 Token refrescado');
-              // No hacer nada, mantener usuario actual
+              // Recargar perfil para actualizar admin_role
+              if (session?.user) {
+                fetchUserProfile(session.user.id, false).then(refreshed => {
+                  if (refreshed && mountedRef.current) {
+                    setUser(refreshed);
+                  }
+                });
+              }
               break;
 
             default:
@@ -268,7 +314,7 @@ export const AuthProvider = ({ children }) => {
         authSubscriptionRef.current = null;
       }
     };
-  }, []);
+  }, [initializeAuth, fetchUserProfile]);
 
   // ===============================
   // SIGN IN - SIMPLIFICADO PERO ROBUSTO
@@ -318,7 +364,18 @@ export const AuthProvider = ({ children }) => {
       if (data?.session?.user) {
         console.log('✅ Sesión obtenida exitosamente');
         
-        // Crear usuario inmediato
+        // ⭐ MODIFICADO: Cargar perfil completo con admin_roles
+        const fullProfile = await fetchUserProfile(data.session.user.id, false);
+        
+        if (fullProfile && mountedRef.current) {
+          setUser(fullProfile);
+          setLoading(false);
+          setError(null);
+          console.log('✅ SignIn completado con admin_role:', fullProfile.role);
+          return { success: true, user: fullProfile };
+        }
+        
+        // Fallback si no se pudo cargar el perfil
         const immediateUser = {
           id: data.session.user.id,
           name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
@@ -327,29 +384,19 @@ export const AuthProvider = ({ children }) => {
           avatar_url: data.session.user.user_metadata?.avatar_url || null,
           email: data.session.user.email,
           points: 0,
+          role: 'user',
+          permissions: [],
+          isAdmin: false,
           _cacheTime: Date.now()
         };
 
         if (mountedRef.current) {
           setUser(immediateUser);
-          setLoading(false); // Manual
+          setLoading(false);
           setError(null);
         }
 
-        console.log('✅ SignIn completado para:', immediateUser.email);
-
-        // Background: enriquecer perfil
-        setTimeout(() => {
-          fetchUserProfile(data.session.user.id, false).then(enriched => {
-            if (enriched && mountedRef.current) {
-              console.log('🎨 Perfil enriquecido tras signIn');
-              setUser(enriched);
-            }
-          }).catch(err => {
-            console.log('ℹ️ No se pudo enriquecer perfil tras signIn');
-          });
-        }, 100);
-
+        console.log('✅ SignIn completado (fallback):', immediateUser.email);
         return { success: true, user: immediateUser };
       }
 
