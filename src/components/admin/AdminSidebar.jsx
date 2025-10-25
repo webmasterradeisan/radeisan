@@ -5,7 +5,7 @@
 // Con menú dinámico basado en permisos
 // ============================================
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 // Hooks
@@ -13,9 +13,6 @@ import { useAdminRole } from '../../hooks/useAdminRole';
 
 // Componentes
 import AppIcon from '../AppIcon';
-
-// Servicios
-import { getContentReports } from '../../services/adminService';
 
 // ============================================
 // CONFIGURACIÓN DEL MENÚ
@@ -86,8 +83,7 @@ const getMenuItems = () => [
     icon: 'Shield',
     description: 'Reportes y moderación',
     requiredPermission: 'moderate_content',
-    badge: null, // Se actualizará dinámicamente
-    badgeKey: 'pendingReports'
+    badge: null
   },
   {
     id: 'analytics',
@@ -135,63 +131,15 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
   const { canAccess, roleType, roleName } = useAdminRole();
 
   // ============================================
-  // ESTADO LOCAL
-  // ============================================
-
-  const [menuItems, setMenuItems] = useState(getMenuItems());
-  const [badges, setBadges] = useState({});
-
-  // ============================================
-  // EFECTOS
-  // ============================================
-
-  // Cargar badges y notificaciones
-  useEffect(() => {
-    loadBadges();
-
-    // Actualizar badges cada 30 segundos
-    const interval = setInterval(loadBadges, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Actualizar items del menú cuando cambian los badges
-  useEffect(() => {
-    const updatedItems = getMenuItems().map(item => {
-      if (item.badgeKey && badges[item.badgeKey]) {
-        return { ...item, badge: badges[item.badgeKey] };
-      }
-      return item;
-    });
-    setMenuItems(updatedItems);
-  }, [badges]);
-
-  // ============================================
   // FUNCIONES
   // ============================================
-
-  /**
-   * Cargar badges de notificaciones
-   */
-  const loadBadges = async () => {
-    try {
-      // Obtener reportes pendientes
-      const reports = await getContentReports({ status: 'pending' });
-      const pendingCount = reports?.length || 0;
-
-      setBadges(prev => ({
-        ...prev,
-        pendingReports: pendingCount > 0 ? pendingCount : null
-      }));
-    } catch (error) {
-      console.error('Error loading badges:', error);
-    }
-  };
 
   /**
    * Filtrar items del menú según permisos
    */
   const getFilteredMenuItems = () => {
-    return menuItems.filter(item => {
+    const items = getMenuItems();
+    return items.filter(item => {
       // Si no requiere permiso, mostrar a todos los admins
       if (!item.requiredPermission) return true;
       
@@ -317,7 +265,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
                       </span>
                     </div>
 
-                    {/* Badge de notificaciones */}
+                    {/* Badge de notificaciones (si existe) */}
                     {item.badge && (
                       <span className="ml-2 flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-medium">
                         {item.badge > 99 ? '99+' : item.badge}
