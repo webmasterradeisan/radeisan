@@ -1,166 +1,382 @@
-// AuthContext.jsx - ACTUALIZADO para tu estructura de admin_roles
-// Tu admin_roles tiene: role_name, permissions (array), is_active
-// Ruta: src/contexts/AuthContext.jsx
+// src/contexts/AuthContext.jsx
+// AuthContext HÍBRIDO - Mantiene funcionalidades pero elimina los timeouts problemáticos
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../lib/supabase';
 
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import { supabase } from '../services/supabase';
-
-const AuthContext = createContext({});
+const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
   }
   return context;
 };
 
 export const AuthProvider = ({ children }) => {
+  // Estados principales
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // ============================================
-  // FUNCIÓN LOADUSER - AJUSTADA A TU ESTRUCTURA
-  // ============================================
-  
-  const loadUser = async (session) => {
-    try {
-      setLoading(true);
-      
-      if (!session?.user) {
-        setUser(null);
-        setLoading(false);
-        return;
+  // Referencias para control - REDUCIDAS a las esenciales
+  const mountedRef = useRef(true);
+  const authSubscriptionRef = useRef(null);
+  const userCacheRef = useRef(null);
+
+  // Estados computados
+  const isAuthenticated = !!user;
+
+  // Constantes simplificadas - SIN timeouts complejos
+  const CACHE_DURATION = 30000; // Solo mantener cache de perfil
+
+  // ===============================
+  // GESTIÓN DE PERFIL - MANTENIDA PERO SIMPLIFICADA
+  // ===============================
+
+  const fetchUserProfile = useCallback(async (userId, useCache = true) => {
+    if (!userId || !mountedRef.current) return null;
+
+    // Verificar cache
+    const cachedUser = userCacheRef.current;
+    if (useCache && cachedUser && cachedUser.id === userId) {
+      const cacheAge = Date.now() - cachedUser._cacheTime;
+      if (cacheAge < CACHE_DURATION) {
+        console.log('📦 Usando perfil en cache');
+        return cachedUser;
       }
-
-      // Obtener perfil con JOIN a admin_roles
-      // IMPORTANTE: Incluir is_active para verificar si el rol está activo
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select(`
-          *,
-          admin_role:admin_roles(
-            id,
-            role_name,
-            permissions,
-            is_active,
-            granted_by,
-            granted_at,
-            revoked_at,
-            revoked_by
-          )
-        `)
-        .eq('id', session.user.id)
-        .single();
-
-      if (error) {
-        console.error('Error loading user profile:', error);
-        // Si hay error, al menos cargar el usuario básico de auth
-        setUser({
-          ...session.user,
-          role: 'user'
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Construir objeto de usuario completo
-      const userData = {
-        // Datos de auth
-        ...session.user,
-        // Datos del perfil
-        ...profile,
-        // Datos de admin_role
-        role: profile?.admin_role?.role_name || 'user',
-        permissions: profile?.admin_role?.permissions || [],
-        isActive: profile?.admin_role?.is_active !== false,
-        admin_role: profile?.admin_role,
-        // Helpers
-        isAdmin: ['super_admin', 'admin', 'moderator'].includes(
-          profile?.admin_role?.role_name
-        ) && profile?.admin_role?.is_active !== false
-      };
-
-      console.log('✅ Usuario cargado:', {
-        id: userData.id,
-        email: userData.email,
-        username: userData.username,
-        role: userData.role,
-        permissions: userData.permissions,
-        isActive: userData.isActive,
-        isAdmin: userData.isAdmin
-      });
-
-      setUser(userData);
-      setLoading(false);
-    } catch (error) {
-      console.error('❌ Error in loadUser:', error);
-      setUser(null);
-      setLoading(false);
     }
-  };
 
-  // ============================================
-  // SUSCRIPCIÓN A CAMBIOS DE AUTENTICACIÓN
-  // ============================================
-  
-  useEffect(() => {
-    // Obtener sesión inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('📍 Sesión inicial:', session ? 'Existe' : 'No existe');
-      loadUser(session);
-    });
+    try {
+      console.log('🔍 Obteniendo perfil de BD para:', userId);
+      
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url, email, full_name')
+        .eq('id', userId)
+        .maybeSingle();
 
-    // Suscribirse a cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔄 Auth state changed:', event);
-        
-        if (event === 'SIGNED_IN') {
-          console.log('✅ Usuario inició sesión');
-          await loadUser(session);
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔄 Token refrescado');
-          await loadUser(session);
-        } else if (event === 'SIGNED_OUT') {
-          console.log('👋 Usuario cerró sesión');
-          setUser(null);
+      if (error && error.code !== 'PGRST116') {
+        console.warn('⚠️ Error obteniendo perfil de BD:', error);
+      }
+
+      let profile;
+      if (data) {
+        // Perfil de BD encontrado
+        profile = {
+          id: data.id,
+          name: data.full_name || data.username || data.email?.split('@')[0] || 'Usuario',
+          full_name: data.full_name || data.username || 'Usuario',
+          username: data.username || data.email?.split('@')[0] || 'usuario',
+          avatar_url: data.avatar_url,
+          email: data.email,
+          points: 0,
+          _cacheTime: Date.now()
+        };
+        console.log('✅ Perfil de BD:', profile.name);
+      } else {
+        // Crear perfil básico desde auth
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser && authUser.id === userId) {
+          profile = {
+            id: authUser.id,
+            name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Usuario',
+            full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Usuario',
+            username: authUser.email?.split('@')[0] || 'usuario',
+            avatar_url: authUser.user_metadata?.avatar_url || null,
+            email: authUser.email,
+            points: 0,
+            _cacheTime: Date.now()
+          };
+          console.log('✅ Perfil básico creado:', profile.name);
+        } else {
+          return null;
         }
       }
-    );
+
+      userCacheRef.current = profile;
+      return profile;
+
+    } catch (err) {
+      console.error('❌ Error en fetchUserProfile:', err);
+      return null;
+    }
+  }, []);
+
+  // ===============================
+  // INICIALIZACIÓN - SIMPLIFICADA SIN TIMEOUTS COMPLEJOS
+  // ===============================
+
+  const initializeAuth = useCallback(async () => {
+    try {
+      console.log('🚀 Inicializando autenticación...');
+      
+      // ELIMINADO: Todo el sistema de debounce y timeouts complejos
+      if (mountedRef.current) {
+        setLoading(true); // SIN timeout automático
+        setError(null);
+      }
+
+      // Verificar sesión
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('❌ Error obteniendo sesión:', sessionError);
+        if (mountedRef.current) {
+          setUser(null);
+          setError(sessionError.message);
+          setLoading(false); // Manual, no automático
+        }
+        return;
+      }
+
+      if (session?.user && mountedRef.current) {
+        console.log('✅ Sesión válida encontrada:', session.user.email);
+        
+        // Crear usuario básico inmediatamente
+        const basicUser = {
+          id: session.user.id,
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+          full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+          username: session.user.email?.split('@')[0] || 'usuario',
+          avatar_url: session.user.user_metadata?.avatar_url || null,
+          email: session.user.email,
+          points: 0,
+          _cacheTime: Date.now()
+        };
+
+        setUser(basicUser);
+        setLoading(false); // Manual, controlado
+        console.log('✅ Usuario básico seteado:', basicUser.name);
+
+        // Background: enriquecer perfil (sin afectar loading)
+        fetchUserProfile(session.user.id, false).then(enriched => {
+          if (enriched && mountedRef.current && enriched.username !== basicUser.username) {
+            console.log('🎨 Perfil enriquecido');
+            setUser(enriched);
+          }
+        }).catch(err => {
+          console.log('ℹ️ No se pudo enriquecer perfil:', err.message);
+        });
+
+      } else {
+        console.log('ℹ️ No hay sesión activa');
+        if (mountedRef.current) {
+          setUser(null);
+          userCacheRef.current = null;
+          setLoading(false); // Manual
+        }
+      }
+
+    } catch (err) {
+      console.error('❌ Error en inicialización:', err);
+      if (mountedRef.current) {
+        setUser(null);
+        userCacheRef.current = null;
+        setError(err.message);
+        setLoading(false); // Manual
+      }
+    }
+  }, [fetchUserProfile]);
+
+  // ===============================
+  // SETUP INICIAL - SIMPLIFICADO
+  // ===============================
+
+  useEffect(() => {
+    console.log('🎬 Iniciando AuthProvider HÍBRIDO...');
+    mountedRef.current = true;
+
+    // Inicialización
+    initializeAuth();
+
+    // Configurar listener SIMPLE de auth
+    if (!authSubscriptionRef.current) {
+      console.log('🔗 Configurando listener de auth...');
+      
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!mountedRef.current) return;
+
+          console.log('📡 Auth event:', event, session?.user?.email || 'no user');
+
+          switch (event) {
+            case 'SIGNED_IN':
+              if (session?.user) {
+                console.log('🔑 SIGNED_IN detectado');
+                
+                const immediateUser = {
+                  id: session.user.id,
+                  name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+                  full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+                  username: session.user.email?.split('@')[0] || 'usuario',
+                  avatar_url: session.user.user_metadata?.avatar_url || null,
+                  email: session.user.email,
+                  points: 0,
+                  _cacheTime: Date.now()
+                };
+
+                setUser(immediateUser);
+                setLoading(false);
+                setError(null);
+                console.log('✅ Usuario seteado en SIGNED_IN:', immediateUser.email);
+
+                // Background: enriquecer perfil
+                fetchUserProfile(session.user.id, false).then(enriched => {
+                  if (enriched && mountedRef.current) {
+                    setUser(enriched);
+                  }
+                }).catch(() => {
+                  // Silencioso
+                });
+              }
+              break;
+
+            case 'SIGNED_OUT':
+              console.log('🚪 SIGNED_OUT detectado');
+              if (mountedRef.current) {
+                setUser(null);
+                userCacheRef.current = null;
+                setLoading(false);
+                setError(null);
+              }
+              break;
+
+            case 'TOKEN_REFRESHED':
+              console.log('🔄 Token refrescado');
+              // No hacer nada, mantener usuario actual
+              break;
+
+            default:
+              console.log('📋 Evento ignorado:', event);
+              break;
+          }
+        }
+      );
+
+      authSubscriptionRef.current = subscription;
+    }
 
     return () => {
-      subscription?.unsubscribe();
+      console.log('🧹 Limpiando AuthProvider...');
+      mountedRef.current = false;
+      
+      // ELIMINADO: Limpiar timeouts complejos (ya no existen)
+      
+      if (authSubscriptionRef.current) {
+        authSubscriptionRef.current.unsubscribe();
+        authSubscriptionRef.current = null;
+      }
     };
   }, []);
 
-  // ============================================
-  // FUNCIÓN DE LOGIN
-  // ============================================
-  
-  const signIn = async (email, password) => {
+  // ===============================
+  // SIGN IN - SIMPLIFICADO PERO ROBUSTO
+  // ===============================
+
+  const signIn = useCallback(async (email, password) => {
     try {
+      console.log('🔑 INICIANDO signIn para:', email);
+      
+      // ELIMINADO: setLoadingWithTimeout (problemático)
+      setLoading(true);
+      setError(null);
+
+      if (!email || !password) {
+        throw new Error('Email y contraseña son requeridos');
+      }
+
+      console.log('📡 Llamando a supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
+        email: email.trim(),
+        password: password
       });
 
-      if (error) throw error;
+      console.log('📥 Respuesta de Supabase:', { 
+        hasSession: !!data?.session, 
+        hasUser: !!data?.session?.user,
+        error: error?.message 
+      });
 
-      console.log('✅ Login exitoso');
-      return { success: true, data };
-    } catch (error) {
-      console.error('❌ Error signing in:', error);
-      return { success: false, error: error.message };
+      if (error) {
+        console.error('❌ Error de Supabase signIn:', error);
+        
+        let errorMessage = error.message;
+        if (error.message === 'Invalid login credentials') {
+          errorMessage = 'Email o contraseña incorrectos';
+        } else if (error.message === 'Email not confirmed') {
+          errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
+        }
+        
+        if (mountedRef.current) {
+          setError(errorMessage);
+          setLoading(false); // Manual
+        }
+        return { success: false, error: errorMessage };
+      }
+
+      if (data?.session?.user) {
+        console.log('✅ Sesión obtenida exitosamente');
+        
+        // Crear usuario inmediato
+        const immediateUser = {
+          id: data.session.user.id,
+          name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
+          full_name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
+          username: data.session.user.email?.split('@')[0] || 'usuario',
+          avatar_url: data.session.user.user_metadata?.avatar_url || null,
+          email: data.session.user.email,
+          points: 0,
+          _cacheTime: Date.now()
+        };
+
+        if (mountedRef.current) {
+          setUser(immediateUser);
+          setLoading(false); // Manual
+          setError(null);
+        }
+
+        console.log('✅ SignIn completado para:', immediateUser.email);
+
+        // Background: enriquecer perfil
+        setTimeout(() => {
+          fetchUserProfile(data.session.user.id, false).then(enriched => {
+            if (enriched && mountedRef.current) {
+              console.log('🎨 Perfil enriquecido tras signIn');
+              setUser(enriched);
+            }
+          }).catch(err => {
+            console.log('ℹ️ No se pudo enriquecer perfil tras signIn');
+          });
+        }, 100);
+
+        return { success: true, user: immediateUser };
+      }
+
+      throw new Error('No se recibió sesión válida');
+
+    } catch (err) {
+      console.error('❌ Error crítico en signIn:', err);
+      const errorMessage = err.message || 'Error de conexión';
+      
+      if (mountedRef.current) {
+        setError(errorMessage);
+        setLoading(false); // Manual
+      }
+      
+      return { success: false, error: errorMessage };
     }
-  };
+  }, [fetchUserProfile]);
 
-  // ============================================
-  // FUNCIÓN DE REGISTRO
-  // ============================================
-  
-  const signUp = async (email, password, metadata = {}) => {
+  // ===============================
+  // OTRAS FUNCIONES - MANTENIDAS PERO SIMPLIFICADAS
+  // ===============================
+
+  const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
+      setLoading(true);
+      setError(null);
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -169,44 +385,69 @@ export const AuthProvider = ({ children }) => {
         }
       });
 
-      if (error) throw error;
-
-      console.log('✅ Registro exitoso');
-      return { success: true, data };
-    } catch (error) {
-      console.error('❌ Error signing up:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  // ============================================
-  // FUNCIÓN DE LOGOUT
-  // ============================================
-  
-  const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      setUser(null);
-      console.log('✅ Logout exitoso');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error signing out:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  // ============================================
-  // ACTUALIZAR PERFIL
-  // ============================================
-  
-  const updateProfile = async (updates) => {
-    try {
-      if (!user?.id) {
-        throw new Error('Usuario no autenticado');
+      if (error) {
+        setError(error.message);
+        return { success: false, error: error.message };
       }
 
+      return { success: true, data };
+
+    } catch (err) {
+      const errorMessage = `Error de conexión: ${err.message}`;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Error al cerrar sesión:', error);
+        setError(error.message);
+        return { success: false, error: error.message };
+      }
+
+      setUser(null);
+      userCacheRef.current = null;
+      setError(null);
+      
+      return { success: true };
+      
+    } catch (err) {
+      const errorMessage = `Error cerrando sesión: ${err.message}`;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const resetPassword = useCallback(async (email) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: `Error de conexión: ${err.message}` };
+    }
+  }, []);
+
+  const updateProfile = useCallback(async (updates) => {
+    if (!user) {
+      return { success: false, error: 'Usuario no autenticado' };
+    }
+
+    try {
       const { data, error } = await supabase
         .from('user_profiles')
         .update(updates)
@@ -214,30 +455,54 @@ export const AuthProvider = ({ children }) => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        return { success: false, error: error.message };
+      }
 
-      // Actualizar estado local
-      setUser(prev => ({ ...prev, ...data }));
+      const updatedUser = {
+        ...user,
+        ...updates,
+        name: updates.full_name || updates.name || user.name,
+        full_name: updates.full_name || user.full_name,
+        _cacheTime: Date.now()
+      };
+      
+      setUser(updatedUser);
+      userCacheRef.current = updatedUser;
+      
+      return { success: true, data: updatedUser };
 
-      console.log('✅ Perfil actualizado');
-      return { success: true, data };
-    } catch (error) {
-      console.error('❌ Error updating profile:', error);
-      return { success: false, error: error.message };
+    } catch (err) {
+      return { success: false, error: `Error de conexión: ${err.message}` };
     }
-  };
+  }, [user]);
 
-  // ============================================
+  const refreshAuth = useCallback(() => {
+    console.log('🔄 Refresh manual solicitado');
+    userCacheRef.current = null;
+    initializeAuth();
+  }, [initializeAuth]);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // ===============================
   // VALOR DEL CONTEXTO
-  // ============================================
-  
+  // ===============================
+
   const value = {
     user,
     loading,
+    error,
+    isAuthenticated,
     signIn,
     signUp,
     signOut,
-    updateProfile
+    resetPassword,
+    updateProfile,
+    refreshAuth,
+    clearError
   };
 
   return (
@@ -247,42 +512,4 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export default AuthContext;
-
-// ============================================
-// NOTAS DE IMPLEMENTACIÓN
-// ============================================
-
-/*
-Este AuthContext está optimizado para tu estructura específica de admin_roles:
-
-✅ Lee: role_name, permissions (array), is_active
-✅ Construye: user.role, user.permissions, user.isAdmin
-✅ Verifica: is_active = true antes de considerar admin
-✅ Logs: Muestra información útil en consola
-
-ESTRUCTURA ESPERADA DE admin_roles:
-{
-  id: uuid,
-  user_id: uuid,
-  role_name: 'super_admin' | 'admin' | 'moderator' | 'editor',
-  permissions: ['all'] | ['manage_users', 'view_analytics', ...],
-  is_active: boolean,
-  granted_by: uuid,
-  granted_at: timestamp,
-  revoked_at: timestamp | null,
-  revoked_by: uuid | null
-}
-
-DATOS DEL USUARIO FINAL:
-{
-  id: uuid,
-  email: string,
-  username: string,
-  role: 'super_admin',           ← De admin_roles.role_name
-  permissions: ['all'],           ← De admin_roles.permissions
-  isActive: true,                 ← De admin_roles.is_active
-  isAdmin: true,                  ← Calculado
-  admin_role: { ... }             ← Objeto completo
-}
-*/
+export default AuthProvider;
