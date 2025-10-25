@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.jsx
-// AuthContext HÍBRIDO - VERSIÓN CORREGIDA FINAL
+// AuthContext HÍBRIDO - VERSIÓN CORREGIDA
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -14,30 +14,18 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  // Estados principales
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Referencias para control - REDUCIDAS a las esenciales
   const mountedRef = useRef(true);
   const authSubscriptionRef = useRef(null);
   const userCacheRef = useRef(null);
-
-  // Estados computados
   const isAuthenticated = !!user;
-
-  // Constantes simplificadas - SIN timeouts complejos
-  const CACHE_DURATION = 30000; // Solo mantener cache de perfil
-
-  // ===============================
-  // GESTIÓN DE PERFIL - CON admin_roles
-  // ===============================
+  const CACHE_DURATION = 30000;
 
   const fetchUserProfile = useCallback(async (userId, useCache = true) => {
     if (!userId || !mountedRef.current) return null;
 
-    // Verificar cache
     const cachedUser = userCacheRef.current;
     if (useCache && cachedUser && cachedUser.id === userId) {
       const cacheAge = Date.now() - cachedUser._cacheTime;
@@ -69,7 +57,6 @@ export const AuthProvider = ({ children }) => {
 
       let profile;
       if (data) {
-        // Perfil de BD encontrado
         profile = {
           id: data.id,
           name: data.full_name || data.username || data.email?.split('@')[0] || 'Usuario',
@@ -78,18 +65,15 @@ export const AuthProvider = ({ children }) => {
           avatar_url: data.avatar_url,
           email: data.email,
           points: 0,
-          // ⭐ DATOS DE ADMIN_ROLES
           role: data.admin_role?.role_name || 'user',
           permissions: data.admin_role?.permissions || [],
           isActive: data.admin_role?.is_active !== false,
           admin_role: data.admin_role,
-          isAdmin: ['super_admin', 'admin', 'moderator'].includes(data.admin_role?.role_name) 
-                   && data.admin_role?.is_active !== false,
+          isAdmin: ['super_admin', 'admin', 'moderator'].includes(data.admin_role?.role_name) && data.admin_role?.is_active !== false,
           _cacheTime: Date.now()
         };
-        console.log('✅ Perfil de BD:', profile.name, '| Role:', profile.role, '| Is Admin:', profile.isAdmin);
+        console.log('✅ Perfil cargado:', profile.name, '| Role:', profile.role, '| Admin:', profile.isAdmin);
       } else {
-        // Crear perfil básico desde auth
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser && authUser.id === userId) {
           profile = {
@@ -100,7 +84,6 @@ export const AuthProvider = ({ children }) => {
             avatar_url: authUser.user_metadata?.avatar_url || null,
             email: authUser.email,
             points: 0,
-            // Usuario sin admin_role
             role: 'user',
             permissions: [],
             isActive: true,
@@ -116,27 +99,20 @@ export const AuthProvider = ({ children }) => {
 
       userCacheRef.current = profile;
       return profile;
-
     } catch (err) {
       console.error('❌ Error en fetchUserProfile:', err);
       return null;
     }
   }, []);
 
-  // ===============================
-  // INICIALIZACIÓN - SIMPLIFICADA SIN TIMEOUTS COMPLEJOS
-  // ===============================
-
   const initializeAuth = useCallback(async () => {
     try {
       console.log('🚀 Inicializando autenticación...');
-      
       if (mountedRef.current) {
         setLoading(true);
         setError(null);
       }
 
-      // Verificar sesión
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
       if (sessionError) {
@@ -151,16 +127,12 @@ export const AuthProvider = ({ children }) => {
 
       if (session?.user && mountedRef.current) {
         console.log('✅ Sesión válida encontrada:', session.user.email);
-        
-        // Cargar perfil completo con admin_roles
         const fullProfile = await fetchUserProfile(session.user.id, false);
         
         if (fullProfile && mountedRef.current) {
           setUser(fullProfile);
           setLoading(false);
-          console.log('✅ Usuario cargado con role:', fullProfile.role);
         } else {
-          // Fallback
           const basicUser = {
             id: session.user.id,
             name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
@@ -179,7 +151,6 @@ export const AuthProvider = ({ children }) => {
           setUser(basicUser);
           setLoading(false);
         }
-
       } else {
         console.log('ℹ️ No hay sesión activa');
         if (mountedRef.current) {
@@ -188,7 +159,6 @@ export const AuthProvider = ({ children }) => {
           setLoading(false);
         }
       }
-
     } catch (err) {
       console.error('❌ Error en inicialización:', err);
       if (mountedRef.current) {
@@ -200,64 +170,30 @@ export const AuthProvider = ({ children }) => {
     }
   }, [fetchUserProfile]);
 
-  // ===============================
-  // SETUP INICIAL - SIMPLIFICADO
-  // ===============================
-
   useEffect(() => {
-    console.log('🎬 Iniciando AuthProvider HÍBRIDO...');
+    console.log('🎬 Iniciando AuthProvider...');
     mountedRef.current = true;
-
-    // Inicialización
     initializeAuth();
 
-    // Configurar listener SIMPLE de auth
     if (!authSubscriptionRef.current) {
       console.log('🔗 Configurando listener de auth...');
-      
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           if (!mountedRef.current) return;
-
-          console.log('📡 Auth event:', event, session?.user?.email || 'no user');
+          console.log('📡 Auth event:', event);
 
           switch (event) {
             case 'SIGNED_IN':
               if (session?.user) {
                 console.log('🔑 SIGNED_IN detectado');
-                
-                // Cargar perfil completo
                 const fullProfile = await fetchUserProfile(session.user.id, false);
-                
                 if (fullProfile && mountedRef.current) {
                   setUser(fullProfile);
-                  setLoading(false);
-                  setError(null);
-                  console.log('✅ Usuario seteado en SIGNED_IN:', fullProfile.email, '| Role:', fullProfile.role);
-                } else {
-                  // Fallback
-                  const immediateUser = {
-                    id: session.user.id,
-                    name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-                    full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-                    username: session.user.email?.split('@')[0] || 'usuario',
-                    avatar_url: session.user.user_metadata?.avatar_url || null,
-                    email: session.user.email,
-                    points: 0,
-                    role: 'user',
-                    permissions: [],
-                    isAdmin: false,
-                    isActive: true,
-                    admin_role: null,
-                    _cacheTime: Date.now()
-                  };
-                  setUser(immediateUser);
                   setLoading(false);
                   setError(null);
                 }
               }
               break;
-
             case 'SIGNED_OUT':
               console.log('🚪 SIGNED_OUT detectado');
               if (mountedRef.current) {
@@ -267,26 +203,20 @@ export const AuthProvider = ({ children }) => {
                 setError(null);
               }
               break;
-
             case 'TOKEN_REFRESHED':
               console.log('🔄 Token refrescado');
-              // No hacer nada, mantener usuario actual
               break;
-
             default:
-              console.log('📋 Evento ignorado:', event);
               break;
           }
         }
       );
-
       authSubscriptionRef.current = subscription;
     }
 
     return () => {
       console.log('🧹 Limpiando AuthProvider...');
       mountedRef.current = false;
-      
       if (authSubscriptionRef.current) {
         authSubscriptionRef.current.unsubscribe();
         authSubscriptionRef.current = null;
@@ -294,14 +224,9 @@ export const AuthProvider = ({ children }) => {
     };
   }, [initializeAuth, fetchUserProfile]);
 
-  // ===============================
-  // SIGN IN - SIMPLIFICADO PERO ROBUSTO
-  // ===============================
-
   const signIn = useCallback(async (email, password) => {
     try {
       console.log('🔑 INICIANDO signIn para:', email);
-      
       setLoading(true);
       setError(null);
 
@@ -309,28 +234,19 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Email y contraseña son requeridos');
       }
 
-      console.log('📡 Llamando a supabase.auth.signInWithPassword...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password
       });
 
-      console.log('📥 Respuesta de Supabase:', { 
-        hasSession: !!data?.session, 
-        hasUser: !!data?.session?.user,
-        error: error?.message 
-      });
-
       if (error) {
         console.error('❌ Error de Supabase signIn:', error);
-        
         let errorMessage = error.message;
         if (error.message === 'Invalid login credentials') {
           errorMessage = 'Email o contraseña incorrectos';
         } else if (error.message === 'Email not confirmed') {
           errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
         }
-        
         if (mountedRef.current) {
           setError(errorMessage);
           setLoading(false);
@@ -340,8 +256,6 @@ export const AuthProvider = ({ children }) => {
 
       if (data?.session?.user) {
         console.log('✅ Sesión obtenida exitosamente');
-        
-        // Cargar perfil completo con admin_roles
         const fullProfile = await fetchUserProfile(data.session.user.id, false);
         
         if (fullProfile && mountedRef.current) {
@@ -351,73 +265,34 @@ export const AuthProvider = ({ children }) => {
           console.log('✅ SignIn completado:', fullProfile.email, '| Role:', fullProfile.role);
           return { success: true, user: fullProfile };
         }
-        
-        // Fallback
-        const immediateUser = {
-          id: data.session.user.id,
-          name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
-          full_name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
-          username: data.session.user.email?.split('@')[0] || 'usuario',
-          avatar_url: data.session.user.user_metadata?.avatar_url || null,
-          email: data.session.user.email,
-          points: 0,
-          role: 'user',
-          permissions: [],
-          isAdmin: false,
-          isActive: true,
-          admin_role: null,
-          _cacheTime: Date.now()
-        };
-
-        if (mountedRef.current) {
-          setUser(immediateUser);
-          setLoading(false);
-          setError(null);
-        }
-
-        console.log('✅ SignIn completado (fallback):', immediateUser.email);
-        return { success: true, user: immediateUser };
       }
 
       throw new Error('No se recibió sesión válida');
-
     } catch (err) {
       console.error('❌ Error crítico en signIn:', err);
       const errorMessage = err.message || 'Error de conexión';
-      
       if (mountedRef.current) {
         setError(errorMessage);
         setLoading(false);
       }
-      
       return { success: false, error: errorMessage };
     }
   }, [fetchUserProfile]);
-
-  // ===============================
-  // OTRAS FUNCIONES - MANTENIDAS PERO SIMPLIFICADAS
-  // ===============================
 
   const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
       setLoading(true);
       setError(null);
-
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: metadata
-        }
+        options: { data: metadata }
       });
-
       if (error) {
         setError(error.message);
         return { success: false, error: error.message };
       }
-
       return { success: true, data };
-
     } catch (err) {
       const errorMessage = `Error de conexión: ${err.message}`;
       setError(errorMessage);
@@ -430,21 +305,16 @@ export const AuthProvider = ({ children }) => {
   const signOut = useCallback(async () => {
     try {
       setLoading(true);
-      
       const { error } = await supabase.auth.signOut();
-      
       if (error) {
         console.error('Error al cerrar sesión:', error);
         setError(error.message);
         return { success: false, error: error.message };
       }
-
       setUser(null);
       userCacheRef.current = null;
       setError(null);
-      
       return { success: true };
-      
     } catch (err) {
       const errorMessage = `Error cerrando sesión: ${err.message}`;
       setError(errorMessage);
@@ -457,11 +327,9 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = useCallback(async (email) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
-      
       if (error) {
         return { success: false, error: error.message };
       }
-      
       return { success: true };
     } catch (err) {
       return { success: false, error: `Error de conexión: ${err.message}` };
@@ -472,7 +340,6 @@ export const AuthProvider = ({ children }) => {
     if (!user) {
       return { success: false, error: 'Usuario no autenticado' };
     }
-
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -480,11 +347,9 @@ export const AuthProvider = ({ children }) => {
         .eq('id', user.id)
         .select()
         .single();
-
       if (error) {
         return { success: false, error: error.message };
       }
-
       const updatedUser = {
         ...user,
         ...updates,
@@ -492,12 +357,9 @@ export const AuthProvider = ({ children }) => {
         full_name: updates.full_name || user.full_name,
         _cacheTime: Date.now()
       };
-      
       setUser(updatedUser);
       userCacheRef.current = updatedUser;
-      
       return { success: true, data: updatedUser };
-
     } catch (err) {
       return { success: false, error: `Error de conexión: ${err.message}` };
     }
@@ -512,10 +374,6 @@ export const AuthProvider = ({ children }) => {
   const clearError = useCallback(() => {
     setError(null);
   }, []);
-
-  // ===============================
-  // VALOR DEL CONTEXTO
-  // ===============================
 
   const value = {
     user,
