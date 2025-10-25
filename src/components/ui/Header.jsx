@@ -1,4 +1,5 @@
 // src/components/ui/Header.jsx
+// ACTUALIZADO: Con Panel Admin integrado
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -54,12 +55,12 @@ const Header = () => {
   };
 
   // ✅ NUEVA FUNCIÓN: Navegar al inicio (dashboard sin filtros)
-const handleHomeNavigate = () => {
-  navigate('/dashboard', { 
-    replace: true,
-    state: { orientation: 'all' } 
-  });
-};
+  const handleHomeNavigate = () => {
+    navigate('/dashboard', { 
+      replace: true,
+      state: { orientation: 'all' } 
+    });
+  };
 
   // ✅ FUNCIÓN AUXILIAR: Verificar si estamos en dashboard con orientación activa
   const isOrientationActive = (orientation) => {
@@ -69,6 +70,14 @@ const handleHomeNavigate = () => {
   const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
     return <AppIcon name={name} size={size} color={color} className={className} />;
   };
+
+  // ⭐ NUEVO: Log para verificar datos del usuario (quitar en producción)
+  console.log('Header - User Data:', {
+    email: user?.email,
+    role: user?.role,
+    isAdmin: user?.isAdmin,
+    admin_role: user?.admin_role
+  });
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
@@ -89,16 +98,16 @@ const handleHomeNavigate = () => {
           {user && (
             <nav className="hidden md:flex items-center space-x-1">
               <button
-  onClick={handleHomeNavigate}
-  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-    location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
-      ? 'bg-primary/10 text-primary' 
-      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-  }`}
->
-  <Icon name="Home" size={18} />
-  <span>Inicio</span>
-</button>
+                onClick={handleHomeNavigate}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
+                    ? 'bg-primary/10 text-primary' 
+                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                }`}
+              >
+                <Icon name="Home" size={18} />
+                <span>Inicio</span>
+              </button>
 
               {/* ✅ ACTUALIZADO: Reels ahora navega al dashboard con orientación vertical */}
               <button
@@ -161,6 +170,21 @@ const handleHomeNavigate = () => {
                 <Icon name="User" size={18} />
                 <span>Perfil</span>
               </Link>
+
+              {/* ⭐ NUEVO: PANEL ADMIN - Solo para administradores */}
+              {user.isAdmin && (
+                <Link
+                  to="/admin"
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname.startsWith('/admin')
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="Shield" size={18} />
+                  <span>Admin</span>
+                </Link>
+              )}
             </nav>
           )}
 
@@ -224,6 +248,14 @@ const handleHomeNavigate = () => {
                           <div className="text-xs text-muted-foreground truncate">
                             {user.email}
                           </div>
+                          {/* ⭐ NUEVO: Badge mostrando el rol de admin */}
+                          {user.isAdmin && (
+                            <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                              <Icon name="Shield" size={12} className="mr-1" />
+                              {user.role === 'super_admin' ? 'Super Admin' : 
+                               user.role === 'admin' ? 'Admin' : 'Moderador'}
+                            </div>
+                          )}
                         </div>
 
                         {/* Enlaces del Menú */}
@@ -255,6 +287,21 @@ const handleHomeNavigate = () => {
                           <Icon name="Gift" size={16} className="mr-2" />
                           Mis Recompensas
                         </Link>
+
+                        {/* ⭐ NUEVO: PANEL ADMIN en el menú - Solo para administradores */}
+                        {user.isAdmin && (
+                          <>
+                            <div className="border-t border-border my-1"></div>
+                            <Link
+                              to="/admin"
+                              className="flex items-center px-4 py-2 text-sm text-primary hover:bg-primary/10 transition-colors font-medium"
+                              onClick={() => setIsUserMenuOpen(false)}
+                            >
+                              <Icon name="Shield" size={16} className="mr-2" />
+                              Panel de Administración
+                            </Link>
+                          </>
+                        )}
 
                         <div className="border-t border-border my-1"></div>
 
