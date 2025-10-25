@@ -1,6 +1,5 @@
 // src/contexts/AuthContext.jsx
-// AuthContext HÍBRIDO - Mantiene funcionalidades pero elimina los timeouts problemáticos
-// ACTUALIZADO: Incluye soporte para admin_roles
+// AuthContext HÍBRIDO - VERSIÓN CORREGIDA FINAL
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -32,7 +31,7 @@ export const AuthProvider = ({ children }) => {
   const CACHE_DURATION = 30000; // Solo mantener cache de perfil
 
   // ===============================
-  // GESTIÓN DE PERFIL - ACTUALIZADO CON admin_roles
+  // GESTIÓN DE PERFIL - CON admin_roles
   // ===============================
 
   const fetchUserProfile = useCallback(async (userId, useCache = true) => {
@@ -51,7 +50,6 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔍 Obteniendo perfil de BD para:', userId);
       
-      // ⭐ CAMBIO PRINCIPAL: Agregar JOIN con admin_roles
       const { data, error } = await supabase
         .from('user_profiles')
         .select(`
@@ -60,13 +58,7 @@ export const AuthProvider = ({ children }) => {
           avatar_url, 
           email, 
           full_name,
-          admin_role:admin_roles(
-            id,
-            role_name,
-            permissions,
-            is_active,
-            granted_at
-          )
+          admin_role:admin_roles(role_name, permissions, is_active)
         `)
         .eq('id', userId)
         .maybeSingle();
@@ -86,7 +78,7 @@ export const AuthProvider = ({ children }) => {
           avatar_url: data.avatar_url,
           email: data.email,
           points: 0,
-          // ⭐ AGREGAR: Datos de admin_roles
+          // ⭐ DATOS DE ADMIN_ROLES
           role: data.admin_role?.role_name || 'user',
           permissions: data.admin_role?.permissions || [],
           isActive: data.admin_role?.is_active !== false,
@@ -95,12 +87,7 @@ export const AuthProvider = ({ children }) => {
                    && data.admin_role?.is_active !== false,
           _cacheTime: Date.now()
         };
-        console.log('✅ Perfil de BD cargado:', {
-          name: profile.name,
-          role: profile.role,
-          permissions: profile.permissions,
-          isAdmin: profile.isAdmin
-        });
+        console.log('✅ Perfil de BD:', profile.name, '| Role:', profile.role, '| Is Admin:', profile.isAdmin);
       } else {
         // Crear perfil básico desde auth
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -113,7 +100,7 @@ export const AuthProvider = ({ children }) => {
             avatar_url: authUser.user_metadata?.avatar_url || null,
             email: authUser.email,
             points: 0,
-            // ⭐ AGREGAR: Valores por defecto para usuarios sin admin_role
+            // Usuario sin admin_role
             role: 'user',
             permissions: [],
             isActive: true,
@@ -144,9 +131,8 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🚀 Inicializando autenticación...');
       
-      // ELIMINADO: Todo el sistema de debounce y timeouts complejos
       if (mountedRef.current) {
-        setLoading(true); // SIN timeout automático
+        setLoading(true);
         setError(null);
       }
 
@@ -158,7 +144,7 @@ export const AuthProvider = ({ children }) => {
         if (mountedRef.current) {
           setUser(null);
           setError(sessionError.message);
-          setLoading(false); // Manual, no automático
+          setLoading(false);
         }
         return;
       }
@@ -166,18 +152,15 @@ export const AuthProvider = ({ children }) => {
       if (session?.user && mountedRef.current) {
         console.log('✅ Sesión válida encontrada:', session.user.email);
         
-        // ⭐ MODIFICADO: Cargar perfil completo con admin_roles
+        // Cargar perfil completo con admin_roles
         const fullProfile = await fetchUserProfile(session.user.id, false);
         
-        if (fullProfile) {
+        if (fullProfile && mountedRef.current) {
           setUser(fullProfile);
-          console.log('✅ Usuario completo cargado:', {
-            email: fullProfile.email,
-            role: fullProfile.role,
-            isAdmin: fullProfile.isAdmin
-          });
+          setLoading(false);
+          console.log('✅ Usuario cargado con role:', fullProfile.role);
         } else {
-          // Fallback: usuario básico
+          // Fallback
           const basicUser = {
             id: session.user.id,
             name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
@@ -189,19 +172,20 @@ export const AuthProvider = ({ children }) => {
             role: 'user',
             permissions: [],
             isAdmin: false,
+            isActive: true,
+            admin_role: null,
             _cacheTime: Date.now()
           };
           setUser(basicUser);
+          setLoading(false);
         }
-        
-        setLoading(false);
 
       } else {
         console.log('ℹ️ No hay sesión activa');
         if (mountedRef.current) {
           setUser(null);
           userCacheRef.current = null;
-          setLoading(false); // Manual
+          setLoading(false);
         }
       }
 
@@ -211,7 +195,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         userCacheRef.current = null;
         setError(err.message);
-        setLoading(false); // Manual
+        setLoading(false);
       }
     }
   }, [fetchUserProfile]);
@@ -221,7 +205,7 @@ export const AuthProvider = ({ children }) => {
   // ===============================
 
   useEffect(() => {
-    console.log('🎬 Iniciando AuthProvider HÍBRIDO con admin_roles...');
+    console.log('🎬 Iniciando AuthProvider HÍBRIDO...');
     mountedRef.current = true;
 
     // Inicialización
@@ -242,12 +226,14 @@ export const AuthProvider = ({ children }) => {
               if (session?.user) {
                 console.log('🔑 SIGNED_IN detectado');
                 
-                // ⭐ MODIFICADO: Cargar perfil completo con admin_roles
+                // Cargar perfil completo
                 const fullProfile = await fetchUserProfile(session.user.id, false);
                 
-                if (fullProfile) {
+                if (fullProfile && mountedRef.current) {
                   setUser(fullProfile);
-                  console.log('✅ Usuario con admin_role cargado:', fullProfile.role);
+                  setLoading(false);
+                  setError(null);
+                  console.log('✅ Usuario seteado en SIGNED_IN:', fullProfile.email, '| Role:', fullProfile.role);
                 } else {
                   // Fallback
                   const immediateUser = {
@@ -261,13 +247,14 @@ export const AuthProvider = ({ children }) => {
                     role: 'user',
                     permissions: [],
                     isAdmin: false,
+                    isActive: true,
+                    admin_role: null,
                     _cacheTime: Date.now()
                   };
                   setUser(immediateUser);
+                  setLoading(false);
+                  setError(null);
                 }
-                
-                setLoading(false);
-                setError(null);
               }
               break;
 
@@ -283,14 +270,7 @@ export const AuthProvider = ({ children }) => {
 
             case 'TOKEN_REFRESHED':
               console.log('🔄 Token refrescado');
-              // Recargar perfil para actualizar admin_role
-              if (session?.user) {
-                fetchUserProfile(session.user.id, false).then(refreshed => {
-                  if (refreshed && mountedRef.current) {
-                    setUser(refreshed);
-                  }
-                });
-              }
+              // No hacer nada, mantener usuario actual
               break;
 
             default:
@@ -307,8 +287,6 @@ export const AuthProvider = ({ children }) => {
       console.log('🧹 Limpiando AuthProvider...');
       mountedRef.current = false;
       
-      // ELIMINADO: Limpiar timeouts complejos (ya no existen)
-      
       if (authSubscriptionRef.current) {
         authSubscriptionRef.current.unsubscribe();
         authSubscriptionRef.current = null;
@@ -324,7 +302,6 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔑 INICIANDO signIn para:', email);
       
-      // ELIMINADO: setLoadingWithTimeout (problemático)
       setLoading(true);
       setError(null);
 
@@ -356,7 +333,7 @@ export const AuthProvider = ({ children }) => {
         
         if (mountedRef.current) {
           setError(errorMessage);
-          setLoading(false); // Manual
+          setLoading(false);
         }
         return { success: false, error: errorMessage };
       }
@@ -364,18 +341,18 @@ export const AuthProvider = ({ children }) => {
       if (data?.session?.user) {
         console.log('✅ Sesión obtenida exitosamente');
         
-        // ⭐ MODIFICADO: Cargar perfil completo con admin_roles
+        // Cargar perfil completo con admin_roles
         const fullProfile = await fetchUserProfile(data.session.user.id, false);
         
         if (fullProfile && mountedRef.current) {
           setUser(fullProfile);
           setLoading(false);
           setError(null);
-          console.log('✅ SignIn completado con admin_role:', fullProfile.role);
+          console.log('✅ SignIn completado:', fullProfile.email, '| Role:', fullProfile.role);
           return { success: true, user: fullProfile };
         }
         
-        // Fallback si no se pudo cargar el perfil
+        // Fallback
         const immediateUser = {
           id: data.session.user.id,
           name: data.session.user.user_metadata?.full_name || data.session.user.email?.split('@')[0] || 'Usuario',
@@ -387,6 +364,8 @@ export const AuthProvider = ({ children }) => {
           role: 'user',
           permissions: [],
           isAdmin: false,
+          isActive: true,
+          admin_role: null,
           _cacheTime: Date.now()
         };
 
@@ -408,7 +387,7 @@ export const AuthProvider = ({ children }) => {
       
       if (mountedRef.current) {
         setError(errorMessage);
-        setLoading(false); // Manual
+        setLoading(false);
       }
       
       return { success: false, error: errorMessage };
