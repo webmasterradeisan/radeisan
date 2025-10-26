@@ -2,7 +2,7 @@
 // Sprint 6: Moderación y Analytics
 // Funciones para gestionar reportes, moderar contenido y obtener estadísticas
 
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 // ============================================================================
 // CONSTANTES
