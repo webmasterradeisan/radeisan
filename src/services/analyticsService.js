@@ -2,7 +2,7 @@
 // Sprint 6: Moderación y Analytics
 // Ruta: src/services/analyticsService.js
 
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 // ============================================================================
 // CONSTANTES
