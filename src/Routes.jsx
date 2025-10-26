@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN COMPLETA CON PANEL ADMIN INTEGRADO
+// src/Routes.jsx - VERSIÓN COMPLETA CON PANEL ADMIN FUNCIONAL
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -23,7 +23,7 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
-// ✅ PÁGINAS REALES DE USUARIO (YA NO PLACEHOLDERS)
+// ✅ PÁGINAS REALES DE USUARIO
 import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
@@ -34,7 +34,7 @@ import PointsRewardsStore from './pages/points-rewards-store';
 import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
 import AdminLayout from './components/admin/AdminLayout';
 
-// PÁGINAS DE ADMINISTRACIÓN - TODAS REALES ✅
+// ✅ PÁGINAS DE ADMINISTRACIÓN - TODAS REALES
 import AdminDashboard from './pages/admin-dashboard';
 import UserManagement from './pages/admin-users/UserManagement';
 import CategoryManagement from './pages/admin-categories/CategoryManagement';
@@ -91,24 +91,17 @@ const Unauthorized = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
     <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
       <div className="text-center">
-        {/* Icono de advertencia */}
         <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
           <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-
-        {/* Título */}
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
           Acceso No Autorizado
         </h2>
-
-        {/* Mensaje */}
         <p className="text-gray-600 mb-6">
           No tienes permisos suficientes para acceder a esta sección.
         </p>
-
-        {/* Botón para volver */}
         <a
           href="/dashboard"
           className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
@@ -202,7 +195,6 @@ const Routes = () => {
 
             {/* =================== SISTEMA DE VIDEOS =================== */}
             
-            {/* Página de reproducción individual de video */}
             <Route 
               path="/video/:videoId" 
               element={
@@ -212,7 +204,6 @@ const Routes = () => {
               } 
             />
 
-            {/* Alias para reels - redirige a la página de video */}
             <Route 
               path="/reel/:videoId" 
               element={
@@ -222,7 +213,6 @@ const Routes = () => {
               } 
             />
 
-            {/* Página de reels en fullscreen (móvil principalmente) */}
             <Route 
               path="/reels" 
               element={
@@ -232,9 +222,8 @@ const Routes = () => {
               } 
             />
 
-            {/* =================== RUTAS PROTEGIDAS - USUARIO NORMAL =================== */}
+            {/* =================== RUTAS PROTEGIDAS - USUARIO =================== */}
             
-            {/* DASHBOARD PRINCIPAL */}
             <Route 
               path="/dashboard" 
               element={
@@ -246,7 +235,6 @@ const Routes = () => {
               } 
             />
 
-            {/* SUBIR VIDEOS */}
             <Route 
               path="/upload" 
               element={
@@ -258,7 +246,6 @@ const Routes = () => {
               } 
             />
 
-            {/* PERFIL DE USUARIO - AHORA CON PÁGINA REAL */}
             <Route 
               path="/profile" 
               element={
@@ -270,7 +257,6 @@ const Routes = () => {
               } 
             />
 
-            {/* MARKETPLACE - AHORA CON PÁGINA REAL */}
             <Route 
               path="/marketplace" 
               element={
@@ -282,7 +268,6 @@ const Routes = () => {
               } 
             />
 
-            {/* TIENDA DE RECOMPENSAS - AHORA CON PÁGINA REAL */}
             <Route 
               path="/rewards" 
               element={
@@ -294,7 +279,6 @@ const Routes = () => {
               } 
             />
 
-            {/* CONTENIDO GUARDADO - AÚN PLACEHOLDER */}
             <Route 
               path="/saved" 
               element={
@@ -309,7 +293,6 @@ const Routes = () => {
               } 
             />
 
-            {/* CONFIGURACIÓN - AÚN PLACEHOLDER */}
             <Route 
               path="/settings" 
               element={
@@ -326,7 +309,6 @@ const Routes = () => {
 
             {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
             
-            {/* Ruta principal del admin - con rutas anidadas */}
             <Route 
               path="/admin" 
               element={
@@ -335,10 +317,10 @@ const Routes = () => {
                 </ProtectedAdminRoute>
               }
             >
-              {/* Dashboard principal del admin - ✅ REAL */}
+              {/* Dashboard - ✅ REAL (Sprint 4) */}
               <Route index element={<AdminDashboard />} />
 
-              {/* Gestión de Usuarios - ✅ REAL (Sprint 4) */}
+              {/* Usuarios - ✅ REAL (Sprint 4) */}
               <Route 
                 path="users" 
                 element={
@@ -348,7 +330,7 @@ const Routes = () => {
                 } 
               />
 
-              {/* Gestión de Categorías - ✅ REAL (Sprint 4) */}
+              {/* Categorías - ✅ REAL (Sprint 4) */}
               <Route 
                 path="categories" 
                 element={
@@ -358,7 +340,7 @@ const Routes = () => {
                 } 
               />
 
-              {/* Sistema de Puntos - ✅ REAL (Sprint 5) */}
+              {/* Puntos - ✅ REAL (Sprint 5) */}
               <Route 
                 path="points" 
                 element={
@@ -368,7 +350,7 @@ const Routes = () => {
                 } 
               />
 
-              {/* Misiones Diarias - ⏳ PLACEHOLDER (Sprint 3 - componente existe pero no está integrado aquí) */}
+              {/* Misiones - ⏳ PLACEHOLDER */}
               <Route 
                 path="missions" 
                 element={
@@ -412,7 +394,7 @@ const Routes = () => {
                 } 
               />
 
-              {/* Configuración del Sitio - ✅ REAL (Sprint 5) */}
+              {/* Branding - ✅ REAL (Sprint 5) */}
               <Route 
                 path="settings" 
                 element={
@@ -422,7 +404,7 @@ const Routes = () => {
                 } 
               />
 
-              {/* Logs de Administración - ⏳ PLACEHOLDER */}
+              {/* Logs - ⏳ PLACEHOLDER */}
               <Route 
                 path="logs" 
                 element={
@@ -437,7 +419,7 @@ const Routes = () => {
               />
             </Route>
 
-            {/* Página de acceso no autorizado */}
+            {/* Acceso no autorizado */}
             <Route 
               path="/unauthorized" 
               element={
