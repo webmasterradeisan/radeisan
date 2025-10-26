@@ -2,7 +2,7 @@
 // ✅ SPRINT 4 - Gestión Completa de Usuarios
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
-import { supabase } from '../../supabase';
+import { supabase } from '../../lib/supabase';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
