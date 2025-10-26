@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN HÍBRIDA SEGURA + SISTEMA DE VIDEOS + REELS FULLSCREEN + PANEL ADMIN
+// src/Routes.jsx - VERSIÓN COMPLETA CON PANEL ADMIN INTEGRADO
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -33,7 +33,16 @@ import PointsRewardsStore from './pages/points-rewards-store';
 // ===============================
 import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
 import AdminLayout from './components/admin/AdminLayout';
+
+// PÁGINAS DE ADMINISTRACIÓN - TODAS REALES ✅
 import AdminDashboard from './pages/admin-dashboard';
+import UserManagement from './pages/admin-users/UserManagement';
+import CategoryManagement from './pages/admin-categories/CategoryManagement';
+import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
+import RewardsManagement from './pages/admin-rewards/RewardsManagement';
+import BrandingSettings from './pages/admin-settings/BrandingSettings';
+import ContentModeration from './pages/admin-moderation/ContentModeration';
+import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics';
 
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
@@ -112,7 +121,7 @@ const Unauthorized = () => (
 );
 
 // ===============================
-// PLACEHOLDER PARA PÁGINAS ADMIN PENDIENTES
+// PLACEHOLDER SOLO PARA MISIONES Y LOGS
 // ===============================
 const AdminPlaceholder = ({ title, description, requiredPermission }) => (
   <div className="p-6">
@@ -128,7 +137,7 @@ const AdminPlaceholder = ({ title, description, requiredPermission }) => (
           <p className="text-gray-600 mb-6">{description}</p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              Esta sección se implementará en los próximos sprints.
+              Esta sección se implementará próximamente.
             </p>
             {requiredPermission && (
               <p className="text-xs text-blue-600 mt-2 font-mono">
@@ -213,8 +222,19 @@ const Routes = () => {
               } 
             />
 
-            {/* =================== RUTAS PROTEGIDAS - CON MOBILELAYOUT =================== */}
+            {/* Página de reels en fullscreen (móvil principalmente) */}
+            <Route 
+              path="/reels" 
+              element={
+                <UniversalRoute>
+                  <ReelsPage />
+                </UniversalRoute>
+              } 
+            />
+
+            {/* =================== RUTAS PROTEGIDAS - USUARIO NORMAL =================== */}
             
+            {/* DASHBOARD PRINCIPAL */}
             <Route 
               path="/dashboard" 
               element={
@@ -226,6 +246,7 @@ const Routes = () => {
               } 
             />
 
+            {/* SUBIR VIDEOS */}
             <Route 
               path="/upload" 
               element={
@@ -237,19 +258,7 @@ const Routes = () => {
               } 
             />
 
-            {/* ✅ REELS FULLSCREEN */}
-            <Route 
-              path="/reels" 
-              element={
-                <ProtectedRoute>
-                  <MobileLayoutWrapper>
-                    <ReelsPage />
-                  </MobileLayoutWrapper>
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* ✅ PÁGINAS REALES DE USUARIO - ACTUALIZADAS */}
+            {/* PERFIL DE USUARIO - AHORA CON PÁGINA REAL */}
             <Route 
               path="/profile" 
               element={
@@ -261,6 +270,7 @@ const Routes = () => {
               } 
             />
 
+            {/* MARKETPLACE - AHORA CON PÁGINA REAL */}
             <Route 
               path="/marketplace" 
               element={
@@ -272,6 +282,7 @@ const Routes = () => {
               } 
             />
 
+            {/* TIENDA DE RECOMPENSAS - AHORA CON PÁGINA REAL */}
             <Route 
               path="/rewards" 
               element={
@@ -324,52 +335,40 @@ const Routes = () => {
                 </ProtectedAdminRoute>
               }
             >
-              {/* Dashboard principal del admin */}
+              {/* Dashboard principal del admin - ✅ REAL */}
               <Route index element={<AdminDashboard />} />
 
-              {/* Gestión de Usuarios - Sprint 4 */}
+              {/* Gestión de Usuarios - ✅ REAL (Sprint 4) */}
               <Route 
                 path="users" 
                 element={
                   <ProtectedAdminRoute requiredPermission="manage_users">
-                    <AdminPlaceholder 
-                      title="Gestión de Usuarios"
-                      description="Administra usuarios, permisos y actividad"
-                      requiredPermission="manage_users"
-                    />
+                    <UserManagement />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Gestión de Categorías - Sprint 4 */}
+              {/* Gestión de Categorías - ✅ REAL (Sprint 4) */}
               <Route 
                 path="categories" 
                 element={
                   <ProtectedAdminRoute requiredPermission="manage_categories">
-                    <AdminPlaceholder 
-                      title="Gestión de Categorías"
-                      description="Crea y administra categorías dinámicas"
-                      requiredPermission="manage_categories"
-                    />
+                    <CategoryManagement />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Sistema de Puntos - Sprint 5 */}
+              {/* Sistema de Puntos - ✅ REAL (Sprint 5) */}
               <Route 
                 path="points" 
                 element={
                   <ProtectedAdminRoute requiredPermission="manage_points">
-                    <AdminPlaceholder 
-                      title="Sistema de Puntos"
-                      description="Configura reglas de puntos y multiplicadores"
-                      requiredPermission="manage_points"
-                    />
+                    <PointsRulesEditor />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Misiones Diarias - Sprint 3 */}
+              {/* Misiones Diarias - ⏳ PLACEHOLDER (Sprint 3 - componente existe pero no está integrado aquí) */}
               <Route 
                 path="missions" 
                 element={
@@ -383,63 +382,47 @@ const Routes = () => {
                 } 
               />
 
-              {/* Recompensas - Sprint 5 */}
+              {/* Recompensas - ✅ REAL (Sprint 5) */}
               <Route 
                 path="rewards" 
                 element={
                   <ProtectedAdminRoute requiredPermission="manage_rewards">
-                    <AdminPlaceholder 
-                      title="Gestión de Recompensas"
-                      description="Administra el catálogo de recompensas y stock"
-                      requiredPermission="manage_rewards"
-                    />
+                    <RewardsManagement />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Moderación - Sprint 6 */}
+              {/* Moderación - ✅ REAL (Sprint 6) */}
               <Route 
                 path="moderation" 
                 element={
                   <ProtectedAdminRoute requiredPermission="moderate_content">
-                    <AdminPlaceholder 
-                      title="Moderación de Contenido"
-                      description="Revisa reportes y modera contenido"
-                      requiredPermission="moderate_content"
-                    />
+                    <ContentModeration />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Analytics - Sprint 6 */}
+              {/* Analytics - ✅ REAL (Sprint 6) */}
               <Route 
                 path="analytics" 
                 element={
                   <ProtectedAdminRoute requiredPermission="view_analytics">
-                    <AdminPlaceholder 
-                      title="Analytics"
-                      description="Estadísticas avanzadas y métricas de engagement"
-                      requiredPermission="view_analytics"
-                    />
+                    <AdvancedAnalytics />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Configuración del Sitio - Sprint 5 */}
+              {/* Configuración del Sitio - ✅ REAL (Sprint 5) */}
               <Route 
                 path="settings" 
                 element={
                   <ProtectedAdminRoute requiredPermission="manage_settings">
-                    <AdminPlaceholder 
-                      title="Configuración del Sitio"
-                      description="Personaliza branding, SEO y ajustes generales"
-                      requiredPermission="manage_settings"
-                    />
+                    <BrandingSettings />
                   </ProtectedAdminRoute>
                 } 
               />
 
-              {/* Logs de Administración - Sprint 4 */}
+              {/* Logs de Administración - ⏳ PLACEHOLDER */}
               <Route 
                 path="logs" 
                 element={
