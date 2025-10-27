@@ -1,5 +1,5 @@
 // src/pages/admin-users/UserManagement.jsx
-// ✅ SPRINT 4 - Gestión Completa de Usuarios
+// âœ… SPRINT 4 - GestiÃ³n Completa de Usuarios
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { supabase } from '../../lib/supabase';
@@ -16,19 +16,19 @@ const UserManagement = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  // Estados de filtros y búsqueda
+  // Estados de filtros y bÃºsqueda
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
   
-  // Paginación
+  // PaginaciÃ³n
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const usersPerPage = 20;
   
-  // Estados de edición
+  // Estados de ediciÃ³n
   const [editingUser, setEditingUser] = useState(null);
   const [saving, setSaving] = useState(false);
   const [userActivity, setUserActivity] = useState([]);
@@ -50,10 +50,10 @@ const UserManagement = () => {
       
       // Construir query base
       let query = supabase
-        .from('profiles')
+        .from('user_profiles')
         .select(`
           *,
-          admin_roles (role),
+          admin_roles (role_name),
           user_points (free_points, premium_points)
         `, { count: 'exact' });
 
@@ -69,7 +69,7 @@ const UserManagement = () => {
       // Ordenamiento
       query = query.order(sortBy, { ascending: sortOrder === 'asc' });
 
-      // Paginación
+      // PaginaciÃ³n
       const from = (currentPage - 1) * usersPerPage;
       const to = from + usersPerPage - 1;
       query = query.range(from, to);
@@ -81,11 +81,11 @@ const UserManagement = () => {
       // Procesar usuarios para incluir rol
       const processedUsers = data?.map(user => ({
         ...user,
-        role: user.admin_roles?.[0]?.role || 'user',
+        role: user.admin_roles?.[0]?.role_name || 'user',
         totalPoints: (user.user_points?.[0]?.free_points || 0) + (user.user_points?.[0]?.premium_points || 0)
       })) || [];
 
-      // Aplicar filtro de rol (después de procesar)
+      // Aplicar filtro de rol (despuÃ©s de procesar)
       const filteredUsers = roleFilter !== 'all' 
         ? processedUsers.filter(u => u.role === roleFilter)
         : processedUsers;
@@ -107,7 +107,7 @@ const UserManagement = () => {
     try {
       setLoadingActivity(true);
       
-      // Obtener últimas transacciones de puntos
+      // Obtener Ãºltimas transacciones de puntos
       const { data: transactions } = await supabase
         .from('points_transactions')
         .select('*')
@@ -178,7 +178,7 @@ const UserManagement = () => {
 
       if (profileError) throw profileError;
 
-      // Actualizar rol si cambió
+      // Actualizar rol si cambiÃ³
       if (editingUser.role !== selectedUser.role) {
         // Primero eliminar rol anterior
         await supabase
@@ -266,7 +266,7 @@ const UserManagement = () => {
   };
 
   // ===============================
-  // PAGINACIÓN
+  // PAGINACIÃ“N
   // ===============================
   const totalPages = Math.ceil(totalUsers / usersPerPage);
 
@@ -285,7 +285,7 @@ const UserManagement = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Reset página cuando cambian filtros
+  // Reset pÃ¡gina cuando cambian filtros
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, roleFilter, statusFilter]);
@@ -336,10 +336,10 @@ const UserManagement = () => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Información Básica */}
+              {/* InformaciÃ³n BÃ¡sica */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-foreground mb-4">
-                  Información Básica
+                  InformaciÃ³n BÃ¡sica
                 </h3>
 
                 <div>
@@ -386,7 +386,7 @@ const UserManagement = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-muted-foreground mb-2">
-                    Biografía
+                    BiografÃ­a
                   </label>
                   <textarea
                     value={editingUser?.bio || ''}
@@ -396,7 +396,7 @@ const UserManagement = () => {
                     })}
                     rows={3}
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground"
-                    placeholder="Biografía del usuario"
+                    placeholder="BiografÃ­a del usuario"
                   />
                 </div>
 
@@ -440,10 +440,10 @@ const UserManagement = () => {
                 </div>
               </div>
 
-              {/* Estadísticas y Actividad */}
+              {/* EstadÃ­sticas y Actividad */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-foreground mb-4">
-                  Estadísticas
+                  EstadÃ­sticas
                 </h3>
 
                 {/* Stats Cards */}
@@ -481,7 +481,7 @@ const UserManagement = () => {
                   <div className="bg-background border border-border rounded-lg p-4">
                     <div className="flex items-center space-x-2 mb-2">
                       <Icon name="Clock" size={16} color="var(--color-secondary)" />
-                      <span className="text-xs text-muted-foreground">Última actividad</span>
+                      <span className="text-xs text-muted-foreground">Ãšltima actividad</span>
                     </div>
                     <p className="text-sm font-semibold text-foreground">
                       {new Date(selectedUser.updated_at).toLocaleDateString()}
@@ -505,7 +505,7 @@ const UserManagement = () => {
                       {userActivity.transactions?.length > 0 && (
                         <div className="bg-background border border-border rounded-lg p-3">
                           <p className="text-xs font-medium text-muted-foreground mb-2">
-                            Últimas Transacciones
+                            Ãšltimas Transacciones
                           </p>
                           <div className="space-y-2 max-h-32 overflow-y-auto">
                             {userActivity.transactions.slice(0, 5).map(tx => (
@@ -593,7 +593,7 @@ const UserManagement = () => {
   };
 
   // ===============================
-  // RENDER: MODAL DE CONFIRMACIÓN
+  // RENDER: MODAL DE CONFIRMACIÃ“N
   // ===============================
   const renderDeleteConfirm = () => {
     if (!showDeleteConfirm) return null;
@@ -607,17 +607,17 @@ const UserManagement = () => {
             </div>
             <div>
               <h3 className="text-lg font-bold text-foreground">
-                ¿Eliminar usuario?
+                Â¿Eliminar usuario?
               </h3>
               <p className="text-sm text-muted-foreground">
-                Esta acción no se puede deshacer
+                Esta acciÃ³n no se puede deshacer
               </p>
             </div>
           </div>
 
           <p className="text-sm text-muted-foreground mb-6">
-            Estás a punto de eliminar la cuenta de <strong>{selectedUser?.full_name}</strong>. 
-            El usuario será desactivado permanentemente y perderá el acceso a la plataforma.
+            EstÃ¡s a punto de eliminar la cuenta de <strong>{selectedUser?.full_name}</strong>. 
+            El usuario serÃ¡ desactivado permanentemente y perderÃ¡ el acceso a la plataforma.
           </p>
 
           <div className="flex space-x-3">
@@ -648,14 +648,14 @@ const UserManagement = () => {
   return (
     <>
       <Helmet>
-        <title>Gestión de Usuarios - Admin Radeisan</title>
+        <title>GestiÃ³n de Usuarios - Admin Radeisan</title>
       </Helmet>
 
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Gestión de Usuarios</h1>
+            <h1 className="text-3xl font-bold text-foreground">GestiÃ³n de Usuarios</h1>
             <p className="text-muted-foreground mt-1">
               {totalUsers} usuarios registrados
             </p>
@@ -670,10 +670,10 @@ const UserManagement = () => {
           </Button>
         </div>
 
-        {/* Filtros y Búsqueda */}
+        {/* Filtros y BÃºsqueda */}
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Búsqueda */}
+            {/* BÃºsqueda */}
             <div className="md:col-span-2">
               <Input
                 placeholder="Buscar por nombre, username o email..."
@@ -866,7 +866,7 @@ const UserManagement = () => {
             </table>
           </div>
 
-          {/* Paginación */}
+          {/* PaginaciÃ³n */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-border">
               <p className="text-sm text-muted-foreground">
@@ -882,7 +882,7 @@ const UserManagement = () => {
                   <Icon name="ChevronLeft" size={16} />
                 </Button>
                 <span className="text-sm text-foreground">
-                  Página {currentPage} de {totalPages}
+                  PÃ¡gina {currentPage} de {totalPages}
                 </span>
                 <Button
                   variant="outline"
