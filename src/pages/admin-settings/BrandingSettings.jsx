@@ -190,23 +190,34 @@ export default function BrandingSettings() {
       setError(null);
       setSuccessMessage(null);
 
-      console.log('💾 Guardando branding...');
+      console.log('💾 Iniciando guardado de branding...');
       console.log('📦 Datos a guardar:', branding);
+      console.log('🔑 Tipo de datos:', typeof branding);
 
-      // Guardar en system_settings
-      const { error: upsertError } = await supabase
-        .from('system_settings')
-        .upsert({
-          setting_key: 'branding_config',
-          setting_value: branding, // ✅ Supabase maneja JSONB automáticamente
-          updated_at: new Date().toISOString()
-        });
+      // Guardar en system_settings con timeout
+      const { data, error: upsertError } = await Promise.race([
+        supabase
+          .from('system_settings')
+          .upsert({
+            setting_key: 'branding_config',
+            setting_value: branding,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'setting_key'
+          })
+          .select(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout: La operación tardó más de 10 segundos')), 10000)
+        )
+      ]);
 
       if (upsertError) {
-        console.error('❌ Error guardando:', upsertError);
+        console.error('❌ Error en upsert:', upsertError);
+        console.error('❌ Detalles del error:', JSON.stringify(upsertError, null, 2));
         throw upsertError;
       }
 
+      console.log('✅ Respuesta de Supabase:', data);
       console.log('✅ Branding guardado exitosamente');
 
       // Aplicar branding al DOM
@@ -217,8 +228,19 @@ export default function BrandingSettings() {
 
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('❌ Error guardando branding:', err);
-      setError(err.message);
+      console.error('❌ Error completo:', err);
+      console.error('❌ Stack:', err.stack);
+      
+      let errorMessage = 'Error al guardar: ';
+      if (err.message.includes('Timeout')) {
+        errorMessage += 'La operación tardó demasiado. Verifica tu conexión.';
+      } else if (err.code) {
+        errorMessage += `${err.code} - ${err.message}`;
+      } else {
+        errorMessage += err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setSaving(false);
     }
