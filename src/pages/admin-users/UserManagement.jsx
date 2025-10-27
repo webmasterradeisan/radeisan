@@ -49,14 +49,12 @@ const UserManagement = () => {
     try {
       setLoading(true);
       
-      // Construir query base
+      console.log('🔍 Iniciando fetchUsers...');
+      
+      // Construir query base - SIN relaciones para evitar el error
       let query = supabase
         .from('profiles')
-        .select(`
-          *,
-          admin_roles (role_name),
-          user_points (free_points, premium_points)
-        `, { count: 'exact' });
+        .select('*', { count: 'exact' });
 
       // Aplicar filtros
       if (searchTerm) {
@@ -75,34 +73,81 @@ const UserManagement = () => {
       const to = from + usersPerPage - 1;
       query = query.range(from, to);
 
-      const { data, error, count } = await query;
+      const { data: profiles, error: profilesError, count } = await query;
 
-      if (error) {
-        console.error('Error en fetchUsers:', error);
-        throw error;
+      if (profilesError) {
+        console.error('❌ Error obteniendo profiles:', profilesError);
+        throw profilesError;
       }
 
-      console.log('Datos recibidos de Supabase:', data); // Debug
+      console.log('✅ Profiles obtenidos:', profiles?.length);
 
-      // Procesar usuarios para incluir rol
-      const processedUsers = data?.map(user => ({
-        ...user,
-        role: user.admin_roles?.[0]?.role_name || 'user',
-        totalPoints: (user.user_points?.[0]?.free_points || 0) + (user.user_points?.[0]?.premium_points || 0)
-      })) || [];
+      if (!profiles || profiles.length === 0) {
+        setUsers([]);
+        setTotalUsers(0);
+        setLoading(false);
+        return;
+      }
 
-      console.log('Usuarios procesados:', processedUsers); // Debug
+      // Ahora obtener roles y puntos por separado para cada usuario
+      const userIds = profiles.map(p => p.id);
+
+      // Obtener roles
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('admin_roles')
+        .select('user_id, role_name')
+        .in('user_id', userIds);
+
+      if (rolesError) {
+        console.error('❌ Error obteniendo roles:', rolesError);
+      }
+
+      console.log('✅ Roles obtenidos:', rolesData?.length);
+
+      // Obtener puntos
+      const { data: pointsData, error: pointsError } = await supabase
+        .from('user_points')
+        .select('user_id, free_points, premium_points')
+        .in('user_id', userIds);
+
+      if (pointsError) {
+        console.error('❌ Error obteniendo puntos:', pointsError);
+      }
+
+      console.log('✅ Puntos obtenidos:', pointsData?.length);
+
+      // Combinar datos
+      const processedUsers = profiles.map(profile => {
+        const userRole = rolesData?.find(r => r.user_id === profile.id);
+        const userPoints = pointsData?.find(p => p.user_id === profile.id);
+
+        return {
+          ...profile,
+          role: userRole?.role_name || 'user',
+          admin_roles: userRole ? [{ role_name: userRole.role_name }] : [],
+          user_points: userPoints ? [{
+            free_points: userPoints.free_points || 0,
+            premium_points: userPoints.premium_points || 0
+          }] : [{ free_points: 0, premium_points: 0 }],
+          totalPoints: (userPoints?.free_points || 0) + (userPoints?.premium_points || 0)
+        };
+      });
+
+      console.log('✅ Usuarios procesados:', processedUsers.length);
+      console.log('📊 Primer usuario:', processedUsers[0]);
 
       // Aplicar filtro de rol (después de procesar)
       const filteredUsers = roleFilter !== 'all' 
         ? processedUsers.filter(u => u.role === roleFilter)
         : processedUsers;
 
+      console.log('✅ Usuarios filtrados:', filteredUsers.length);
+
       setUsers(filteredUsers);
       setTotalUsers(count || 0);
 
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('❌ Error general en fetchUsers:', error);
     } finally {
       setLoading(false);
     }
@@ -200,7 +245,7 @@ const UserManagement = () => {
             .from('admin_roles')
             .insert({
               user_id: editingUser.id,
-              role_name: editingUser.role  // ✅ CORREGIDO: Usar role_name
+              role_name: editingUser.role
             });
 
           if (roleError) throw roleError;
