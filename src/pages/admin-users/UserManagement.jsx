@@ -38,7 +38,8 @@ const UserManagement = () => {
   const ROLES = [
     { value: 'user', label: 'Usuario', color: 'text-muted-foreground' },
     { value: 'moderator', label: 'Moderador', color: 'text-warning' },
-    { value: 'admin', label: 'Administrador', color: 'text-error' }
+    { value: 'admin', label: 'Administrador', color: 'text-error' },
+    { value: 'super_admin', label: 'Super Admin', color: 'text-error' }
   ];
 
   // ===============================
@@ -76,7 +77,12 @@ const UserManagement = () => {
 
       const { data, error, count } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error en fetchUsers:', error);
+        throw error;
+      }
+
+      console.log('Datos recibidos de Supabase:', data); // Debug
 
       // Procesar usuarios para incluir rol
       const processedUsers = data?.map(user => ({
@@ -84,6 +90,8 @@ const UserManagement = () => {
         role: user.admin_roles?.[0]?.role_name || 'user',
         totalPoints: (user.user_points?.[0]?.free_points || 0) + (user.user_points?.[0]?.premium_points || 0)
       })) || [];
+
+      console.log('Usuarios procesados:', processedUsers); // Debug
 
       // Aplicar filtro de rol (después de procesar)
       const filteredUsers = roleFilter !== 'all' 
@@ -192,7 +200,7 @@ const UserManagement = () => {
             .from('admin_roles')
             .insert({
               user_id: editingUser.id,
-              role: editingUser.role
+              role_name: editingUser.role  // ✅ CORREGIDO: Usar role_name
             });
 
           if (roleError) throw roleError;
@@ -207,7 +215,7 @@ const UserManagement = () => {
 
     } catch (error) {
       console.error('Error saving user:', error);
-      alert('Error al guardar los cambios');
+      alert('Error al guardar cambios: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -225,43 +233,40 @@ const UserManagement = () => {
 
       if (error) throw error;
 
-      await fetchUsers();
+      // Actualizar estado local
+      setUsers(users.map(u => 
+        u.id === userId ? { ...u, is_active: !currentStatus } : u
+      ));
+
     } catch (error) {
       console.error('Error toggling user status:', error);
-      alert('Error al cambiar el estado del usuario');
+      alert('Error al cambiar estado del usuario');
     }
   };
 
   // ===============================
-  // ELIMINAR USUARIO (Soft delete)
+  // ELIMINAR USUARIO
   // ===============================
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
 
     try {
-      setSaving(true);
-
-      // En lugar de eliminar, desactivar permanentemente
+      // Eliminar usuario (esto también eliminará registros relacionados por CASCADE)
       const { error } = await supabase
         .from('profiles')
-        .update({ 
-          is_active: false,
-          deleted_at: new Date().toISOString()
-        })
+        .delete()
         .eq('id', selectedUser.id);
 
       if (error) throw error;
 
+      // Recargar usuarios
       await fetchUsers();
       setShowDeleteConfirm(false);
-      setShowUserModal(false);
       setSelectedUser(null);
 
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert('Error al eliminar el usuario');
-    } finally {
-      setSaving(false);
+      alert('Error al eliminar usuario: ' + error.message);
     }
   };
 
@@ -270,12 +275,16 @@ const UserManagement = () => {
   // ===============================
   const totalPages = Math.ceil(totalUsers / usersPerPage);
 
-  const handlePreviousPage = () => {
-    setCurrentPage(prev => Math.max(prev - 1, 1));
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
   };
 
-  const handleNextPage = () => {
-    setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
   };
 
   // ===============================
@@ -285,307 +294,185 @@ const UserManagement = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Reset página cuando cambian filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, roleFilter, statusFilter]);
-
   // ===============================
-  // RENDER: MODAL DE USUARIO
+  // MODAL DE USUARIO
   // ===============================
   const renderUserModal = () => {
-    if (!showUserModal || !selectedUser) return null;
+    if (!showUserModal || !editingUser) return null;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-card border border-border rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-card border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-border">
-            <div className="flex items-center space-x-4">
-              {selectedUser.avatar_url ? (
-                <img 
-                  src={selectedUser.avatar_url}
-                  alt={selectedUser.full_name}
-                  className="w-16 h-16 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Icon name="User" size={32} color="var(--color-primary)" />
-                </div>
-              )}
+            <h2 className="text-xl font-bold text-foreground">
+              Detalles del Usuario
+            </h2>
+            <button
+              onClick={() => {
+                setShowUserModal(false);
+                setEditingUser(null);
+                setSelectedUser(null);
+              }}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Icon name="X" size={24} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 space-y-6">
+            {/* Información Básica */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h2 className="text-xl font-bold text-foreground">
-                  {selectedUser.full_name || 'Sin nombre'}
-                </h2>
-                <p className="text-muted-foreground">@{selectedUser.username}</p>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Nombre Completo
+                </label>
+                <Input
+                  value={editingUser.full_name}
+                  onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })}
+                  placeholder="Nombre completo"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Nombre de Usuario
+                </label>
+                <Input
+                  value={editingUser.username}
+                  onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+                  placeholder="username"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Email
+                </label>
+                <Input
+                  value={editingUser.email}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Rol
+                </label>
+                <select
+                  value={editingUser.role}
+                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground"
+                >
+                  {ROLES.map(role => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
+
+            {/* Biografía */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Biografía
+              </label>
+              <textarea
+                value={editingUser.bio}
+                onChange={(e) => setEditingUser({ ...editingUser, bio: e.target.value })}
+                placeholder="Biografía del usuario"
+                rows={3}
+                className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground resize-none"
+              />
+            </div>
+
+            {/* Estado Activo */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                checked={editingUser.is_active}
+                onCheckedChange={(checked) => setEditingUser({ ...editingUser, is_active: checked })}
+              />
+              <label className="text-sm font-medium text-foreground">
+                Usuario Activo
+              </label>
+            </div>
+
+            {/* Actividad del Usuario */}
+            {loadingActivity ? (
+              <div className="py-4 text-center">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Videos */}
+                {userActivity.videos?.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Videos Subidos ({userActivity.videos.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {userActivity.videos.map(video => (
+                        <div key={video.id} className="p-3 bg-muted rounded-md">
+                          <p className="text-sm font-medium text-foreground">{video.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {video.views_count} vistas • {new Date(video.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Transacciones */}
+                {userActivity.transactions?.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Últimas Transacciones
+                    </h3>
+                    <div className="space-y-2">
+                      {userActivity.transactions.slice(0, 5).map(transaction => (
+                        <div key={transaction.id} className="p-3 bg-muted rounded-md flex justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{transaction.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(transaction.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className={`text-sm font-semibold ${
+                            transaction.amount > 0 ? 'text-success' : 'text-error'
+                          }`}>
+                            {transaction.amount > 0 ? '+' : ''}{transaction.amount}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end space-x-3 p-6 border-t border-border">
             <Button
-              variant="ghost"
-              size="icon"
+              variant="outline"
               onClick={() => {
                 setShowUserModal(false);
                 setEditingUser(null);
                 setSelectedUser(null);
               }}
             >
-              <Icon name="X" size={20} />
+              Cancelar
             </Button>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Información Básica */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  Información Básica
-                </h3>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">
-                    Nombre Completo
-                  </label>
-                  <Input
-                    value={editingUser?.full_name || ''}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      full_name: e.target.value
-                    })}
-                    placeholder="Nombre completo"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">
-                    Username
-                  </label>
-                  <Input
-                    value={editingUser?.username || ''}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      username: e.target.value
-                    })}
-                    placeholder="Username"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">
-                    Email
-                  </label>
-                  <Input
-                    value={editingUser?.email || selectedUser.email}
-                    disabled
-                    className="bg-muted/50"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    El email no se puede modificar
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">
-                    Biografía
-                  </label>
-                  <textarea
-                    value={editingUser?.bio || ''}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      bio: e.target.value
-                    })}
-                    rows={3}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground"
-                    placeholder="Biografía del usuario"
-                  />
-                </div>
-
-                {/* Rol y Estado */}
-                <div className="space-y-3 pt-4 border-t border-border">
-                  <div>
-                    <label className="block text-sm font-medium text-muted-foreground mb-2">
-                      Rol
-                    </label>
-                    <select
-                      value={editingUser?.role || 'user'}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser,
-                        role: e.target.value
-                      })}
-                      className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground"
-                    >
-                      {ROLES.map(role => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-background rounded-lg">
-                    <div>
-                      <p className="font-medium text-foreground">Estado de la cuenta</p>
-                      <p className="text-sm text-muted-foreground">
-                        {editingUser?.is_active ? 'Cuenta activa' : 'Cuenta suspendida'}
-                      </p>
-                    </div>
-                    <Checkbox
-                      checked={editingUser?.is_active ?? true}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser,
-                        is_active: e.target.checked
-                      })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Estadísticas y Actividad */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  Estadísticas
-                </h3>
-
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-background border border-border rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Icon name="Coins" size={16} color="var(--color-accent)" />
-                      <span className="text-xs text-muted-foreground">Puntos Gratis</span>
-                    </div>
-                    <p className="text-2xl font-bold text-accent">
-                      {selectedUser.user_points?.[0]?.free_points?.toLocaleString() || 0}
-                    </p>
-                  </div>
-
-                  <div className="bg-background border border-border rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Icon name="Award" size={16} color="var(--color-warning)" />
-                      <span className="text-xs text-muted-foreground">Puntos Premium</span>
-                    </div>
-                    <p className="text-2xl font-bold text-warning">
-                      {selectedUser.user_points?.[0]?.premium_points?.toLocaleString() || 0}
-                    </p>
-                  </div>
-
-                  <div className="bg-background border border-border rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Icon name="Calendar" size={16} color="var(--color-primary)" />
-                      <span className="text-xs text-muted-foreground">Miembro desde</span>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {new Date(selectedUser.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-
-                  <div className="bg-background border border-border rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Icon name="Clock" size={16} color="var(--color-secondary)" />
-                      <span className="text-xs text-muted-foreground">Última actividad</span>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {new Date(selectedUser.updated_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Actividad Reciente */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-foreground">
-                    Actividad Reciente
-                  </h4>
-                  
-                  {loadingActivity ? (
-                    <div className="text-center py-4">
-                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Transacciones */}
-                      {userActivity.transactions?.length > 0 && (
-                        <div className="bg-background border border-border rounded-lg p-3">
-                          <p className="text-xs font-medium text-muted-foreground mb-2">
-                            Últimas Transacciones
-                          </p>
-                          <div className="space-y-2 max-h-32 overflow-y-auto">
-                            {userActivity.transactions.slice(0, 5).map(tx => (
-                              <div key={tx.id} className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground truncate">
-                                  {tx.description}
-                                </span>
-                                <span className={`font-semibold ${
-                                  tx.amount > 0 ? 'text-success' : 'text-error'
-                                }`}>
-                                  {tx.amount > 0 ? '+' : ''}{tx.amount}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Videos */}
-                      {userActivity.videos?.length > 0 && (
-                        <div className="bg-background border border-border rounded-lg p-3">
-                          <p className="text-xs font-medium text-muted-foreground mb-2">
-                            Videos Recientes
-                          </p>
-                          <div className="space-y-2 max-h-32 overflow-y-auto">
-                            {userActivity.videos.slice(0, 5).map(video => (
-                              <div key={video.id} className="flex items-center justify-between text-xs">
-                                <span className="text-foreground truncate">
-                                  {video.title}
-                                </span>
-                                <span className="text-muted-foreground flex items-center">
-                                  <Icon name="Eye" size={12} className="mr-1" />
-                                  {video.views_count || 0}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {(!userActivity.transactions?.length && !userActivity.videos?.length) && (
-                        <div className="text-center py-6 text-muted-foreground">
-                          <Icon name="Activity" size={32} className="mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">Sin actividad reciente</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between p-6 border-t border-border">
             <Button
-              variant="destructive"
-              onClick={() => setShowDeleteConfirm(true)}
+              onClick={handleSaveUser}
+              disabled={saving}
             >
-              <Icon name="Trash2" size={16} className="mr-2" />
-              Eliminar Usuario
+              {saving ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
-            <div className="flex space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowUserModal(false);
-                  setEditingUser(null);
-                  setSelectedUser(null);
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleSaveUser}
-                disabled={saving}
-              >
-                {saving ? 'Guardando...' : 'Guardar Cambios'}
-              </Button>
-            </div>
           </div>
         </div>
       </div>
@@ -593,21 +480,21 @@ const UserManagement = () => {
   };
 
   // ===============================
-  // RENDER: MODAL DE CONFIRMACIÓN
+  // MODAL DE CONFIRMACIÓN DE ELIMINACIÓN
   // ===============================
   const renderDeleteConfirm = () => {
-    if (!showDeleteConfirm) return null;
+    if (!showDeleteConfirm || !selectedUser) return null;
 
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-card border border-border rounded-lg max-w-md w-full p-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-card border border-border rounded-lg shadow-xl max-w-md w-full p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-error/10 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-error/10 flex items-center justify-center">
               <Icon name="AlertTriangle" size={24} color="var(--color-error)" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-foreground">
-                ¿Eliminar usuario?
+              <h3 className="text-lg font-semibold text-foreground">
+                Eliminar Usuario
               </h3>
               <p className="text-sm text-muted-foreground">
                 Esta acción no se puede deshacer
@@ -615,26 +502,26 @@ const UserManagement = () => {
             </div>
           </div>
 
-          <p className="text-sm text-muted-foreground mb-6">
-            Estás a punto de eliminar la cuenta de <strong>{selectedUser?.full_name}</strong>. 
-            El usuario será desactivado permanentemente y perderá el acceso a la plataforma.
+          <p className="text-foreground mb-6">
+            ¿Estás seguro de que deseas eliminar a <strong>{selectedUser.full_name}</strong>? 
+            Todos sus datos, videos y actividad serán eliminados permanentemente.
           </p>
 
-          <div className="flex space-x-3">
+          <div className="flex items-center justify-end space-x-3">
             <Button
               variant="outline"
-              className="flex-1"
-              onClick={() => setShowDeleteConfirm(false)}
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                setSelectedUser(null);
+              }}
             >
               Cancelar
             </Button>
             <Button
-              variant="destructive"
-              className="flex-1"
+              variant="danger"
               onClick={handleDeleteUser}
-              disabled={saving}
             >
-              {saving ? 'Eliminando...' : 'Eliminar'}
+              Eliminar Usuario
             </Button>
           </div>
         </div>
@@ -648,26 +535,21 @@ const UserManagement = () => {
   return (
     <>
       <Helmet>
-        <title>Gestión de Usuarios - Admin Radeisan</title>
+        <title>Gestión de Usuarios - Admin</title>
       </Helmet>
 
-      <div className="p-6 space-y-6">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Gestión de Usuarios</h1>
-            <p className="text-muted-foreground mt-1">
-              {totalUsers} usuarios registrados
-            </p>
+            <h1 className="text-2xl font-bold text-foreground">Gestión de Usuarios</h1>
+            <p className="text-muted-foreground">Administra todos los usuarios de la plataforma</p>
           </div>
-          <Button onClick={fetchUsers} disabled={loading}>
-            <Icon 
-              name="RefreshCw" 
-              size={16} 
-              className={`mr-2 ${loading ? 'animate-spin' : ''}`} 
-            />
-            Actualizar
-          </Button>
+          <div className="flex items-center space-x-2">
+            <span className="px-3 py-1 bg-primary/10 text-primary text-sm font-medium rounded-full">
+              {totalUsers} usuarios totales
+            </span>
+          </div>
         </div>
 
         {/* Filtros y Búsqueda */}
@@ -676,6 +558,7 @@ const UserManagement = () => {
             {/* Búsqueda */}
             <div className="md:col-span-2">
               <Input
+                type="text"
                 placeholder="Buscar por nombre, username o email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -691,9 +574,7 @@ const UserManagement = () => {
             >
               <option value="all">Todos los roles</option>
               {ROLES.map(role => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
-                </option>
+                <option key={role.value} value={role.value}>{role.label}</option>
               ))}
             </select>
 
@@ -793,6 +674,7 @@ const UserManagement = () => {
                       {/* Rol */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          user.role === 'super_admin' ? 'bg-purple-500/10 text-purple-500' :
                           user.role === 'admin' ? 'bg-error/10 text-error' :
                           user.role === 'moderator' ? 'bg-warning/10 text-warning' :
                           'bg-muted text-muted-foreground'
