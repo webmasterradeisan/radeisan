@@ -31,6 +31,8 @@ const ReelsContainer = ({
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null); // ID del comentario al que se está respondiendo
+  const [showReplies, setShowReplies] = useState({}); // Controlar qué respuestas mostrar
   const containerRef = useRef(null);
   const videoRefs = useRef([]);
   const isInitialMount = useRef(true);
@@ -570,11 +572,11 @@ const ReelsContainer = ({
   };
 
   // ===============================
-  // SISTEMA DE COMENTARIOS
+  // SISTEMA DE COMENTARIOS CON RESPUESTAS
   // ===============================
   const loadComments = async (videoId) => {
     try {
-      // Primero intentar cargar comentarios con join a user_profiles
+      // Cargar todos los comentarios del video (incluyendo respuestas)
       let { data, error } = await supabase
         .from('video_comments')
         .select(`
@@ -582,6 +584,7 @@ const ReelsContainer = ({
           video_id,
           user_id,
           content,
+          parent_comment_id,
           created_at,
           updated_at
         `)
@@ -594,7 +597,7 @@ const ReelsContainer = ({
       if (data && data.length > 0) {
         const userIds = [...new Set(data.map(comment => comment.user_id))];
         
-        // Intentar cargar desde user_profiles
+        // Cargar usuarios desde user_profiles
         const { data: usersData, error: usersError } = await supabase
           .from('user_profiles')
           .select('id, name, avatar, username')
@@ -615,18 +618,45 @@ const ReelsContainer = ({
               name: 'Usuario',
               avatar: null,
               username: null
-            }
+            },
+            replies: [] // Inicializar array de respuestas
           }));
+
+          // Organizar comentarios y respuestas
+          const topLevelComments = [];
+          const repliesMap = {};
+
+          data.forEach(comment => {
+            if (comment.parent_comment_id) {
+              // Es una respuesta
+              if (!repliesMap[comment.parent_comment_id]) {
+                repliesMap[comment.parent_comment_id] = [];
+              }
+              repliesMap[comment.parent_comment_id].push(comment);
+            } else {
+              // Es un comentario principal
+              topLevelComments.push(comment);
+            }
+          });
+
+          // Agregar respuestas a sus comentarios padres
+          topLevelComments.forEach(comment => {
+            comment.replies = repliesMap[comment.id] || [];
+            comment.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); // Respuestas más antiguas primero
+          });
+
+          data = topLevelComments;
         } else {
-          // Si falla, intentar desde auth.users o usar datos por defecto
-          data = data.map(comment => ({
+          // Si falla, usar datos por defecto
+          data = data.filter(c => !c.parent_comment_id).map(comment => ({
             ...comment,
             user: {
               id: comment.user_id,
               name: 'Usuario',
               avatar: null,
               username: null
-            }
+            },
+            replies: []
           }));
         }
       }
@@ -637,7 +667,6 @@ const ReelsContainer = ({
       }));
     } catch (error) {
       console.error('Error cargando comentarios:', error);
-      // Establecer array vacío en caso de error
       setComments(prev => ({
         ...prev,
         [videoId]: []
@@ -647,6 +676,8 @@ const ReelsContainer = ({
 
   const handleOpenComments = async (videoId) => {
     setShowCommentsModal(true);
+    setReplyingTo(null);
+    setNewComment('');
     await loadComments(videoId);
   };
 
@@ -665,27 +696,48 @@ const ReelsContainer = ({
         .insert({
           video_id: videoId,
           user_id: user.id,
-          content: newComment.trim()
+          content: newComment.trim(),
+          parent_comment_id: replyingTo // null si es comentario principal, ID si es respuesta
         });
 
       if (error) throw error;
 
-      // Actualizar contador
-      await supabase.rpc('increment_video_comments', { video_id: videoId });
+      // Actualizar contador solo si es comentario principal
+      if (!replyingTo) {
+        await supabase.rpc('increment_video_comments', { video_id: videoId });
+      }
 
       // Otorgar puntos usando el servicio de puntos
       try {
-        await addFreePoints(3, 'Comentar video', 'video', videoId);
+        await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
         onPointsEarned && onPointsEarned(3);
       } catch (pointsError) {
         console.error('Error al otorgar puntos:', pointsError);
       }
 
       setNewComment('');
+      setReplyingTo(null);
       await loadComments(videoId);
     } catch (error) {
       console.error('Error agregando comentario:', error);
     }
+  };
+
+  const handleReply = (commentId, username) => {
+    setReplyingTo(commentId);
+    setNewComment(`@${username} `);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+    setNewComment('');
+  };
+
+  const toggleReplies = (commentId) => {
+    setShowReplies(prev => ({
+      ...prev,
+      [commentId]: !prev[commentId]
+    }));
   };
 
   // ===============================
@@ -755,6 +807,7 @@ const ReelsContainer = ({
               <Link 
                 to={`/profile/${video.creator?.id}`}
                 className="block"
+                onClick={(e) => e.stopPropagation()}
               >
                 <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
                   {video.creator?.avatar ? (
@@ -776,7 +829,10 @@ const ReelsContainer = ({
               {/* Botón de Seguir */}
               {!isFollowing && (
                 <button
-                  onClick={() => handleFollow(video.creator?.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleFollow(video.creator?.id);
+                  }}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 >
                   <Icon name="Plus" size={16} color="white" />
@@ -786,7 +842,10 @@ const ReelsContainer = ({
 
             {/* Like */}
             <button
-              onClick={() => handleLike(video.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike(video.id);
+              }}
               className="flex flex-col items-center space-y-1"
             >
               <div className={`
@@ -806,7 +865,10 @@ const ReelsContainer = ({
 
             {/* Dislike */}
             <button
-              onClick={() => handleDislike(video.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDislike(video.id);
+              }}
               className="flex flex-col items-center space-y-1"
             >
               <div className={`
@@ -826,7 +888,10 @@ const ReelsContainer = ({
 
             {/* Comentarios */}
             <button 
-              onClick={() => handleOpenComments(video.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenComments(video.id);
+              }}
               className="flex flex-col items-center space-y-1"
             >
               <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
@@ -839,7 +904,10 @@ const ReelsContainer = ({
 
             {/* Guardar/Favorito */}
             <button
-              onClick={() => handleSave(video.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSave(video.id);
+              }}
               className="flex flex-col items-center space-y-1"
             >
               <div className={`
@@ -859,7 +927,10 @@ const ReelsContainer = ({
 
             {/* Compartir */}
             <button
-              onClick={() => handleShare(video)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShare(video);
+              }}
               className="flex flex-col items-center space-y-1"
             >
               <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
@@ -872,7 +943,10 @@ const ReelsContainer = ({
 
             {/* Volumen */}
             <button
-              onClick={() => handleMuteToggle(video.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMuteToggle(video.id);
+              }}
               className="flex flex-col items-center space-y-1"
             >
               <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
@@ -884,7 +958,10 @@ const ReelsContainer = ({
             </button>
 
             {/* Icono de Audio/Música (decorativo) */}
-            <button className="flex flex-col items-center mt-2">
+            <button 
+              onClick={(e) => e.stopPropagation()}
+              className="flex flex-col items-center mt-2"
+            >
               <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-lg">
                 <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
                   <Icon name="Music" size={18} color="white" />
@@ -1014,6 +1091,7 @@ const ReelsContainer = ({
               <Link 
                 to={`/profile/${videos[currentIndex]?.creator?.id}`}
                 className="block"
+                onClick={(e) => e.stopPropagation()}
               >
                 <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
                   {videos[currentIndex]?.creator?.avatar ? (
@@ -1035,7 +1113,10 @@ const ReelsContainer = ({
               {/* Botón de Seguir */}
               {!followedCreators.has(videos[currentIndex]?.creator?.id) && (
                 <button
-                  onClick={() => handleFollow(videos[currentIndex]?.creator?.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleFollow(videos[currentIndex]?.creator?.id);
+                  }}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
                 >
                   <Icon name="Plus" size={18} color="white" />
@@ -1045,7 +1126,10 @@ const ReelsContainer = ({
 
             {/* Like */}
             <button
-              onClick={() => handleLike(videos[currentIndex]?.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike(videos[currentIndex]?.id);
+              }}
               className="flex flex-col items-center space-y-1 group"
             >
               <div className={`
@@ -1068,7 +1152,10 @@ const ReelsContainer = ({
 
             {/* Dislike */}
             <button
-              onClick={() => handleDislike(videos[currentIndex]?.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDislike(videos[currentIndex]?.id);
+              }}
               className="flex flex-col items-center space-y-1 group"
             >
               <div className={`
@@ -1091,7 +1178,10 @@ const ReelsContainer = ({
 
             {/* Comentarios */}
             <button 
-              onClick={() => handleOpenComments(videos[currentIndex]?.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenComments(videos[currentIndex]?.id);
+              }}
               className="flex flex-col items-center space-y-1 group"
             >
               <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
@@ -1104,7 +1194,10 @@ const ReelsContainer = ({
 
             {/* Guardar/Favorito */}
             <button
-              onClick={() => handleSave(videos[currentIndex]?.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSave(videos[currentIndex]?.id);
+              }}
               className="flex flex-col items-center space-y-1 group"
             >
               <div className={`
@@ -1127,7 +1220,10 @@ const ReelsContainer = ({
 
             {/* Compartir */}
             <button
-              onClick={() => handleShare(videos[currentIndex])}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShare(videos[currentIndex]);
+              }}
               className="flex flex-col items-center space-y-1 group"
             >
               <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
@@ -1140,7 +1236,10 @@ const ReelsContainer = ({
 
             {/* Volumen */}
             <button
-              onClick={() => handleMuteToggle(videos[currentIndex]?.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMuteToggle(videos[currentIndex]?.id);
+              }}
               className="flex flex-col items-center space-y-1 group"
             >
               <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
@@ -1152,7 +1251,10 @@ const ReelsContainer = ({
             </button>
 
             {/* Icono de Audio/Música (decorativo) */}
-            <button className="flex flex-col items-center mt-2">
+            <button 
+              onClick={(e) => e.stopPropagation()}
+              className="flex flex-col items-center mt-2"
+            >
               <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
                 <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
                   <Icon name="Music" size={20} color="white" />
@@ -1166,60 +1268,193 @@ const ReelsContainer = ({
       {/* FLECHAS DE NAVEGACIÓN (DESKTOP) - COMENTADAS/ELIMINADAS */}
       {/* Las flechas han sido eliminadas según requerimiento del usuario */}
 
-      {/* MODAL DE COMENTARIOS */}
+      {/* MODAL DE COMENTARIOS CON RESPUESTAS */}
       {showCommentsModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center">
-          <div className="bg-white rounded-t-3xl w-full max-w-lg h-[70vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end md:items-center justify-center">
+          <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-2xl h-[75vh] md:h-[80vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-bold text-lg">Comentarios</h3>
+              <h3 className="font-bold text-xl">
+                Comentarios {comments[videos[currentIndex]?.id]?.length > 0 && 
+                  `(${comments[videos[currentIndex]?.id]?.length})`}
+              </h3>
               <button
-                onClick={() => setShowCommentsModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                onClick={() => {
+                  setShowCommentsModal(false);
+                  setReplyingTo(null);
+                  setNewComment('');
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
-                <Icon name="X" size={20} />
+                <Icon name="X" size={24} />
               </button>
             </div>
 
-            {/* Lista de comentarios */}
+            {/* Lista de comentarios con scroll */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {comments[videos[currentIndex]?.id]?.map((comment) => (
-                <div key={comment.id} className="flex space-x-3">
-                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-                    {comment.user?.avatar ? (
-                      <img src={comment.user.avatar} alt={comment.user.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-purple-500 flex items-center justify-center text-white text-sm">
-                        {comment.user?.name?.charAt(0) || 'U'}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">{comment.user?.name}</p>
-                    <p className="text-sm text-gray-700">{comment.content}</p>
-                    <p className="text-xs text-gray-400 mt-1">{new Date(comment.created_at).toLocaleDateString()}</p>
-                  </div>
+              {comments[videos[currentIndex]?.id]?.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <Icon name="MessageCircle" size={48} className="mb-2" />
+                  <p className="text-lg">No hay comentarios aún</p>
+                  <p className="text-sm">Sé el primero en comentar</p>
                 </div>
-              ))}
+              ) : (
+                comments[videos[currentIndex]?.id]?.map((comment) => (
+                  <div key={comment.id} className="space-y-2">
+                    {/* Comentario Principal */}
+                    <div className="flex space-x-3">
+                      {/* Avatar */}
+                      <Link 
+                        to={`/profile/${comment.user?.id}`}
+                        className="flex-shrink-0"
+                      >
+                        <div className="w-10 h-10 rounded-full overflow-hidden">
+                          {comment.user?.avatar ? (
+                            <img 
+                              src={comment.user.avatar} 
+                              alt={comment.user.name} 
+                              className="w-full h-full object-cover" 
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">
+                              {comment.user?.name?.charAt(0) || 'U'}
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+
+                      {/* Contenido del comentario */}
+                      <div className="flex-1">
+                        <div className="bg-gray-100 rounded-2xl px-4 py-2">
+                          <Link 
+                            to={`/profile/${comment.user?.id}`}
+                            className="font-semibold text-sm hover:underline"
+                          >
+                            {comment.user?.name}
+                          </Link>
+                          <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
+                        </div>
+                        
+                        {/* Acciones del comentario */}
+                        <div className="flex items-center space-x-4 mt-1 px-2">
+                          <span className="text-xs text-gray-500">
+                            {new Date(comment.created_at).toLocaleDateString('es', { 
+                              day: 'numeric', 
+                              month: 'short' 
+                            })}
+                          </span>
+                          <button
+                            onClick={() => handleReply(comment.id, comment.user?.name)}
+                            className="text-xs font-semibold text-gray-600 hover:text-purple-600 transition-colors"
+                          >
+                            Responder
+                          </button>
+                          {comment.replies?.length > 0 && (
+                            <button
+                              onClick={() => toggleReplies(comment.id)}
+                              className="text-xs font-semibold text-purple-600 hover:text-purple-700 transition-colors flex items-center space-x-1"
+                            >
+                              <Icon 
+                                name={showReplies[comment.id] ? "ChevronUp" : "ChevronDown"} 
+                                size={14} 
+                              />
+                              <span>
+                                {showReplies[comment.id] ? 'Ocultar' : 'Ver'} {comment.replies.length} {comment.replies.length === 1 ? 'respuesta' : 'respuestas'}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Respuestas */}
+                        {showReplies[comment.id] && comment.replies?.length > 0 && (
+                          <div className="mt-3 space-y-3 pl-4 border-l-2 border-gray-200">
+                            {comment.replies.map((reply) => (
+                              <div key={reply.id} className="flex space-x-2">
+                                {/* Avatar de respuesta */}
+                                <Link 
+                                  to={`/profile/${reply.user?.id}`}
+                                  className="flex-shrink-0"
+                                >
+                                  <div className="w-8 h-8 rounded-full overflow-hidden">
+                                    {reply.user?.avatar ? (
+                                      <img 
+                                        src={reply.user.avatar} 
+                                        alt={reply.user.name} 
+                                        className="w-full h-full object-cover" 
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                                        {reply.user?.name?.charAt(0) || 'U'}
+                                      </div>
+                                    )}
+                                  </div>
+                                </Link>
+
+                                {/* Contenido de la respuesta */}
+                                <div className="flex-1">
+                                  <div className="bg-gray-50 rounded-2xl px-3 py-2">
+                                    <Link 
+                                      to={`/profile/${reply.user?.id}`}
+                                      className="font-semibold text-sm hover:underline"
+                                    >
+                                      {reply.user?.name}
+                                    </Link>
+                                    <p className="text-sm text-gray-700 mt-1">{reply.content}</p>
+                                  </div>
+                                  <span className="text-xs text-gray-500 px-2 mt-1 inline-block">
+                                    {new Date(reply.created_at).toLocaleDateString('es', { 
+                                      day: 'numeric', 
+                                      month: 'short' 
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Input de comentario */}
-            <div className="p-4 border-t">
+            <div className="p-4 border-t bg-white">
+              {/* Indicador de respuesta */}
+              {replyingTo && (
+                <div className="mb-2 px-3 py-2 bg-purple-50 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Icon name="CornerDownRight" size={16} className="text-purple-600" />
+                    <span className="text-sm text-purple-700">
+                      Respondiendo a comentario
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCancelReply}
+                    className="text-purple-600 hover:text-purple-800"
+                  >
+                    <Icon name="X" size={18} />
+                  </button>
+                </div>
+              )}
+
               <div className="flex space-x-2">
                 <input
                   type="text"
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Agrega un comentario..."
-                  className="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:border-purple-500"
+                  placeholder={replyingTo ? "Escribe tu respuesta..." : "Agrega un comentario..."}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
                   onKeyPress={(e) => e.key === 'Enter' && handleAddComment(videos[currentIndex]?.id)}
                 />
                 <button
                   onClick={() => handleAddComment(videos[currentIndex]?.id)}
                   disabled={!newComment.trim()}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-full hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center space-x-2"
                 >
-                  Enviar
+                  <Icon name={replyingTo ? "CornerDownRight" : "Send"} size={18} />
+                  <span>{replyingTo ? 'Responder' : 'Enviar'}</span>
                 </button>
               </div>
             </div>
