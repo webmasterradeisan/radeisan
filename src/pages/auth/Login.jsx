@@ -179,12 +179,24 @@ const Login = () => {
           {/* Header */}
           <div className="text-center mb-8">
             <Link 
-              to="/" 
-              className="inline-flex items-center text-2xl font-bold text-primary hover:opacity-80 transition-opacity"
-            >
-              <Icon name="PlayCircle" size={32} className="mr-2" />
-              RADEISAN
-            </Link>
+  to="/" 
+  className="inline-flex items-center hover:opacity-80 transition-opacity"
+>
+  {branding.logo.primary ? (
+    <img 
+      src={branding.logo.primary} 
+      alt={branding.texts.appName || 'Logo'} 
+      className="h-10 object-contain"
+    />
+  ) : (
+    <>
+      <Icon name="PlayCircle" size={32} className="mr-2" />
+      <span className="text-2xl font-bold text-primary">
+        {branding.texts.appName || 'RADEISAN'}
+      </span>
+    </>
+  )}
+</Link>
             <h2 className="mt-6 text-3xl font-bold text-foreground">
               Iniciar Sesión
             </h2>
