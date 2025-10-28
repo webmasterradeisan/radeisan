@@ -1,13 +1,12 @@
-// AdminHeader.jsx - Header del panel de administración CON BRANDING DINÁMICO
+// AdminHeader.jsx - Header del panel de administración
 // Ruta: src/components/admin/AdminHeader.jsx
-// Incluye breadcrumbs, búsqueda, menú de usuario y branding personalizado
+// Incluye breadcrumbs, búsqueda y menú de usuario
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
 // Contextos y Hooks
 import { useAuth } from '../../contexts/AuthContext';
-import { useBranding } from '../../hooks/useBranding';
 
 // Componentes
 import Icon from '../AppIcon';
@@ -17,7 +16,7 @@ import Icon from '../AppIcon';
 // ============================================
 
 /**
- * Header del panel de administración con branding dinámico
+ * Header del panel de administración
  * @param {Object} props
  * @param {Function} props.onToggleSidebar - Callback para toggle del sidebar
  * @param {boolean} props.sidebarOpen - Estado del sidebar
@@ -27,9 +26,6 @@ import Icon from '../AppIcon';
 const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  
-  // Hook de branding para logo y colores personalizados
-  const { branding, loading: brandingLoading } = useBranding();
 
   // ============================================
   // ESTADO LOCAL
@@ -38,7 +34,6 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [logoError, setLogoError] = useState(false);
   const userMenuRef = useRef(null);
   const searchRef = useRef(null);
 
@@ -81,11 +76,6 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
       if (input) input.focus();
     }
   }, [searchOpen]);
-
-  // Reset logo error cuando cambia el logo
-  useEffect(() => {
-    setLogoError(false);
-  }, [branding.logo_url]);
 
   // ============================================
   // FUNCIONES
@@ -179,23 +169,6 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
     }
   };
 
-  /**
-   * Manejar error al cargar logo
-   */
-  const handleLogoError = () => {
-    console.warn('Error cargando logo del branding');
-    setLogoError(true);
-  };
-
-  // ============================================
-  // VARIABLES DE BRANDING
-  // ============================================
-
-  const hasCustomLogo = branding.logo_url && !logoError;
-  const appName = branding.app_name || 'Radeisan';
-  const primaryColor = branding.primary_color || '#8b5cf6';
-  const secondaryColor = branding.secondary_color || '#3b82f6';
-
   // ============================================
   // RENDERIZADO
   // ============================================
@@ -205,74 +178,26 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
       <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
         
         {/* ============================================ */}
-        {/* LADO IZQUIERDO: Logo + Toggle Sidebar + Breadcrumbs */}
+        {/* LADO IZQUIERDO: Toggle Sidebar + Breadcrumbs */}
         {/* ============================================ */}
 
         <div className="flex items-center flex-1 min-w-0">
-          {/* Logo y Toggle juntos */}
-          <div className="flex items-center mr-4">
-            {/* Botón Toggle Sidebar */}
-            <button
-              onClick={onToggleSidebar}
-              className="p-2 mr-2 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label={sidebarOpen ? 'Cerrar sidebar' : 'Abrir sidebar'}
-            >
-              <Icon 
-                name={sidebarOpen ? 'PanelLeftClose' : 'Menu'} 
-                size={20}
-                className="text-gray-600" 
-              />
-            </button>
-
-            {/* Logo del branding */}
-            <Link 
-              to="/admin" 
-              className="flex items-center gap-2 group"
-              title={`Panel Admin - ${appName}`}
-            >
-              {!brandingLoading && (
-                <>
-                  {hasCustomLogo ? (
-                    // Logo personalizado
-                    <img
-                      src={branding.logo_url}
-                      alt={appName}
-                      onError={handleLogoError}
-                      className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
-                      style={{ maxWidth: '120px' }}
-                    />
-                  ) : (
-                    // Fallback: Icono + Texto con colores del branding
-                    <>
-                      <div 
-                        className="p-1.5 rounded-lg transition-transform group-hover:scale-105"
-                        style={{
-                          background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                        }}
-                      >
-                        <Icon name="Shield" size={20} className="text-white" />
-                      </div>
-                      <span 
-                        className="font-bold text-lg hidden sm:block transition-colors"
-                        style={{
-                          background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
-                          WebkitBackgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                          backgroundClip: 'text'
-                        }}
-                      >
-                        {appName}
-                      </span>
-                    </>
-                  )}
-                </>
-              )}
-            </Link>
-          </div>
+          {/* Botón Toggle Sidebar */}
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 mr-2 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label={sidebarOpen ? 'Cerrar sidebar' : 'Abrir sidebar'}
+          >
+            <Icon 
+              name={sidebarOpen ? 'PanelLeftClose' : 'Menu'} 
+              size={20}
+              className="text-gray-600" 
+            />
+          </button>
 
           {/* Breadcrumbs (Desktop) */}
           {breadcrumbs.length > 0 && (
-            <nav className="hidden lg:flex items-center space-x-2 ml-4 pl-4 border-l border-gray-200" aria-label="Breadcrumb">
+            <nav className="hidden md:flex items-center space-x-2 ml-4" aria-label="Breadcrumb">
               {breadcrumbs.map((crumb, index) => (
                 <React.Fragment key={`${crumb.path}-${index}`}>
                   {index > 0 && (
@@ -297,7 +222,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
 
           {/* Título Mobile (sin breadcrumbs) */}
           {breadcrumbs.length > 0 && (
-            <div className="lg:hidden ml-2">
+            <div className="md:hidden ml-2">
               <h1 className="text-sm font-semibold text-gray-900 truncate">
                 {breadcrumbs[breadcrumbs.length - 1]?.name || 'Admin Panel'}
               </h1>
@@ -333,10 +258,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar..."
-                  className="w-64 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all"
-                  style={{
-                    focusRing: `2px solid ${primaryColor}40`
-                  }}
+                  className="w-64 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <Icon 
                   name="Search" 
@@ -397,13 +319,10 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
             {/* Botón de Usuario */}
             <button
               onClick={toggleUserMenu}
-              className="flex items-center space-x-3 p-1.5 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2"
-              style={{
-                focusRingColor: `${primaryColor}40`
-              }}
+              className="flex items-center space-x-3 p-1.5 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Menú de usuario"
             >
-              {/* Avatar con colores del branding */}
+              {/* Avatar */}
               <div className="flex-shrink-0">
                 {user?.avatar_url ? (
                   <img
@@ -412,12 +331,7 @@ const AdminHeader = ({ onToggleSidebar, sidebarOpen, breadcrumbs = [] }) => {
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div 
-                    className="w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{
-                      background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                    }}
-                  >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                     <span className="text-xs font-bold text-white">
                       {getUserInitials()}
                     </span>
