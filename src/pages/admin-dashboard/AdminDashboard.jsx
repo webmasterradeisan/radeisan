@@ -212,18 +212,21 @@ const AdminDashboard = () => {
     try {
       const { data: categories } = await supabase
         .from('content_categories')
-        .select(`
-          id,
-          name,
-          videos!videos_category_id_fkey(count)
-        `)
+        .select('id, name')
         .eq('is_active', true);
+      
+      // Contar videos por categoría
+      const categoriesWithCounts = await Promise.all(
+        (categories || []).map(async (cat) => {
+          const { count } = await supabase
+            .from('videos')
+            .select('*', { count: 'exact', head: true })
+            .eq('category_id', cat.id);
+          return { name: cat.name, value: count || 0 };
+        })
+      );
 
-      const chartData = categories?.map(cat => ({
-        name: cat.name,
-        value: cat.videos?.length || 0
-      })).filter(item => item.value > 0) || [];
-
+      const chartData = categoriesWithCounts.filter(item => item.value > 0);
       setCategoryChartData(chartData);
     } catch (error) {
       console.error('Error fetching category chart data:', error);
@@ -238,16 +241,24 @@ const AdminDashboard = () => {
       // Obtener últimas transacciones de puntos
       const { data: transactions } = await supabase
         .from('points_transactions')
-        .select(`
-          id,
-          created_at,
-          amount,
-          transaction_type,
-          description,
-          profiles:user_id (full_name, username)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(10);
+      
+      // Enriquecer con info de usuarios
+      if (transactions && transactions.length > 0) {
+        const userIds = [...new Set(transactions.map(t => t.user_id).filter(Boolean))];
+        const { data: users } = await supabase
+          .from('profiles')
+          .select('id, full_name, username')
+          .in('id', userIds);
+        
+        const usersMap = Object.fromEntries((users || []).map(u => [u.id, u]));
+        
+        transactions.forEach(t => {
+          t.profiles = usersMap[t.user_id] || null;
+        });
+      }
 
       setRecentActivity(transactions || []);
     } catch (error) {
@@ -260,22 +271,30 @@ const AdminDashboard = () => {
   // ===============================
   const fetchTopUsers = useCallback(async () => {
     try {
-      const { data: topUsers } = await supabase
+      const { data: pointsData } = await supabase
         .from('user_points')
-        .select(`
-          user_id,
-          free_points,
-          premium_points,
-          profiles:user_id (
-            full_name,
-            username,
-            avatar_url
-          )
-        `)
+        .select('user_id, free_points, premium_points')
         .order('free_points', { ascending: false })
         .limit(5);
+      
+      // Enriquecer con info de usuarios
+      let topUsersData = [];
+      if (pointsData && pointsData.length > 0) {
+        const userIds = pointsData.map(p => p.user_id);
+        const { data: users } = await supabase
+          .from('profiles')
+          .select('id, full_name, username, avatar_url')
+          .in('id', userIds);
+        
+        const usersMap = Object.fromEntries((users || []).map(u => [u.id, u]));
+        
+        topUsersData = pointsData.map(p => ({
+          ...p,
+          profiles: usersMap[p.user_id] || null
+        }));
+      }
 
-      setTopUsers(topUsers || []);
+      setTopUsers(topUsersData);
     } catch (error) {
       console.error('Error fetching top users:', error);
     }
