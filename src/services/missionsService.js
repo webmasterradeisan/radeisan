@@ -9,7 +9,7 @@
 // - Integración con sistema de puntos dual
 // ============================================================================
 
-import { supabase } from '../supabase';
+import { supabase } from '../lib/supabase';
 import * as pointsService from './pointsService';
 
 // ============================================================================
