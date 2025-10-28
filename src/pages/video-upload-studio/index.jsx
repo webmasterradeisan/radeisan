@@ -13,6 +13,8 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import VideoUploadZone from './components/VideoUploadZone';
+import CategorySelector from './components/CategorySelector';
+import { calculateVideoPoints, addFreePoints } from '../../services/pointsService';
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -167,9 +169,26 @@ const useVideoUpload = () => {
       // PASO 8: OBTENER DURACIÓN
       const videoDuration = await getVideoDuration(file);
 
-      setUploadProgress(85);
+      setUploadProgress(75);
 
-      // PASO 9: INSERTAR EN BASE DE DATOS
+      // 🆕 PASO 9: CALCULAR PUNTOS BASADOS EN CATEGORÍA Y ORIENTACIÓN
+      console.log('💰 Calculando puntos...');
+      let pointsCalculation = { total_points: 10 }; // Fallback por defecto
+      
+      try {
+        pointsCalculation = await calculateVideoPoints(
+          Math.round(videoDuration || 0),
+          metadata.category,
+          orientationData.orientation
+        );
+        console.log('📊 Puntos calculados:', pointsCalculation);
+      } catch (pointsCalcError) {
+        console.warn('⚠️ Error calculando puntos, usando valor por defecto:', pointsCalcError);
+      }
+
+      setUploadProgress(80);
+
+      // 🆕 PASO 10: INSERTAR EN BASE DE DATOS CON ORIENTACIÓN Y PUNTOS
       const { data: videoData, error: insertError } = await supabase
         .from('videos')
         .insert({
@@ -183,18 +202,56 @@ const useVideoUpload = () => {
           duration_seconds: Math.round(videoDuration || 0),
           file_size_bytes: file.size,
           is_published: metadata.visibility === 'public',
-          points_earned: 0,
+          
+          // 🆕 DATOS DE ORIENTACIÓN
           orientation: orientationData.orientation,
           aspect_ratio: orientationData.aspectRatio,
           video_width: orientationData.width,
-          video_height: orientationData.height
+          video_height: orientationData.height,
+          
+          // 🆕 PUNTOS CALCULADOS
+          points_earned: pointsCalculation.total_points
         })
         .select()
         .single();
 
       if (insertError) throw insertError;
 
-      setUploadProgress(95);
+      setUploadProgress(85);
+
+      // 🆕 PASO 11: OTORGAR PUNTOS AL USUARIO
+      console.log('🎁 Otorgando puntos al usuario...');
+      try {
+        await addFreePoints(
+          pointsCalculation.total_points,
+          `Video subido: ${metadata.title}`,
+          'video',
+          videoData.id
+        );
+        console.log('✅ Puntos otorgados:', pointsCalculation.total_points);
+      } catch (pointsError) {
+        console.warn('⚠️ Error otorgando puntos:', pointsError);
+      }
+
+      setUploadProgress(90);
+
+      // 🆕 PASO 12: ACTUALIZAR CONTADOR DE CATEGORÍA
+      console.log('📊 Actualizando contador de categoría...');
+      try {
+        const { error: categoryError } = await supabase.rpc('increment_category_count', {
+          category_slug: metadata.category
+        });
+        
+        if (categoryError) {
+          console.warn('⚠️ Error actualizando contador:', categoryError);
+        } else {
+          console.log('✅ Contador de categoría actualizado');
+        }
+      } catch (categoryUpdateError) {
+        console.warn('⚠️ Error en contador de categoría:', categoryUpdateError);
+      }
+
+      setUploadProgress(95);      setUploadProgress(95);
 
       // PASO 10: OTORGAR PUNTOS
       const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
@@ -209,7 +266,8 @@ const useVideoUpload = () => {
         videoId: videoData.id,
         videoUrl: urlData.publicUrl,
         thumbnailUrl,
-        pointsEarned: uploadPoints,
+        pointsEarned: pointsCalculation.total_points,
+        pointsBreakdown: pointsCalculation,
         orientation: orientationData.orientation,
         aspectRatio: orientationData.aspectRatio,
         detectionData: orientationData
@@ -1136,16 +1194,12 @@ const VideoUploadStudio = () => {
                           </p>
                         </div>
 
-                        {/* Categoría */}
-                        <div>
-                          <Select
-                            label="Categoría"
-                            value={formData.category}
-                            onChange={(value) => handleInputChange('category', value)}
-                            options={categories}
-                            required
-                          />
-                        </div>
+                        {/* Categoría - 🆕 INTEGRADO CON ADMIN */}
+                        <CategorySelector
+                          value={formData.category}
+                          onChange={(category) => handleInputChange('category', category)}
+                          required
+                        />
 
                         {/* Tags */}
                         <div>
@@ -1269,6 +1323,52 @@ const VideoUploadStudio = () => {
                         <p className="text-xs text-muted-foreground">{uploadSuccess.aspectRatio}</p>
                       </div>
                     </div>
+
+                    {/* 🆕 DESGLOSE DETALLADO DE PUNTOS */}
+                    {uploadSuccess.pointsBreakdown && (
+                      <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
+                          <Icon name="Info" size={16} className="mr-2" />
+                          Desglose de puntos
+                        </h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Puntos base (duración):</span>
+                            <span className="font-medium text-foreground">
+                              {uploadSuccess.pointsBreakdown.base_points} pts
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">
+                              Multiplicador {uploadSuccess.pointsBreakdown.category_name}:
+                            </span>
+                            <span className="font-medium text-foreground">
+                              ×{uploadSuccess.pointsBreakdown.category_multiplier}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Subtotal con categoría:</span>
+                            <span className="font-medium text-foreground">
+                              {uploadSuccess.pointsBreakdown.points_with_category} pts
+                            </span>
+                          </div>
+                          {uploadSuccess.pointsBreakdown.orientation_bonus > 0 && (
+                            <div className="flex justify-between items-center text-success">
+                              <span>Bonus por Reel vertical:</span>
+                              <span className="font-semibold">
+                                +{uploadSuccess.pointsBreakdown.orientation_bonus} pts
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center pt-2 border-t border-border">
+                            <span className="font-semibold text-foreground">Total ganado:</span>
+                            <span className="font-bold text-primary text-lg">
+                              {uploadSuccess.pointsBreakdown.total_points} pts
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex flex-col sm:flex-row gap-4">
                       <Button 
