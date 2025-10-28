@@ -31,7 +31,7 @@ export const useBranding = () => {
 
   const loadBranding = async () => {
     try {
-      console.log('🔍 useBranding: Cargando configuración...');
+      console.log('useBranding: Cargando configuracion...');
       
       const { data, error } = await supabase
         .from('system_settings')
@@ -40,7 +40,7 @@ export const useBranding = () => {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('❌ useBranding: Error:', error);
+        console.error('useBranding: Error:', error);
         return;
       }
 
@@ -49,13 +49,13 @@ export const useBranding = () => {
           ? JSON.parse(data.setting_value)
           : data.setting_value;
         
-        console.log('✅ useBranding: Branding cargado:', brandingData);
+        console.log('useBranding: Branding cargado:', brandingData);
         setBranding(brandingData);
       } else {
-        console.log('⚠️ useBranding: No hay datos, usando defaults');
+        console.log('useBranding: No hay datos, usando defaults');
       }
     } catch (err) {
-      console.error('❌ useBranding: Error en catch:', err);
+      console.error('useBranding: Error en catch:', err);
     } finally {
       setLoading(false);
     }
@@ -63,15 +63,3 @@ export const useBranding = () => {
 
   return { branding, loading };
 };
-```
-
-### Paso 3: Recarga la aplicación
-
-Una vez creado el archivo, recarga el Login y abre la consola (F12).
-
----
-
-## 📊 ¿Qué deberías ver en la consola?
-```
-🔍 useBranding: Cargando configuración...
-✅ useBranding: Branding cargado: {logo: {...}, colors: {...}}
