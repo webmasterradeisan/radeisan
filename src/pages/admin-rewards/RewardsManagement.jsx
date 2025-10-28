@@ -133,8 +133,8 @@ export default function RewardsManagement() {
         .from('reward_redemptions')
         .select(`
           *,
-          user:user_id(id, full_name, username, avatar_url),
-          reward:reward_id(id, name, image_url)
+          users!user_id(id, full_name, username, avatar_url),
+          rewards!reward_id(id, name, image_url)
         `)
         .order('created_at', { ascending: false })
         .limit(50);
