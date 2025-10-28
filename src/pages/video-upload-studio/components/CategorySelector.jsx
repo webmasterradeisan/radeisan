@@ -4,9 +4,9 @@ import { supabase } from '../../../lib/supabase';
 import Icon from '../../../components/AppIcon';
 
 /**
- * COMPONENTE DE SELECTOR DE CATEGORÍAS
- * Carga categorías activas desde content_categories y permite selección
- * Integrado con el sistema administrativo de categorías
+ * COMPONENTE DE SELECTOR DE CATEGORÍAS - VERSIÓN CORREGIDA
+ * Carga categorías activas desde content_categories
+ * Maneja correctamente emojis vs nombres de iconos
  */
 const CategorySelector = ({ value, onChange, required = true, className = '' }) => {
   const [categories, setCategories] = useState([]);
@@ -39,17 +39,48 @@ const CategorySelector = ({ value, onChange, required = true, className = '' }) 
       console.error('❌ Error loading categories:', err);
       setError('Error al cargar categorías');
       
-      // Fallback: categorías por defecto si falla la carga
+      // Fallback: categorías por defecto con emojis correctos
       setCategories([
         { id: 'default-1', slug: 'general', name: 'General', icon: '📌', color: '#3b82f6' },
         { id: 'default-2', slug: 'educacion', name: 'Educación', icon: '📚', color: '#10b981' },
         { id: 'default-3', slug: 'entretenimiento', name: 'Entretenimiento', icon: '🎬', color: '#f59e0b' },
         { id: 'default-4', slug: 'tecnologia', name: 'Tecnología', icon: '💻', color: '#8b5cf6' },
-        { id: 'default-5', slug: 'negocios', name: 'Negocios', icon: '💼', color: '#ef4444' }
+        { id: 'default-5', slug: 'negocios', name: 'Negocios', icon: '💼', color: '#ef4444' },
+        { id: 'default-6', slug: 'gaming', name: 'Gaming', icon: '🎮', color: '#ec4899' },
+        { id: 'default-7', slug: 'comedia', name: 'Comedia', icon: '😂', color: '#f59e0b' },
+        { id: 'default-8', slug: 'musica', name: 'Música', icon: '🎵', color: '#8b5cf6' },
+        { id: 'default-9', slug: 'deportes', name: 'Deportes', icon: '⚽', color: '#10b981' },
+        { id: 'default-10', slug: 'viajes', name: 'Viajes', icon: '✈️', color: '#06b6d4' },
+        { id: 'default-11', slug: 'cocina', name: 'Cocina', icon: '🍳', color: '#f59e0b' },
+        { id: 'default-12', slug: 'arte', name: 'Arte', icon: '🎨', color: '#ec4899' },
+        { id: 'default-13', slug: 'ciencia', name: 'Ciencia', icon: '🔬', color: '#10b981' },
+        { id: 'default-14', slug: 'salud', name: 'Salud', icon: '🏥', color: '#10b981' },
+        { id: 'default-15', slug: 'moda', name: 'Moda', icon: '👗', color: '#ec4899' }
       ]);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Función para determinar si el "icon" es un emoji o nombre de icono
+  const isEmoji = (str) => {
+    if (!str) return false;
+    // Los emojis tienen 1-4 caracteres y contienen caracteres especiales
+    return str.length <= 4 && /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/u.test(str);
+  };
+
+  // Renderizar el icono correctamente
+  const renderIcon = (category) => {
+    if (!category.icon) return null;
+
+    // Si es emoji, mostrarlo directamente
+    if (isEmoji(category.icon)) {
+      return category.icon;
+    }
+
+    // Si no es emoji, es probable que sea un nombre de icono de Lucide
+    // En este caso, no lo mostramos o usamos un emoji por defecto
+    return '📄'; // Emoji por defecto
   };
 
   return (
@@ -78,7 +109,7 @@ const CategorySelector = ({ value, onChange, required = true, className = '' }) 
           <option value="">Selecciona una categoría</option>
           {categories.map(cat => (
             <option key={cat.id} value={cat.slug}>
-              {cat.icon && `${cat.icon} `}{cat.name}
+              {renderIcon(cat)} {cat.name}
             </option>
           ))}
         </select>
