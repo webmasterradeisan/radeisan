@@ -21,7 +21,8 @@ const AdminDashboard = () => {
   // Estados para métricas
   const [metrics, setMetrics] = useState({
     totalUsers: 0,
-    totalVideos: 0,
+    totalVideos: 0, // Videos horizontales
+    totalReels: 0, // Videos verticales
     totalPhotos: 0,
     totalCategories: 0,
     totalFreePoints: 0,
@@ -85,10 +86,17 @@ const AdminDashboard = () => {
         .select('*', { count: 'exact', head: true })
         .gte('created_at', today.toISOString());
 
-      // Total de videos
+      // Total de videos horizontales (orientation = 'horizontal')
       const { count: totalVideos } = await supabase
         .from('videos')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('orientation', 'horizontal');
+
+      // Total de reels (orientation = 'vertical')
+      const { count: totalReels } = await supabase
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('orientation', 'vertical');
 
       // Total de fotos
       const { count: totalPhotos } = await supabase
@@ -112,6 +120,7 @@ const AdminDashboard = () => {
       setMetrics({
         totalUsers: totalUsers || 0,
         totalVideos: totalVideos || 0,
+        totalReels: totalReels || 0,
         totalPhotos: totalPhotos || 0,
         totalCategories: totalCategories || 0,
         totalFreePoints,
@@ -169,11 +178,21 @@ const AdminDashboard = () => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const { data: videos } = await supabase
+      // Videos horizontales
+      const { data: videosHorizontal } = await supabase
         .from('videos')
         .select('created_at')
+        .eq('orientation', 'horizontal')
         .gte('created_at', thirtyDaysAgo.toISOString());
 
+      // Reels (videos verticales)
+      const { data: videosVertical } = await supabase
+        .from('videos')
+        .select('created_at')
+        .eq('orientation', 'vertical')
+        .gte('created_at', thirtyDaysAgo.toISOString());
+
+      // Fotos
       const { data: photos } = await supabase
         .from('photos')
         .select('created_at')
@@ -188,15 +207,21 @@ const AdminDashboard = () => {
 
       const weeklyData = {};
       
-      videos?.forEach(video => {
+      videosHorizontal?.forEach(video => {
         const week = getWeekNumber(video.created_at);
-        if (!weeklyData[week]) weeklyData[week] = { semana: week, videos: 0, fotos: 0 };
+        if (!weeklyData[week]) weeklyData[week] = { semana: week, videos: 0, reels: 0, fotos: 0 };
         weeklyData[week].videos++;
+      });
+
+      videosVertical?.forEach(reel => {
+        const week = getWeekNumber(reel.created_at);
+        if (!weeklyData[week]) weeklyData[week] = { semana: week, videos: 0, reels: 0, fotos: 0 };
+        weeklyData[week].reels++;
       });
 
       photos?.forEach(photo => {
         const week = getWeekNumber(photo.created_at);
-        if (!weeklyData[week]) weeklyData[week] = { semana: week, videos: 0, fotos: 0 };
+        if (!weeklyData[week]) weeklyData[week] = { semana: week, videos: 0, reels: 0, fotos: 0 };
         weeklyData[week].fotos++;
       });
 
@@ -376,7 +401,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Métricas principales */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Total Usuarios */}
           <div className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
             <div className="flex items-center justify-between mb-4">
@@ -390,24 +415,43 @@ const AdminDashboard = () => {
             <h3 className="text-2xl font-bold text-foreground mb-1">
               {metrics.totalUsers.toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Total de Usuarios</p>
+            <p className="text-sm text-muted-foreground">Usuarios</p>
             <div className="mt-2 text-xs text-muted-foreground">
               <Icon name="Activity" size={12} className="inline mr-1" />
-              {metrics.activeUsers} activos (7 días)
+              {metrics.activeUsers} activos
             </div>
           </div>
 
-          {/* Total Videos */}
+          {/* Total Videos Horizontales */}
           <div className="bg-card border border-border rounded-lg p-6 hover:border-secondary/50 transition-colors">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center">
-                <Icon name="Video" size={24} color={COLORS.secondary} />
+                <Icon name="Monitor" size={24} color={COLORS.secondary} />
               </div>
             </div>
             <h3 className="text-2xl font-bold text-foreground mb-1">
               {metrics.totalVideos.toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Videos Publicados</p>
+            <p className="text-sm text-muted-foreground">Videos</p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Formato horizontal
+            </div>
+          </div>
+
+          {/* Total Reels */}
+          <div className="bg-card border border-border rounded-lg p-6 hover:border-purple/50 transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-full bg-purple/10 flex items-center justify-center">
+                <Icon name="Smartphone" size={24} color={COLORS.purple} />
+              </div>
+            </div>
+            <h3 className="text-2xl font-bold text-foreground mb-1">
+              {metrics.totalReels.toLocaleString()}
+            </h3>
+            <p className="text-sm text-muted-foreground">Reels</p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Formato vertical
+            </div>
           </div>
 
           {/* Total Fotos */}
@@ -420,7 +464,10 @@ const AdminDashboard = () => {
             <h3 className="text-2xl font-bold text-foreground mb-1">
               {metrics.totalPhotos.toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Fotos Publicadas</p>
+            <p className="text-sm text-muted-foreground">Fotos</p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Galería de imágenes
+            </div>
           </div>
 
           {/* Puntos Distribuidos */}
@@ -433,12 +480,19 @@ const AdminDashboard = () => {
             <h3 className="text-2xl font-bold text-foreground mb-1">
               {(metrics.totalFreePoints + metrics.totalPremiumPoints).toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Puntos Distribuidos</p>
-            <div className="mt-2 flex items-center gap-3 text-xs">
+            <p className="text-sm text-muted-foreground">Puntos</p>
+            <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="text-accent">
-                <Icon name="Circle" size={10} className="inline mr-1" />
-                {metrics.totalFreePoints.toLocaleString()} gratis
+                <Icon name="Circle" size={8} className="inline mr-1" />
+                {metrics.totalFreePoints.toLocaleString()}
               </span>
+              <span className="text-success">
+                <Icon name="Gem" size={8} className="inline mr-1" />
+                {metrics.totalPremiumPoints.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
               <span className="text-success">
                 <Icon name="Gem" size={10} className="inline mr-1" />
                 {metrics.totalPremiumPoints.toLocaleString()} premium
@@ -507,8 +561,9 @@ const AdminDashboard = () => {
                   }}
                 />
                 <Legend />
-                <Bar dataKey="videos" fill={COLORS.secondary} radius={[8, 8, 0, 0]} />
-                <Bar dataKey="fotos" fill={COLORS.accent} radius={[8, 8, 0, 0]} />
+                <Bar dataKey="videos" name="Videos" fill={COLORS.secondary} radius={[8, 8, 0, 0]} />
+                <Bar dataKey="reels" name="Reels" fill={COLORS.purple} radius={[8, 8, 0, 0]} />
+                <Bar dataKey="fotos" name="Fotos" fill={COLORS.accent} radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
