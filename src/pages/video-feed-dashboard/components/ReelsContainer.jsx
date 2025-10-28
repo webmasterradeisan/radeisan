@@ -581,7 +581,8 @@ const ReelsContainer = ({
           user:user_id (
             id,
             name,
-            avatar
+            avatar,
+            username
           )
         `)
         .eq('video_id', videoId)
