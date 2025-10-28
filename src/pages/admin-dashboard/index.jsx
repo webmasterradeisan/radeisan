@@ -3,6 +3,7 @@
 // ============================================
 // Dashboard principal del panel de administración
 // Muestra KPIs, estadísticas y actividad reciente
+// ✅ MODIFICADO: Separa Videos, Reels y Fotos
 // ============================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -12,8 +13,8 @@ import { Link } from 'react-router-dom';
 import { useAdminRole } from '../../hooks/useAdminRole';
 
 // Servicios
+import { supabase } from '../../supabase';
 import { 
-  getAdminStats, 
   getRecentActivity, 
   getTopUsersByPoints,
   formatNumber,
@@ -36,7 +37,7 @@ const StatsCard = ({
   icon, 
   iconColor, 
   iconBg, 
-  change = null,
+  subtitle = null,
   loading = false,
   link = null
 }) => {
@@ -64,30 +65,9 @@ const StatsCard = ({
             </p>
           )}
 
-          {/* Variación */}
-          {change !== null && !loading && (
-            <div className="flex items-center mt-2 space-x-1">
-              {change > 0 ? (
-                <>
-                  <AppIcon name="TrendingUp" className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-green-600">
-                    +{change}%
-                  </span>
-                </>
-              ) : change < 0 ? (
-                <>
-                  <AppIcon name="TrendingDown" className="w-4 h-4 text-red-600" />
-                  <span className="text-sm font-medium text-red-600">
-                    {change}%
-                  </span>
-                </>
-              ) : (
-                <span className="text-sm font-medium text-gray-500">
-                  Sin cambios
-                </span>
-              )}
-              <span className="text-xs text-gray-500">vs semana anterior</span>
-            </div>
+          {/* Subtítulo */}
+          {subtitle && !loading && (
+            <p className="text-xs text-gray-500 mt-2">{subtitle}</p>
           )}
         </div>
 
@@ -225,104 +205,147 @@ const TopUserItem = ({ user, rank }) => {
 // ============================================
 
 const AdminDashboard = () => {
-  const { canAccess } = useAdminRole();
+  const { isAdmin, loading: roleLoading, canAccess } = useAdminRole();
 
-  // ============================================
-  // ESTADO LOCAL
-  // ============================================
-
-  const [stats, setStats] = useState(null);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [topUsers, setTopUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [stats, setStats] = useState({
+    total_users: 0,
+    total_videos: 0,
+    total_reels: 0,
+    total_photos: 0,
+    total_points_distributed: 0,
+    active_users_today: 0,
+    pending_reports: 0
+  });
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [topUsers, setTopUsers] = useState([]);
 
   // ============================================
-  // FUNCIONES
+  // FETCH STATS PERSONALIZADAS
   // ============================================
-
-  /**
-   * Cargar datos del dashboard
-   */
-  const loadDashboardData = useCallback(async () => {
+  const fetchStats = useCallback(async () => {
     try {
-      setError(null);
-      
-      // Cargar estadísticas principales
-      const statsData = await getAdminStats();
-      setStats(statsData);
+      // Total de usuarios
+      const { count: totalUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
 
-      // Cargar actividad reciente
-      const activityData = await getRecentActivity(10);
-      setRecentActivity(activityData || []);
+      // Total de videos horizontales
+      const { count: totalVideos } = await supabase
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('orientation', 'horizontal');
 
-      // Cargar top usuarios
-      const topUsersData = await getTopUsersByPoints(5);
-      setTopUsers(topUsersData || []);
+      // Total de reels (verticales)
+      const { count: totalReels } = await supabase
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('orientation', 'vertical');
 
-      setLastUpdate(new Date());
+      // Total de fotos
+      const { count: totalPhotos } = await supabase
+        .from('photos')
+        .select('*', { count: 'exact', head: true });
+
+      // Puntos distribuidos
+      const { data: pointsData } = await supabase
+        .from('user_points')
+        .select('free_points, premium_points');
+
+      const totalPoints = pointsData?.reduce(
+        (sum, p) => sum + (p.free_points || 0) + (p.premium_points || 0),
+        0
+      ) || 0;
+
+      // Usuarios activos hoy
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count: activeToday } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('updated_at', today.toISOString());
+
+      // Reportes pendientes
+      const { count: pendingReports } = await supabase
+        .from('content_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      setStats({
+        total_users: totalUsers || 0,
+        total_videos: totalVideos || 0,
+        total_reels: totalReels || 0,
+        total_photos: totalPhotos || 0,
+        total_points_distributed: totalPoints,
+        active_users_today: activeToday || 0,
+        pending_reports: pendingReports || 0
+      });
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+      setError(err.message);
+    }
+  }, []);
+
+  // ============================================
+  // CARGAR DATOS
+  // ============================================
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await Promise.all([
+        fetchStats(),
+        getRecentActivity(10).then(data => setRecentActivity(data.activities || [])),
+        getTopUsersByPoints(5).then(data => setTopUsers(data.users || []))
+      ]);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError('Error al cargar los datos del dashboard');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchStats]);
 
-  /**
-   * Refresh manual
-   */
+  // ============================================
+  // EFFECTS
+  // ============================================
+  useEffect(() => {
+    if (!roleLoading && isAdmin) {
+      loadData();
+    }
+  }, [roleLoading, isAdmin, loadData]);
+
+  // ============================================
+  // HANDLERS
+  // ============================================
   const handleRefresh = () => {
-    setLoading(true);
-    loadDashboardData();
+    loadData();
   };
 
   // ============================================
-  // EFECTOS
+  // RENDER
   // ============================================
-
-  // Cargar datos al montar
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
-
-  // Auto-refresh cada 30 segundos
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadDashboardData();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [loadDashboardData]);
-
-  // ============================================
-  // RENDERIZADO
-  // ============================================
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* ============================================ */}
       {/* HEADER */}
       {/* ============================================ */}
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Vista general de tu plataforma
-          </p>
-        </div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Panel Admin</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Vista general de tu plataforma
+            </p>
+          </div>
 
-        {/* Botón de refresh */}
-        <div className="mt-4 sm:mt-0 flex items-center space-x-3">
-          <span className="text-xs text-gray-500">
-            Última actualización: {formatRelativeDate(lastUpdate)}
-          </span>
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <AppIcon 
               name="RefreshCw" 
@@ -356,68 +379,60 @@ const AdminDashboard = () => {
       )}
 
       {/* ============================================ */}
-      {/* GRID DE KPIs */}
+      {/* GRID DE KPIs - 5 TARJETAS */}
       {/* ============================================ */}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatsCard
-          title="Total de Usuarios"
+          title="Usuarios"
           value={stats?.total_users || 0}
           icon="Users"
           iconColor="text-blue-600"
           iconBg="bg-blue-100"
-          change={stats?.users_growth}
+          subtitle="Total registrados"
           loading={loading}
           link={canAccess('manage_users') ? '/admin/users' : null}
         />
 
         <StatsCard
-          title="Total de Contenido"
-          value={stats?.total_content || 0}
-          icon="FileVideo"
+          title="Videos"
+          value={stats?.total_videos || 0}
+          icon="Monitor"
           iconColor="text-purple-600"
           iconBg="bg-purple-100"
-          change={stats?.content_growth}
+          subtitle="Formato horizontal"
           loading={loading}
         />
 
         <StatsCard
-          title="Puntos Distribuidos"
+          title="Reels"
+          value={stats?.total_reels || 0}
+          icon="Smartphone"
+          iconColor="text-pink-600"
+          iconBg="bg-pink-100"
+          subtitle="Formato vertical"
+          loading={loading}
+        />
+
+        <StatsCard
+          title="Fotos"
+          value={stats?.total_photos || 0}
+          icon="Image"
+          iconColor="text-cyan-600"
+          iconBg="bg-cyan-100"
+          subtitle="Galería de imágenes"
+          loading={loading}
+        />
+
+        <StatsCard
+          title="Puntos"
           value={stats?.total_points_distributed || 0}
           icon="Coins"
           iconColor="text-yellow-600"
           iconBg="bg-yellow-100"
+          subtitle="Distribuidos"
           loading={loading}
           link={canAccess('manage_points') ? '/admin/points' : null}
-        />
-
-        <StatsCard
-          title="Ventas Premium"
-          value={stats?.premium_sales ? `$${formatNumber(stats.premium_sales)}` : '$0'}
-          icon="DollarSign"
-          iconColor="text-green-600"
-          iconBg="bg-green-100"
-          change={stats?.sales_growth}
-          loading={loading}
-        />
-
-        <StatsCard
-          title="Usuarios Activos Hoy"
-          value={stats?.active_users_today || 0}
-          icon="Activity"
-          iconColor="text-indigo-600"
-          iconBg="bg-indigo-100"
-          loading={loading}
-        />
-
-        <StatsCard
-          title="Reportes Pendientes"
-          value={stats?.pending_reports || 0}
-          icon="Shield"
-          iconColor={stats?.pending_reports > 0 ? 'text-red-600' : 'text-gray-600'}
-          iconBg={stats?.pending_reports > 0 ? 'bg-red-100' : 'bg-gray-100'}
-          loading={loading}
-          link={canAccess('moderate_content') ? '/admin/moderation' : null}
         />
       </div>
 
@@ -536,7 +551,7 @@ const AdminDashboard = () => {
             <div className="text-center">
               <AppIcon name="BarChart3" className="w-16 h-16 mx-auto mb-3 text-gray-400" />
               <p className="text-sm font-medium text-gray-700">Gráfica de Crecimiento</p>
-              <p className="text-xs text-gray-500 mt-1">Se implementará con Recharts en Sprint 4</p>
+              <p className="text-xs text-gray-500 mt-1">Próximamente</p>
             </div>
           </div>
         </div>
