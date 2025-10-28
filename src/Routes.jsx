@@ -39,6 +39,7 @@ import AdminDashboard from './pages/admin-dashboard';
 import UserManagement from './pages/admin-users/UserManagement';
 import CategoryManagement from './pages/admin-categories/CategoryManagement';
 import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
+import MissionsManagement from './pages/admin-missions/MissionsManagement'; // ✅ NUEVO - Gestión de Misiones
 import RewardsManagement from './pages/admin-rewards/RewardsManagement';
 import BrandingSettings from './pages/admin-settings/BrandingSettings';
 import ContentModeration from './pages/admin-moderation/ContentModeration';
@@ -114,7 +115,7 @@ const Unauthorized = () => (
 );
 
 // ===============================
-// PLACEHOLDER SOLO PARA MISIONES Y LOGS
+// PLACEHOLDER SOLO PARA LOGS
 // ===============================
 const AdminPlaceholder = ({ title, description, requiredPermission }) => (
   <div className="p-6">
@@ -222,7 +223,7 @@ const Routes = () => {
               } 
             />
 
-            {/* =================== RUTAS PROTEGIDAS - USUARIO =================== */}
+            {/* =================== RUTAS PROTEGIDAS =================== */}
             
             <Route 
               path="/dashboard" 
@@ -350,16 +351,12 @@ const Routes = () => {
                 } 
               />
 
-              {/* Misiones - ⏳ PLACEHOLDER */}
+              {/* Misiones - ✅ REAL (NUEVO) */}
               <Route 
                 path="missions" 
                 element={
                   <ProtectedAdminRoute requiredPermission="manage_missions">
-                    <AdminPlaceholder 
-                      title="Misiones Diarias"
-                      description="Administra misiones y sistema de rachas"
-                      requiredPermission="manage_missions"
-                    />
+                    <MissionsManagement />
                   </ProtectedAdminRoute>
                 } 
               />
