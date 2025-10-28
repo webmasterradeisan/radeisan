@@ -1,9 +1,10 @@
 // src/pages/auth/Login.jsx
-// LOGIN COMPLETO Y FUNCIONAL - Versión simplificada sin bucles
+// LOGIN COMPLETO Y FUNCIONAL - Con Branding Dinámico
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBranding } from '../../hooks/useBranding';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Icon from '../../components/AppIcon';
@@ -12,6 +13,7 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { signIn, user, loading: authLoading } = useAuth();
+  const { branding } = useBranding(); // ✅ Hook de branding
   
   // Estados del formulario
   const [formData, setFormData] = useState({
@@ -169,39 +171,54 @@ const Login = () => {
   return (
     <>
       <Helmet>
-        <title>Iniciar Sesión | RADEISAN</title>
-        <meta name="description" content="Accede a tu cuenta de RADEISAN" />
+        <title>Iniciar Sesión | {branding.texts.appName || 'RADEISAN'}</title>
+        <meta name="description" content={`Accede a tu cuenta de ${branding.texts.appName || 'RADEISAN'}`} />
       </Helmet>
 
       <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
         <div className="w-full max-w-md">
           
-          {/* Header */}
+          {/* Header con Logo Dinámico */}
           <div className="text-center mb-8">
             <Link 
-  to="/" 
-  className="inline-flex items-center hover:opacity-80 transition-opacity"
->
-  {branding.logo.primary ? (
-    <img 
-      src={branding.logo.primary} 
-      alt={branding.texts.appName || 'Logo'} 
-      className="h-10 object-contain"
-    />
-  ) : (
-    <>
-      <Icon name="PlayCircle" size={32} className="mr-2" />
-      <span className="text-2xl font-bold text-primary">
-        {branding.texts.appName || 'RADEISAN'}
-      </span>
-    </>
-  )}
-</Link>
+              to="/" 
+              className="inline-flex items-center justify-center hover:opacity-80 transition-opacity mb-6"
+            >
+              {branding.logo.primary ? (
+                // Logo personalizado
+                <img 
+                  src={branding.logo.primary} 
+                  alt={branding.texts.appName || 'Logo'} 
+                  className="h-12 object-contain"
+                  onError={(e) => {
+                    // Si falla, mostrar icono + texto por defecto
+                    e.target.style.display = 'none';
+                    const fallback = e.target.nextElementSibling;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              
+              {/* Fallback: Icono + Texto (se muestra si no hay logo o si falla) */}
+              <div 
+                className="inline-flex items-center"
+                style={{ display: branding.logo.primary ? 'none' : 'flex' }}
+              >
+                <Icon name="PlayCircle" size={32} className="mr-2" style={{ color: branding.colors.primary }} />
+                <span 
+                  className="text-2xl font-bold"
+                  style={{ color: branding.colors.primary }}
+                >
+                  {branding.texts.appName || 'RADEISAN'}
+                </span>
+              </div>
+            </Link>
+            
             <h2 className="mt-6 text-3xl font-bold text-foreground">
               Iniciar Sesión
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Accede a tu cuenta y continúa creando contenido
+              {branding.texts.welcomeMessage || 'Accede a tu cuenta y continúa creando contenido'}
             </p>
           </div>
 
@@ -378,6 +395,7 @@ const Login = () => {
                 <div>Submitting: <span className="text-blue-400">{isSubmitting ? 'true' : 'false'}</span></div>
                 <div>RedirectTo: <span className="text-purple-400">{redirectTo}</span></div>
                 <div>FormValid: <span className="text-orange-400">{formData.email && formData.password ? 'true' : 'false'}</span></div>
+                <div>Branding: <span className="text-cyan-400">{branding.texts.appName}</span></div>
                 {location.state?.from && (
                   <div>From: <span className="text-cyan-400">{location.state.from}</span></div>
                 )}
