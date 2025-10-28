@@ -129,34 +129,64 @@ export const isAdmin = async (userId) => {
 
 /**
  * Obtiene las estadísticas principales del dashboard
+ * ✅ MODIFICADO: Ahora separa videos horizontales y reels verticales
  * @returns {Promise<Object>} Estadísticas del dashboard
  */
 export const getAdminStats = async () => {
   try {
-    const { data, error } = await supabase.rpc('get_admin_dashboard_stats');
+    // Llamar a la función RPC original
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_dashboard_stats');
 
-    if (error) throw error;
+    if (rpcError) throw rpcError;
 
-    return data || {
-      total_users: 0,
-      total_videos: 0,
-      total_photos: 0,
-      total_points_distributed: 0,
-      active_users_today: 0,
-      new_users_this_week: 0,
-      pending_reports: 0,
-      total_premium_sales: 0,
+    // 🆕 CONSULTAS ADICIONALES: Separar videos por orientación
+    const { count: horizontalCount } = await supabase
+      .from('videos')
+      .select('*', { count: 'exact', head: true })
+      .eq('orientation', 'horizontal');
+
+    const { count: verticalCount } = await supabase
+      .from('videos')
+      .select('*', { count: 'exact', head: true })
+      .eq('orientation', 'vertical');
+
+    // Combinar resultados
+    const stats = {
+      total_users: rpcData?.total_users || 0,
+      total_videos: horizontalCount || 0, // Videos horizontales
+      total_reels: verticalCount || 0,    // Reels verticales
+      total_photos: rpcData?.total_photos || 0,
+      total_points_distributed: rpcData?.total_points_distributed || 0,
+      active_users_today: rpcData?.active_users_today || 0,
+      new_users_this_week: rpcData?.new_users_this_week || 0,
+      pending_reports: rpcData?.pending_reports || 0,
+      total_premium_sales: rpcData?.total_premium_sales || 0,
     };
+
+    return { stats }; // Devolver en el mismo formato que espera el componente
   } catch (error) {
     console.error('Error al obtener estadísticas del admin:', error);
-    throw error;
+    // Devolver estructura vacía en caso de error
+    return {
+      stats: {
+        total_users: 0,
+        total_videos: 0,
+        total_reels: 0,
+        total_photos: 0,
+        total_points_distributed: 0,
+        active_users_today: 0,
+        new_users_this_week: 0,
+        pending_reports: 0,
+        total_premium_sales: 0,
+      }
+    };
   }
 };
 
 /**
  * Obtiene la actividad reciente del sistema
  * @param {number} limit - Número de actividades a obtener (default: 10)
- * @returns {Promise<Array>} Lista de actividades recientes
+ * @returns {Promise<Object>} Objeto con lista de actividades recientes
  */
 export const getRecentActivity = async (limit = 10) => {
   try {
@@ -165,17 +195,17 @@ export const getRecentActivity = async (limit = 10) => {
     });
 
     if (error) throw error;
-    return data || [];
+    return { activities: data || [] }; // Devolver en formato que espera el componente
   } catch (error) {
     console.error('Error al obtener actividad reciente:', error);
-    throw error;
+    return { activities: [] };
   }
 };
 
 /**
  * Obtiene el ranking de usuarios por puntos
  * @param {number} limit - Número de usuarios a obtener (default: 10)
- * @returns {Promise<Array>} Lista de top usuarios
+ * @returns {Promise<Object>} Objeto con lista de top usuarios
  */
 export const getTopUsersByPoints = async (limit = 10) => {
   try {
@@ -184,10 +214,10 @@ export const getTopUsersByPoints = async (limit = 10) => {
     });
 
     if (error) throw error;
-    return data || [];
+    return { users: data || [] }; // Devolver en formato que espera el componente
   } catch (error) {
     console.error('Error al obtener top usuarios:', error);
-    throw error;
+    return { users: [] };
   }
 };
 
@@ -316,10 +346,10 @@ export const getUsers = async (options = {}) => {
     const to = from + limit - 1;
 
     let query = supabase
-      .from('user_profiles')
+      .from('profiles')
       .select('*', { count: 'exact' });
 
-    // Aplicar búsqueda
+    // Búsqueda
     if (search) {
       query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,username.ilike.%${search}%`);
     }
@@ -347,16 +377,16 @@ export const getUsers = async (options = {}) => {
 };
 
 /**
- * Actualiza los datos de un usuario
+ * Actualiza información de un usuario
  * @param {string} userId - ID del usuario
  * @param {Object} updates - Datos a actualizar
- * @param {string} adminId - ID del admin que realiza la acción
+ * @param {string} adminId - ID del admin que realiza la actualización
  * @returns {Promise<Object>} Usuario actualizado
  */
 export const updateUser = async (userId, updates, adminId) => {
   try {
     const { data, error } = await supabase
-      .from('user_profiles')
+      .from('profiles')
       .update(updates)
       .eq('id', userId)
       .select()
@@ -387,7 +417,7 @@ export const updateUser = async (userId, updates, adminId) => {
  * @param {number} pointsChange - Cambio en puntos (positivo o negativo)
  * @param {string} reason - Razón del ajuste
  * @param {string} adminId - ID del admin
- * @returns {Promise<Object>} Balance actualizado
+ * @returns {Promise<Object>} Resultado de la transacción
  */
 export const adjustUserPoints = async (userId, pointsChange, reason, adminId) => {
   try {
