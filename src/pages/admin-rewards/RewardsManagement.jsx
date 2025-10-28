@@ -128,19 +128,58 @@ export default function RewardsManagement() {
       if (rewardsError) throw rewardsError;
       setRewards(rewardsData || []);
 
-      // Cargar canjes recientes
+      // Cargar canjes recientes SIN JOINS
       const { data: redemptionsData, error: redemptionsError } = await supabase
         .from('reward_redemptions')
-        .select(`
-          *,
-          users!user_id(id, full_name, username, avatar_url),
-          rewards!reward_id(id, name, image_url)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (redemptionsError) throw redemptionsError;
-      setRedemptions(redemptionsData || []);
+
+      // Si hay canjes, cargar la info de usuarios y rewards por separado
+      if (redemptionsData && redemptionsData.length > 0) {
+        // Obtener IDs únicos
+        const userIds = [...new Set(redemptionsData.map(r => r.user_id).filter(Boolean))];
+        const rewardIds = [...new Set(redemptionsData.map(r => r.reward_id).filter(Boolean))];
+
+        // Cargar usuarios
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: usersData } = await supabase
+            .from('users')
+            .select('id, full_name, username, avatar_url')
+            .in('id', userIds);
+
+          if (usersData) {
+            usersMap = Object.fromEntries(usersData.map(u => [u.id, u]));
+          }
+        }
+
+        // Cargar rewards
+        let rewardsMap = {};
+        if (rewardIds.length > 0) {
+          const { data: rewardsDataForMap } = await supabase
+            .from('rewards')
+            .select('id, name, image_url')
+            .in('id', rewardIds);
+
+          if (rewardsDataForMap) {
+            rewardsMap = Object.fromEntries(rewardsDataForMap.map(r => [r.id, r]));
+          }
+        }
+
+        // Enriquecer los canjes con la info de usuario y reward
+        const enrichedRedemptions = redemptionsData.map(redemption => ({
+          ...redemption,
+          user: usersMap[redemption.user_id] || null,
+          reward: rewardsMap[redemption.reward_id] || null
+        }));
+
+        setRedemptions(enrichedRedemptions);
+      } else {
+        setRedemptions(redemptionsData || []);
+      }
 
     } catch (err) {
       console.error('Error cargando datos:', err);
