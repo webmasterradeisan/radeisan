@@ -1,5 +1,6 @@
 // src/pages/admin-dashboard/AdminDashboard.jsx
 // ✅ SPRINT 4 - Panel Admin Core: Dashboard con Gráficas
+// 🔧 CORREGIDO: Usa 'points_change' en lugar de 'amount'
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
@@ -271,40 +272,38 @@ const AdminDashboard = () => {
   // ===============================
   const fetchTopUsers = useCallback(async () => {
     try {
-      const { data: pointsData } = await supabase
+      const { data: topUsers } = await supabase
         .from('user_points')
-        .select('user_id, free_points, premium_points')
+        .select('*')
         .order('free_points', { ascending: false })
         .limit(5);
-      
-      // Enriquecer con info de usuarios
-      let topUsersData = [];
-      if (pointsData && pointsData.length > 0) {
-        const userIds = pointsData.map(p => p.user_id);
-        const { data: users } = await supabase
+
+      // Enriquecer con info de perfiles
+      if (topUsers && topUsers.length > 0) {
+        const userIds = topUsers.map(u => u.user_id);
+        const { data: profiles } = await supabase
           .from('profiles')
           .select('id, full_name, username, avatar_url')
           .in('id', userIds);
         
-        const usersMap = Object.fromEntries((users || []).map(u => [u.id, u]));
+        const profilesMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
         
-        topUsersData = pointsData.map(p => ({
-          ...p,
-          profiles: usersMap[p.user_id] || null
-        }));
+        topUsers.forEach(u => {
+          u.profiles = profilesMap[u.user_id] || null;
+        });
       }
 
-      setTopUsers(topUsersData);
+      setTopUsers(topUsers || []);
     } catch (error) {
       console.error('Error fetching top users:', error);
     }
   }, []);
 
   // ===============================
-  // FETCH INICIAL Y REFRESH
+  // CARGAR TODOS LOS DATOS
   // ===============================
   const fetchAllData = useCallback(async () => {
-    setLoading(true);
+    setRefreshing(true);
     try {
       await Promise.all([
         fetchMetrics(),
@@ -314,207 +313,171 @@ const AdminDashboard = () => {
         fetchRecentActivity(),
         fetchTopUsers()
       ]);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [
     fetchMetrics, 
     fetchUsersChartData, 
-    fetchContentChartData,
+    fetchContentChartData, 
     fetchCategoryChartData,
     fetchRecentActivity,
     fetchTopUsers
   ]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await fetchAllData();
-    setRefreshing(false);
-  };
-
+  // Cargar datos al montar
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    if (user) {
+      fetchAllData();
+    }
+  }, [user, fetchAllData]);
 
-  // ===============================
-  // LOADING STATE
-  // ===============================
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Cargando dashboard...</p>
         </div>
       </div>
     );
   }
 
-  // ===============================
-  // RENDER PRINCIPAL
-  // ===============================
   return (
     <>
       <Helmet>
-        <title>Dashboard Admin - Radeisan</title>
+        <title>Dashboard Admin | Panel de Administración</title>
       </Helmet>
 
-      <div className="p-6 space-y-6">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
             <p className="text-muted-foreground mt-1">
-              Bienvenido de nuevo, {user?.user_metadata?.full_name || 'Admin'}
+              Vista general de la plataforma
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
+          <Button 
+            onClick={fetchAllData}
             disabled={refreshing}
+            variant="outline"
           >
             <Icon 
               name="RefreshCw" 
               size={16} 
-              className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} 
+              className={`mr-2 ${refreshing ? 'animate-spin' : ''}`}
             />
             Actualizar
           </Button>
         </div>
 
-        {/* KPIs Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Métricas principales */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Usuarios */}
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                 <Icon name="Users" size={24} color={COLORS.primary} />
               </div>
-              <span className="text-xs text-success flex items-center">
-                <Icon name="TrendingUp" size={14} className="mr-1" />
+              <span className="text-xs text-success font-semibold bg-success/10 px-2 py-1 rounded-full">
                 +{metrics.newUsersToday} hoy
               </span>
             </div>
             <h3 className="text-2xl font-bold text-foreground mb-1">
               {metrics.totalUsers.toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Total Usuarios</p>
-            <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                {metrics.activeUsers} activos (7 días)
-              </p>
+            <p className="text-sm text-muted-foreground">Total de Usuarios</p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              <Icon name="Activity" size={12} className="inline mr-1" />
+              {metrics.activeUsers} activos (7 días)
             </div>
           </div>
 
           {/* Total Videos */}
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6 hover:border-secondary/50 transition-colors">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center">
                 <Icon name="Video" size={24} color={COLORS.secondary} />
               </div>
-              <Link to="/admin/moderation">
-                <Button variant="ghost" size="sm">
-                  <Icon name="Eye" size={14} />
-                </Button>
-              </Link>
             </div>
             <h3 className="text-2xl font-bold text-foreground mb-1">
               {metrics.totalVideos.toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Total Videos</p>
-            <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                {metrics.totalPhotos.toLocaleString()} fotos
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground">Videos Publicados</p>
           </div>
 
-          {/* Puntos Gratis */}
-          <div className="bg-card border border-border rounded-lg p-6">
+          {/* Total Fotos */}
+          <div className="bg-card border border-border rounded-lg p-6 hover:border-accent/50 transition-colors">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-accent/10 rounded-lg flex items-center justify-center">
-                <Icon name="Coins" size={24} color={COLORS.accent} />
+              <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                <Icon name="Image" size={24} color={COLORS.accent} />
               </div>
-              <Link to="/admin/points">
-                <Button variant="ghost" size="sm">
-                  <Icon name="Settings" size={14} />
-                </Button>
-              </Link>
             </div>
             <h3 className="text-2xl font-bold text-foreground mb-1">
-              {metrics.totalFreePoints.toLocaleString()}
+              {metrics.totalPhotos.toLocaleString()}
             </h3>
-            <p className="text-sm text-muted-foreground">Puntos Gratis</p>
-            <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">Fotos Publicadas</p>
+          </div>
+
+          {/* Puntos Distribuidos */}
+          <div className="bg-card border border-border rounded-lg p-6 hover:border-warning/50 transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
+                <Icon name="Award" size={24} color={COLORS.warning} />
+              </div>
+            </div>
+            <h3 className="text-2xl font-bold text-foreground mb-1">
+              {(metrics.totalFreePoints + metrics.totalPremiumPoints).toLocaleString()}
+            </h3>
+            <p className="text-sm text-muted-foreground">Puntos Distribuidos</p>
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              <span className="text-accent">
+                <Icon name="Circle" size={10} className="inline mr-1" />
+                {metrics.totalFreePoints.toLocaleString()} gratis
+              </span>
+              <span className="text-success">
+                <Icon name="Gem" size={10} className="inline mr-1" />
                 {metrics.totalPremiumPoints.toLocaleString()} premium
-              </p>
-            </div>
-          </div>
-
-          {/* Categorías */}
-          <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center">
-                <Icon name="Layers" size={24} color={COLORS.success} />
-              </div>
-              <Link to="/admin/categories">
-                <Button variant="ghost" size="sm">
-                  <Icon name="Edit" size={14} />
-                </Button>
-              </Link>
-            </div>
-            <h3 className="text-2xl font-bold text-foreground mb-1">
-              {metrics.totalCategories}
-            </h3>
-            <p className="text-sm text-muted-foreground">Categorías Activas</p>
-            <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                Sistema configurado
-              </p>
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Gráficas Row 1 */}
+        {/* Gráficas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Gráfica de Usuarios Nuevos */}
+          {/* Gráfica de Nuevos Usuarios */}
           <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">
-                  Usuarios Nuevos
-                </h3>
-                <p className="text-sm text-muted-foreground">Últimos 30 días</p>
-              </div>
-              <Icon name="Users" size={20} color={COLORS.primary} />
-            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-6">
+              Nuevos Usuarios (últimos 30 días)
+            </h3>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={usersChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
                 <XAxis 
                   dataKey="date" 
-                  stroke="#888"
-                  style={{ fontSize: '12px' }}
+                  stroke="#9ca3af" 
+                  fontSize={12}
                 />
-                <YAxis 
-                  stroke="#888"
-                  style={{ fontSize: '12px' }}
-                />
+                <YAxis stroke="#9ca3af" fontSize={12} />
                 <Tooltip 
-                  contentStyle={{
-                    backgroundColor: '#1a1a1a',
-                    border: '1px solid #333',
-                    borderRadius: '8px'
+                  contentStyle={{ 
+                    backgroundColor: '#1f2937', 
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#f3f4f6'
                   }}
                 />
                 <Legend />
                 <Line 
                   type="monotone" 
                   dataKey="usuarios" 
-                  stroke={COLORS.primary}
+                  stroke={COLORS.primary} 
                   strokeWidth={2}
-                  dot={{ fill: COLORS.primary, r: 4 }}
+                  dot={{ fill: COLORS.primary }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>
@@ -523,32 +486,24 @@ const AdminDashboard = () => {
 
           {/* Gráfica de Contenido */}
           <div className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">
-                  Contenido Subido
-                </h3>
-                <p className="text-sm text-muted-foreground">Por semana</p>
-              </div>
-              <Icon name="BarChart3" size={20} color={COLORS.secondary} />
-            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-6">
+              Contenido Subido (últimos 30 días)
+            </h3>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={contentChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
                 <XAxis 
                   dataKey="semana" 
-                  stroke="#888"
-                  style={{ fontSize: '12px' }}
+                  stroke="#9ca3af"
+                  fontSize={12}
                 />
-                <YAxis 
-                  stroke="#888"
-                  style={{ fontSize: '12px' }}
-                />
+                <YAxis stroke="#9ca3af" fontSize={12} />
                 <Tooltip 
-                  contentStyle={{
-                    backgroundColor: '#1a1a1a',
-                    border: '1px solid #333',
-                    borderRadius: '8px'
+                  contentStyle={{ 
+                    backgroundColor: '#1f2937', 
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#f3f4f6'
                   }}
                 />
                 <Legend />
@@ -559,19 +514,13 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Gráficas Row 2 */}
+        {/* Categorías y Actividad */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Gráfica de Categorías */}
-          <div className="bg-card border border-border rounded-lg p-6 lg:col-span-1">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">
-                  Videos por Categoría
-                </h3>
-                <p className="text-sm text-muted-foreground">Distribución</p>
-              </div>
-              <Icon name="PieChart" size={20} color={COLORS.success} />
-            </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-6">
+              Contenido por Categoría
+            </h3>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -579,7 +528,7 @@ const AdminDashboard = () => {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -589,10 +538,11 @@ const AdminDashboard = () => {
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{
-                    backgroundColor: '#1a1a1a',
-                    border: '1px solid #333',
-                    borderRadius: '8px'
+                  contentStyle={{ 
+                    backgroundColor: '#1f2937', 
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#f3f4f6'
                   }}
                 />
               </PieChart>
@@ -653,9 +603,9 @@ const AdminDashboard = () => {
                     </div>
                     <div className="text-right">
                       <p className={`text-sm font-semibold ${
-                        activity.amount > 0 ? 'text-success' : 'text-error'
+                        activity.points_change > 0 ? 'text-success' : 'text-error'
                       }`}>
-                        {activity.amount > 0 ? '+' : ''}{activity.amount}
+                        {activity.points_change > 0 ? '+' : ''}{activity.points_change}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(activity.created_at).toLocaleDateString()}
