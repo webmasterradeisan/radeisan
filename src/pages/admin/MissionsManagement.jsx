@@ -6,8 +6,8 @@
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import * as missionsService from '../services/missionsService';
-import AppIcon from '../components/AppIcon';
+import * as missionsService from '../../services/missionsService';
+import AppIcon from '../../components/AppIcon';
 
 // ============================================================================
 // COMPONENTE PRINCIPAL
