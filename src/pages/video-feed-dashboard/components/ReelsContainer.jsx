@@ -7,7 +7,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
-import { supabase } from '../../../config/supabase';
+import { supabase } from '../../../lib/supabase';
+import { addFreePoints } from '../../../services/pointsService';
 
 const ReelsContainer = ({ 
   videos = [], 
@@ -403,8 +404,13 @@ const ReelsContainer = ({
         // Actualizar contador en videos
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // Otorgar puntos
-        onPointsEarned && onPointsEarned(5, 'LIKE_VIDEO');
+        // Otorgar puntos usando el servicio de puntos
+        try {
+          await addFreePoints(5, 'Like en video', 'video', videoId);
+          onPointsEarned && onPointsEarned(5);
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
+        }
       }
       
       setLikedVideos(newLikedVideos);
@@ -471,8 +477,13 @@ const ReelsContainer = ({
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // Otorgar puntos
-        onPointsEarned && onPointsEarned(2, 'SAVE_VIDEO');
+        // Otorgar puntos usando el servicio de puntos
+        try {
+          await addFreePoints(2, 'Video guardado', 'video', videoId);
+          onPointsEarned && onPointsEarned(2);
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
+        }
       }
       
       setSavedVideos(newSavedVideos);
@@ -506,8 +517,13 @@ const ReelsContainer = ({
           .from('follows')
           .insert({ follower_id: user.id, following_id: creatorId });
 
-        // Otorgar puntos
-        onPointsEarned && onPointsEarned(10, 'FOLLOW_CREATOR');
+        // Otorgar puntos usando el servicio de puntos
+        try {
+          await addFreePoints(10, 'Seguir creador', 'user', creatorId);
+          onPointsEarned && onPointsEarned(10);
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
+        }
       }
       
       setFollowedCreators(newFollowed);
@@ -524,7 +540,14 @@ const ReelsContainer = ({
           text: `Mira este reel de ${video.creator.name}`,
           url: `${window.location.origin}/reel/${video.id}`
         });
-        onPointsEarned && onPointsEarned(3, 'SHARE_VIDEO');
+        
+        // Otorgar puntos usando el servicio de puntos
+        try {
+          await addFreePoints(3, 'Compartir video', 'video', video.id);
+          onPointsEarned && onPointsEarned(3);
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
+        }
       } catch (error) {
         console.log('Error sharing:', error);
       }
@@ -532,7 +555,14 @@ const ReelsContainer = ({
       try {
         await navigator.clipboard.writeText(`${window.location.origin}/reel/${video.id}`);
         alert('Enlace copiado al portapapeles');
-        onPointsEarned && onPointsEarned(3, 'SHARE_VIDEO');
+        
+        // Otorgar puntos usando el servicio de puntos
+        try {
+          await addFreePoints(3, 'Compartir video', 'video', video.id);
+          onPointsEarned && onPointsEarned(3);
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
+        }
       } catch (error) {
         console.log('Error copying:', error);
       }
@@ -596,8 +626,13 @@ const ReelsContainer = ({
       // Actualizar contador
       await supabase.rpc('increment_video_comments', { video_id: videoId });
 
-      // Otorgar puntos
-      onPointsEarned && onPointsEarned(3, 'COMMENT_VIDEO');
+      // Otorgar puntos usando el servicio de puntos
+      try {
+        await addFreePoints(3, 'Comentar video', 'video', videoId);
+        onPointsEarned && onPointsEarned(3);
+      } catch (pointsError) {
+        console.error('Error al otorgar puntos:', pointsError);
+      }
 
       setNewComment('');
       await loadComments(videoId);
