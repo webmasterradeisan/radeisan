@@ -468,34 +468,23 @@ const ReelsContainer = ({
             <div className="flex items-center space-x-4">
               <button
                 onClick={handlePlayPause}
-                className="w-10 h-10 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/60 transition-colors"
+                className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
               >
                 <Icon 
                   name={isAutoPlaying ? 'Pause' : 'Play'} 
                   size={20} 
-                  color="white" 
-                />
-              </button>
-              
-              <button
-                onClick={() => handleMuteToggle(video.id)}
-                className="w-10 h-10 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/60 transition-colors"
-              >
-                <Icon 
-                  name={isMuted ? 'VolumeX' : 'Volume2'} 
-                  size={20} 
-                  color="white" 
+                  className="text-gray-800"
                 />
               </button>
             </div>
 
             <div className="flex items-center space-x-3">
-              <button className="w-8 h-8 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/60 transition-colors">
-                <Icon name="Settings" size={18} color="white" />
+              <button className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg">
+                <Icon name="Settings" size={18} className="text-gray-800" />
               </button>
               
-              <button className="w-8 h-8 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/60 transition-colors">
-                <Icon name="MoreVertical" size={18} color="white" />
+              <button className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg">
+                <Icon name="MoreVertical" size={18} className="text-gray-800" />
               </button>
             </div>
           </div>
@@ -506,6 +495,22 @@ const ReelsContainer = ({
           absolute flex flex-col items-center space-y-5
           ${isDesktop ? 'bottom-24 right-6' : 'bottom-20 right-4'}
         `}>
+          
+          {/* Botón de Volumen (Solo Desktop) */}
+          {isDesktop && (
+            <button
+              onClick={() => handleMuteToggle(video.id)}
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 text-gray-800 hover:scale-110 bg-white/80 shadow-lg">
+                <Icon 
+                  name={isMuted ? 'VolumeX' : 'Volume2'} 
+                  size={26}
+                  className="text-gray-800"
+                />
+              </div>
+            </button>
+          )}
           
           {/* Avatar del Creador + Follow Button */}
           <div className="relative">
@@ -551,10 +556,10 @@ const ReelsContainer = ({
           >
             <div className={`
               rounded-full flex items-center justify-center transition-all duration-200
-              ${isDesktop ? 'w-11 h-11' : 'w-10 h-10'}
+              ${isDesktop ? 'w-11 h-11 bg-white/80 shadow-lg' : 'w-10 h-10'}
               ${isLiked 
                 ? 'text-red-500' 
-                : 'text-white hover:scale-110'
+                : `${isDesktop ? 'text-gray-800' : 'text-white'} hover:scale-110`
               }
             `}>
               <Icon 
@@ -563,7 +568,7 @@ const ReelsContainer = ({
                 className={isLiked ? 'fill-current' : ''} 
               />
             </div>
-            <span className="text-white font-semibold text-xs">
+            <span className={`font-semibold text-xs ${isDesktop ? 'text-gray-800' : 'text-white'}`}>
               {formatCount(video.likes || 0)}
             </span>
           </button>
@@ -575,10 +580,10 @@ const ReelsContainer = ({
           >
             <div className={`
               rounded-full flex items-center justify-center transition-all duration-200
-              ${isDesktop ? 'w-11 h-11' : 'w-10 h-10'}
+              ${isDesktop ? 'w-11 h-11 bg-white/80 shadow-lg' : 'w-10 h-10'}
               ${isDisliked 
                 ? 'text-gray-400' 
-                : 'text-white hover:scale-110'
+                : `${isDesktop ? 'text-gray-800' : 'text-white'} hover:scale-110`
               }
             `}>
               <Icon 
@@ -587,7 +592,7 @@ const ReelsContainer = ({
                 className={isDisliked ? 'fill-current' : ''} 
               />
             </div>
-            <span className="text-white font-semibold text-xs">
+            <span className={`font-semibold text-xs ${isDesktop ? 'text-gray-800' : 'text-white'}`}>
               No me...
             </span>
           </button>
@@ -599,11 +604,11 @@ const ReelsContainer = ({
           >
             <div className={`
               rounded-full flex items-center justify-center hover:scale-110 transition-transform
-              ${isDesktop ? 'w-11 h-11' : 'w-10 h-10'}
+              ${isDesktop ? 'w-11 h-11 bg-white/80 shadow-lg text-gray-800' : 'w-10 h-10 text-white'}
             `}>
-              <Icon name="MessageCircle" size={isDesktop ? 26 : 24} color="white" />
+              <Icon name="MessageCircle" size={isDesktop ? 26 : 24} />
             </div>
-            <span className="text-white font-semibold text-xs">
+            <span className={`font-semibold text-xs ${isDesktop ? 'text-gray-800' : 'text-white'}`}>
               {formatCount(video.comments || 0)}
             </span>
           </Link>
@@ -615,10 +620,10 @@ const ReelsContainer = ({
           >
             <div className={`
               rounded-full flex items-center justify-center transition-all duration-200
-              ${isDesktop ? 'w-11 h-11' : 'w-10 h-10'}
+              ${isDesktop ? 'w-11 h-11 bg-white/80 shadow-lg' : 'w-10 h-10'}
               ${isSaved 
-                ? 'text-yellow-400' 
-                : 'text-white hover:scale-110'
+                ? 'text-yellow-500' 
+                : `${isDesktop ? 'text-gray-800' : 'text-white'} hover:scale-110`
               }
             `}>
               <Icon 
@@ -627,7 +632,7 @@ const ReelsContainer = ({
                 className={isSaved ? 'fill-current' : ''} 
               />
             </div>
-            <span className="text-white font-semibold text-xs">
+            <span className={`font-semibold text-xs ${isDesktop ? 'text-gray-800' : 'text-white'}`}>
               {formatCount(video.saves || 116500)}
             </span>
           </button>
@@ -639,11 +644,11 @@ const ReelsContainer = ({
           >
             <div className={`
               rounded-full flex items-center justify-center hover:scale-110 transition-transform
-              ${isDesktop ? 'w-11 h-11' : 'w-10 h-10'}
+              ${isDesktop ? 'w-11 h-11 bg-white/80 shadow-lg text-gray-800' : 'w-10 h-10 text-white'}
             `}>
-              <Icon name="Share2" size={isDesktop ? 26 : 24} color="white" />
+              <Icon name="Share2" size={isDesktop ? 26 : 24} />
             </div>
-            <span className="text-white font-semibold text-xs">
+            <span className={`font-semibold text-xs ${isDesktop ? 'text-gray-800' : 'text-white'}`}>
               Compartir
             </span>
           </button>
@@ -750,14 +755,16 @@ const ReelsContainer = ({
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
+    <div className="relative w-full h-screen overflow-hidden bg-gray-50">
       
       {/* CONTENEDOR DE REELS */}
       <div
         ref={containerRef}
         className={`flex flex-col h-full ease-out ${enableTransition ? 'transition-transform duration-500' : ''}`}
         style={{
-          transform: `translateY(-${currentIndex * 100}vh)`
+          transform: `translateY(-${currentIndex * 100}vh)`,
+          maxWidth: isDesktop ? '500px' : '100%',
+          margin: isDesktop ? '0 auto' : '0'
         }}
       >
         {videos.map((video, index) => (
@@ -779,13 +786,13 @@ const ReelsContainer = ({
             disabled={currentIndex === 0}
             className={`
               fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[260px]
-              w-12 h-12 bg-black/60 backdrop-blur-sm rounded-full 
-              flex items-center justify-center transition-all duration-200 z-50
-              hover:bg-black/80 hover:scale-110 active:scale-95
+              w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full 
+              flex items-center justify-center transition-all duration-200 z-50 shadow-lg
+              hover:bg-white hover:scale-110 active:scale-95
               ${currentIndex === 0 ? 'opacity-0 cursor-not-allowed' : 'opacity-70 hover:opacity-100'}
             `}
           >
-            <Icon name="ChevronUp" size={28} color="white" />
+            <Icon name="ChevronUp" size={28} className="text-gray-800" />
           </button>
 
           {/* Flecha Abajo */}
@@ -794,34 +801,23 @@ const ReelsContainer = ({
             disabled={currentIndex === videos.length - 1}
             className={`
               fixed bottom-1/2 left-1/2 transform -translate-x-1/2 translate-y-[260px]
-              w-12 h-12 bg-black/60 backdrop-blur-sm rounded-full 
-              flex items-center justify-center transition-all duration-200 z-50
-              hover:bg-black/80 hover:scale-110 active:scale-95
+              w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full 
+              flex items-center justify-center transition-all duration-200 z-50 shadow-lg
+              hover:bg-white hover:scale-110 active:scale-95
               ${currentIndex === videos.length - 1 ? 'opacity-0 cursor-not-allowed' : 'opacity-70 hover:opacity-100'}
             `}
           >
-            <Icon name="ChevronDown" size={28} color="white" />
+            <Icon name="ChevronDown" size={28} className="text-gray-800" />
           </button>
         </>
-      )}
-
-      {/* INDICADOR DE POSICIÓN */}
-      {isDesktop && (
-        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50">
-          <div className="bg-black/60 backdrop-blur-sm rounded-full px-4 py-2">
-            <span className="text-white text-sm font-medium">
-              {currentIndex + 1} / {videos.length}
-            </span>
-          </div>
-        </div>
       )}
 
       {/* INDICADOR DE CARGA */}
       {loading && (
         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none">
-          <div className="text-white flex items-center space-x-2 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2">
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-sm">Cargando más reels...</span>
+          <div className="text-gray-800 flex items-center space-x-2 bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg">
+            <div className="w-4 h-4 border-2 border-gray-800 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-medium">Cargando más reels...</span>
           </div>
         </div>
       )}
@@ -829,11 +825,11 @@ const ReelsContainer = ({
       {/* INSTRUCCIONES INICIALES (Solo primer video) */}
       {currentIndex === 0 && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-40 pointer-events-none animate-fade-out">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-6 py-3 text-center">
-            <p className="text-white text-base mb-1">
+          <div className="bg-white/90 backdrop-blur-sm rounded-lg px-6 py-3 text-center shadow-lg">
+            <p className="text-gray-800 text-base mb-1 font-medium">
               {isDesktop ? '↑↓ Flechas o rueda del mouse para navegar' : 'Desliza ↑↓ para navegar'}
             </p>
-            <p className="text-white/75 text-sm">
+            <p className="text-gray-600 text-sm">
               Toca el video para pausar • Espacio para reproducir/pausar
             </p>
           </div>
