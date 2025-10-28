@@ -102,15 +102,17 @@ const Header = () => {
               <Icon name="Video" size={20} color="white" />
             </div>
             
-            {/* Nombre de la app */}
-            <span 
-              className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-              style={{
-                backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-              }}
-            >
-              {branding.texts.appName || 'Radeisan'}
-            </span>
+            {/* Nombre de la app - Solo si NO hay logo */}
+{!branding.logo.primary && (
+  <span 
+    className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+    style={{
+      backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+    }}
+  >
+    {branding.texts.appName || 'Radeisan'}
+  </span>
+)}
           </Link>
 
           {/* NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS) */}
