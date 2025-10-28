@@ -1,13 +1,15 @@
 // src/components/ui/Header.jsx
-// ACTUALIZADO: Con Panel Admin integrado
+// ACTUALIZADO: Con Panel Admin integrado y Branding Dinámico
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBranding } from '../../hooks/useBranding';
 import AppIcon from '../AppIcon';
 import Button from './Button';
 
 const Header = () => {
   const { user, signOut, loading } = useAuth();
+  const { branding } = useBranding(); // ✅ Hook de branding
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,14 +49,12 @@ const Header = () => {
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Navegar al dashboard con orientación específica
   const handleOrientationNavigate = (orientation) => {
     navigate('/dashboard', { 
       state: { orientation } 
     });
   };
 
-  // ✅ NUEVA FUNCIÓN: Navegar al inicio (dashboard sin filtros)
   const handleHomeNavigate = () => {
     navigate('/dashboard', { 
       replace: true,
@@ -62,7 +62,6 @@ const Header = () => {
     });
   };
 
-  // ✅ FUNCIÓN AUXILIAR: Verificar si estamos en dashboard con orientación activa
   const isOrientationActive = (orientation) => {
     return location.pathname === '/dashboard' && location.state?.orientation === orientation;
   };
@@ -71,26 +70,46 @@ const Header = () => {
     return <AppIcon name={name} size={size} color={color} className={className} />;
   };
 
-  // ⭐ NUEVO: Log para verificar datos del usuario (quitar en producción)
-  console.log('Header - User Data:', {
-    email: user?.email,
-    role: user?.role,
-    isAdmin: user?.isAdmin,
-    admin_role: user?.admin_role
-  });
-
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           
-          {/* LOGO */}
+          {/* LOGO - ✅ Ahora usa branding dinámico */}
           <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center">
+            {branding.logo.primary ? (
+              // Si hay logo personalizado, mostrarlo
+              <img 
+                src={branding.logo.primary} 
+                alt={branding.texts.appName || 'Logo'} 
+                className="h-8 object-contain"
+                onError={(e) => {
+                  // Si falla la carga, mostrar icono por defecto
+                  e.target.style.display = 'none';
+                  e.target.nextElementSibling.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            
+            {/* Icono por defecto (se muestra si no hay logo o si falla) */}
+            <div 
+              className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+              style={{ 
+                display: branding.logo.primary ? 'none' : 'flex',
+                backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+              }}
+            >
               <Icon name="Video" size={20} color="white" />
             </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Radeisan
+            
+            {/* Nombre de la app */}
+            <span 
+              className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+              style={{
+                backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+              }}
+            >
+              {branding.texts.appName || 'Radeisan'}
             </span>
           </Link>
 
@@ -109,7 +128,6 @@ const Header = () => {
                 <span>Inicio</span>
               </button>
 
-              {/* ✅ ACTUALIZADO: Reels ahora navega al dashboard con orientación vertical */}
               <button
                 onClick={() => handleOrientationNavigate('vertical')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -122,7 +140,6 @@ const Header = () => {
                 <span>Reels</span>
               </button>
 
-              {/* ✅ ACTUALIZADO: Videos ahora navega al dashboard con orientación horizontal */}
               <button
                 onClick={() => handleOrientationNavigate('horizontal')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -171,7 +188,7 @@ const Header = () => {
                 <span>Perfil</span>
               </Link>
 
-              {/* ⭐ NUEVO: PANEL ADMIN - Solo para administradores */}
+              {/* PANEL ADMIN - Solo para administradores */}
               {user.isAdmin && (
                 <Link
                   to="/admin"
@@ -248,7 +265,6 @@ const Header = () => {
                           <div className="text-xs text-muted-foreground truncate">
                             {user.email}
                           </div>
-                          {/* ⭐ NUEVO: Badge mostrando el rol de admin */}
                           {user.isAdmin && (
                             <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                               <Icon name="Shield" size={12} className="mr-1" />
@@ -288,7 +304,7 @@ const Header = () => {
                           Mis Recompensas
                         </Link>
 
-                        {/* ⭐ NUEVO: PANEL ADMIN en el menú - Solo para administradores */}
+                        {/* PANEL ADMIN en el menú - Solo para administradores */}
                         {user.isAdmin && (
                           <>
                             <div className="border-t border-border my-1"></div>
