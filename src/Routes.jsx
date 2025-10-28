@@ -39,7 +39,7 @@ import AdminDashboard from './pages/admin-dashboard';
 import UserManagement from './pages/admin-users/UserManagement';
 import CategoryManagement from './pages/admin-categories/CategoryManagement';
 import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
-import MissionsManagement from './pages/admin-missions/MissionsManagement'; // ✅ NUEVO - Gestión de Misiones
+import MissionsManagement from './pages/admin/MissionsManagement'; // ✅ NUEVO - Gestión de Misiones
 import RewardsManagement from './pages/admin-rewards/RewardsManagement';
 import BrandingSettings from './pages/admin-settings/BrandingSettings';
 import ContentModeration from './pages/admin-moderation/ContentModeration';
