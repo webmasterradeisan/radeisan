@@ -490,7 +490,7 @@ export async function cancelRedemption(redemptionId) {
     // Verificar que el canje sea del usuario y esté pendiente
     const { data: redemption, error: fetchError } = await supabase
       .from('reward_redemptions')
-      .select('*, reward:reward_id(cost_free_points, cost_premium_points)')
+      .select('*, rewards!reward_id(cost_free_points, cost_premium_points)')
       .eq('id', redemptionId)
       .eq('user_id', user.id)
       .single();
@@ -546,7 +546,7 @@ export async function getUserRedemptionHistory(filters = {}) {
       .from('reward_redemptions')
       .select(`
         *,
-        reward:reward_id(*)
+        rewards!reward_id(*)
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
@@ -606,8 +606,8 @@ export async function getRedemptionDetails(redemptionId) {
       .from('reward_redemptions')
       .select(`
         *,
-        reward:reward_id(*),
-        user:user_id(id, full_name, username, avatar_url)
+        rewards!reward_id(*),
+        users!user_id(id, full_name, username, avatar_url)
       `)
       .eq('id', redemptionId)
       .eq('user_id', user.id)
@@ -643,7 +643,7 @@ export async function getRecentRedemptions(limit = 10) {
       .from('reward_redemptions')
       .select(`
         *,
-        reward:reward_id(name, image_url)
+        rewards!reward_id(name, image_url)
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -688,8 +688,8 @@ export async function getAllRedemptions(filters = {}) {
       .from('reward_redemptions')
       .select(`
         *,
-        user:user_id(id, full_name, username, avatar_url),
-        reward:reward_id(*)
+        users!user_id(id, full_name, username, avatar_url),
+        rewards!reward_id(*)
       `)
       .order('created_at', { ascending: false });
 
