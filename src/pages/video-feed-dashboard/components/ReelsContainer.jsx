@@ -1086,7 +1086,17 @@ const ReelsContainer = ({
         onHide={hidePointsNotification}
       />
       
-      <div className="relative w-full h-full bg-white overflow-hidden">
+      <div 
+        ref={containerRef}
+        className={`relative w-full h-full overflow-hidden ${isDesktop ? 'max-w-xl mx-auto' : ''}`}
+        style={{
+          height: isMobile ? '100dvh' : 'calc(100vh - 80px)',
+          maxHeight: isMobile ? '100dvh' : 'calc(100vh - 80px)',
+        }}
+        onTouchStart={isMobile ? handleTouchStart : undefined}
+        onTouchMove={isMobile ? handleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      >
         {/* CONTENEDOR PRINCIPAL */}
         <div className="flex h-full w-full items-center justify-center">
         
@@ -1097,10 +1107,10 @@ const ReelsContainer = ({
               ${isDesktop 
                 ? showCommentsModal 
                   ? 'w-[55%]' 
-                  : 'w-full max-w-[500px]'
+                  : 'w-full'
                 : 'w-full'
               }
-              ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}
+              h-full
             `}
           >
             
