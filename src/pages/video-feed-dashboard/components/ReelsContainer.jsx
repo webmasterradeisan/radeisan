@@ -130,6 +130,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
     if (isInitialMount.current) {
       setCurrentIndex(correctIndex);
       setEnableTransition(false);
+      hasPlayedInitial.current = false; // Reset para permitir reproducción
       
       setTimeout(() => {
         setEnableTransition(true);
@@ -139,6 +140,8 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
     } else if (selectedReelId) {
       // Si cambia el selectedReelId después del montaje, actualizar
       setCurrentIndex(correctIndex);
+      hasPlayedInitial.current = false; // Reset para permitir reproducción del nuevo video
+      setEnableTransition(true);
     }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
@@ -218,28 +221,37 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
       // Configurar y reproducir el video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
-      const playPromise = currentVideo.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log('✅ Video inicial reproduciendo correctamente');
-            hasPlayedInitial.current = true;
-          })
-          .catch(err => {
-            console.error('❌ Error autoplay inicial:', err);
-            currentVideo.muted = true;
-            currentVideo.play()
-              .then(() => {
-                console.log('✅ Video inicial reproduciendo (muted)');
-                hasPlayedInitial.current = true;
-              })
-              .catch(e => console.error('❌ Error crítico reproducción inicial:', e));
-          });
+      // Solo intentar reproducir si no está ya reproduciéndose
+      if (currentVideo.paused) {
+        const playPromise = currentVideo.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Video inicial reproduciendo correctamente');
+              hasPlayedInitial.current = true;
+            })
+            .catch(err => {
+              console.error('❌ Error autoplay inicial:', err);
+              // Si falla, intentar con muted
+              currentVideo.muted = true;
+              const mutedPromise = currentVideo.play();
+              if (mutedPromise !== undefined) {
+                mutedPromise
+                  .then(() => {
+                    console.log('✅ Video inicial reproduciendo (muted)');
+                    hasPlayedInitial.current = true;
+                  })
+                  .catch(e => console.error('❌ Error crítico reproducción inicial:', e));
+              }
+            });
+        }
+      } else {
+        hasPlayedInitial.current = true;
       }
     };
 
-    setTimeout(attemptPlay, 250);
+    setTimeout(attemptPlay, 300);
   }, [videos, currentIndex, mutedVideos]);
 
   // ===============================
@@ -251,19 +263,26 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
     // Si es el video inicial y aún no se ha reproducido, dejar que el useEffect anterior lo maneje
     const initialIndex = getInitialReelIndex();
     if (!hasPlayedInitial.current && currentIndex === initialIndex) {
+      console.log('⏭️ Skipping autoplay - el video inicial será manejado por useEffect dedicado');
       return;
     }
 
     const currentVideo = videoRefs.current[currentIndex];
     
     if (currentVideo && isAutoPlaying) {
-      const playPromise = currentVideo.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log('Autoplay bloqueado:', error);
-          currentVideo.muted = true;
-          currentVideo.play().catch(err => console.log('Error en reproducción:', err));
-        });
+      // Solo intentar reproducir si el video está pausado
+      if (currentVideo.paused) {
+        const playPromise = currentVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log('Autoplay bloqueado, intentando con muted:', error);
+            currentVideo.muted = true;
+            const mutedPromise = currentVideo.play();
+            if (mutedPromise !== undefined) {
+              mutedPromise.catch(err => console.log('Error en reproducción:', err));
+            }
+          });
+        }
       }
     }
 
@@ -391,23 +410,29 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
   useEffect(() => {
     if (!isDesktop) return;
 
+    let timeout = null;
+    
     const handleWheel = (e) => {
       e.preventDefault();
       
-      clearTimeout(handleWheel.timeout);
-      handleWheel.timeout = setTimeout(() => {
-        if (e.deltaY > 0) {
-          navigateNext();
-        } else if (e.deltaY < 0) {
-          navigatePrevious();
-        }
-      }, 150);
+      if (timeout) return; // Ignorar si ya hay un scroll en proceso
+      
+      if (e.deltaY > 30 && currentIndex < videos.length - 1) {
+        navigateNext();
+        timeout = setTimeout(() => { timeout = null; }, 600);
+      } else if (e.deltaY < -30 && currentIndex > 0) {
+        navigatePrevious();
+        timeout = setTimeout(() => { timeout = null; }, 600);
+      }
     };
 
     const container = containerRef.current;
     if (container) {
       container.addEventListener('wheel', handleWheel, { passive: false });
-      return () => container.removeEventListener('wheel', handleWheel);
+      return () => {
+        if (timeout) clearTimeout(timeout);
+        container.removeEventListener('wheel', handleWheel);
+      };
     }
   }, [currentIndex, videos.length, isDesktop]);
 
@@ -844,7 +869,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
           playsInline
           preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "none"}
           onClick={handlePlayPause}
-          autoPlay={isActive}
         />
 
         {/* CONTROLES LATERALES DERECHOS - SOLO MOBILE */}
@@ -1094,7 +1118,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-white flex">
+    <div className="relative w-full h-screen overflow-hidden bg-black flex">
       
       {/* NOTIFICACIÓN FLOTANTE DE PUNTOS */}
       <FloatingPointsNotification
@@ -1107,18 +1131,20 @@ const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) 
       {/* CONTENEDOR DE REELS */}
       <div 
         className={`
-          h-screen transition-all duration-300 flex items-center justify-center bg-gray-50 overflow-hidden
+          relative h-screen flex items-center justify-center overflow-hidden
           ${showCommentsModal && isDesktop ? 'w-[60%]' : 'w-full'}
         `}
+        style={{
+          backgroundColor: 'black'
+        }}
       >
         <div
           ref={containerRef}
-          className={`flex flex-col ${enableTransition ? 'transition-transform duration-500 ease-out' : ''} overflow-hidden`}
+          className={`flex flex-col w-full ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
           style={{
             transform: `translateY(-${currentIndex * 100}vh)`,
-            width: isDesktop && !showCommentsModal ? '500px' : '100%',
-            maxWidth: isDesktop ? '500px' : '100%',
-            height: `${videos.length * 100}vh`
+            height: `${videos.length * 100}vh`,
+            maxWidth: isDesktop && !showCommentsModal ? '500px' : '100%'
           }}
         >
           {videos.map((video, index) => (
