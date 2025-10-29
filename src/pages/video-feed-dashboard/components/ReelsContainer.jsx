@@ -20,8 +20,8 @@ const FloatingPointsNotification = ({ points, message, show, onHide }) => {
   if (!show) return null;
 
   return (
-    <div className="fixed top-20 right-4 z-[60] animate-bounce-in">
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300 hover:scale-105">
+    <div className="fixed top-20 right-4 z-[9999] animate-bounce-in pointer-events-none">
+      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300">
         <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
           <Icon name="Star" size={20} className="text-yellow-300" />
         </div>
@@ -339,7 +339,8 @@ const ReelsContainer = ({
     const currentVideo = videoRefs.current[currentIndex];
     const isNavigationChange = lastNavigationIndex.current !== currentIndex;
 
-    if (currentVideo && isAutoPlaying) {
+    if (currentVideo) {
+      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
@@ -348,31 +349,50 @@ const ReelsContainer = ({
 
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
-      // SOLO reiniciar si es un cambio de navegación
+      // Si es cambio de navegación, SIEMPRE reproducir automáticamente
       if (isNavigationChange) {
-        console.log('🔄 Cambio de navegación detectado, reiniciando video');
+        console.log('🔄 Cambio de navegación detectado, auto-reproduciendo video');
         currentVideo.currentTime = 0;
         lastNavigationIndex.current = currentIndex;
+        
+        const playPromise = currentVideo.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Video auto-reproduciendo desde el inicio');
+              setIsAutoPlaying(true);
+            })
+            .catch(err => {
+              console.log('Autoplay bloqueado:', err);
+              currentVideo.muted = true;
+              currentVideo.play()
+                .then(() => setIsAutoPlaying(true))
+                .catch(e => console.log('Error:', e));
+            });
+        }
+      } else if (isAutoPlaying) {
+        // No es navegación, pero debe estar reproduciéndose (usuario no pausó)
+        console.log('⚡ Play/Pause - continúa desde:', currentVideo.currentTime);
+        
+        const playPromise = currentVideo.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Video reproduciendo desde:', currentVideo.currentTime);
+            })
+            .catch(err => {
+              console.log('Autoplay bloqueado:', err);
+              currentVideo.muted = true;
+              currentVideo.play().catch(e => console.log('Error:', e));
+            });
+        }
       } else {
-        console.log('⚡ Play/Pause - NO reiniciando video, continúa desde:', currentVideo.currentTime);
+        // Usuario pausó manualmente
+        console.log('⏸️ Video pausado por usuario en:', currentVideo.currentTime);
+        currentVideo.pause();
       }
-      
-      const playPromise = currentVideo.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log('✅ Video reproduciendo desde:', currentVideo.currentTime);
-          })
-          .catch(err => {
-            console.log('Autoplay bloqueado:', err);
-            currentVideo.muted = true;
-            currentVideo.play().catch(e => console.log('Error:', e));
-          });
-      }
-    } else if (currentVideo && !isAutoPlaying) {
-      console.log('⏸️ Pausando video en:', currentVideo.currentTime);
-      currentVideo.pause();
     }
   }, [currentIndex, isAutoPlaying, videos, mutedVideos, getInitialReelIndex]);
 
@@ -505,7 +525,12 @@ const ReelsContainer = ({
   // ACCIONES
   // ===============================
   
-  const handleLike = async (videoId) => {
+  const handleLike = async (videoId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -563,7 +588,12 @@ const ReelsContainer = ({
     }
   };
 
-  const handleDislike = async (videoId) => {
+  const handleDislike = async (videoId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -598,7 +628,12 @@ const ReelsContainer = ({
     }
   };
 
-  const handleSave = async (videoId) => {
+  const handleSave = async (videoId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -643,7 +678,12 @@ const ReelsContainer = ({
     }
   };
 
-  const handleFollow = async (creatorId) => {
+  const handleFollow = async (creatorId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -691,7 +731,12 @@ const ReelsContainer = ({
     }
   };
 
-  const handleShare = async (video) => {
+  const handleShare = async (video, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     try {
       const wasAlreadyShared = actionsPerformed.shares.has(video.id);
 
@@ -737,7 +782,12 @@ const ReelsContainer = ({
     }
   };
 
-  const handleMuteToggle = (videoId) => {
+  const handleMuteToggle = (videoId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     const currentVideo = videoRefs.current[currentIndex];
     if (currentVideo) {
       const newMutedVideos = new Set(mutedVideos);
@@ -841,12 +891,19 @@ const ReelsContainer = ({
     }
   };
 
-  const handleOpenComments = async (videoId) => {
+  const handleOpenComments = async (videoId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     console.log('🗨️ Abriendo modal de comentarios para video:', videoId);
+    console.log('📹 Video debe SEGUIR reproduciéndose');
     setShowCommentsModal(true);
     setReplyingTo(null);
     setNewComment('');
     await loadComments(videoId);
+    // ✅ NO pausar el video - continúa reproduciéndose
   };
 
   const handleCloseComments = () => {
@@ -857,43 +914,67 @@ const ReelsContainer = ({
   };
 
   const handleAddComment = async (videoId) => {
-    if (!newComment.trim()) return;
+    if (!newComment.trim()) {
+      console.log('❌ Comentario vacío');
+      return;
+    }
+
+    console.log('📝 ===== INICIANDO ENVÍO DE COMENTARIO =====');
+    console.log('📝 VideoId:', videoId);
+    console.log('📝 Contenido:', newComment.trim());
+    console.log('📝 Respondiendo a:', replyingTo);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        console.log('❌ Usuario no autenticado');
         navigate('/login');
         return;
       }
 
-      console.log('📝 Enviando comentario:', { videoId, userId: user.id, content: newComment.trim(), replyingTo });
+      console.log('👤 Usuario autenticado:', user.id);
+
+      const commentData = {
+        video_id: videoId,
+        user_id: user.id,
+        content: newComment.trim(),
+        parent_comment_id: replyingTo
+      };
+
+      console.log('📤 Enviando a Supabase:', commentData);
 
       const { data: insertedComment, error } = await supabase
         .from('video_comments')
-        .insert({
-          video_id: videoId,
-          user_id: user.id,
-          content: newComment.trim(),
-          parent_comment_id: replyingTo
-        })
+        .insert(commentData)
         .select()
         .single();
 
       if (error) {
-        console.error('❌ Error al insertar comentario:', error);
+        console.error('❌ Error de Supabase:', error);
+        console.error('❌ Código:', error.code);
+        console.error('❌ Mensaje:', error.message);
+        console.error('❌ Detalles:', error.details);
+        alert(`Error al comentar: ${error.message}`);
         throw error;
       }
 
-      console.log('✅ Comentario insertado:', insertedComment);
+      console.log('✅ Comentario insertado exitosamente:', insertedComment);
 
       if (!replyingTo) {
-        await supabase.rpc('increment_video_comments', { video_id: videoId });
+        console.log('📊 Incrementando contador de comentarios...');
+        const { error: rpcError } = await supabase.rpc('increment_video_comments', { video_id: videoId });
+        if (rpcError) {
+          console.error('⚠️ Error al incrementar contador:', rpcError);
+        } else {
+          console.log('✅ Contador incrementado');
+        }
       }
 
       const wasAlreadyCommented = actionsPerformed.comments.has(videoId);
 
       if (!wasAlreadyCommented) {
         try {
+          console.log('🎁 Otorgando puntos...');
           await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
           const missionResult = await missionsService.trackComment('video', videoId);
           if (missionResult.completed) {
@@ -906,17 +987,23 @@ const ReelsContainer = ({
             ...prev,
             comments: new Set([...prev.comments, videoId])
           }));
+          console.log('✅ Puntos otorgados');
         } catch (pointsError) {
-          console.error('Error al otorgar puntos:', pointsError);
+          console.error('⚠️ Error al otorgar puntos:', pointsError);
         }
       }
 
       setNewComment('');
       setReplyingTo(null);
+      
+      console.log('🔄 Recargando comentarios...');
       await loadComments(videoId);
+      console.log('✅ ===== COMENTARIO COMPLETADO =====');
     } catch (error) {
-      console.error('Error agregando comentario:', error);
-      alert('Error al agregar comentario. Por favor, intenta de nuevo.');
+      console.error('❌ ===== ERROR GENERAL AL COMENTAR =====');
+      console.error('❌ Error:', error);
+      console.error('❌ Stack:', error.stack);
+      alert('Error al agregar comentario. Revisa la consola para más detalles.');
     }
   };
 
@@ -1001,11 +1088,18 @@ const ReelsContainer = ({
 
         {/* CONTROLES - SOLO MOBILE (dentro del reel) */}
         {!isDesktop && (
-          <div className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10">
+          <div 
+            className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             
             {/* Avatar + Follow */}
             <div className="relative">
-              <Link to={`/profile/${video.creator?.id}`}>
+              <Link 
+                to={`/profile/${video.creator?.id}`}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
                   {video.creator?.avatar ? (
                     <img src={video.creator.avatar} alt={video.creator.name} className="w-full h-full object-cover" />
@@ -1021,7 +1115,7 @@ const ReelsContainer = ({
               
               {!isFollowing && (
                 <button
-                  onClick={() => handleFollow(video.creator?.id)}
+                  onClick={(e) => handleFollow(video.creator?.id, e)}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 >
                   <Icon name="Plus" size={16} color="white" />
@@ -1030,7 +1124,10 @@ const ReelsContainer = ({
             </div>
 
             {/* Like */}
-            <button onClick={() => handleLike(video.id)} className="flex flex-col items-center space-y-1">
+            <button 
+              onClick={(e) => handleLike(video.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
               <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${isLiked ? 'text-red-500' : 'text-white hover:scale-110'}`}>
                 <Icon name="ThumbsUp" size={26} className={isLiked ? 'fill-current' : ''} />
               </div>
@@ -1038,14 +1135,20 @@ const ReelsContainer = ({
             </button>
 
             {/* Dislike */}
-            <button onClick={() => handleDislike(video.id)} className="flex flex-col items-center space-y-1">
+            <button 
+              onClick={(e) => handleDislike(video.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
               <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${isDisliked ? 'text-gray-400' : 'text-white hover:scale-110'}`}>
                 <Icon name="ThumbsDown" size={26} className={isDisliked ? 'fill-current' : ''} />
               </div>
             </button>
 
             {/* Comentarios */}
-            <button onClick={() => handleOpenComments(video.id)} className="flex flex-col items-center space-y-1">
+            <button 
+              onClick={(e) => handleOpenComments(video.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
               <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
                 <Icon name="MessageCircle" size={26} />
               </div>
@@ -1053,28 +1156,40 @@ const ReelsContainer = ({
             </button>
 
             {/* Guardar */}
-            <button onClick={() => handleSave(video.id)} className="flex flex-col items-center space-y-1">
+            <button 
+              onClick={(e) => handleSave(video.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
               <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${isSaved ? 'text-yellow-400' : 'text-white hover:scale-110'}`}>
                 <Icon name="Bookmark" size={26} className={isSaved ? 'fill-current' : ''} />
               </div>
             </button>
 
             {/* Compartir */}
-            <button onClick={() => handleShare(video)} className="flex flex-col items-center space-y-1">
+            <button 
+              onClick={(e) => handleShare(video, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
               <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
                 <Icon name="Share2" size={26} />
               </div>
             </button>
 
             {/* Volumen */}
-            <button onClick={() => handleMuteToggle(video.id)} className="flex flex-col items-center space-y-1">
+            <button 
+              onClick={(e) => handleMuteToggle(video.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
               <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
                 <Icon name={isMuted ? 'VolumeX' : 'Volume2'} size={26} />
               </div>
             </button>
 
             {/* Música */}
-            <button className="flex flex-col items-center mt-2">
+            <button 
+              className="flex flex-col items-center mt-2"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-lg">
                 <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
                   <Icon name="Music" size={18} color="white" />
@@ -1085,10 +1200,17 @@ const ReelsContainer = ({
         )}
 
         {/* INFORMACIÓN DEL VIDEO */}
-        <div className="absolute bottom-8 left-4 right-24 z-10">
+        <div 
+          className="absolute bottom-8 left-4 right-24 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
             <div className="flex items-center space-x-2 mb-3">
-              <Link to={`/profile/${video.creator?.id}`} className="font-bold hover:underline text-base text-white drop-shadow-lg">
+              <Link 
+                to={`/profile/${video.creator?.id}`} 
+                className="font-bold hover:underline text-base text-white drop-shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
                 @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
               </Link>
               <span className="text-gray-200 text-sm">•</span>
@@ -1206,7 +1328,7 @@ const ReelsContainer = ({
           </div>
 
           {/* FLECHAS DE NAVEGACIÓN DESKTOP */}
-          {isDesktop && !showCommentsModal && (
+          {isDesktop && (
             <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between pointer-events-none">
               <button
                 onClick={navigatePrevious}
@@ -1239,7 +1361,7 @@ const ReelsContainer = ({
           )}
 
           {/* INSTRUCCIONES */}
-          {currentIndex === 0 && !showCommentsModal && (
+          {currentIndex === 0 && (
             <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none z-40">
               <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
                 <p className={isDesktop ? 'text-base' : 'text-sm'}>
@@ -1254,12 +1376,18 @@ const ReelsContainer = ({
         </div>
 
         {/* CONTROLES LATERALES - DESKTOP (FUERA DEL REEL) */}
-        {isDesktop && currentVideo && !showCommentsModal && (
-          <div className="flex flex-col items-center space-y-6 ml-6 z-50">
+        {isDesktop && currentVideo && (
+          <div 
+            className="flex flex-col items-center space-y-6 ml-6 z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Avatar */}
             <div className="relative">
-              <Link to={`/profile/${currentVideo?.creator?.id}`}>
+              <Link 
+                to={`/profile/${currentVideo?.creator?.id}`}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform bg-white">
                   {currentVideo?.creator?.avatar ? (
                     <img 
@@ -1279,7 +1407,7 @@ const ReelsContainer = ({
               
               {!followedCreators.has(currentVideo?.creator?.id) && (
                 <button
-                  onClick={() => handleFollow(currentVideo?.creator?.id)}
+                  onClick={(e) => handleFollow(currentVideo?.creator?.id, e)}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
                 >
                   <Icon name="Plus" size={18} color="white" />
@@ -1288,7 +1416,10 @@ const ReelsContainer = ({
             </div>
 
             {/* Like */}
-            <button onClick={() => handleLike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <button 
+              onClick={(e) => handleLike(currentVideo?.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
               <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo?.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
                 <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
               </div>
@@ -1298,14 +1429,20 @@ const ReelsContainer = ({
             </button>
 
             {/* Dislike */}
-            <button onClick={() => handleDislike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <button 
+              onClick={(e) => handleDislike(currentVideo?.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
               <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo?.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
                 <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
               </div>
             </button>
 
             {/* Comentarios */}
-            <button onClick={() => handleOpenComments(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <button 
+              onClick={(e) => handleOpenComments(currentVideo?.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
               <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
                 <Icon name="MessageCircle" size={28} />
               </div>
@@ -1315,28 +1452,40 @@ const ReelsContainer = ({
             </button>
 
             {/* Guardar */}
-            <button onClick={() => handleSave(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <button 
+              onClick={(e) => handleSave(currentVideo?.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
               <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo?.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
                 <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
               </div>
             </button>
 
             {/* Compartir */}
-            <button onClick={() => handleShare(currentVideo)} className="flex flex-col items-center space-y-1 group">
+            <button 
+              onClick={(e) => handleShare(currentVideo, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
               <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
                 <Icon name="Share2" size={28} />
               </div>
             </button>
 
             {/* Volumen */}
-            <button onClick={() => handleMuteToggle(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <button 
+              onClick={(e) => handleMuteToggle(currentVideo?.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
               <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
                 <Icon name={mutedVideos.has(currentVideo?.id) ? 'VolumeX' : 'Volume2'} size={28} />
               </div>
             </button>
 
             {/* Música */}
-            <button className="flex flex-col items-center mt-2">
+            <button 
+              className="flex flex-col items-center mt-2"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform">
                 <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
                   <Icon name="Music" size={20} color="white" />
@@ -1348,7 +1497,7 @@ const ReelsContainer = ({
 
         {/* PANEL DE COMENTARIOS - DESKTOP */}
         {isDesktop && showCommentsModal && currentVideo && (
-          <div className="w-[40%] h-[80vh] bg-white flex flex-col shadow-2xl rounded-r-xl ml-4 flex-shrink-0">
+          <div className="w-[40%] h-[80vh] bg-white flex flex-col shadow-2xl rounded-r-xl ml-4 flex-shrink-0 z-20">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <Icon name="MessageCircle" size={20} />
@@ -1461,7 +1610,11 @@ const ReelsContainer = ({
               )}
             </div>
 
-            <div className="border-t border-gray-200 p-4 bg-gray-50">
+            <div 
+              className="border-t border-gray-200 p-4 bg-gray-50"
+              onClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+            >
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
                   <span className="text-xs text-blue-700 flex items-center gap-1">
@@ -1497,7 +1650,10 @@ const ReelsContainer = ({
                     placeholder="Agrega un comentario..."
                     rows={2}
                     className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
+                      e.stopPropagation();
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         handleAddComment(currentVideo.id);
@@ -1505,7 +1661,10 @@ const ReelsContainer = ({
                     }}
                   />
                   <button
-                    onClick={() => handleAddComment(currentVideo.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddComment(currentVideo.id);
+                    }}
                     disabled={!newComment.trim()}
                     className={`absolute right-2 bottom-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                       newComment.trim() 
@@ -1525,14 +1684,14 @@ const ReelsContainer = ({
       {/* MODAL DE COMENTARIOS - MOBILE */}
       {isMobile && showCommentsModal && currentVideo && (
         <div 
-          className="fixed inset-0 z-50 flex items-end"
+          className="fixed inset-0 z-[100] flex items-end"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseComments();
           }}
         >
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseComments} />
           
-          <div className="relative bg-white rounded-t-3xl shadow-2xl w-full h-[75vh] flex flex-col animate-slide-up">
+          <div className="relative bg-white rounded-t-3xl shadow-2xl w-full h-[75vh] flex flex-col animate-slide-up z-[101]">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-800">
                 {formatCount(currentVideo.comments || 0)} comentarios
@@ -1643,7 +1802,12 @@ const ReelsContainer = ({
               )}
             </div>
 
-            <div className="border-t border-gray-200 p-4">
+            <div 
+              className="border-t border-gray-200 p-4"
+              onClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
                   <span className="text-xs text-blue-700">
@@ -1678,7 +1842,11 @@ const ReelsContainer = ({
                     placeholder="Agrega un comentario..."
                     rows={1}
                     className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
+                      e.stopPropagation();
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         handleAddComment(currentVideo.id);
@@ -1686,7 +1854,10 @@ const ReelsContainer = ({
                     }}
                   />
                   <button
-                    onClick={() => handleAddComment(currentVideo.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddComment(currentVideo.id);
+                    }}
                     disabled={!newComment.trim()}
                     className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                       newComment.trim() 
