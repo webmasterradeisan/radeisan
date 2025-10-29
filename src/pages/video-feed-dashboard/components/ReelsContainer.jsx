@@ -58,6 +58,7 @@ const ReelsContainer = ({
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [followedCreators, setFollowedCreators] = useState(new Set());
   const [enableTransition, setEnableTransition] = useState(false);
+  const [loadingVideo, setLoadingVideo] = useState(true);
   
   // Estados de comentarios
   const [showCommentsModal, setShowCommentsModal] = useState(false);
@@ -332,6 +333,11 @@ const ReelsContainer = ({
     
     if (!currentVideo || !currentVideoData) return;
 
+    // Handlers para el estado de carga
+    const handleLoadStart = () => setLoadingVideo(true);
+    const handleCanPlay = () => setLoadingVideo(false);
+    const handleLoadedData = () => setLoadingVideo(false);
+
     const handleTimeUpdate = () => {
       const watchedPercent = (currentVideo.currentTime / currentVideo.duration) * 100;
       
@@ -348,8 +354,17 @@ const ReelsContainer = ({
       }
     };
 
+    currentVideo.addEventListener('loadstart', handleLoadStart);
+    currentVideo.addEventListener('canplay', handleCanPlay);
+    currentVideo.addEventListener('loadeddata', handleLoadedData);
     currentVideo.addEventListener('timeupdate', handleTimeUpdate);
-    return () => currentVideo.removeEventListener('timeupdate', handleTimeUpdate);
+    
+    return () => {
+      currentVideo.removeEventListener('loadstart', handleLoadStart);
+      currentVideo.removeEventListener('canplay', handleCanPlay);
+      currentVideo.removeEventListener('loadeddata', handleLoadedData);
+      currentVideo.removeEventListener('timeupdate', handleTimeUpdate);
+    };
   }, [currentIndex, videos, videoWatchedIds]);
 
   // ===============================
@@ -824,9 +839,19 @@ const ReelsContainer = ({
           className="w-full h-full object-contain"
           loop
           playsInline
-          preload={Math.abs(index - currentIndex) <= 1 ? "auto" : "metadata"}
+          preload={index === currentIndex ? "auto" : Math.abs(index - currentIndex) === 1 ? "metadata" : "none"}
           onClick={handlePlayPause}
         />
+
+        {/* INDICADOR DE CARGA */}
+        {isActive && loadingVideo && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="flex flex-col items-center space-y-3">
+              <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-white text-sm">Cargando video...</p>
+            </div>
+          </div>
+        )}
 
         {/* CONTROLES - SOLO MOBILE */}
         {!isDesktop && (
@@ -1021,6 +1046,99 @@ const ReelsContainer = ({
           />
         ))}
       </div>
+
+      {/* CONTROLES LATERALES - DESKTOP */}
+      {isDesktop && videos[currentIndex] && (
+        <div className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50">
+          
+          {/* Avatar */}
+          <div className="relative">
+            <Link to={`/profile/${videos[currentIndex]?.creator?.id}`}>
+              <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
+                {videos[currentIndex]?.creator?.avatar ? (
+                  <img 
+                    src={videos[currentIndex].creator.avatar} 
+                    alt={videos[currentIndex].creator.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <span className="text-white font-bold text-xl">
+                      {videos[currentIndex]?.creator?.name?.charAt(0) || 'U'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </Link>
+            
+            {!followedCreators.has(videos[currentIndex]?.creator?.id) && (
+              <button
+                onClick={() => handleFollow(videos[currentIndex]?.creator?.id)}
+                className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
+              >
+                <Icon name="Plus" size={18} color="white" />
+              </button>
+            )}
+          </div>
+
+          {/* Like */}
+          <button onClick={() => handleLike(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(videos[currentIndex]?.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
+              <Icon name="ThumbsUp" size={28} className={likedVideos.has(videos[currentIndex]?.id) ? 'fill-current' : ''} />
+            </div>
+            <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
+              {formatCount(videos[currentIndex]?.likes || 0)}
+            </span>
+          </button>
+
+          {/* Dislike */}
+          <button onClick={() => handleDislike(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(videos[currentIndex]?.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
+              <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(videos[currentIndex]?.id) ? 'fill-current' : ''} />
+            </div>
+          </button>
+
+          {/* Comentarios */}
+          <button onClick={() => handleOpenComments(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
+              <Icon name="MessageCircle" size={28} />
+            </div>
+            <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
+              {formatCount(videos[currentIndex]?.comments || 0)}
+            </span>
+          </button>
+
+          {/* Guardar */}
+          <button onClick={() => handleSave(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(videos[currentIndex]?.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
+              <Icon name="Bookmark" size={28} className={savedVideos.has(videos[currentIndex]?.id) ? 'fill-current' : ''} />
+            </div>
+          </button>
+
+          {/* Compartir */}
+          <button onClick={() => handleShare(videos[currentIndex])} className="flex flex-col items-center space-y-1 group">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
+              <Icon name="Share2" size={28} />
+            </div>
+          </button>
+
+          {/* Volumen */}
+          <button onClick={() => handleMuteToggle(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
+              <Icon name={mutedVideos.has(videos[currentIndex]?.id) ? 'VolumeX' : 'Volume2'} size={28} />
+            </div>
+          </button>
+
+          {/* Música */}
+          <button className="flex flex-col items-center mt-2">
+            <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
+              <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
+                <Icon name="Music" size={20} color="white" />
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* FLECHAS DE NAVEGACIÓN DESKTOP */}
       {isDesktop && (
