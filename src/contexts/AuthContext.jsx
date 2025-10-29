@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.jsx
-// AuthContext CORREGIDO - Sin loops infinitos
+// AuthContext CORREGIDO - Con timeout y mejor manejo de loading
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -23,10 +23,26 @@ export const AuthProvider = ({ children }) => {
   const authSubscriptionRef = useRef(null);
   const initializingRef = useRef(false);
   const lastFetchRef = useRef(null);
+  const loadingTimeoutRef = useRef(null);
   
   const isAuthenticated = !!user;
 
-  // Función para obtener perfil de usuario - sin caché problemático
+  // CRÍTICO: Forzar fin de loading después de timeout
+  const forceLoadingComplete = useCallback(() => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current && loading) {
+        console.warn('⚠️ Loading timeout alcanzado, forzando fin de loading');
+        setLoading(false);
+        initializingRef.current = false;
+      }
+    }, 8000); // 8 segundos máximo de loading
+  }, [loading]);
+
+  // Función para obtener perfil de usuario
   const fetchUserProfile = useCallback(async (userId) => {
     if (!userId || !mountedRef.current) return null;
 
@@ -113,7 +129,7 @@ export const AuthProvider = ({ children }) => {
       console.error('❌ Error en fetchUserProfile:', err);
       return null;
     }
-  }, []); // Sin dependencias para evitar recreación
+  }, []);
 
   // Inicializar autenticación - SOLO UNA VEZ
   useEffect(() => {
@@ -129,10 +145,22 @@ export const AuthProvider = ({ children }) => {
       initializingRef.current = true;
       console.log('🚀 Inicializando autenticación...');
 
+      // Activar timeout de seguridad
+      const timeoutId = setTimeout(() => {
+        if (!isCancelled && mountedRef.current) {
+          console.warn('⚠️ Timeout de inicialización alcanzado');
+          setLoading(false);
+          initializingRef.current = false;
+        }
+      }, 7000);
+
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (isCancelled) return;
+        if (isCancelled) {
+          clearTimeout(timeoutId);
+          return;
+        }
 
         if (sessionError) {
           console.error('❌ Error obteniendo sesión:', sessionError);
@@ -140,6 +168,7 @@ export const AuthProvider = ({ children }) => {
           setError(sessionError.message);
           setLoading(false);
           initializingRef.current = false;
+          clearTimeout(timeoutId);
           return;
         }
 
@@ -147,7 +176,10 @@ export const AuthProvider = ({ children }) => {
           console.log('✅ Sesión encontrada:', session.user.email);
           const profile = await fetchUserProfile(session.user.id);
 
-          if (isCancelled) return;
+          if (isCancelled) {
+            clearTimeout(timeoutId);
+            return;
+          }
 
           if (profile) {
             setUser(profile);
@@ -174,14 +206,17 @@ export const AuthProvider = ({ children }) => {
         }
 
         setError(null);
+        clearTimeout(timeoutId);
       } catch (err) {
         console.error('❌ Error en inicialización:', err);
         if (!isCancelled) {
           setUser(null);
           setError(err.message);
         }
+        clearTimeout(timeoutId);
       } finally {
         if (!isCancelled) {
+          console.log('✅ Inicialización completada');
           setLoading(false);
           initializingRef.current = false;
         }
@@ -202,9 +237,12 @@ export const AuthProvider = ({ children }) => {
           case 'SIGNED_IN':
             if (session?.user) {
               console.log('🔑 Usuario signed in');
+              setLoading(true);
               const profile = await fetchUserProfile(session.user.id);
-              if (!isCancelled && profile) {
-                setUser(profile);
+              if (!isCancelled) {
+                if (profile) {
+                  setUser(profile);
+                }
                 setLoading(false);
                 setError(null);
               }
@@ -222,7 +260,7 @@ export const AuthProvider = ({ children }) => {
 
           case 'TOKEN_REFRESHED':
             console.log('🔄 Token refrescado');
-            // Solo actualizar si es necesario
+            // No cambiar loading state aquí
             if (session?.user && !isCancelled) {
               const profile = await fetchUserProfile(session.user.id);
               if (profile && !isCancelled) {
@@ -257,6 +295,9 @@ export const AuthProvider = ({ children }) => {
       if (authSubscriptionRef.current) {
         authSubscriptionRef.current.unsubscribe();
         authSubscriptionRef.current = null;
+      }
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
       }
     };
   }, []); // Array vacío - solo ejecutar una vez
