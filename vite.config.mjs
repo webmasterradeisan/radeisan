@@ -22,6 +22,8 @@ export default defineConfig({
     host: "0.0.0.0",
     strictPort: true,
     allowedHosts: ['.amazonaws.com', '.builtwithrockit.net'],
+    // Fallback para desarrollo local
+    open: true,
   },
 
   // CRÍTICO: Configuración para preview (producción local)
@@ -29,5 +31,6 @@ export default defineConfig({
     port: 4028,
     host: "0.0.0.0",
     strictPort: false,
+    open: true,
   },
 });
