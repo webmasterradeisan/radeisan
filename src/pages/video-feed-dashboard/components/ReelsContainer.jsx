@@ -12,6 +12,7 @@ import useIsMobile from 'hooks/useIsMobile';
 const FloatingPointsNotification = ({ points, message, show, onHide }) => {
   useEffect(() => {
     if (show) {
+      console.log('🎉 Mostrando notificación de puntos:', points, message);
       const timer = setTimeout(onHide, 2500);
       return () => clearTimeout(timer);
     }
@@ -20,7 +21,15 @@ const FloatingPointsNotification = ({ points, message, show, onHide }) => {
   if (!show) return null;
 
   return (
-    <div className="fixed top-20 right-4 z-[9999] animate-bounce-in pointer-events-none">
+    <div 
+      className="fixed top-20 right-4 animate-bounce pointer-events-none"
+      style={{ 
+        zIndex: 99999,
+        position: 'fixed',
+        top: '80px',
+        right: '16px'
+      }}
+    >
       <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300">
         <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
           <Icon name="Star" size={20} className="text-yellow-300" />
@@ -1283,17 +1292,18 @@ const ReelsContainer = ({
   const currentVideo = videos[currentIndex];
 
   return (
-    <div className="relative w-full h-full bg-white overflow-hidden">
-      {/* NOTIFICACIÓN FLOTANTE DE PUNTOS */}
+    <>
+      {/* NOTIFICACIÓN FLOTANTE DE PUNTOS - FUERA DEL CONTENEDOR */}
       <FloatingPointsNotification
         points={pointsNotification.points}
         message={pointsNotification.message}
         show={pointsNotification.show}
         onHide={hidePointsNotification}
       />
-
-      {/* CONTENEDOR PRINCIPAL */}
-      <div className="flex h-full w-full items-center justify-center">
+      
+      <div className="relative w-full h-full bg-white overflow-hidden">
+        {/* CONTENEDOR PRINCIPAL */}
+        <div className="flex h-full w-full items-center justify-center">
         
         {/* CONTENEDOR DEL REEL */}
         <div 
@@ -1874,6 +1884,7 @@ const ReelsContainer = ({
         </div>
       )}
     </div>
+    </>
   );
 };
 
