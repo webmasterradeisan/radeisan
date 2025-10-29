@@ -701,8 +701,9 @@ const ReelsContainer = ({
         navigate('/login');
         return;
       }
-
-      if (followedCreators.has(creatorId)) {
+      
+      // Chequeo de seguridad: Evitar seguirse a sí mismo o si el creatorId no existe
+      if (!creatorId || user.id === creatorId || followedCreators.has(creatorId)) {
         return;
       }
 
@@ -1138,10 +1139,10 @@ const ReelsContainer = ({
                 </div>
               </Link>
               
-              {!isFollowing && (
+              {/* CORRECCIÓN: Agregar verificación de video.creator antes de llamar a handleFollow */}
+              {video.creator && !isFollowing && (
                 <button
-                  // Uso seguro de optional chaining
-                  onClick={(e) => handleFollow(video.creator?.id, e)}
+                  onClick={(e) => handleFollow(video.creator.id, e)}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 >
                   <Icon name="Plus" size={16} color="white" />
@@ -1417,7 +1418,7 @@ const ReelsContainer = ({
           )}
         </div>
 
-        {/* CONTROLES LATERALES - DESKTOP (FUERA DEL REEL) */}
+        {/* CONTROLES LATERALES - DESKTOP */}
         {isDesktop && currentVideo && (
           <div 
             className="flex flex-col items-center space-y-6 ml-6 z-50"
@@ -1449,11 +1450,12 @@ const ReelsContainer = ({
                 </div>
               </Link>
               
-              {/* Uso seguro de optional chaining */}
-              {!followedCreators.has(currentVideo.creator?.id) && (
+              {/* ===> CORRECCIÓN APLICADA PARA EL ERROR 'id' <=== */}
+              {/* Se verifica que currentVideo.creator exista ANTES de intentar obtener su ID */}
+              {currentVideo.creator && !followedCreators.has(currentVideo.creator.id) && (
                 <button
-                  // Uso seguro de optional chaining
-                  onClick={(e) => handleFollow(currentVideo.creator?.id, e)}
+                  // Ahora es seguro usar .id aquí.
+                  onClick={(e) => handleFollow(currentVideo.creator.id, e)}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
                 >
                   <Icon name="Plus" size={18} color="white" />
@@ -1735,214 +1737,213 @@ const ReelsContainer = ({
             </div>
           </div>
         )}
-      </div>
 
-      {/* MODAL DE COMENTARIOS - MOBILE */}
-      {isMobile && showCommentsModal && currentVideo && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-end"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) handleCloseComments();
-          }}
-        >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseComments} />
-          
-          <div className="relative bg-white rounded-t-3xl shadow-2xl w-full h-[75vh] flex flex-col animate-slide-up z-[101]">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-800">
-                {formatCount(currentVideo.comments || 0)} comentarios
-              </h3>
-              <button 
-                onClick={handleCloseComments}
-                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-              >
-                <Icon name="X" size={20} className="text-gray-600" />
-              </button>
-            </div>
+        {/* MODAL DE COMENTARIOS - MOBILE */}
+        {isMobile && showCommentsModal && currentVideo && (
+          <div 
+            className="fixed inset-0 z-[100] flex items-end"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) handleCloseComments();
+            }}
+          >
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseComments} />
+            
+            <div className="relative bg-white rounded-t-3xl shadow-2xl w-full h-[75vh] flex flex-col animate-slide-up z-[101]">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <h3 className="text-lg font-bold text-gray-800">
+                  {formatCount(currentVideo.comments || 0)} comentarios
+                </h3>
+                <button 
+                  onClick={handleCloseComments}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <Icon name="X" size={20} className="text-gray-600" />
+                </button>
+              </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {!comments[currentVideo.id] || comments[currentVideo.id]?.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <Icon name="MessageCircle" size={48} className="mb-2" />
-                  <p>No hay comentarios aún</p>
-                  <p className="text-sm">Sé el primero en comentar</p>
-                </div>
-              ) : (
-                comments[currentVideo.id]?.map((comment) => (
-                  <div key={comment.id} className="space-y-2">
-                    <div className="flex space-x-3">
-                      <div className="flex-shrink-0">
-                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-400 to-pink-400">
-                          {comment.user?.avatar ? (
-                            <img src={comment.user.avatar} alt={comment.user.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-white font-bold">
-                              {comment.user?.name?.charAt(0) || 'U'}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {!comments[currentVideo.id] || comments[currentVideo.id]?.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                    <Icon name="MessageCircle" size={48} className="mb-2" />
+                    <p>No hay comentarios aún</p>
+                    <p className="text-sm">Sé el primero en comentar</p>
+                  </div>
+                ) : (
+                  comments[currentVideo.id]?.map((comment) => (
+                    <div key={comment.id} className="space-y-2">
+                      <div className="flex space-x-3">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-400 to-pink-400">
+                            {comment.user?.avatar ? (
+                              <img src={comment.user.avatar} alt={comment.user.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                                {comment.user?.name?.charAt(0) || 'U'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold text-sm text-gray-800">
+                              {comment.user?.name || 'Usuario'}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {formatTimeAgo(comment.created_at)}
+                            </span>
+                          </div>
+                          
+                          <p className="text-sm text-gray-700 mt-1 break-words">
+                            {comment.content}
+                          </p>
+                          
+                          <button
+                            // Uso seguro de optional chaining
+                            onClick={() => handleReply(comment.id, comment.user?.username || comment.user?.name)}
+                            className="text-xs text-gray-500 hover:text-gray-700 mt-2 font-medium"
+                          >
+                            Responder
+                          </button>
+
+                          {comment.replies?.length > 0 && (
+                            <div className="mt-3">
+                              <button
+                                onClick={() => toggleReplies(comment.id)}
+                                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                {showReplies[comment.id] 
+                                  ? 'Ocultar respuestas' 
+                                  : `Ver ${comment.replies.length} respuesta${comment.replies.length > 1 ? 's' : ''}`
+                                }
+                              </button>
+                              
+                              {showReplies[comment.id] && (
+                                <div className="mt-3 space-y-3 ml-4 border-l-2 border-gray-200 pl-4">
+                                  {comment.replies.map((reply) => (
+                                    <div key={reply.id} className="flex space-x-2">
+                                      <div className="flex-shrink-0">
+                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-purple-400">
+                                          {reply.user?.avatar ? (
+                                            <img src={reply.user.avatar} alt={reply.user.name} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
+                                              {reply.user?.name?.charAt(0) || 'U'}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="font-semibold text-xs text-gray-800">
+                                            {reply.user?.name || 'Usuario'}
+                                          </span>
+                                          <span className="text-xs text-gray-400">
+                                            {formatTimeAgo(reply.created_at)}
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-gray-700 mt-1 break-words">
+                                          {reply.content}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-sm text-gray-800">
-                            {comment.user?.name || 'Usuario'}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {formatTimeAgo(comment.created_at)}
-                          </span>
-                        </div>
-                        
-                        <p className="text-sm text-gray-700 mt-1 break-words">
-                          {comment.content}
-                        </p>
-                        
-                        <button
-                          // Uso seguro de optional chaining
-                          onClick={() => handleReply(comment.id, comment.user?.username || comment.user?.name)}
-                          className="text-xs text-gray-500 hover:text-gray-700 mt-2 font-medium"
-                        >
-                          Responder
-                        </button>
+                    </div>
+                  ))
+                )}
+              </div>
 
-                        {comment.replies?.length > 0 && (
-                          <div className="mt-3">
-                            <button
-                              onClick={() => toggleReplies(comment.id)}
-                              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              {showReplies[comment.id] 
-                                ? 'Ocultar respuestas' 
-                                : `Ver ${comment.replies.length} respuesta${comment.replies.length > 1 ? 's' : ''}`
-                              }
-                            </button>
-                            
-                            {showReplies[comment.id] && (
-                              <div className="mt-3 space-y-3 ml-4 border-l-2 border-gray-200 pl-4">
-                                {comment.replies.map((reply) => (
-                                  <div key={reply.id} className="flex space-x-2">
-                                    <div className="flex-shrink-0">
-                                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-purple-400">
-                                        {reply.user?.avatar ? (
-                                          <img src={reply.user.avatar} alt={reply.user.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                          <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
-                                            {reply.user?.name?.charAt(0) || 'U'}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center space-x-2">
-                                        <span className="font-semibold text-xs text-gray-800">
-                                          {reply.user?.name || 'Usuario'}
-                                        </span>
-                                        <span className="text-xs text-gray-400">
-                                          {formatTimeAgo(reply.created_at)}
-                                        </span>
-                                      </div>
-                                      <p className="text-xs text-gray-700 mt-1 break-words">
-                                        {reply.content}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+              <div 
+                className="border-t border-gray-200 p-4"
+                onClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+              >
+                {replyingTo && (
+                  <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
+                    <span className="text-xs text-blue-700">
+                      Respondiendo a comentario
+                    </span>
+                    <button 
+                      onClick={handleCancelReply}
+                      className="text-blue-700 hover:text-blue-900"
+                    >
+                      <Icon name="X" size={16} />
+                    </button>
+                  </div>
+                )}
+                
+                <div className="flex items-end space-x-2">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500">
+                      {currentUser?.avatar ? (
+                        <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                          {currentUser?.name?.charAt(0) || 'U'}
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-
-            <div 
-              className="border-t border-gray-200 p-4"
-              onClick={(e) => e.stopPropagation()}
-              onFocus={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-            >
-              {replyingTo && (
-                <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
-                  <span className="text-xs text-blue-700">
-                    Respondiendo a comentario
-                  </span>
-                  <button 
-                    onClick={handleCancelReply}
-                    className="text-blue-700 hover:text-blue-900"
-                  >
-                    <Icon name="X" size={16} />
-                  </button>
-                </div>
-              )}
-              
-              <div className="flex items-end space-x-2">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500">
-                    {currentUser?.avatar ? (
-                      <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white font-bold">
-                        {currentUser?.name?.charAt(0) || 'U'}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex-1 relative">
-                  <textarea
-                    value={newComment}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setNewComment(e.target.value);
-                    }}
-                    placeholder="Agrega un comentario..."
-                    rows={1}
-                    className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                    onClick={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onTouchMove={(e) => e.stopPropagation()}
-                    onTouchEnd={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onMouseUp={(e) => e.stopPropagation()}
-                    onInput={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === 'Enter' && !e.shiftKey) {
+                  
+                  <div className="flex-1 relative">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setNewComment(e.target.value);
+                      }}
+                      placeholder="Agrega un comentario..."
+                      rows={1}
+                      className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchMove={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onMouseUp={(e) => e.stopPropagation()}
+                      onInput={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAddComment(currentVideo.id);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         e.preventDefault();
+                        console.log('🔘 Botón enviar (mobile) clickeado');
                         handleAddComment(currentVideo.id);
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      console.log('🔘 Botón enviar (mobile) clickeado');
-                      handleAddComment(currentVideo.id);
-                    }}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    disabled={!newComment.trim()}
-                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                      newComment.trim() 
-                        ? 'bg-purple-500 hover:bg-purple-600 text-white cursor-pointer' 
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    <Icon name="Send" size={16} />
-                  </button>
+                      }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      disabled={!newComment.trim()}
+                      className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                        newComment.trim() 
+                          ? 'bg-purple-500 hover:bg-purple-600 text-white cursor-pointer' 
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <Icon name="Send" size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </>
   );
 };
