@@ -528,7 +528,7 @@ const ReelsContainer = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, videos.length, showCommentsModal, navigateNext, navigatePrevious, useCallback]); // Ajuste aquí si es necesario importar handleCloseComments, pero lo dejaremos así por ahora.
+  }, [currentIndex, videos.length, showCommentsModal, navigateNext, navigatePrevious, useCallback]);
 
   // ===============================
   // ACCIONES
@@ -644,7 +644,7 @@ const ReelsContainer = ({
     }
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } = {} } = await supabase.auth.getUser();
       if (!user) {
         navigate('/login');
         return;
@@ -1070,6 +1070,7 @@ const ReelsContainer = ({
   const ReelItem = ({ video, index, isActive }) => {
     const videoUrl = video.videoUrl || video.video_url;
     const isLiked = likedVideos.has(video.id);
+    const isMuted = mutedVideos.has(video.id); // Agregué el estado de mute para el render
     const isFollowing = video.creator?.id ? followedCreators.has(video.creator.id) : false;
 
     // Solo se mantienen los estados de liked y following para el componente individual
@@ -1696,7 +1697,8 @@ const ReelsContainer = ({
           </div>
         )}
 
-      </div>
+        </div> {/* Cierra: <div className="flex h-full w-full items-center justify-center"> */}
+      </div> {/* [CORRECCIÓN] Cierra: <div className="relative w-full h-full bg-white overflow-hidden"> */}
     </>
   );
 };
