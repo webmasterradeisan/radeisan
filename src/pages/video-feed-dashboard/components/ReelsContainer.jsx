@@ -92,7 +92,7 @@ const ReelsContainer = ({
   const touchEndY = useRef(0);
   const isInitialMount = useRef(true);
   const hasPlayedInitial = useRef(false);
-  const lastNavigationIndex = useRef(-1); // Para detectar cambios de navegación
+  const lastNavigationIndex = useRef(-1);
 
   console.log('🎬 ReelsContainer render:', {
     videosCount: videos.length,
@@ -164,7 +164,6 @@ const ReelsContainer = ({
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          // Cargar perfil
           const { data: profile } = await supabase
             .from('user_profiles')
             .select('id, name, avatar, username')
@@ -181,7 +180,6 @@ const ReelsContainer = ({
           console.log('👤 Usuario actual cargado:', userProfile);
           setCurrentUser(userProfile);
 
-          // Cargar likes previos
           const { data: likesData } = await supabase
             .from('video_likes')
             .select('video_id')
@@ -196,7 +194,6 @@ const ReelsContainer = ({
             }));
           }
 
-          // Cargar videos guardados previos
           const { data: savedData } = await supabase
             .from('saved_videos')
             .select('video_id')
@@ -211,7 +208,6 @@ const ReelsContainer = ({
             }));
           }
 
-          // Cargar follows previos
           const { data: followsData } = await supabase
             .from('follows')
             .select('following_id')
@@ -268,14 +264,12 @@ const ReelsContainer = ({
 
       console.log('🎮 Video encontrado, reproduciendo');
 
-      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
         }
       });
 
-      // Configurar y reproducir el video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
       const playPromise = currentVideo.play();
@@ -305,18 +299,6 @@ const ReelsContainer = ({
   }, [videos, currentIndex, mutedVideos]);
 
   // ===============================
-  // RESPONSIVE DETECTION
-  // ===============================
-  useEffect(() => {
-    const handleResize = () => {
-      // Forzar re-render cuando cambia el tamaño
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // ===============================
   // MOUSE WHEEL NAVIGATION (DESKTOP)
   // ===============================
   useEffect(() => {
@@ -343,7 +325,7 @@ const ReelsContainer = ({
   }, [isDesktop, currentIndex, videos.length]);
 
   // ===============================
-  // AUTOPLAY Y GESTIÓN DE VIDEOS (SIN REINICIAR)
+  // AUTOPLAY Y GESTIÓN DE VIDEOS (MANTIENE POSICIÓN AL PAUSAR)
   // ===============================
   useEffect(() => {
     if (videos.length === 0) return;
@@ -355,28 +337,24 @@ const ReelsContainer = ({
     }
 
     const currentVideo = videoRefs.current[currentIndex];
-
-    // Solo reiniciar si cambió el índice por navegación
     const isNavigationChange = lastNavigationIndex.current !== currentIndex;
 
     if (currentVideo && isAutoPlaying) {
-      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
         }
       });
 
-      // Configurar el video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
       
-      // SOLO reiniciar si es un cambio de navegación (no un cambio de estado)
+      // SOLO reiniciar si es un cambio de navegación
       if (isNavigationChange) {
         console.log('🔄 Cambio de navegación detectado, reiniciando video');
         currentVideo.currentTime = 0;
         lastNavigationIndex.current = currentIndex;
       } else {
-        console.log('⚡ Cambio de estado, NO reiniciando video');
+        console.log('⚡ Play/Pause - NO reiniciando video, continúa desde:', currentVideo.currentTime);
       }
       
       const playPromise = currentVideo.play();
@@ -384,7 +362,7 @@ const ReelsContainer = ({
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log('✅ Video reproduciendo');
+            console.log('✅ Video reproduciendo desde:', currentVideo.currentTime);
           })
           .catch(err => {
             console.log('Autoplay bloqueado:', err);
@@ -393,6 +371,7 @@ const ReelsContainer = ({
           });
       }
     } else if (currentVideo && !isAutoPlaying) {
+      console.log('⏸️ Pausando video en:', currentVideo.currentTime);
       currentVideo.pause();
     }
   }, [currentIndex, isAutoPlaying, videos, mutedVideos, getInitialReelIndex]);
@@ -406,7 +385,6 @@ const ReelsContainer = ({
     
     if (!currentVideo || !currentVideoData) return;
 
-    // Handlers para el estado de carga
     const handleLoadStart = () => setLoadingVideo(true);
     const handleCanPlay = () => setLoadingVideo(false);
     const handleLoadedData = () => setLoadingVideo(false);
@@ -441,16 +419,18 @@ const ReelsContainer = ({
   }, [currentIndex, videos, videoWatchedIds, showPointsEarned]);
 
   // ===============================
-  // PLAY/PAUSE (MANTIENE POSICIÓN)
+  // PLAY/PAUSE (MANTIENE POSICIÓN - NO REINICIA)
   // ===============================
   const handlePlayPause = (e) => {
     if (e.target.tagName === 'VIDEO') {
       const currentVideo = videoRefs.current[currentIndex];
       if (currentVideo) {
         if (currentVideo.paused) {
+          console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
           currentVideo.play();
           setIsAutoPlaying(true);
         } else {
+          console.log('⏸️ Pausando en:', currentVideo.currentTime);
           currentVideo.pause();
           setIsAutoPlaying(false);
         }
@@ -477,7 +457,6 @@ const ReelsContainer = ({
     }
   };
 
-  // Touch para mobile
   const handleTouchStart = (e) => {
     touchStartY.current = e.touches[0].clientY;
   };
@@ -494,7 +473,6 @@ const ReelsContainer = ({
     }
   };
 
-  // Navegación con teclado
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -540,7 +518,6 @@ const ReelsContainer = ({
       const wasAlreadyLiked = actionsPerformed.likes.has(videoId);
       
       if (newLikedVideos.has(videoId)) {
-        // Quitar like
         newLikedVideos.delete(videoId);
         await supabase
           .from('video_likes')
@@ -550,7 +527,6 @@ const ReelsContainer = ({
 
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
       } else {
-        // Agregar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
 
@@ -560,7 +536,6 @@ const ReelsContainer = ({
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // Solo dar puntos si es la primera vez que da like a este video
         if (!wasAlreadyLiked) {
           try {
             await addFreePoints(5, 'Like en video', 'video', videoId);
@@ -571,7 +546,6 @@ const ReelsContainer = ({
               showPointsEarned(5, 'Like en video');
             }
             
-            // Marcar como acción realizada
             setActionsPerformed(prev => ({
               ...prev,
               likes: new Set([...prev.likes, videoId])
@@ -605,7 +579,6 @@ const ReelsContainer = ({
       } else {
         newDislikedVideos.add(videoId);
         
-        // Si tenía like, quitarlo
         if (newLikedVideos.has(videoId)) {
           newLikedVideos.delete(videoId);
           await supabase
@@ -637,7 +610,6 @@ const ReelsContainer = ({
       const wasAlreadySaved = actionsPerformed.saves.has(videoId);
       
       if (newSavedVideos.has(videoId)) {
-        // Quitar guardado
         newSavedVideos.delete(videoId);
         await supabase
           .from('saved_videos')
@@ -645,19 +617,16 @@ const ReelsContainer = ({
           .eq('video_id', videoId)
           .eq('user_id', user.id);
       } else {
-        // Agregar guardado
         newSavedVideos.add(videoId);
         await supabase
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // Solo dar puntos si es la primera vez que guarda este video
         if (!wasAlreadySaved) {
           try {
             await addFreePoints(2, 'Guardar video', 'video', videoId);
             showPointsEarned(2, 'Video guardado');
             
-            // Marcar como acción realizada
             setActionsPerformed(prev => ({
               ...prev,
               saves: new Set([...prev.saves, videoId])
@@ -683,7 +652,6 @@ const ReelsContainer = ({
       }
 
       if (followedCreators.has(creatorId)) {
-        // Ya sigue al creador, no hacer nada
         return;
       }
 
@@ -700,7 +668,6 @@ const ReelsContainer = ({
           following_id: creatorId 
         });
 
-      // Solo dar puntos si es la primera vez que sigue a este creador
       if (!wasAlreadyFollowed) {
         try {
           await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
@@ -711,7 +678,6 @@ const ReelsContainer = ({
             showPointsEarned(10, 'Seguiste a un creador');
           }
           
-          // Marcar como acción realizada
           setActionsPerformed(prev => ({
             ...prev,
             follows: new Set([...prev.follows, creatorId])
@@ -740,7 +706,6 @@ const ReelsContainer = ({
         alert('Enlace copiado al portapapeles');
       }
 
-      // Solo dar puntos si es la primera vez que comparte este video
       if (!wasAlreadyShared) {
         try {
           const { data: { user } } = await supabase.auth.getUser();
@@ -758,7 +723,6 @@ const ReelsContainer = ({
               showPointsEarned(3, 'Video compartido');
             }
             
-            // Marcar como acción realizada
             setActionsPerformed(prev => ({
               ...prev,
               shares: new Set([...prev.shares, video.id])
@@ -883,7 +847,6 @@ const ReelsContainer = ({
     setReplyingTo(null);
     setNewComment('');
     await loadComments(videoId);
-    // NO pausar el video - continúa reproduciéndose
   };
 
   const handleCloseComments = () => {
@@ -929,7 +892,6 @@ const ReelsContainer = ({
 
       const wasAlreadyCommented = actionsPerformed.comments.has(videoId);
 
-      // Solo dar puntos si es la primera vez que comenta en este video
       if (!wasAlreadyCommented) {
         try {
           await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
@@ -940,7 +902,6 @@ const ReelsContainer = ({
             showPointsEarned(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado');
           }
           
-          // Marcar como acción realizada
           setActionsPerformed(prev => ({
             ...prev,
             comments: new Set([...prev.comments, videoId])
@@ -1011,7 +972,7 @@ const ReelsContainer = ({
 
     return (
       <div 
-        className="relative flex-shrink-0 bg-black w-full"
+        className="relative flex-shrink-0 w-full"
         style={{ height: isDesktop ? '80vh' : '100vh' }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -1021,7 +982,7 @@ const ReelsContainer = ({
         <video
           ref={el => videoRefs.current[index] = el}
           src={videoUrl}
-          className="w-full h-full object-contain"
+          className="w-full h-full object-contain bg-gray-100"
           loop
           playsInline
           preload={index === currentIndex ? "auto" : Math.abs(index - currentIndex) === 1 ? "metadata" : "none"}
@@ -1030,15 +991,15 @@ const ReelsContainer = ({
 
         {/* INDICADOR DE CARGA */}
         {isActive && loadingVideo && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
             <div className="flex flex-col items-center space-y-3">
-              <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-white text-sm">Cargando video...</p>
+              <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-700 text-sm">Cargando video...</p>
             </div>
           </div>
         )}
 
-        {/* CONTROLES - SOLO MOBILE */}
+        {/* CONTROLES - SOLO MOBILE (dentro del reel) */}
         {!isDesktop && (
           <div className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10">
             
@@ -1188,8 +1149,8 @@ const ReelsContainer = ({
   // ===============================
   if (videos.length === 0) {
     return (
-      <div className="w-full h-screen bg-black flex items-center justify-center">
-        <div className="text-white text-center">
+      <div className="w-full h-screen bg-white flex items-center justify-center">
+        <div className="text-gray-600 text-center">
           <Icon name="VideoOff" size={48} className="mx-auto mb-4" />
           <p>No hay videos disponibles</p>
         </div>
@@ -1200,8 +1161,8 @@ const ReelsContainer = ({
   const currentVideo = videos[currentIndex];
 
   return (
-    <div className="relative w-full h-full bg-black overflow-hidden">
-      {/* NOTIFICACIÓN FLOTANTE DE PUNTOS - FUERA DEL CONTENEDOR PARA QUE SEA VISIBLE */}
+    <div className="relative w-full h-full bg-white overflow-hidden">
+      {/* NOTIFICACIÓN FLOTANTE DE PUNTOS */}
       <FloatingPointsNotification
         points={pointsNotification.points}
         message={pointsNotification.message}
@@ -1209,20 +1170,20 @@ const ReelsContainer = ({
         onHide={hidePointsNotification}
       />
 
-      {/* CONTENEDOR PRINCIPAL CON LAYOUT ESTILO YOUTUBE */}
-      <div className="flex h-full w-full">
+      {/* CONTENEDOR PRINCIPAL */}
+      <div className="flex h-full w-full items-center justify-center">
         
-        {/* CONTENEDOR DEL REEL - Se mueve a la izquierda cuando se abren comentarios en desktop */}
+        {/* CONTENEDOR DEL REEL */}
         <div 
           className={`
-            relative overflow-hidden bg-black transition-all duration-300 ease-in-out flex-shrink-0
+            relative overflow-hidden flex-shrink-0
             ${isDesktop 
               ? showCommentsModal 
-                ? 'w-[60%]' 
-                : 'w-full max-w-[500px] mx-auto rounded-lg shadow-2xl'
+                ? 'w-[55%]' 
+                : 'w-full max-w-[500px]'
               : 'w-full'
             }
-            ${isDesktop ? 'h-[80vh] my-auto' : 'h-full'}
+            ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}
           `}
         >
           
@@ -1244,100 +1205,7 @@ const ReelsContainer = ({
             ))}
           </div>
 
-          {/* CONTROLES LATERALES - DESKTOP (solo cuando NO hay comentarios) */}
-          {isDesktop && currentVideo && !showCommentsModal && (
-            <div className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50">
-              
-              {/* Avatar */}
-              <div className="relative">
-                <Link to={`/profile/${currentVideo?.creator?.id}`}>
-                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
-                    {currentVideo?.creator?.avatar ? (
-                      <img 
-                        src={currentVideo.creator.avatar} 
-                        alt={currentVideo.creator.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                        <span className="text-white font-bold text-xl">
-                          {currentVideo?.creator?.name?.charAt(0) || 'U'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </Link>
-                
-                {!followedCreators.has(currentVideo?.creator?.id) && (
-                  <button
-                    onClick={() => handleFollow(currentVideo?.creator?.id)}
-                    className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
-                  >
-                    <Icon name="Plus" size={18} color="white" />
-                  </button>
-                )}
-              </div>
-
-              {/* Like */}
-              <button onClick={() => handleLike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo?.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
-                  <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
-                </div>
-                <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                  {formatCount(currentVideo?.likes || 0)}
-                </span>
-              </button>
-
-              {/* Dislike */}
-              <button onClick={() => handleDislike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo?.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
-                  <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
-                </div>
-              </button>
-
-              {/* Comentarios */}
-              <button onClick={() => handleOpenComments(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
-                  <Icon name="MessageCircle" size={28} />
-                </div>
-                <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                  {formatCount(currentVideo?.comments || 0)}
-                </span>
-              </button>
-
-              {/* Guardar */}
-              <button onClick={() => handleSave(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo?.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
-                  <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
-                </div>
-              </button>
-
-              {/* Compartir */}
-              <button onClick={() => handleShare(currentVideo)} className="flex flex-col items-center space-y-1 group">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
-                  <Icon name="Share2" size={28} />
-                </div>
-              </button>
-
-              {/* Volumen */}
-              <button onClick={() => handleMuteToggle(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
-                  <Icon name={mutedVideos.has(currentVideo?.id) ? 'VolumeX' : 'Volume2'} size={28} />
-                </div>
-              </button>
-
-              {/* Música */}
-              <button className="flex flex-col items-center mt-2">
-                <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
-                  <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
-                    <Icon name="Music" size={20} color="white" />
-                  </div>
-                </div>
-              </button>
-            </div>
-          )}
-
-          {/* FLECHAS DE NAVEGACIÓN DESKTOP (solo cuando NO hay comentarios) */}
+          {/* FLECHAS DE NAVEGACIÓN DESKTOP */}
           {isDesktop && !showCommentsModal && (
             <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between pointer-events-none">
               <button
@@ -1345,13 +1213,13 @@ const ReelsContainer = ({
                 disabled={currentIndex === 0}
                 className={`
                   absolute top-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
-                  w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full 
-                  flex items-center justify-center transition-all
-                  hover:bg-black/70 hover:scale-110
+                  w-12 h-12 bg-white/80 backdrop-blur-sm rounded-full 
+                  flex items-center justify-center transition-all shadow-lg
+                  hover:bg-white hover:scale-110
                   ${currentIndex === 0 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
                 `}
               >
-                <Icon name="ChevronUp" size={24} color="white" />
+                <Icon name="ChevronUp" size={24} className="text-gray-800" />
               </button>
 
               <button
@@ -1359,18 +1227,18 @@ const ReelsContainer = ({
                 disabled={currentIndex === videos.length - 1}
                 className={`
                   absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
-                  w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full 
-                  flex items-center justify-center transition-all
-                  hover:bg-black/70 hover:scale-110
+                  w-12 h-12 bg-white/80 backdrop-blur-sm rounded-full 
+                  flex items-center justify-center transition-all shadow-lg
+                  hover:bg-white hover:scale-110
                   ${currentIndex === videos.length - 1 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
                 `}
               >
-                <Icon name="ChevronDown" size={24} color="white" />
+                <Icon name="ChevronDown" size={24} className="text-gray-800" />
               </button>
             </div>
           )}
 
-          {/* INSTRUCCIONES (solo cuando NO hay comentarios) */}
+          {/* INSTRUCCIONES */}
           {currentIndex === 0 && !showCommentsModal && (
             <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none z-40">
               <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
@@ -1385,10 +1253,102 @@ const ReelsContainer = ({
           )}
         </div>
 
-        {/* PANEL DE COMENTARIOS - DESKTOP (lado derecho estilo YouTube) */}
+        {/* CONTROLES LATERALES - DESKTOP (FUERA DEL REEL) */}
+        {isDesktop && currentVideo && !showCommentsModal && (
+          <div className="flex flex-col items-center space-y-6 ml-6 z-50">
+            
+            {/* Avatar */}
+            <div className="relative">
+              <Link to={`/profile/${currentVideo?.creator?.id}`}>
+                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform bg-white">
+                  {currentVideo?.creator?.avatar ? (
+                    <img 
+                      src={currentVideo.creator.avatar} 
+                      alt={currentVideo.creator.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-xl">
+                        {currentVideo?.creator?.name?.charAt(0) || 'U'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Link>
+              
+              {!followedCreators.has(currentVideo?.creator?.id) && (
+                <button
+                  onClick={() => handleFollow(currentVideo?.creator?.id)}
+                  className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
+                >
+                  <Icon name="Plus" size={18} color="white" />
+                </button>
+              )}
+            </div>
+
+            {/* Like */}
+            <button onClick={() => handleLike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo?.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
+                <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
+              </div>
+              <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
+                {formatCount(currentVideo?.likes || 0)}
+              </span>
+            </button>
+
+            {/* Dislike */}
+            <button onClick={() => handleDislike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo?.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
+                <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
+              </div>
+            </button>
+
+            {/* Comentarios */}
+            <button onClick={() => handleOpenComments(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
+                <Icon name="MessageCircle" size={28} />
+              </div>
+              <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
+                {formatCount(currentVideo?.comments || 0)}
+              </span>
+            </button>
+
+            {/* Guardar */}
+            <button onClick={() => handleSave(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo?.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
+                <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
+              </div>
+            </button>
+
+            {/* Compartir */}
+            <button onClick={() => handleShare(currentVideo)} className="flex flex-col items-center space-y-1 group">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
+                <Icon name="Share2" size={28} />
+              </div>
+            </button>
+
+            {/* Volumen */}
+            <button onClick={() => handleMuteToggle(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
+                <Icon name={mutedVideos.has(currentVideo?.id) ? 'VolumeX' : 'Volume2'} size={28} />
+              </div>
+            </button>
+
+            {/* Música */}
+            <button className="flex flex-col items-center mt-2">
+              <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform">
+                <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
+                  <Icon name="Music" size={20} color="white" />
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* PANEL DE COMENTARIOS - DESKTOP */}
         {isDesktop && showCommentsModal && currentVideo && (
-          <div className="w-[40%] h-[80vh] my-auto bg-white flex flex-col shadow-2xl rounded-r-lg flex-shrink-0">
-            {/* Header */}
+          <div className="w-[40%] h-[80vh] bg-white flex flex-col shadow-2xl rounded-r-xl ml-4 flex-shrink-0">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <Icon name="MessageCircle" size={20} />
@@ -1402,7 +1362,6 @@ const ReelsContainer = ({
               </button>
             </div>
 
-            {/* Lista de comentarios */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {!comments[currentVideo.id] || comments[currentVideo.id]?.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -1413,7 +1372,6 @@ const ReelsContainer = ({
               ) : (
                 comments[currentVideo.id]?.map((comment) => (
                   <div key={comment.id} className="space-y-2">
-                    {/* Comentario principal */}
                     <div className="flex space-x-3">
                       <div className="flex-shrink-0">
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-400 to-pink-400">
@@ -1448,7 +1406,6 @@ const ReelsContainer = ({
                           Responder
                         </button>
 
-                        {/* Respuestas */}
                         {comment.replies?.length > 0 && (
                           <div className="mt-3">
                             <button
@@ -1504,7 +1461,6 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* Input de comentario */}
             <div className="border-t border-gray-200 p-4 bg-gray-50">
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
@@ -1566,7 +1522,7 @@ const ReelsContainer = ({
         )}
       </div>
 
-      {/* MODAL DE COMENTARIOS - MOBILE (overlay completo) */}
+      {/* MODAL DE COMENTARIOS - MOBILE */}
       {isMobile && showCommentsModal && currentVideo && (
         <div 
           className="fixed inset-0 z-50 flex items-end"
@@ -1574,12 +1530,9 @@ const ReelsContainer = ({
             if (e.target === e.currentTarget) handleCloseComments();
           }}
         >
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseComments} />
           
-          {/* Modal */}
           <div className="relative bg-white rounded-t-3xl shadow-2xl w-full h-[75vh] flex flex-col animate-slide-up">
-            {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-800">
                 {formatCount(currentVideo.comments || 0)} comentarios
@@ -1592,7 +1545,6 @@ const ReelsContainer = ({
               </button>
             </div>
 
-            {/* Lista de comentarios */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {!comments[currentVideo.id] || comments[currentVideo.id]?.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -1603,7 +1555,6 @@ const ReelsContainer = ({
               ) : (
                 comments[currentVideo.id]?.map((comment) => (
                   <div key={comment.id} className="space-y-2">
-                    {/* Comentario principal */}
                     <div className="flex space-x-3">
                       <div className="flex-shrink-0">
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-400 to-pink-400">
@@ -1638,7 +1589,6 @@ const ReelsContainer = ({
                           Responder
                         </button>
 
-                        {/* Respuestas */}
                         {comment.replies?.length > 0 && (
                           <div className="mt-3">
                             <button
@@ -1693,7 +1643,6 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* Input de comentario */}
             <div className="border-t border-gray-200 p-4">
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
