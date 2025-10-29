@@ -37,11 +37,18 @@ const FloatingPointsNotification = ({ points, message, show, onHide }) => {
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
 // ===============================
-const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) => {
+const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
+
+  console.log('🎬 ReelsContainer RENDER:', {
+    videosCount: videos.length,
+    selectedReelId: selectedReelId,
+    isMobile,
+    isDesktop
+  });
 
   // ===============================
   // ESTADOS
@@ -80,21 +87,60 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   const videoRefs = useRef([]);
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
-  const videoWatchTimeRef = useRef({});
+  const isInitialMount = useRef(true);
+  const hasPlayedInitial = useRef(false);
 
   // ===============================
-  // CARGAR VIDEO INICIAL (PROBLEMA 4 - RESUELTO)
+  // ✅ FUNCIÓN: Convertir ID del video a índice en array
+  // ===============================
+  const getInitialReelIndex = useCallback(() => {
+    if (!selectedReelId) {
+      console.log('🔍 ReelsContainer: No hay ID seleccionado, iniciando en índice 0');
+      return 0;
+    }
+    
+    const index = videos.findIndex(video => video.id === selectedReelId);
+    
+    console.log('🔍 ReelsContainer: Búsqueda de video por ID');
+    console.log('   🆔 ID buscado:', selectedReelId);
+    console.log('   📍 Índice encontrado:', index);
+    console.log('   📹 Video:', index >= 0 ? videos[index]?.title : 'No encontrado');
+    
+    if (index < 0) {
+      console.warn('⚠️ Video con ID', selectedReelId, 'no encontrado en array de reels');
+      return 0;
+    }
+    
+    return index;
+  }, [selectedReelId, videos]);
+
+  // ===============================
+  // 🎯 SINCRONIZACIÓN INICIAL: Convertir initialVideoId a índice
   // ===============================
   useEffect(() => {
-    if (initialVideoId && videos.length > 0) {
-      const foundIndex = videos.findIndex(v => v.id === initialVideoId);
-      if (foundIndex !== -1 && foundIndex !== currentIndex) {
-        setEnableTransition(false);
-        setCurrentIndex(foundIndex);
-        setTimeout(() => setEnableTransition(true), 50);
-      }
+    if (videos.length === 0) return;
+    
+    const correctIndex = getInitialReelIndex();
+    
+    console.log('🎯 ReelsContainer: Sincronizando estado inicial');
+    console.log('   🆔 selectedReelId recibido:', selectedReelId);
+    console.log('   🎯 Índice calculado:', correctIndex);
+    console.log('   📹 Video a reproducir:', videos[correctIndex]?.title || 'No existe');
+    
+    if (isInitialMount.current) {
+      setCurrentIndex(correctIndex);
+      setEnableTransition(false);
+      
+      setTimeout(() => {
+        setEnableTransition(true);
+        isInitialMount.current = false;
+        console.log('✅ Transiciones habilitadas para navegación manual');
+      }, 100);
+    } else if (selectedReelId) {
+      // Si cambia el selectedReelId después del montaje, actualizar
+      setCurrentIndex(correctIndex);
     }
-  }, [initialVideoId, videos]);
+  }, [selectedReelId, videos, getInitialReelIndex]);
 
   // ===============================
   // CARGAR USUARIO ACTUAL
@@ -104,7 +150,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          // Cargar perfil del usuario
           const { data: profile } = await supabase
             .from('user_profiles')
             .select('id, name, avatar, username')
@@ -141,34 +186,97 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   };
 
   // ===============================
-  // MANEJO DE VIDEO (PROBLEMA 2 & 6 - RESUELTO)
+  // ✅ FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
   // ===============================
   useEffect(() => {
+    if (hasPlayedInitial.current || videos.length === 0) return;
+
+    console.log('🎬 Intentando reproducir video inicial:', currentIndex);
+    
+    const attemptPlay = () => {
+      const currentVideo = videoRefs.current[currentIndex];
+      
+      if (!currentVideo) {
+        console.log('⏳ Video no disponible aún, reintentando...');
+        setTimeout(attemptPlay, 100);
+        return;
+      }
+
+      console.log('🎮 Video encontrado, reproduciendo:', {
+        index: currentIndex,
+        src: currentVideo.src,
+        readyState: currentVideo.readyState
+      });
+
+      // Pausar todos los otros videos
+      videoRefs.current.forEach((video, index) => {
+        if (video && index !== currentIndex) {
+          video.pause();
+        }
+      });
+
+      // Configurar y reproducir el video actual
+      currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
+      
+      const playPromise = currentVideo.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('✅ Video inicial reproduciendo correctamente');
+            hasPlayedInitial.current = true;
+          })
+          .catch(err => {
+            console.error('❌ Error autoplay inicial:', err);
+            currentVideo.muted = true;
+            currentVideo.play()
+              .then(() => {
+                console.log('✅ Video inicial reproduciendo (muted)');
+                hasPlayedInitial.current = true;
+              })
+              .catch(e => console.error('❌ Error crítico reproducción inicial:', e));
+          });
+      }
+    };
+
+    setTimeout(attemptPlay, 250);
+  }, [videos, currentIndex, mutedVideos]);
+
+  // ===============================
+  // ✅ AUTOPLAY Y GESTIÓN DE VIDEOS AL CAMBIAR DE ÍNDICE
+  // ===============================
+  useEffect(() => {
+    if (videos.length === 0) return;
+    
+    // Si es el video inicial y aún no se ha reproducido, dejar que el useEffect anterior lo maneje
+    const initialIndex = getInitialReelIndex();
+    if (!hasPlayedInitial.current && currentIndex === initialIndex) {
+      return;
+    }
+
     const currentVideo = videoRefs.current[currentIndex];
+    
     if (currentVideo && isAutoPlaying) {
-      // Intentar reproducir
       const playPromise = currentVideo.play();
       if (playPromise !== undefined) {
         playPromise.catch(error => {
-          console.log('Autoplay bloqueado, intentando con muted:', error);
+          console.log('Autoplay bloqueado:', error);
           currentVideo.muted = true;
           currentVideo.play().catch(err => console.log('Error en reproducción:', err));
         });
       }
     }
 
-    // Pausar otros videos SIN RESETEAR el tiempo (PROBLEMA 2 & 6 RESUELTO)
+    // Pausar otros videos SIN RESETEAR el tiempo
     videoRefs.current.forEach((video, index) => {
       if (video && index !== currentIndex) {
         video.pause();
-        // ❌ REMOVIDO: video.currentTime = 0; 
-        // Ahora el video mantiene su posición al pausar
       }
     });
-  }, [currentIndex, isAutoPlaying]);
+  }, [currentIndex, isAutoPlaying, videos, getInitialReelIndex]);
 
   // ===============================
-  // TRACKING DE VISUALIZACIÓN COMPLETA DE VIDEO (MISIONES)
+  // TRACKING DE VISUALIZACIÓN COMPLETA DE VIDEO
   // ===============================
   useEffect(() => {
     const currentVideo = videoRefs.current[currentIndex];
@@ -179,11 +287,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     const handleTimeUpdate = () => {
       const watchedPercent = (currentVideo.currentTime / currentVideo.duration) * 100;
       
-      // Si vio más del 80% del video y no se ha registrado antes
       if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
         setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
         
-        // Track misión de ver video
         missionsService.trackWatchVideo(currentVideoData.id, currentVideo.currentTime)
           .then(result => {
             if (result.completed) {
@@ -199,10 +305,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   }, [currentIndex, videos, videoWatchedIds]);
 
   // ===============================
-  // PLAY/PAUSE (PROBLEMA 2 & 6 - RESUELTO)
+  // ✅ PLAY/PAUSE (MANTIENE POSICIÓN)
   // ===============================
   const handlePlayPause = (e) => {
-    // Solo pausar/reproducir si se hace clic directamente en el video (PROBLEMA 7 - RESUELTO)
     if (e.target.tagName === 'VIDEO') {
       const currentVideo = videoRefs.current[currentIndex];
       if (currentVideo) {
@@ -213,7 +318,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           currentVideo.pause();
           setIsAutoPlaying(false);
         }
-        // El video mantiene su currentTime, no se resetea
       }
     }
   };
@@ -235,10 +339,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  // Navegación con teclado (solo cuando NO se está escribiendo en input)
+  // Navegación con teclado
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // No hacer nada si el foco está en un input o textarea
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
         return;
       }
@@ -290,11 +393,15 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 
     const handleWheel = (e) => {
       e.preventDefault();
-      if (e.deltaY > 0) {
-        navigateNext();
-      } else if (e.deltaY < 0) {
-        navigatePrevious();
-      }
+      
+      clearTimeout(handleWheel.timeout);
+      handleWheel.timeout = setTimeout(() => {
+        if (e.deltaY > 0) {
+          navigateNext();
+        } else if (e.deltaY < 0) {
+          navigatePrevious();
+        }
+      }, 150);
     };
 
     const container = containerRef.current;
@@ -305,13 +412,12 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   }, [currentIndex, videos.length, isDesktop]);
 
   // ===============================
-  // ACCIONES CON TRACKING DE MISIONES (PROBLEMA 3 - MEJORADO)
+  // ACCIONES CON TRACKING DE MISIONES
   // ===============================
   
-  /**
-   * LIKE - Con tracking de misión
-   */
-  const handleLike = async (videoId) => {
+  const handleLike = async (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -323,7 +429,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       const newDislikedVideos = new Set(dislikedVideos);
       
       if (newLikedVideos.has(videoId)) {
-        // Quitar like
         newLikedVideos.delete(videoId);
         await supabase
           .from('video_likes')
@@ -331,7 +436,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           .eq('video_id', videoId)
           .eq('user_id', user.id);
       } else {
-        // Dar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
 
@@ -341,11 +445,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // Otorgar puntos por like
         try {
           await addFreePoints(5, 'Like en video', 'video', videoId);
           
-          // Track misión de dar likes
           const missionResult = await missionsService.trackGiveLike('video', videoId);
           if (missionResult.completed) {
             showPointsEarned(missionResult.reward.points, missionResult.message);
@@ -366,10 +468,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * DISLIKE
-   */
-  const handleDislike = async (videoId) => {
+  const handleDislike = async (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -401,10 +502,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * GUARDAR - Con tracking de misión
-   */
-  const handleSave = async (videoId) => {
+  const handleSave = async (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -442,10 +542,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * SEGUIR - Con tracking de misión
-   */
-  const handleFollow = async (creatorId) => {
+  const handleFollow = async (creatorId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -457,7 +556,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       newFollowedCreators.add(creatorId);
       setFollowedCreators(newFollowedCreators);
 
-      // Registrar follow en BD
       await supabase
         .from('follows')
         .insert({ 
@@ -468,7 +566,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       try {
         await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
         
-        // Track misión de seguir
         const missionResult = await missionsService.trackFollowUser(creatorId);
         if (missionResult.completed) {
           showPointsEarned(missionResult.reward.points, missionResult.message);
@@ -484,10 +581,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * COMPARTIR - Con tracking de misión
-   */
-  const handleShare = async (video) => {
+  const handleShare = async (video, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       if (navigator.share) {
         await navigator.share({
@@ -505,7 +601,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
         if (user) {
           await addFreePoints(3, 'Compartir video', 'video', video.id);
           
-          // Track misión de compartir
           const missionResult = await missionsService.trackShareContent(
             'video', 
             video.id, 
@@ -526,31 +621,30 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * TOGGLE MUTE
-   */
-  const handleMuteToggle = (videoId) => {
+  const handleMuteToggle = (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     const currentVideo = videoRefs.current[currentIndex];
     if (currentVideo) {
       const newMutedVideos = new Set(mutedVideos);
-      if (newMutedVideos.has(videoId)) {
-        newMutedVideos.delete(videoId);
-        currentVideo.muted = false;
-      } else {
+      const willBeMuted = !newMutedVideos.has(videoId);
+      
+      if (willBeMuted) {
         newMutedVideos.add(videoId);
         currentVideo.muted = true;
+      } else {
+        newMutedVideos.delete(videoId);
+        currentVideo.muted = false;
       }
+      
       setMutedVideos(newMutedVideos);
     }
   };
 
   // ===============================
-  // SISTEMA DE COMENTARIOS (PROBLEMA 1 - MEJORADO)
+  // SISTEMA DE COMENTARIOS
   // ===============================
   
-  /**
-   * Cargar comentarios con retry logic mejorado
-   */
   const loadComments = async (videoId, retryCount = 0) => {
     try {
       let { data, error } = await supabase
@@ -641,9 +735,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * Abrir modal de comentarios
-   */
   const handleOpenComments = async (videoId) => {
     setShowCommentsModal(true);
     setReplyingTo(null);
@@ -651,9 +742,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     await loadComments(videoId);
   };
 
-  /**
-   * Agregar comentario o respuesta - Con tracking de misión
-   */
   const handleAddComment = async (videoId) => {
     if (!newComment.trim()) return;
 
@@ -682,7 +770,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       try {
         await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
         
-        // Track misión de comentar
         const missionResult = await missionsService.trackComment('video', videoId);
         if (missionResult.completed) {
           showPointsEarned(missionResult.reward.points, missionResult.message);
@@ -702,30 +789,20 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  /**
-   * Activar modo respuesta (PROBLEMA 1 - RESUELTO)
-   */
   const handleReply = (commentId, username) => {
     setReplyingTo(commentId);
     setNewComment(`@${username} `);
-    // Dar foco al input
     setTimeout(() => {
-      const input = document.querySelector('input[type="text"][placeholder*="comentario"]');
+      const input = document.querySelector('textarea[placeholder*="comentario"]');
       if (input) input.focus();
     }, 100);
   };
 
-  /**
-   * Cancelar respuesta
-   */
   const handleCancelReply = () => {
     setReplyingTo(null);
     setNewComment('');
   };
 
-  /**
-   * Toggle mostrar/ocultar respuestas
-   */
   const toggleReplies = (commentId) => {
     setShowReplies(prev => ({
       ...prev,
@@ -733,9 +810,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }));
   };
 
-  /**
-   * Formatear contador
-   */
   const formatCount = (count) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
@@ -761,7 +835,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* VIDEO (PROBLEMA 5 - RESUELTO: h-full w-full sin espacios) */}
+        {/* VIDEO */}
         <video
           ref={el => videoRefs.current[index] = el}
           src={videoUrl}
@@ -773,7 +847,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           autoPlay={isActive}
         />
 
-        {/* CONTROLES LATERALES DERECHOS - SOLO MOBILE (PROBLEMA 7 - RESUELTO) */}
+        {/* CONTROLES LATERALES DERECHOS - SOLO MOBILE */}
         {!isDesktop && (
           <div 
             className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10"
@@ -808,7 +882,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleFollow(video.creator?.id);
+                    handleFollow(video.creator?.id, e);
                   }}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 >
@@ -821,7 +895,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleLike(video.id);
+                handleLike(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -844,7 +918,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDislike(video.id);
+                handleDislike(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -880,7 +954,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleSave(video.id);
+                handleSave(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -900,7 +974,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleShare(video);
+                handleShare(video, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -913,7 +987,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleMuteToggle(video.id);
+                handleMuteToggle(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -939,7 +1013,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           </div>
         )}
 
-        {/* INFORMACIÓN DEL VIDEO - ENCIMA con fondo translúcido negro */}
+        {/* INFORMACIÓN DEL VIDEO */}
         <div className="absolute bottom-8 left-4 right-24 z-10">
           <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
             <div className="flex items-center space-x-2 mb-3">
@@ -1030,20 +1104,21 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
         onHide={hidePointsNotification}
       />
       
-      {/* CONTENEDOR DE REELS - Con scroll vertical funcional */}
+      {/* CONTENEDOR DE REELS */}
       <div 
         className={`
-          h-screen transition-all duration-300 flex items-center justify-center bg-gray-50
+          h-screen transition-all duration-300 flex items-center justify-center bg-gray-50 overflow-hidden
           ${showCommentsModal && isDesktop ? 'w-[60%]' : 'w-full'}
         `}
       >
         <div
           ref={containerRef}
-          className={`flex flex-col h-screen overflow-hidden ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
+          className={`flex flex-col ${enableTransition ? 'transition-transform duration-500 ease-out' : ''} overflow-hidden`}
           style={{
             transform: `translateY(-${currentIndex * 100}vh)`,
             width: isDesktop && !showCommentsModal ? '500px' : '100%',
-            maxWidth: isDesktop ? '500px' : '100%'
+            maxWidth: isDesktop ? '500px' : '100%',
+            height: `${videos.length * 100}vh`
           }}
         >
           {videos.map((video, index) => (
@@ -1056,7 +1131,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           ))}
         </div>
 
-        {/* CONTROLES LATERALES EXTERNOS - SOLO DESKTOP CUANDO NO HAY MODAL (PROBLEMA 7 - RESUELTO) */}
+        {/* CONTROLES LATERALES EXTERNOS - SOLO DESKTOP */}
         {isDesktop && !showCommentsModal && (
           <div 
             className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50"
@@ -1091,7 +1166,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleFollow(videos[currentIndex]?.creator?.id);
+                    handleFollow(videos[currentIndex]?.creator?.id, e);
                   }}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
                 >
@@ -1104,7 +1179,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleLike(videos[currentIndex]?.id);
+                handleLike(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1130,7 +1205,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDislike(videos[currentIndex]?.id);
+                handleDislike(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1169,7 +1244,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleSave(videos[currentIndex]?.id);
+                handleSave(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1192,7 +1267,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleShare(videos[currentIndex]);
+                handleShare(videos[currentIndex], e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1205,7 +1280,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleMuteToggle(videos[currentIndex]?.id);
+                handleMuteToggle(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1232,7 +1307,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
         )}
       </div>
 
-      {/* PANEL DE COMENTARIOS - ESTILO YOUTUBE SHORTS */}
+      {/* PANEL DE COMENTARIOS */}
       {showCommentsModal && (
         <>
           {/* MOBILE: Modal Fullscreen desde abajo */}
@@ -1291,7 +1366,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             </div>
           )}
 
-          {/* DESKTOP: Panel lateral derecho estilo YouTube */}
+          {/* DESKTOP: Panel lateral derecho */}
           {isDesktop && (
             <div className="w-[40%] h-screen bg-white flex flex-col border-l border-gray-200 z-40">
               {/* Header */}
@@ -1353,7 +1428,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 // COMPONENTE DE COMENTARIO
 // ===============================
 const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
-  // Determinar el nombre a mostrar con fallbacks mejorados
   const displayName = comment.user?.name || comment.user?.username || 'Usuario';
   const displayUsername = comment.user?.username || comment.user?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario';
 
@@ -1486,7 +1560,7 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
 };
 
 // ===============================
-// COMPONENTE DE INPUT DE COMENTARIO - OPTIMIZADO Y CORREGIDO
+// COMPONENTE DE INPUT DE COMENTARIO
 // ===============================
 const CommentInput = React.memo(({ currentUser, newComment, setNewComment, replyingTo, onCancelReply, onSubmit }) => {
   const textareaRef = useRef(null);
