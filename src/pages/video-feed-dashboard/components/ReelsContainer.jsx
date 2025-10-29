@@ -92,6 +92,7 @@ const ReelsContainer = ({
   const touchEndY = useRef(0);
   const isInitialMount = useRef(true);
   const hasPlayedInitial = useRef(false);
+  const lastNavigationIndex = useRef(-1); // Para detectar cambios de navegación
 
   console.log('🎬 ReelsContainer render:', {
     videosCount: videos.length,
@@ -170,12 +171,15 @@ const ReelsContainer = ({
             .eq('id', user.id)
             .single();
           
-          setCurrentUser(profile || { 
+          const userProfile = profile || { 
             id: user.id, 
             name: user.email?.split('@')[0] || 'Usuario', 
             avatar: null, 
             username: user.email?.split('@')[0] || 'usuario'
-          });
+          };
+
+          console.log('👤 Usuario actual cargado:', userProfile);
+          setCurrentUser(userProfile);
 
           // Cargar likes previos
           const { data: likesData } = await supabase
@@ -281,6 +285,7 @@ const ReelsContainer = ({
           .then(() => {
             console.log('✅ Video inicial reproduciendo correctamente');
             hasPlayedInitial.current = true;
+            lastNavigationIndex.current = currentIndex;
           })
           .catch(err => {
             console.error('❌ Error autoplay inicial:', err);
@@ -289,6 +294,7 @@ const ReelsContainer = ({
               .then(() => {
                 console.log('✅ Video inicial reproduciendo (muted)');
                 hasPlayedInitial.current = true;
+                lastNavigationIndex.current = currentIndex;
               })
               .catch(e => console.error('❌ Error crítico:', e));
           });
@@ -337,7 +343,7 @@ const ReelsContainer = ({
   }, [isDesktop, currentIndex, videos.length]);
 
   // ===============================
-  // AUTOPLAY Y GESTIÓN DE VIDEOS
+  // AUTOPLAY Y GESTIÓN DE VIDEOS (SIN REINICIAR)
   // ===============================
   useEffect(() => {
     if (videos.length === 0) return;
@@ -350,6 +356,9 @@ const ReelsContainer = ({
 
     const currentVideo = videoRefs.current[currentIndex];
 
+    // Solo reiniciar si cambió el índice por navegación
+    const isNavigationChange = lastNavigationIndex.current !== currentIndex;
+
     if (currentVideo && isAutoPlaying) {
       // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
@@ -358,16 +367,24 @@ const ReelsContainer = ({
         }
       });
 
-      // Reproducir video actual
+      // Configurar el video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
-      currentVideo.currentTime = 0; // Reiniciar desde el inicio
+      
+      // SOLO reiniciar si es un cambio de navegación (no un cambio de estado)
+      if (isNavigationChange) {
+        console.log('🔄 Cambio de navegación detectado, reiniciando video');
+        currentVideo.currentTime = 0;
+        lastNavigationIndex.current = currentIndex;
+      } else {
+        console.log('⚡ Cambio de estado, NO reiniciando video');
+      }
       
       const playPromise = currentVideo.play();
       
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log('✅ Video reproduciendo (autoplay)');
+            console.log('✅ Video reproduciendo');
           })
           .catch(err => {
             console.log('Autoplay bloqueado:', err);
@@ -448,7 +465,7 @@ const ReelsContainer = ({
     if (currentIndex < videos.length - 1) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev + 1);
-      setIsAutoPlaying(true); // Asegurar que se reproduzca automáticamente
+      setIsAutoPlaying(true);
     }
   };
 
@@ -456,7 +473,7 @@ const ReelsContainer = ({
     if (currentIndex > 0) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev - 1);
-      setIsAutoPlaying(true); // Asegurar que se reproduzca automáticamente
+      setIsAutoPlaying(true);
     }
   };
 
@@ -805,16 +822,24 @@ const ReelsContainer = ({
             usersMap[user.id] = user;
           });
 
-          data = data.map(comment => ({
-            ...comment,
-            user: usersMap[comment.user_id] || {
-              id: comment.user_id,
-              name: comment.user_id.substring(0, 8), // Usar parte del ID como fallback
-              avatar: null,
-              username: comment.user_id.substring(0, 8)
-            },
-            replies: []
-          }));
+          data = data.map(comment => {
+            const userProfile = usersMap[comment.user_id];
+            return {
+              ...comment,
+              user: userProfile ? {
+                id: userProfile.id,
+                name: userProfile.name || userProfile.username || 'Usuario',
+                avatar: userProfile.avatar,
+                username: userProfile.username || userProfile.name || 'usuario'
+              } : {
+                id: comment.user_id,
+                name: 'Usuario',
+                avatar: null,
+                username: 'usuario'
+              },
+              replies: []
+            };
+          });
 
           const topLevelComments = [];
           const repliesMap = {};
@@ -878,16 +903,25 @@ const ReelsContainer = ({
         return;
       }
 
-      const { error } = await supabase
+      console.log('📝 Enviando comentario:', { videoId, userId: user.id, content: newComment.trim(), replyingTo });
+
+      const { data: insertedComment, error } = await supabase
         .from('video_comments')
         .insert({
           video_id: videoId,
           user_id: user.id,
           content: newComment.trim(),
           parent_comment_id: replyingTo
-        });
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error al insertar comentario:', error);
+        throw error;
+      }
+
+      console.log('✅ Comentario insertado:', insertedComment);
 
       if (!replyingTo) {
         await supabase.rpc('increment_video_comments', { video_id: videoId });
@@ -921,7 +955,7 @@ const ReelsContainer = ({
       await loadComments(videoId);
     } catch (error) {
       console.error('Error agregando comentario:', error);
-      alert('Error al agregar comentario.');
+      alert('Error al agregar comentario. Por favor, intenta de nuevo.');
     }
   };
 
@@ -1166,7 +1200,7 @@ const ReelsContainer = ({
   const currentVideo = videos[currentIndex];
 
   return (
-    <div className="relative w-full h-full bg-black">
+    <div className="relative w-full h-full bg-black overflow-hidden">
       {/* NOTIFICACIÓN FLOTANTE DE PUNTOS - FUERA DEL CONTENEDOR PARA QUE SEA VISIBLE */}
       <FloatingPointsNotification
         points={pointsNotification.points}
@@ -1176,19 +1210,16 @@ const ReelsContainer = ({
       />
 
       {/* CONTENEDOR PRINCIPAL CON LAYOUT ESTILO YOUTUBE */}
-      <div className={`
-        flex h-full
-        ${isDesktop && showCommentsModal ? 'gap-0' : ''}
-      `}>
+      <div className="flex h-full w-full">
         
         {/* CONTENEDOR DEL REEL - Se mueve a la izquierda cuando se abren comentarios en desktop */}
         <div 
           className={`
-            relative overflow-hidden bg-black transition-all duration-300 ease-in-out
+            relative overflow-hidden bg-black transition-all duration-300 ease-in-out flex-shrink-0
             ${isDesktop 
               ? showCommentsModal 
                 ? 'w-[60%]' 
-                : 'max-w-[500px] mx-auto w-full rounded-lg shadow-2xl'
+                : 'w-full max-w-[500px] mx-auto rounded-lg shadow-2xl'
               : 'w-full'
             }
             ${isDesktop ? 'h-[80vh] my-auto' : 'h-full'}
@@ -1356,7 +1387,7 @@ const ReelsContainer = ({
 
         {/* PANEL DE COMENTARIOS - DESKTOP (lado derecho estilo YouTube) */}
         {isDesktop && showCommentsModal && currentVideo && (
-          <div className="w-[40%] h-[80vh] my-auto bg-white flex flex-col shadow-2xl rounded-r-lg">
+          <div className="w-[40%] h-[80vh] my-auto bg-white flex flex-col shadow-2xl rounded-r-lg flex-shrink-0">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -1399,7 +1430,7 @@ const ReelsContainer = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-sm text-gray-800">
-                            {comment.user?.name || comment.user?.username || `Usuario ${comment.user?.id?.substring(0, 6)}`}
+                            {comment.user?.name || 'Usuario'}
                           </span>
                           <span className="text-xs text-gray-400">
                             {formatTimeAgo(comment.created_at)}
@@ -1450,7 +1481,7 @@ const ReelsContainer = ({
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center space-x-2">
                                         <span className="font-semibold text-xs text-gray-800">
-                                          {reply.user?.name || reply.user?.username || `Usuario ${reply.user?.id?.substring(0, 6)}`}
+                                          {reply.user?.name || 'Usuario'}
                                         </span>
                                         <span className="text-xs text-gray-400">
                                           {formatTimeAgo(reply.created_at)}
@@ -1589,7 +1620,7 @@ const ReelsContainer = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-sm text-gray-800">
-                            {comment.user?.name || comment.user?.username || `Usuario ${comment.user?.id?.substring(0, 6)}`}
+                            {comment.user?.name || 'Usuario'}
                           </span>
                           <span className="text-xs text-gray-400">
                             {formatTimeAgo(comment.created_at)}
@@ -1639,7 +1670,7 @@ const ReelsContainer = ({
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center space-x-2">
                                         <span className="font-semibold text-xs text-gray-800">
-                                          {reply.user?.name || reply.user?.username || `Usuario ${reply.user?.id?.substring(0, 6)}`}
+                                          {reply.user?.name || 'Usuario'}
                                         </span>
                                         <span className="text-xs text-gray-400">
                                           {formatTimeAgo(reply.created_at)}
