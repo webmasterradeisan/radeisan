@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../../supabase';
 import { addFreePoints } from '../../../services/pointsService';
-import Icon from '../../../components/Icon';
+import Icon from '../../../components/AppIcon';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const ReelsContainer = ({ videos = [], onPointsEarned }) => {
