@@ -37,11 +37,18 @@ const FloatingPointsNotification = ({ points, message, show, onHide }) => {
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
 // ===============================
-const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) => {
+const ReelsContainer = ({ videos = [], onPointsEarned, selectedReelId = null }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
+
+  console.log('🎬 ReelsContainer RENDER:', {
+    videosCount: videos.length,
+    selectedReelId: selectedReelId,
+    isMobile,
+    isDesktop
+  });
 
   // ===============================
   // ESTADOS
@@ -87,25 +94,25 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   // ✅ FUNCIÓN: Convertir ID del video a índice en array
   // ===============================
   const getInitialReelIndex = useCallback(() => {
-    if (!initialVideoId) {
+    if (!selectedReelId) {
       console.log('🔍 ReelsContainer: No hay ID seleccionado, iniciando en índice 0');
       return 0;
     }
     
-    const index = videos.findIndex(video => video.id === initialVideoId);
+    const index = videos.findIndex(video => video.id === selectedReelId);
     
     console.log('🔍 ReelsContainer: Búsqueda de video por ID');
-    console.log('   🆔 ID buscado:', initialVideoId);
+    console.log('   🆔 ID buscado:', selectedReelId);
     console.log('   📍 Índice encontrado:', index);
     console.log('   📹 Video:', index >= 0 ? videos[index]?.title : 'No encontrado');
     
     if (index < 0) {
-      console.warn('⚠️ Video con ID', initialVideoId, 'no encontrado en array de reels');
+      console.warn('⚠️ Video con ID', selectedReelId, 'no encontrado en array de reels');
       return 0;
     }
     
     return index;
-  }, [initialVideoId, videos]);
+  }, [selectedReelId, videos]);
 
   // ===============================
   // 🎯 SINCRONIZACIÓN INICIAL: Convertir initialVideoId a índice
@@ -116,7 +123,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     const correctIndex = getInitialReelIndex();
     
     console.log('🎯 ReelsContainer: Sincronizando estado inicial');
-    console.log('   🆔 initialVideoId recibido:', initialVideoId);
+    console.log('   🆔 selectedReelId recibido:', selectedReelId);
     console.log('   🎯 Índice calculado:', correctIndex);
     console.log('   📹 Video a reproducir:', videos[correctIndex]?.title || 'No existe');
     
@@ -129,11 +136,11 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
         isInitialMount.current = false;
         console.log('✅ Transiciones habilitadas para navegación manual');
       }, 100);
-    } else if (initialVideoId) {
-      // Si cambia el initialVideoId después del montaje, actualizar
+    } else if (selectedReelId) {
+      // Si cambia el selectedReelId después del montaje, actualizar
       setCurrentIndex(correctIndex);
     }
-  }, [initialVideoId, videos, getInitialReelIndex]);
+  }, [selectedReelId, videos, getInitialReelIndex]);
 
   // ===============================
   // CARGAR USUARIO ACTUAL
@@ -408,7 +415,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   // ACCIONES CON TRACKING DE MISIONES
   // ===============================
   
-  const handleLike = async (videoId) => {
+  const handleLike = async (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -459,7 +468,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  const handleDislike = async (videoId) => {
+  const handleDislike = async (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -491,7 +502,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  const handleSave = async (videoId) => {
+  const handleSave = async (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -529,7 +542,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  const handleFollow = async (creatorId) => {
+  const handleFollow = async (creatorId, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -566,7 +581,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  const handleShare = async (video) => {
+  const handleShare = async (video, e) => {
+    if (e) e.stopPropagation();
+    
     try {
       if (navigator.share) {
         await navigator.share({
@@ -604,17 +621,22 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  const handleMuteToggle = (videoId) => {
+  const handleMuteToggle = (videoId, e) => {
+    if (e) e.stopPropagation();
+    
     const currentVideo = videoRefs.current[currentIndex];
     if (currentVideo) {
       const newMutedVideos = new Set(mutedVideos);
-      if (newMutedVideos.has(videoId)) {
-        newMutedVideos.delete(videoId);
-        currentVideo.muted = false;
-      } else {
+      const willBeMuted = !newMutedVideos.has(videoId);
+      
+      if (willBeMuted) {
         newMutedVideos.add(videoId);
         currentVideo.muted = true;
+      } else {
+        newMutedVideos.delete(videoId);
+        currentVideo.muted = false;
       }
+      
       setMutedVideos(newMutedVideos);
     }
   };
@@ -860,7 +882,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleFollow(video.creator?.id);
+                    handleFollow(video.creator?.id, e);
                   }}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                 >
@@ -873,7 +895,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleLike(video.id);
+                handleLike(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -896,7 +918,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDislike(video.id);
+                handleDislike(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -932,7 +954,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleSave(video.id);
+                handleSave(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -952,7 +974,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleShare(video);
+                handleShare(video, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -965,7 +987,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleMuteToggle(video.id);
+                handleMuteToggle(video.id, e);
               }}
               className="flex flex-col items-center space-y-1"
             >
@@ -1085,17 +1107,18 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       {/* CONTENEDOR DE REELS */}
       <div 
         className={`
-          h-screen transition-all duration-300 flex items-center justify-center bg-gray-50
+          h-screen transition-all duration-300 flex items-center justify-center bg-gray-50 overflow-hidden
           ${showCommentsModal && isDesktop ? 'w-[60%]' : 'w-full'}
         `}
       >
         <div
           ref={containerRef}
-          className={`flex flex-col h-screen overflow-hidden ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
+          className={`flex flex-col ${enableTransition ? 'transition-transform duration-500 ease-out' : ''} overflow-hidden`}
           style={{
             transform: `translateY(-${currentIndex * 100}vh)`,
             width: isDesktop && !showCommentsModal ? '500px' : '100%',
-            maxWidth: isDesktop ? '500px' : '100%'
+            maxWidth: isDesktop ? '500px' : '100%',
+            height: `${videos.length * 100}vh`
           }}
         >
           {videos.map((video, index) => (
@@ -1143,7 +1166,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleFollow(videos[currentIndex]?.creator?.id);
+                    handleFollow(videos[currentIndex]?.creator?.id, e);
                   }}
                   className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
                 >
@@ -1156,7 +1179,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleLike(videos[currentIndex]?.id);
+                handleLike(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1182,7 +1205,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDislike(videos[currentIndex]?.id);
+                handleDislike(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1221,7 +1244,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleSave(videos[currentIndex]?.id);
+                handleSave(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1244,7 +1267,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleShare(videos[currentIndex]);
+                handleShare(videos[currentIndex], e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
@@ -1257,7 +1280,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleMuteToggle(videos[currentIndex]?.id);
+                handleMuteToggle(videos[currentIndex]?.id, e);
               }}
               className="flex flex-col items-center space-y-1 group"
             >
