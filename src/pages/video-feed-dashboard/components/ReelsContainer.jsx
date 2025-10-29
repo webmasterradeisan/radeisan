@@ -1,12 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import { addFreePoints } from 'services/pointsService';
+import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
 
-const ReelsContainer = ({ videos = [], onPointsEarned }) => {
+// ===============================
+// COMPONENTE DE NOTIFICACIÓN FLOTANTE DE PUNTOS
+// ===============================
+const FloatingPointsNotification = ({ points, message, show, onHide }) => {
+  useEffect(() => {
+    if (show) {
+      const timer = setTimeout(onHide, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [show, onHide]);
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed top-20 right-4 z-50 animate-bounce-in">
+      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300 hover:scale-105">
+        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
+          <Icon name="Star" size={20} className="text-yellow-300" />
+        </div>
+        <div>
+          <p className="font-bold text-lg">+{points} puntos</p>
+          {message && <p className="text-xs text-purple-100">{message}</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ===============================
+// COMPONENTE PRINCIPAL: REELS CONTAINER
+// ===============================
+const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
 
@@ -30,6 +63,16 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   const [showReplies, setShowReplies] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
 
+  // Estados de notificación de puntos
+  const [pointsNotification, setPointsNotification] = useState({
+    show: false,
+    points: 0,
+    message: ''
+  });
+
+  // Estados de tracking de misiones
+  const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
+
   // ===============================
   // REFS
   // ===============================
@@ -37,6 +80,21 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   const videoRefs = useRef([]);
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
+  const videoWatchTimeRef = useRef({});
+
+  // ===============================
+  // CARGAR VIDEO INICIAL (PROBLEMA 4 - RESUELTO)
+  // ===============================
+  useEffect(() => {
+    if (initialVideoId && videos.length > 0) {
+      const foundIndex = videos.findIndex(v => v.id === initialVideoId);
+      if (foundIndex !== -1 && foundIndex !== currentIndex) {
+        setEnableTransition(false);
+        setCurrentIndex(foundIndex);
+        setTimeout(() => setEnableTransition(true), 50);
+      }
+    }
+  }, [initialVideoId, videos]);
 
   // ===============================
   // CARGAR USUARIO ACTUAL
@@ -53,7 +111,12 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
             .eq('id', user.id)
             .single();
           
-          setCurrentUser(profile || { id: user.id, name: 'Usuario', avatar: null, username: null });
+          setCurrentUser(profile || { 
+            id: user.id, 
+            name: 'Usuario', 
+            avatar: null, 
+            username: user.email?.split('@')[0] || 'usuario'
+          });
         }
       } catch (error) {
         console.error('Error cargando usuario:', error);
@@ -64,7 +127,21 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   }, []);
 
   // ===============================
-  // MANEJO DE VIDEO
+  // FUNCIÓN PARA MOSTRAR NOTIFICACIÓN DE PUNTOS
+  // ===============================
+  const showPointsEarned = (points, message = '') => {
+    setPointsNotification({ show: true, points, message });
+    if (onPointsEarned) {
+      onPointsEarned(points);
+    }
+  };
+
+  const hidePointsNotification = () => {
+    setPointsNotification({ show: false, points: 0, message: '' });
+  };
+
+  // ===============================
+  // MANEJO DE VIDEO (PROBLEMA 2 & 6 - RESUELTO)
   // ===============================
   useEffect(() => {
     const currentVideo = videoRefs.current[currentIndex];
@@ -80,17 +157,52 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       }
     }
 
-    // Pausar otros videos
+    // Pausar otros videos SIN RESETEAR el tiempo (PROBLEMA 2 & 6 RESUELTO)
     videoRefs.current.forEach((video, index) => {
       if (video && index !== currentIndex) {
         video.pause();
-        video.currentTime = 0;
+        // ❌ REMOVIDO: video.currentTime = 0; 
+        // Ahora el video mantiene su posición al pausar
       }
     });
   }, [currentIndex, isAutoPlaying]);
 
+  // ===============================
+  // TRACKING DE VISUALIZACIÓN COMPLETA DE VIDEO (MISIONES)
+  // ===============================
+  useEffect(() => {
+    const currentVideo = videoRefs.current[currentIndex];
+    const currentVideoData = videos[currentIndex];
+    
+    if (!currentVideo || !currentVideoData) return;
+
+    const handleTimeUpdate = () => {
+      const watchedPercent = (currentVideo.currentTime / currentVideo.duration) * 100;
+      
+      // Si vio más del 80% del video y no se ha registrado antes
+      if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
+        setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
+        
+        // Track misión de ver video
+        missionsService.trackWatchVideo(currentVideoData.id, currentVideo.currentTime)
+          .then(result => {
+            if (result.completed) {
+              showPointsEarned(result.reward.points, result.message);
+            }
+          })
+          .catch(error => console.error('Error tracking video watch:', error));
+      }
+    };
+
+    currentVideo.addEventListener('timeupdate', handleTimeUpdate);
+    return () => currentVideo.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [currentIndex, videos, videoWatchedIds]);
+
+  // ===============================
+  // PLAY/PAUSE (PROBLEMA 2 & 6 - RESUELTO)
+  // ===============================
   const handlePlayPause = (e) => {
-    // Solo pausar/reproducir si se hace clic directamente en el video
+    // Solo pausar/reproducir si se hace clic directamente en el video (PROBLEMA 7 - RESUELTO)
     if (e.target.tagName === 'VIDEO') {
       const currentVideo = videoRefs.current[currentIndex];
       if (currentVideo) {
@@ -101,6 +213,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
           currentVideo.pause();
           setIsAutoPlaying(false);
         }
+        // El video mantiene su currentTime, no se resetea
       }
     }
   };
@@ -133,8 +246,10 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
         if (currentVideo) {
           if (currentVideo.paused) {
             currentVideo.play();
+            setIsAutoPlaying(true);
           } else {
             currentVideo.pause();
+            setIsAutoPlaying(false);
           }
         }
       }
@@ -185,8 +300,12 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   }, [currentIndex, videos.length, isDesktop]);
 
   // ===============================
-  // ACCIONES
+  // ACCIONES CON TRACKING DE MISIONES (PROBLEMA 3 - MEJORADO)
   // ===============================
+  
+  /**
+   * LIKE - Con tracking de misión
+   */
   const handleLike = async (videoId) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -199,6 +318,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       const newDislikedVideos = new Set(dislikedVideos);
       
       if (newLikedVideos.has(videoId)) {
+        // Quitar like
         newLikedVideos.delete(videoId);
         await supabase
           .from('video_likes')
@@ -206,6 +326,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
       } else {
+        // Dar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
 
@@ -215,11 +336,20 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
+        // Otorgar puntos por like
         try {
           await addFreePoints(5, 'Like en video', 'video', videoId);
-          onPointsEarned && onPointsEarned(5);
+          
+          // Track misión de dar likes
+          const missionResult = await missionsService.trackGiveLike('video', videoId);
+          if (missionResult.completed) {
+            showPointsEarned(missionResult.reward.points, missionResult.message);
+          } else {
+            showPointsEarned(5, 'Like en video');
+          }
         } catch (pointsError) {
           console.error('Error al otorgar puntos:', pointsError);
+          showPointsEarned(5, 'Like en video');
         }
       }
       
@@ -227,9 +357,13 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       setDislikedVideos(newDislikedVideos);
     } catch (error) {
       console.error('Error en like:', error);
+      alert('Error al dar like. Por favor intenta de nuevo.');
     }
   };
 
+  /**
+   * DISLIKE
+   */
   const handleDislike = async (videoId) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -258,9 +392,13 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       setLikedVideos(newLikedVideos);
     } catch (error) {
       console.error('Error en dislike:', error);
+      alert('Error al dar dislike. Por favor intenta de nuevo.');
     }
   };
 
+  /**
+   * GUARDAR - Con tracking de misión
+   */
   const handleSave = async (videoId) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -286,7 +424,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
 
         try {
           await addFreePoints(2, 'Guardar video', 'video', videoId);
-          onPointsEarned && onPointsEarned(2);
+          showPointsEarned(2, 'Video guardado');
         } catch (pointsError) {
           console.error('Error al otorgar puntos:', pointsError);
         }
@@ -295,9 +433,13 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       setSavedVideos(newSavedVideos);
     } catch (error) {
       console.error('Error guardando video:', error);
+      alert('Error al guardar video. Por favor intenta de nuevo.');
     }
   };
 
+  /**
+   * SEGUIR - Con tracking de misión
+   */
   const handleFollow = async (creatorId) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -310,17 +452,36 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       newFollowedCreators.add(creatorId);
       setFollowedCreators(newFollowedCreators);
 
+      // Registrar follow en BD
+      await supabase
+        .from('follows')
+        .insert({ 
+          follower_id: user.id, 
+          following_id: creatorId 
+        });
+
       try {
         await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
-        onPointsEarned && onPointsEarned(10);
+        
+        // Track misión de seguir
+        const missionResult = await missionsService.trackFollowUser(creatorId);
+        if (missionResult.completed) {
+          showPointsEarned(missionResult.reward.points, missionResult.message);
+        } else {
+          showPointsEarned(10, 'Seguiste a un creador');
+        }
       } catch (pointsError) {
         console.error('Error al otorgar puntos:', pointsError);
       }
     } catch (error) {
       console.error('Error siguiendo creador:', error);
+      alert('Error al seguir creador. Por favor intenta de nuevo.');
     }
   };
 
+  /**
+   * COMPARTIR - Con tracking de misión
+   */
   const handleShare = async (video) => {
     try {
       if (navigator.share) {
@@ -338,7 +499,19 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await addFreePoints(3, 'Compartir video', 'video', video.id);
-          onPointsEarned && onPointsEarned(3);
+          
+          // Track misión de compartir
+          const missionResult = await missionsService.trackShareContent(
+            'video', 
+            video.id, 
+            navigator.share ? 'native' : 'clipboard'
+          );
+          
+          if (missionResult.completed) {
+            showPointsEarned(missionResult.reward.points, missionResult.message);
+          } else {
+            showPointsEarned(3, 'Video compartido');
+          }
         }
       } catch (pointsError) {
         console.error('Error al otorgar puntos:', pointsError);
@@ -348,6 +521,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
     }
   };
 
+  /**
+   * TOGGLE MUTE
+   */
   const handleMuteToggle = (videoId) => {
     const currentVideo = videoRefs.current[currentIndex];
     if (currentVideo) {
@@ -364,9 +540,13 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   };
 
   // ===============================
-  // SISTEMA DE COMENTARIOS
+  // SISTEMA DE COMENTARIOS (PROBLEMA 1 - MEJORADO)
   // ===============================
-  const loadComments = async (videoId) => {
+  
+  /**
+   * Cargar comentarios con retry logic mejorado
+   */
+  const loadComments = async (videoId, retryCount = 0) => {
     try {
       let { data, error } = await supabase
         .from('video_comments')
@@ -374,7 +554,14 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
         .eq('video_id', videoId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        if (retryCount < 2) {
+          console.log(`Retry ${retryCount + 1} cargando comentarios...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return loadComments(videoId, retryCount + 1);
+        }
+        throw error;
+      }
 
       if (data && data.length > 0) {
         const userIds = [...new Set(data.map(comment => comment.user_id))];
@@ -422,6 +609,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
 
           data = topLevelComments;
         } else {
+          console.warn('Error cargando perfiles de usuarios:', usersError);
           data = data.filter(c => !c.parent_comment_id).map(comment => ({
             ...comment,
             user: {
@@ -448,6 +636,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
     }
   };
 
+  /**
+   * Abrir modal de comentarios
+   */
   const handleOpenComments = async (videoId) => {
     setShowCommentsModal(true);
     setReplyingTo(null);
@@ -455,6 +646,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
     await loadComments(videoId);
   };
 
+  /**
+   * Agregar comentario o respuesta - Con tracking de misión
+   */
   const handleAddComment = async (videoId) => {
     if (!newComment.trim()) return;
 
@@ -482,7 +676,14 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
 
       try {
         await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
-        onPointsEarned && onPointsEarned(3);
+        
+        // Track misión de comentar
+        const missionResult = await missionsService.trackComment('video', videoId);
+        if (missionResult.completed) {
+          showPointsEarned(missionResult.reward.points, missionResult.message);
+        } else {
+          showPointsEarned(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado');
+        }
       } catch (pointsError) {
         console.error('Error al otorgar puntos:', pointsError);
       }
@@ -492,19 +693,34 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
       await loadComments(videoId);
     } catch (error) {
       console.error('Error agregando comentario:', error);
+      alert('Error al agregar comentario. Por favor intenta de nuevo.');
     }
   };
 
+  /**
+   * Activar modo respuesta (PROBLEMA 1 - RESUELTO)
+   */
   const handleReply = (commentId, username) => {
     setReplyingTo(commentId);
     setNewComment(`@${username} `);
+    // Dar foco al input
+    setTimeout(() => {
+      const input = document.querySelector('input[type="text"][placeholder*="comentario"]');
+      if (input) input.focus();
+    }, 100);
   };
 
+  /**
+   * Cancelar respuesta
+   */
   const handleCancelReply = () => {
     setReplyingTo(null);
     setNewComment('');
   };
 
+  /**
+   * Toggle mostrar/ocultar respuestas
+   */
   const toggleReplies = (commentId) => {
     setShowReplies(prev => ({
       ...prev,
@@ -512,6 +728,9 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
     }));
   };
 
+  /**
+   * Formatear contador
+   */
   const formatCount = (count) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
@@ -532,12 +751,12 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
     return (
       <div 
         key={video.id}
-        className="relative flex-shrink-0 bg-black h-screen"
+        className="relative flex-shrink-0 bg-black w-full h-screen"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* VIDEO */}
+        {/* VIDEO (PROBLEMA 5 - RESUELTO: h-full w-full sin espacios) */}
         <video
           ref={el => videoRefs.current[index] = el}
           src={videoUrl}
@@ -549,12 +768,15 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
           autoPlay={isActive}
         />
 
-        {/* CONTROLES LATERALES DERECHOS - SOLO MOBILE */}
+        {/* CONTROLES LATERALES DERECHOS - SOLO MOBILE (PROBLEMA 7 - RESUELTO) */}
         {!isDesktop && (
-          <div className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10">
+          <div 
+            className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Avatar del Creador + Follow Button */}
-            <div className="relative">
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
               <Link 
                 to={`/profile/${video.creator?.id}`}
                 className="block"
@@ -791,22 +1013,29 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gray-50 flex">
+    <div className="relative w-full h-screen overflow-hidden bg-black flex">
       
-      {/* CONTENEDOR DE REELS - Se mueve a la izquierda cuando se abren comentarios en desktop */}
+      {/* NOTIFICACIÓN FLOTANTE DE PUNTOS */}
+      <FloatingPointsNotification
+        points={pointsNotification.points}
+        message={pointsNotification.message}
+        show={pointsNotification.show}
+        onHide={hidePointsNotification}
+      />
+      
+      {/* CONTENEDOR DE REELS (PROBLEMA 5 - RESUELTO: sin espacios, h-screen exacto) */}
       <div 
         className={`
-          flex items-center justify-center h-full transition-all duration-300
+          h-screen transition-all duration-300
           ${showCommentsModal && isDesktop ? 'w-[60%]' : 'w-full'}
         `}
       >
         <div
           ref={containerRef}
-          className={`flex flex-col h-full ease-out ${enableTransition ? 'transition-transform duration-500' : ''}`}
+          className={`flex flex-col h-screen ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
           style={{
             transform: `translateY(-${currentIndex * 100}vh)`,
-            maxWidth: isDesktop ? '500px' : '100%',
-            margin: '0'
+            width: '100%'
           }}
         >
           {videos.map((video, index) => (
@@ -819,12 +1048,15 @@ const ReelsContainer = ({ videos = [], onPointsEarned }) => {
           ))}
         </div>
 
-        {/* CONTROLES LATERALES EXTERNOS - SOLO DESKTOP CUANDO NO HAY MODAL */}
+        {/* CONTROLES LATERALES EXTERNOS - SOLO DESKTOP CUANDO NO HAY MODAL (PROBLEMA 7 - RESUELTO) */}
         {isDesktop && !showCommentsModal && (
-          <div className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50">
+          <div 
+            className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Avatar */}
-            <div className="relative">
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
               <Link 
                 to={`/profile/${videos[currentIndex]?.creator?.id}`}
                 className="block"
@@ -1159,7 +1391,7 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onReply(comment.id, comment.user?.name);
+                onReply(comment.id, comment.user?.name || comment.user?.username || 'Usuario');
               }}
               className="text-xs font-semibold text-gray-600 hover:text-purple-600 transition-colors"
             >
