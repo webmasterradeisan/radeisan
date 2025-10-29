@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.jsx
-// AuthContext ESTABLE - Sin expulsión de sesión
+// AuthContext ESTABLE - Fix para timeout de perfil
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -20,17 +20,37 @@ export const AuthProvider = ({ children }) => {
   
   const mountedRef = useRef(true);
   const initializingRef = useRef(false);
+  const sessionCheckedRef = useRef(false);
   
   const isAuthenticated = !!user;
 
-  // Función para obtener perfil de usuario
+  // Crear usuario desde sesión (fallback rápido)
+  const createUserFromSession = useCallback((session) => {
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      username: session.user.email?.split('@')[0] || 'usuario',
+      full_name: session.user.user_metadata?.full_name || 'Usuario',
+      name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+      avatar_url: session.user.user_metadata?.avatar_url || null,
+      points: 0,
+      role: 'user',
+      permissions: [],
+      isAdmin: false,
+      isActive: true,
+      admin_role: null
+    };
+  }, []);
+
+  // Función para obtener perfil (en background, no bloqueante)
   const fetchUserProfile = useCallback(async (userId) => {
     if (!userId || !mountedRef.current) return null;
 
     try {
       console.log('🔍 Obteniendo perfil para:', userId);
       
-      const { data, error } = await supabase
+      // Timeout para query de perfil
+      const profilePromise = supabase
         .from('user_profiles')
         .select(`
           id, 
@@ -47,13 +67,19 @@ export const AuthProvider = ({ children }) => {
         .eq('id', userId)
         .maybeSingle();
 
-      // Si hay error, no lo tratamos como crítico
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile query timeout')), 4000)
+      );
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
+
       if (error && error.code !== 'PGRST116') {
         console.warn('⚠️ Error obteniendo perfil:', error.message);
+        return null;
       }
 
-      // Si hay datos del perfil
       if (data) {
+        console.log('✅ Perfil completo cargado');
         return {
           id: data.id,
           email: data.email,
@@ -71,29 +97,10 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      // Fallback a usuario de auth
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser && authUser.id === userId) {
-        return {
-          id: authUser.id,
-          email: authUser.email,
-          username: authUser.email?.split('@')[0] || 'usuario',
-          full_name: authUser.user_metadata?.full_name || 'Usuario',
-          name: authUser.user_metadata?.full_name || 'Usuario',
-          avatar_url: authUser.user_metadata?.avatar_url || null,
-          points: 0,
-          role: 'user',
-          permissions: [],
-          isActive: true,
-          admin_role: null,
-          isAdmin: false
-        };
-      }
-
       return null;
+
     } catch (err) {
-      console.error('❌ Error en fetchUserProfile:', err);
-      // IMPORTANTE: Retornar null pero NO lanzar error
+      console.warn('⚠️ Error en fetchUserProfile:', err.message);
       return null;
     }
   }, []);
@@ -104,6 +111,7 @@ export const AuthProvider = ({ children }) => {
 
     const initializeAuth = async () => {
       if (initializingRef.current) {
+        console.log('⏭️ Ya inicializando, skipping...');
         return;
       }
 
@@ -111,25 +119,17 @@ export const AuthProvider = ({ children }) => {
       console.log('🚀 Inicializando autenticación...');
 
       try {
-        // Timeout de seguridad para garantizar que loading termine
-        const timeoutId = setTimeout(() => {
-          if (mountedRef.current && !isCancelled) {
-            console.warn('⚠️ Timeout alcanzado, terminando loading');
-            setLoading(false);
-            initializingRef.current = false;
-          }
-        }, 5000); // 5 segundos máximo
-
+        // Obtener sesión primero (rápido)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        clearTimeout(timeoutId);
+        sessionCheckedRef.current = true;
 
         if (isCancelled) return;
 
         if (sessionError) {
           console.error('❌ Error obteniendo sesión:', sessionError);
-          // NO cerrar sesión, solo mostrar sin usuario
           setUser(null);
+          setError(sessionError.message);
           setLoading(false);
           initializingRef.current = false;
           return;
@@ -138,47 +138,45 @@ export const AuthProvider = ({ children }) => {
         if (session?.user) {
           console.log('✅ Sesión encontrada:', session.user.email);
           
-          // Intentar obtener perfil completo
-          const profile = await fetchUserProfile(session.user.id);
+          // CRÍTICO: Establecer usuario básico INMEDIATAMENTE
+          const basicUser = createUserFromSession(session);
+          setUser(basicUser);
+          setLoading(false); // ⬅️ Terminar loading AHORA
+          
+          console.log('👤 Usuario básico establecido, cargando perfil completo en background...');
 
-          if (isCancelled) return;
+          // Intentar obtener perfil completo en BACKGROUND (no bloqueante)
+          fetchUserProfile(session.user.id).then(profile => {
+            if (profile && !isCancelled && mountedRef.current) {
+              console.log('✅ Perfil completo cargado, actualizando usuario');
+              setUser(profile);
+            } else {
+              console.log('ℹ️ Usando perfil básico');
+            }
+          }).catch(err => {
+            console.warn('⚠️ No se pudo cargar perfil completo:', err.message);
+          });
 
-          if (profile) {
-            console.log('✅ Perfil cargado:', profile.name);
-            setUser(profile);
-          } else {
-            // Usar datos básicos de la sesión si falla el perfil
-            console.log('⚠️ Usando perfil básico de sesión');
-            setUser({
-              id: session.user.id,
-              email: session.user.email,
-              username: session.user.email?.split('@')[0] || 'usuario',
-              full_name: session.user.user_metadata?.full_name || 'Usuario',
-              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
-              avatar_url: session.user.user_metadata?.avatar_url || null,
-              points: 0,
-              role: 'user',
-              permissions: [],
-              isAdmin: false,
-              isActive: true,
-              admin_role: null
-            });
-          }
         } else {
           console.log('ℹ️ No hay sesión activa');
           setUser(null);
+          setLoading(false);
         }
+
+        setError(null);
 
       } catch (err) {
         console.error('❌ Error en inicialización:', err);
+        sessionCheckedRef.current = true;
         if (!isCancelled) {
           setUser(null);
+          setError(err.message);
+          setLoading(false);
         }
       } finally {
         if (!isCancelled && mountedRef.current) {
-          console.log('✅ Inicialización completada');
-          setLoading(false);
           initializingRef.current = false;
+          console.log('✅ Inicialización completada');
         }
       }
     };
@@ -193,41 +191,58 @@ export const AuthProvider = ({ children }) => {
         
         console.log('📡 Auth event:', event);
 
-        if (event === 'SIGNED_IN' && session?.user) {
-          console.log('🔑 Usuario signed in');
-          const profile = await fetchUserProfile(session.user.id);
-          if (!isCancelled && mountedRef.current) {
-            setUser(profile || {
-              id: session.user.id,
-              email: session.user.email,
-              username: session.user.email?.split('@')[0] || 'usuario',
-              full_name: session.user.user_metadata?.full_name || 'Usuario',
-              name: session.user.user_metadata?.full_name || 'Usuario',
-              avatar_url: session.user.user_metadata?.avatar_url || null,
-              points: 0,
-              role: 'user',
-              permissions: [],
-              isAdmin: false,
-              isActive: true,
-              admin_role: null
-            });
-            setLoading(false);
-          }
-        } else if (event === 'SIGNED_OUT') {
-          console.log('🚪 Usuario signed out');
-          if (!isCancelled && mountedRef.current) {
-            setUser(null);
-            setLoading(false);
-          }
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          console.log('🔄 Token refrescado');
-          // Actualizar usuario silenciosamente sin cambiar loading
-          if (!isCancelled && mountedRef.current) {
-            const profile = await fetchUserProfile(session.user.id);
-            if (profile) {
-              setUser(profile);
+        switch (event) {
+          case 'SIGNED_IN':
+            if (session?.user) {
+              console.log('🔑 Usuario signed in');
+              
+              // Establecer usuario básico inmediatamente
+              const basicUser = createUserFromSession(session);
+              setUser(basicUser);
+              setLoading(false);
+              
+              // Cargar perfil completo en background
+              fetchUserProfile(session.user.id).then(profile => {
+                if (profile && !isCancelled && mountedRef.current) {
+                  setUser(profile);
+                }
+              });
             }
-          }
+            break;
+
+          case 'SIGNED_OUT':
+            console.log('🚪 Usuario signed out');
+            if (!isCancelled && mountedRef.current) {
+              setUser(null);
+              setLoading(false);
+              setError(null);
+            }
+            break;
+
+          case 'TOKEN_REFRESHED':
+            console.log('🔄 Token refrescado');
+            if (session?.user && !isCancelled && mountedRef.current) {
+              fetchUserProfile(session.user.id).then(profile => {
+                if (profile) {
+                  setUser(profile);
+                }
+              });
+            }
+            break;
+
+          case 'USER_UPDATED':
+            console.log('👤 Usuario actualizado');
+            if (session?.user && !isCancelled && mountedRef.current) {
+              fetchUserProfile(session.user.id).then(profile => {
+                if (profile) {
+                  setUser(profile);
+                }
+              });
+            }
+            break;
+
+          default:
+            break;
         }
       }
     );
@@ -238,7 +253,7 @@ export const AuthProvider = ({ children }) => {
       mountedRef.current = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, createUserFromSession]);
 
   const signIn = useCallback(async (email, password) => {
     try {
@@ -272,28 +287,22 @@ export const AuthProvider = ({ children }) => {
 
       if (data?.session?.user) {
         console.log('✅ Sesión creada');
-        const profile = await fetchUserProfile(data.session.user.id);
         
-        const finalUser = profile || {
-          id: data.session.user.id,
-          email: data.session.user.email,
-          username: data.session.user.email?.split('@')[0] || 'usuario',
-          full_name: data.session.user.user_metadata?.full_name || 'Usuario',
-          name: data.session.user.user_metadata?.full_name || 'Usuario',
-          avatar_url: data.session.user.user_metadata?.avatar_url || null,
-          points: 0,
-          role: 'user',
-          permissions: [],
-          isAdmin: false,
-          isActive: true,
-          admin_role: null
-        };
-
-        setUser(finalUser);
-        setError(null);
+        // Establecer usuario básico inmediatamente
+        const basicUser = createUserFromSession(data.session);
+        setUser(basicUser);
         setLoading(false);
-        console.log('✅ SignIn exitoso:', finalUser.email);
-        return { success: true, user: finalUser };
+
+        // Cargar perfil completo en background
+        fetchUserProfile(data.session.user.id).then(profile => {
+          if (profile && mountedRef.current) {
+            setUser(profile);
+          }
+        });
+
+        setError(null);
+        console.log('✅ SignIn exitoso');
+        return { success: true, user: basicUser };
       }
 
       throw new Error('No se recibió sesión válida');
@@ -304,7 +313,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
       return { success: false, error: errorMessage };
     }
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, createUserFromSession]);
 
   const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
@@ -334,6 +343,7 @@ export const AuthProvider = ({ children }) => {
 
   const signOut = useCallback(async () => {
     try {
+      console.log('🚪 Cerrando sesión...');
       setLoading(true);
       const { error } = await supabase.auth.signOut();
       
@@ -407,11 +417,15 @@ export const AuthProvider = ({ children }) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
+        const basicUser = createUserFromSession(session);
+        setUser(basicUser);
+        
         const profile = await fetchUserProfile(session.user.id);
         if (profile) {
           setUser(profile);
-          console.log('✅ Auth refrescado');
         }
+        
+        console.log('✅ Auth refrescado');
       } else {
         setUser(null);
       }
@@ -420,7 +434,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, createUserFromSession]);
 
   const clearError = useCallback(() => {
     setError(null);
