@@ -934,45 +934,47 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           </div>
         )}
 
-        {/* INFORMACIÓN DEL VIDEO */}
-        <div className="absolute bottom-8 left-4 right-24 text-white">
-          <div className="flex items-center space-x-2 mb-3">
-            <Link 
-              to={`/profile/${video.creator?.id}`}
-              className="font-bold hover:underline text-base"
-              onClick={(e) => e.stopPropagation()}
-            >
-              @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
-            </Link>
-            <span className="text-gray-300 text-sm">•</span>
-            <span className="text-gray-300 text-sm">
-              {video.timeAgo || 'Reciente'}
-            </span>
-          </div>
-
-          <div className="mb-3">
-            <p className="text-sm leading-relaxed line-clamp-3">
-              {video.description || video.title}
-            </p>
-          </div>
-
-          {video.tags && video.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {video.tags.slice(0, 3).map((tag, tagIndex) => (
-                <span key={tagIndex} className="text-sm font-semibold text-white">
-                  #{tag}
-                </span>
-              ))}
+        {/* INFORMACIÓN DEL VIDEO - MOBILE: encima del video */}
+        {isMobile && (
+          <div className="absolute bottom-8 left-4 right-24 text-white z-10">
+            <div className="flex items-center space-x-2 mb-3">
+              <Link 
+                to={`/profile/${video.creator?.id}`}
+                className="font-bold hover:underline text-base"
+                onClick={(e) => e.stopPropagation()}
+              >
+                @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
+              </Link>
+              <span className="text-gray-300 text-sm">•</span>
+              <span className="text-gray-300 text-sm">
+                {video.timeAgo || 'Reciente'}
+              </span>
             </div>
-          )}
 
-          <div className="flex items-center space-x-2 text-sm">
-            <Icon name="Music" size={14} color="white" />
-            <span className="truncate">
-              {video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}
-            </span>
+            <div className="mb-3">
+              <p className="text-sm leading-relaxed line-clamp-3">
+                {video.description || video.title}
+              </p>
+            </div>
+
+            {video.tags && video.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {video.tags.slice(0, 3).map((tag, tagIndex) => (
+                  <span key={tagIndex} className="text-sm font-semibold text-white">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2 text-sm">
+              <Icon name="Music" size={14} color="white" />
+              <span className="truncate">
+                {video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* INDICADOR DE PLAY/PAUSE */}
         {!isAutoPlaying && isActive && (
@@ -1013,7 +1015,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black flex">
+    <div className="relative w-full h-screen overflow-hidden bg-white flex">
       
       {/* NOTIFICACIÓN FLOTANTE DE PUNTOS */}
       <FloatingPointsNotification
@@ -1026,7 +1028,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
       {/* CONTENEDOR DE REELS (PROBLEMA 5 - RESUELTO: sin espacios, h-screen exacto) */}
       <div 
         className={`
-          h-screen transition-all duration-300
+          h-screen transition-all duration-300 flex items-center justify-center
           ${showCommentsModal && isDesktop ? 'w-[60%]' : 'w-full'}
         `}
       >
@@ -1035,7 +1037,8 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           className={`flex flex-col h-screen ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
           style={{
             transform: `translateY(-${currentIndex * 100}vh)`,
-            width: '100%'
+            width: isDesktop && !showCommentsModal ? '500px' : '100%',
+            maxWidth: isDesktop ? '500px' : '100%'
           }}
         >
           {videos.map((video, index) => (
@@ -1050,10 +1053,83 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 
         {/* CONTROLES LATERALES EXTERNOS - SOLO DESKTOP CUANDO NO HAY MODAL (PROBLEMA 7 - RESUELTO) */}
         {isDesktop && !showCommentsModal && (
-          <div 
-            className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <>
+            {/* INFORMACIÓN DEL VIDEO - DESKTOP: panel lateral derecho */}
+            <div className="absolute left-[520px] top-0 bottom-0 w-80 p-6 flex flex-col justify-end text-gray-800 z-40">
+              <div className="space-y-4">
+                {/* Usuario */}
+                <div className="flex items-center space-x-3">
+                  <Link 
+                    to={`/profile/${videos[currentIndex]?.creator?.id}`}
+                    className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-gray-200">
+                      {videos[currentIndex]?.creator?.avatar ? (
+                        <img 
+                          src={videos[currentIndex].creator.avatar} 
+                          alt={videos[currentIndex].creator.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">
+                            {videos[currentIndex]?.creator?.name?.charAt(0) || 'U'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-base">
+                        @{videos[currentIndex]?.creator?.username || videos[currentIndex]?.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {videos[currentIndex]?.creator?.name || 'Usuario'}
+                      </p>
+                    </div>
+                  </Link>
+                </div>
+
+                {/* Descripción */}
+                {videos[currentIndex]?.description && (
+                  <div>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      {videos[currentIndex].description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Tags */}
+                {videos[currentIndex]?.tags && videos[currentIndex].tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {videos[currentIndex].tags.map((tag, tagIndex) => (
+                      <span key={tagIndex} className="text-sm font-semibold text-purple-600 hover:text-purple-700 cursor-pointer">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Audio */}
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <Icon name="Music" size={16} />
+                  <span className="truncate">
+                    {videos[currentIndex]?.audioTitle || `Sonido original - ${videos[currentIndex]?.creator?.name || 'Creador'}`}
+                  </span>
+                </div>
+
+                {/* Fecha */}
+                <div className="text-xs text-gray-500">
+                  {videos[currentIndex]?.timeAgo || 'Reciente'}
+                </div>
+              </div>
+            </div>
+
+            {/* CONTROLES */}
+            <div 
+              className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50"
+              onClick={(e) => e.stopPropagation()}
+            >
             
             {/* Avatar */}
             <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -1221,6 +1297,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
               </div>
             </button>
           </div>
+          </>
         )}
       </div>
 
@@ -1345,6 +1422,10 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 // COMPONENTE DE COMENTARIO
 // ===============================
 const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
+  // Determinar el nombre a mostrar con fallbacks mejorados
+  const displayName = comment.user?.name || comment.user?.username || 'Usuario';
+  const displayUsername = comment.user?.username || comment.user?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario';
+
   return (
     <div className="space-y-2">
       {/* Comentario Principal */}
@@ -1358,27 +1439,27 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
             {comment.user?.avatar ? (
               <img 
                 src={comment.user.avatar} 
-                alt={comment.user.name} 
+                alt={displayName} 
                 className="w-full h-full object-cover" 
               />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">
-                {comment.user?.name?.charAt(0) || 'U'}
+                {displayName.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
         </Link>
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="bg-gray-100 rounded-2xl px-4 py-2">
             <Link 
               to={`/profile/${comment.user?.id}`}
               className="font-semibold text-sm hover:underline"
               onClick={(e) => e.stopPropagation()}
             >
-              {comment.user?.name || 'Usuario'}
+              {displayName}
             </Link>
-            <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
+            <p className="text-sm text-gray-700 mt-1 break-words">{comment.content}</p>
           </div>
           
           <div className="flex items-center space-x-4 mt-1 px-2">
@@ -1391,7 +1472,7 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onReply(comment.id, comment.user?.name || comment.user?.username || 'Usuario');
+                onReply(comment.id, displayUsername);
               }}
               className="text-xs font-semibold text-gray-600 hover:text-purple-600 transition-colors"
             >
@@ -1419,48 +1500,52 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
           {/* Respuestas */}
           {showReplies[comment.id] && comment.replies?.length > 0 && (
             <div className="mt-3 space-y-3 pl-4 border-l-2 border-gray-200">
-              {comment.replies.map((reply) => (
-                <div key={reply.id} className="flex space-x-2">
-                  <Link 
-                    to={`/profile/${reply.user?.id}`}
-                    className="flex-shrink-0"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-8 h-8 rounded-full overflow-hidden">
-                      {reply.user?.avatar ? (
-                        <img 
-                          src={reply.user.avatar} 
-                          alt={reply.user.name} 
-                          className="w-full h-full object-cover" 
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-                          {reply.user?.name?.charAt(0) || 'U'}
-                        </div>
-                      )}
-                    </div>
-                  </Link>
+              {comment.replies.map((reply) => {
+                const replyDisplayName = reply.user?.name || reply.user?.username || 'Usuario';
+                
+                return (
+                  <div key={reply.id} className="flex space-x-2">
+                    <Link 
+                      to={`/profile/${reply.user?.id}`}
+                      className="flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="w-8 h-8 rounded-full overflow-hidden">
+                        {reply.user?.avatar ? (
+                          <img 
+                            src={reply.user.avatar} 
+                            alt={replyDisplayName} 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                            {replyDisplayName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                    </Link>
 
-                  <div className="flex-1">
-                    <div className="bg-gray-50 rounded-2xl px-3 py-2">
-                      <Link 
-                        to={`/profile/${reply.user?.id}`}
-                        className="font-semibold text-sm hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {reply.user?.name || 'Usuario'}
-                      </Link>
-                      <p className="text-sm text-gray-700 mt-1">{reply.content}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="bg-gray-50 rounded-2xl px-3 py-2">
+                        <Link 
+                          to={`/profile/${reply.user?.id}`}
+                          className="font-semibold text-sm hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {replyDisplayName}
+                        </Link>
+                        <p className="text-sm text-gray-700 mt-1 break-words">{reply.content}</p>
+                      </div>
+                      <span className="text-xs text-gray-500 px-2 mt-1 inline-block">
+                        {new Date(reply.created_at).toLocaleDateString('es', { 
+                          day: 'numeric', 
+                          month: 'short' 
+                        })}
+                      </span>
                     </div>
-                    <span className="text-xs text-gray-500 px-2 mt-1 inline-block">
-                      {new Date(reply.created_at).toLocaleDateString('es', { 
-                        day: 'numeric', 
-                        month: 'short' 
-                      })}
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1470,9 +1555,21 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
 };
 
 // ===============================
-// COMPONENTE DE INPUT DE COMENTARIO
+// COMPONENTE DE INPUT DE COMENTARIO - OPTIMIZADO
 // ===============================
-const CommentInput = ({ currentUser, newComment, setNewComment, replyingTo, onCancelReply, onSubmit }) => {
+const CommentInput = React.memo(({ currentUser, newComment, setNewComment, replyingTo, onCancelReply, onSubmit }) => {
+  const handleKeyPress = React.useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSubmit();
+    }
+  }, [onSubmit]);
+
+  const handleInputChange = React.useCallback((e) => {
+    setNewComment(e.target.value);
+  }, [setNewComment]);
+
   return (
     <div className="p-4 border-t bg-white">
       {replyingTo && (
@@ -1484,6 +1581,7 @@ const CommentInput = ({ currentUser, newComment, setNewComment, replyingTo, onCa
             </span>
           </div>
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onCancelReply();
@@ -1514,21 +1612,19 @@ const CommentInput = ({ currentUser, newComment, setNewComment, replyingTo, onCa
         <input
           type="text"
           value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
+          onChange={handleInputChange}
           placeholder={replyingTo ? "Escribe tu respuesta..." : "Agrega un comentario..."}
           className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') {
-              e.stopPropagation();
-              onSubmit();
-            }
-          }}
+          onKeyPress={handleKeyPress}
           onClick={(e) => e.stopPropagation()}
         />
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onSubmit();
+            if (newComment.trim()) {
+              onSubmit();
+            }
           }}
           disabled={!newComment.trim()}
           className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center space-x-2"
@@ -1538,6 +1634,6 @@ const CommentInput = ({ currentUser, newComment, setNewComment, replyingTo, onCa
       </div>
     </div>
   );
-};
+});
 
 export default ReelsContainer;
