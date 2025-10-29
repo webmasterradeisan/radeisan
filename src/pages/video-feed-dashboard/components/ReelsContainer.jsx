@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import { addFreePoints } from 'services/pointsService';
@@ -235,9 +235,14 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
     }
   };
 
-  // Navegación con teclado
+  // Navegación con teclado (solo cuando NO se está escribiendo en input)
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // No hacer nada si el foco está en un input o textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
       if (e.key === 'ArrowDown') navigateNext();
       if (e.key === 'ArrowUp') navigatePrevious();
       if (e.key === ' ') {
@@ -934,25 +939,25 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
           </div>
         )}
 
-        {/* INFORMACIÓN DEL VIDEO - MOBILE: encima del video */}
-        {isMobile && (
-          <div className="absolute bottom-8 left-4 right-24 text-white z-10">
+        {/* INFORMACIÓN DEL VIDEO - ENCIMA con fondo translúcido negro */}
+        <div className="absolute bottom-8 left-4 right-24 z-10">
+          <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
             <div className="flex items-center space-x-2 mb-3">
               <Link 
                 to={`/profile/${video.creator?.id}`}
-                className="font-bold hover:underline text-base"
+                className="font-bold hover:underline text-base text-white drop-shadow-lg"
                 onClick={(e) => e.stopPropagation()}
               >
                 @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
               </Link>
-              <span className="text-gray-300 text-sm">•</span>
-              <span className="text-gray-300 text-sm">
+              <span className="text-gray-200 text-sm">•</span>
+              <span className="text-gray-200 text-sm">
                 {video.timeAgo || 'Reciente'}
               </span>
             </div>
 
             <div className="mb-3">
-              <p className="text-sm leading-relaxed line-clamp-3">
+              <p className="text-sm leading-relaxed line-clamp-3 text-white drop-shadow-lg">
                 {video.description || video.title}
               </p>
             </div>
@@ -960,7 +965,7 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
             {video.tags && video.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {video.tags.slice(0, 3).map((tag, tagIndex) => (
-                  <span key={tagIndex} className="text-sm font-semibold text-white">
+                  <span key={tagIndex} className="text-sm font-semibold text-white drop-shadow-lg">
                     #{tag}
                   </span>
                 ))}
@@ -969,12 +974,12 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 
             <div className="flex items-center space-x-2 text-sm">
               <Icon name="Music" size={14} color="white" />
-              <span className="truncate">
+              <span className="truncate text-white drop-shadow-lg">
                 {video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}
               </span>
             </div>
           </div>
-        )}
+        </div>
 
         {/* INDICADOR DE PLAY/PAUSE */}
         {!isAutoPlaying && isActive && (
@@ -1025,16 +1030,16 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
         onHide={hidePointsNotification}
       />
       
-      {/* CONTENEDOR DE REELS (PROBLEMA 5 - RESUELTO: sin espacios, h-screen exacto) */}
+      {/* CONTENEDOR DE REELS - Con scroll vertical funcional */}
       <div 
         className={`
-          h-screen transition-all duration-300 flex items-center justify-center
+          h-screen transition-all duration-300 flex items-center justify-center bg-gray-50
           ${showCommentsModal && isDesktop ? 'w-[60%]' : 'w-full'}
         `}
       >
         <div
           ref={containerRef}
-          className={`flex flex-col h-screen ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
+          className={`flex flex-col h-screen overflow-hidden ${enableTransition ? 'transition-transform duration-500 ease-out' : ''}`}
           style={{
             transform: `translateY(-${currentIndex * 100}vh)`,
             width: isDesktop && !showCommentsModal ? '500px' : '100%',
@@ -1053,83 +1058,10 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
 
         {/* CONTROLES LATERALES EXTERNOS - SOLO DESKTOP CUANDO NO HAY MODAL (PROBLEMA 7 - RESUELTO) */}
         {isDesktop && !showCommentsModal && (
-          <>
-            {/* INFORMACIÓN DEL VIDEO - DESKTOP: panel lateral derecho */}
-            <div className="absolute left-[520px] top-0 bottom-0 w-80 p-6 flex flex-col justify-end text-gray-800 z-40">
-              <div className="space-y-4">
-                {/* Usuario */}
-                <div className="flex items-center space-x-3">
-                  <Link 
-                    to={`/profile/${videos[currentIndex]?.creator?.id}`}
-                    className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-gray-200">
-                      {videos[currentIndex]?.creator?.avatar ? (
-                        <img 
-                          src={videos[currentIndex].creator.avatar} 
-                          alt={videos[currentIndex].creator.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                          <span className="text-white font-bold text-lg">
-                            {videos[currentIndex]?.creator?.name?.charAt(0) || 'U'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-bold text-base">
-                        @{videos[currentIndex]?.creator?.username || videos[currentIndex]?.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {videos[currentIndex]?.creator?.name || 'Usuario'}
-                      </p>
-                    </div>
-                  </Link>
-                </div>
-
-                {/* Descripción */}
-                {videos[currentIndex]?.description && (
-                  <div>
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      {videos[currentIndex].description}
-                    </p>
-                  </div>
-                )}
-
-                {/* Tags */}
-                {videos[currentIndex]?.tags && videos[currentIndex].tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {videos[currentIndex].tags.map((tag, tagIndex) => (
-                      <span key={tagIndex} className="text-sm font-semibold text-purple-600 hover:text-purple-700 cursor-pointer">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Audio */}
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Icon name="Music" size={16} />
-                  <span className="truncate">
-                    {videos[currentIndex]?.audioTitle || `Sonido original - ${videos[currentIndex]?.creator?.name || 'Creador'}`}
-                  </span>
-                </div>
-
-                {/* Fecha */}
-                <div className="text-xs text-gray-500">
-                  {videos[currentIndex]?.timeAgo || 'Reciente'}
-                </div>
-              </div>
-            </div>
-
-            {/* CONTROLES */}
-            <div 
-              className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div 
+            className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Avatar */}
             <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -1297,7 +1229,6 @@ const ReelsContainer = ({ videos = [], onPointsEarned, initialVideoId = null }) 
               </div>
             </button>
           </div>
-          </>
         )}
       </div>
 
@@ -1555,23 +1486,37 @@ const CommentItem = ({ comment, onReply, onToggleReplies, showReplies }) => {
 };
 
 // ===============================
-// COMPONENTE DE INPUT DE COMENTARIO - OPTIMIZADO
+// COMPONENTE DE INPUT DE COMENTARIO - OPTIMIZADO Y CORREGIDO
 // ===============================
 const CommentInput = React.memo(({ currentUser, newComment, setNewComment, replyingTo, onCancelReply, onSubmit }) => {
-  const handleKeyPress = React.useCallback((e) => {
+  const textareaRef = useRef(null);
+
+  const handleKeyDown = React.useCallback((e) => {
+    // Prevenir que la tecla espacio pause el video
+    if (e.key === ' ') {
+      e.stopPropagation();
+    }
+
+    // Enviar con Enter (sin Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
-      onSubmit();
+      if (newComment.trim()) {
+        onSubmit();
+      }
     }
-  }, [onSubmit]);
+  }, [newComment, onSubmit]);
 
   const handleInputChange = React.useCallback((e) => {
     setNewComment(e.target.value);
   }, [setNewComment]);
 
+  const handleClick = React.useCallback((e) => {
+    e.stopPropagation();
+  }, []);
+
   return (
-    <div className="p-4 border-t bg-white">
+    <div className="p-4 border-t bg-white" onClick={handleClick}>
       {replyingTo && (
         <div className="mb-2 px-3 py-2 bg-purple-50 rounded-lg flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -1593,9 +1538,9 @@ const CommentInput = React.memo(({ currentUser, newComment, setNewComment, reply
         </div>
       )}
 
-      <div className="flex space-x-2">
+      <div className="flex space-x-2 items-start">
         {currentUser && (
-          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 mt-1">
             {currentUser.avatar ? (
               <img 
                 src={currentUser.avatar} 
@@ -1609,14 +1554,16 @@ const CommentInput = React.memo(({ currentUser, newComment, setNewComment, reply
             )}
           </div>
         )}
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={newComment}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onClick={handleClick}
           placeholder={replyingTo ? "Escribe tu respuesta..." : "Agrega un comentario..."}
-          className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-          onKeyPress={handleKeyPress}
-          onClick={(e) => e.stopPropagation()}
+          className="flex-1 px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all resize-none min-h-[48px] max-h-[120px] overflow-y-auto"
+          rows={1}
+          style={{ wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
         />
         <button
           type="button"
@@ -1627,7 +1574,7 @@ const CommentInput = React.memo(({ currentUser, newComment, setNewComment, reply
             }
           }}
           disabled={!newComment.trim()}
-          className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center space-x-2"
+          className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center space-x-2 flex-shrink-0"
         >
           <Icon name={replyingTo ? "CornerDownRight" : "Send"} size={18} />
         </button>
