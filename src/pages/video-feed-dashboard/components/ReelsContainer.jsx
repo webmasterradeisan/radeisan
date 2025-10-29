@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import { addFreePoints } from 'services/pointsService';
 import Icon from 'components/AppIcon';
-import { useIsMobile } from 'hooks/useIsMobile';
+import useIsMobile from 'hooks/useIsMobile';
 
 const ReelsContainer = ({ videos = [], onPointsEarned }) => {
   const navigate = useNavigate();
