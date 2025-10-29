@@ -1017,11 +1017,20 @@ const ReelsContainer = ({
   };
 
   const handleReply = (commentId, username) => {
+    console.log('💬 Respondiendo a comentario:', { commentId, username });
     setReplyingTo(commentId);
-    setNewComment(`@${username} `);
+    
+    // Usar el username si existe, si no usar un fallback
+    const displayName = username || 'Usuario';
+    setNewComment(`@${displayName} `);
+    
     setTimeout(() => {
       const input = document.querySelector('textarea[placeholder*="comentario"]');
-      if (input) input.focus();
+      if (input) {
+        input.focus();
+        // Mover cursor al final
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
     }, 100);
   };
 
@@ -1656,12 +1665,18 @@ const ReelsContainer = ({
                 <div className="flex-1 relative">
                   <textarea
                     value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setNewComment(e.target.value);
+                    }}
                     placeholder="Agrega un comentario..."
                     rows={2}
                     className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
                     onClick={(e) => e.stopPropagation()}
                     onFocus={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseUp={(e) => e.stopPropagation()}
+                    onInput={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
                       e.stopPropagation();
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1673,12 +1688,15 @@ const ReelsContainer = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
+                      console.log('🔘 Botón enviar clickeado');
                       handleAddComment(currentVideo.id);
                     }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     disabled={!newComment.trim()}
                     className={`absolute right-2 bottom-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                       newComment.trim() 
-                        ? 'bg-purple-500 hover:bg-purple-600 text-white' 
+                        ? 'bg-purple-500 hover:bg-purple-600 text-white cursor-pointer' 
                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
                   >
@@ -1848,13 +1866,21 @@ const ReelsContainer = ({
                 <div className="flex-1 relative">
                   <textarea
                     value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setNewComment(e.target.value);
+                    }}
                     placeholder="Agrega un comentario..."
                     rows={1}
                     className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
                     onClick={(e) => e.stopPropagation()}
                     onFocus={(e) => e.stopPropagation()}
                     onTouchStart={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseUp={(e) => e.stopPropagation()}
+                    onInput={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
                       e.stopPropagation();
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1866,12 +1892,16 @@ const ReelsContainer = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
+                      console.log('🔘 Botón enviar (mobile) clickeado');
                       handleAddComment(currentVideo.id);
                     }}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                     disabled={!newComment.trim()}
                     className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                       newComment.trim() 
-                        ? 'bg-purple-500 hover:bg-purple-600 text-white' 
+                        ? 'bg-purple-500 hover:bg-purple-600 text-white cursor-pointer' 
                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
                   >
