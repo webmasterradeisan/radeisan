@@ -75,8 +75,15 @@ const ReelsContainer = ({
     message: ''
   });
 
-  // Estados de tracking de misiones
+  // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
+  const [actionsPerformed, setActionsPerformed] = useState({
+    likes: new Set(),
+    saves: new Set(),
+    follows: new Set(),
+    comments: new Set(),
+    shares: new Set()
+  });
 
   // Refs
   const containerRef = useRef(null);
@@ -148,13 +155,14 @@ const ReelsContainer = ({
   }, [selectedReelId, videos, getInitialReelIndex]);
 
   // ===============================
-  // CARGAR USUARIO ACTUAL
+  // CARGAR USUARIO ACTUAL Y ACCIONES PREVIAS
   // ===============================
   useEffect(() => {
-    const loadCurrentUser = async () => {
+    const loadCurrentUserAndActions = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+          // Cargar perfil
           const { data: profile } = await supabase
             .from('user_profiles')
             .select('id, name, avatar, username')
@@ -167,28 +175,74 @@ const ReelsContainer = ({
             avatar: null, 
             username: user.email?.split('@')[0] || 'usuario'
           });
+
+          // Cargar likes previos
+          const { data: likesData } = await supabase
+            .from('video_likes')
+            .select('video_id')
+            .eq('user_id', user.id);
+          
+          if (likesData) {
+            const likedIds = new Set(likesData.map(l => l.video_id));
+            setLikedVideos(likedIds);
+            setActionsPerformed(prev => ({
+              ...prev,
+              likes: likedIds
+            }));
+          }
+
+          // Cargar videos guardados previos
+          const { data: savedData } = await supabase
+            .from('saved_videos')
+            .select('video_id')
+            .eq('user_id', user.id);
+          
+          if (savedData) {
+            const savedIds = new Set(savedData.map(s => s.video_id));
+            setSavedVideos(savedIds);
+            setActionsPerformed(prev => ({
+              ...prev,
+              saves: savedIds
+            }));
+          }
+
+          // Cargar follows previos
+          const { data: followsData } = await supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', user.id);
+          
+          if (followsData) {
+            const followedIds = new Set(followsData.map(f => f.following_id));
+            setFollowedCreators(followedIds);
+            setActionsPerformed(prev => ({
+              ...prev,
+              follows: followedIds
+            }));
+          }
         }
       } catch (error) {
-        console.error('Error cargando usuario:', error);
+        console.error('Error cargando usuario y acciones:', error);
       }
     };
     
-    loadCurrentUser();
+    loadCurrentUserAndActions();
   }, []);
 
   // ===============================
   // FUNCIÓN PARA MOSTRAR NOTIFICACIÓN DE PUNTOS
   // ===============================
-  const showPointsEarned = (points, message = '') => {
+  const showPointsEarned = useCallback((points, message = '') => {
+    console.log('🎉 Mostrando notificación de puntos:', points, message);
     setPointsNotification({ show: true, points, message });
     if (onPointsEarned) {
       onPointsEarned(points);
     }
-  };
+  }, [onPointsEarned]);
 
-  const hidePointsNotification = () => {
+  const hidePointsNotification = useCallback(() => {
     setPointsNotification({ show: false, points: 0, message: '' });
-  };
+  }, []);
 
   // ===============================
   // FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
@@ -209,7 +263,7 @@ const ReelsContainer = ({
 
       console.log('🎮 Video encontrado, reproduciendo');
 
-      // Pausar todos los otros videos (SIN resetear tiempo)
+      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
@@ -296,7 +350,7 @@ const ReelsContainer = ({
     const currentVideo = videoRefs.current[currentIndex];
 
     if (currentVideo && isAutoPlaying) {
-      // Pausar todos los otros videos (SIN resetear tiempo)
+      // Pausar todos los otros videos
       videoRefs.current.forEach((video, index) => {
         if (video && index !== currentIndex) {
           video.pause();
@@ -305,6 +359,7 @@ const ReelsContainer = ({
 
       // Reproducir video actual
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
+      currentVideo.currentTime = 0; // Reiniciar desde el inicio
       
       const playPromise = currentVideo.play();
       
@@ -365,7 +420,7 @@ const ReelsContainer = ({
       currentVideo.removeEventListener('loadeddata', handleLoadedData);
       currentVideo.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [currentIndex, videos, videoWatchedIds]);
+  }, [currentIndex, videos, videoWatchedIds, showPointsEarned]);
 
   // ===============================
   // PLAY/PAUSE (MANTIENE POSICIÓN)
@@ -392,6 +447,7 @@ const ReelsContainer = ({
     if (currentIndex < videos.length - 1) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev + 1);
+      setIsAutoPlaying(true); // Asegurar que se reproduzca automáticamente
     }
   };
 
@@ -399,6 +455,7 @@ const ReelsContainer = ({
     if (currentIndex > 0) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev - 1);
+      setIsAutoPlaying(true); // Asegurar que se reproduzca automáticamente
     }
   };
 
@@ -459,15 +516,20 @@ const ReelsContainer = ({
 
       const newLikedVideos = new Set(likedVideos);
       const newDislikedVideos = new Set(dislikedVideos);
+      const wasAlreadyLiked = actionsPerformed.likes.has(videoId);
       
       if (newLikedVideos.has(videoId)) {
+        // Quitar like
         newLikedVideos.delete(videoId);
         await supabase
           .from('video_likes')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
+
+        await supabase.rpc('decrement_video_likes', { video_id: videoId });
       } else {
+        // Agregar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
 
@@ -477,16 +539,25 @@ const ReelsContainer = ({
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        try {
-          await addFreePoints(5, 'Like en video', 'video', videoId);
-          const missionResult = await missionsService.trackGiveLike('video', videoId);
-          if (missionResult.completed) {
-            showPointsEarned(missionResult.reward.points, missionResult.message);
-          } else {
-            showPointsEarned(5, 'Like en video');
+        // Solo dar puntos si es la primera vez que da like a este video
+        if (!wasAlreadyLiked) {
+          try {
+            await addFreePoints(5, 'Like en video', 'video', videoId);
+            const missionResult = await missionsService.trackGiveLike('video', videoId);
+            if (missionResult.completed) {
+              showPointsEarned(missionResult.reward.points, missionResult.message);
+            } else {
+              showPointsEarned(5, 'Like en video');
+            }
+            
+            // Marcar como acción realizada
+            setActionsPerformed(prev => ({
+              ...prev,
+              likes: new Set([...prev.likes, videoId])
+            }));
+          } catch (pointsError) {
+            console.error('Error al otorgar puntos:', pointsError);
           }
-        } catch (pointsError) {
-          console.error('Error al otorgar puntos:', pointsError);
         }
       }
       
@@ -512,13 +583,18 @@ const ReelsContainer = ({
         newDislikedVideos.delete(videoId);
       } else {
         newDislikedVideos.add(videoId);
-        newLikedVideos.delete(videoId);
-
-        await supabase
-          .from('video_likes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
+        
+        // Si tenía like, quitarlo
+        if (newLikedVideos.has(videoId)) {
+          newLikedVideos.delete(videoId);
+          await supabase
+            .from('video_likes')
+            .delete()
+            .eq('video_id', videoId)
+            .eq('user_id', user.id);
+          
+          await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        }
       }
       
       setDislikedVideos(newDislikedVideos);
@@ -537,8 +613,10 @@ const ReelsContainer = ({
       }
 
       const newSavedVideos = new Set(savedVideos);
+      const wasAlreadySaved = actionsPerformed.saves.has(videoId);
       
       if (newSavedVideos.has(videoId)) {
+        // Quitar guardado
         newSavedVideos.delete(videoId);
         await supabase
           .from('saved_videos')
@@ -546,16 +624,26 @@ const ReelsContainer = ({
           .eq('video_id', videoId)
           .eq('user_id', user.id);
       } else {
+        // Agregar guardado
         newSavedVideos.add(videoId);
         await supabase
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        try {
-          await addFreePoints(2, 'Guardar video', 'video', videoId);
-          showPointsEarned(2, 'Video guardado');
-        } catch (pointsError) {
-          console.error('Error al otorgar puntos:', pointsError);
+        // Solo dar puntos si es la primera vez que guarda este video
+        if (!wasAlreadySaved) {
+          try {
+            await addFreePoints(2, 'Guardar video', 'video', videoId);
+            showPointsEarned(2, 'Video guardado');
+            
+            // Marcar como acción realizada
+            setActionsPerformed(prev => ({
+              ...prev,
+              saves: new Set([...prev.saves, videoId])
+            }));
+          } catch (pointsError) {
+            console.error('Error al otorgar puntos:', pointsError);
+          }
         }
       }
       
@@ -573,6 +661,13 @@ const ReelsContainer = ({
         return;
       }
 
+      if (followedCreators.has(creatorId)) {
+        // Ya sigue al creador, no hacer nada
+        return;
+      }
+
+      const wasAlreadyFollowed = actionsPerformed.follows.has(creatorId);
+
       const newFollowedCreators = new Set(followedCreators);
       newFollowedCreators.add(creatorId);
       setFollowedCreators(newFollowedCreators);
@@ -584,16 +679,25 @@ const ReelsContainer = ({
           following_id: creatorId 
         });
 
-      try {
-        await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
-        const missionResult = await missionsService.trackFollowUser(creatorId);
-        if (missionResult.completed) {
-          showPointsEarned(missionResult.reward.points, missionResult.message);
-        } else {
-          showPointsEarned(10, 'Seguiste a un creador');
+      // Solo dar puntos si es la primera vez que sigue a este creador
+      if (!wasAlreadyFollowed) {
+        try {
+          await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
+          const missionResult = await missionsService.trackFollowUser(creatorId);
+          if (missionResult.completed) {
+            showPointsEarned(missionResult.reward.points, missionResult.message);
+          } else {
+            showPointsEarned(10, 'Seguiste a un creador');
+          }
+          
+          // Marcar como acción realizada
+          setActionsPerformed(prev => ({
+            ...prev,
+            follows: new Set([...prev.follows, creatorId])
+          }));
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
         }
-      } catch (pointsError) {
-        console.error('Error al otorgar puntos:', pointsError);
       }
     } catch (error) {
       console.error('Error siguiendo creador:', error);
@@ -602,6 +706,8 @@ const ReelsContainer = ({
 
   const handleShare = async (video) => {
     try {
+      const wasAlreadyShared = actionsPerformed.shares.has(video.id);
+
       if (navigator.share) {
         await navigator.share({
           title: video.title || 'Video',
@@ -613,24 +719,33 @@ const ReelsContainer = ({
         alert('Enlace copiado al portapapeles');
       }
 
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await addFreePoints(3, 'Compartir video', 'video', video.id);
-          const missionResult = await missionsService.trackShareContent(
-            'video', 
-            video.id, 
-            navigator.share ? 'native' : 'clipboard'
-          );
-          
-          if (missionResult.completed) {
-            showPointsEarned(missionResult.reward.points, missionResult.message);
-          } else {
-            showPointsEarned(3, 'Video compartido');
+      // Solo dar puntos si es la primera vez que comparte este video
+      if (!wasAlreadyShared) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await addFreePoints(3, 'Compartir video', 'video', video.id);
+            const missionResult = await missionsService.trackShareContent(
+              'video', 
+              video.id, 
+              navigator.share ? 'native' : 'clipboard'
+            );
+            
+            if (missionResult.completed) {
+              showPointsEarned(missionResult.reward.points, missionResult.message);
+            } else {
+              showPointsEarned(3, 'Video compartido');
+            }
+            
+            // Marcar como acción realizada
+            setActionsPerformed(prev => ({
+              ...prev,
+              shares: new Set([...prev.shares, video.id])
+            }));
           }
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
         }
-      } catch (pointsError) {
-        console.error('Error al otorgar puntos:', pointsError);
       }
     } catch (error) {
       console.error('Error compartiendo:', error);
@@ -734,10 +849,18 @@ const ReelsContainer = ({
   };
 
   const handleOpenComments = async (videoId) => {
+    console.log('🗨️ Abriendo modal de comentarios para video:', videoId);
     setShowCommentsModal(true);
     setReplyingTo(null);
     setNewComment('');
     await loadComments(videoId);
+  };
+
+  const handleCloseComments = () => {
+    console.log('❌ Cerrando modal de comentarios');
+    setShowCommentsModal(false);
+    setReplyingTo(null);
+    setNewComment('');
   };
 
   const handleAddComment = async (videoId) => {
@@ -765,16 +888,27 @@ const ReelsContainer = ({
         await supabase.rpc('increment_video_comments', { video_id: videoId });
       }
 
-      try {
-        await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
-        const missionResult = await missionsService.trackComment('video', videoId);
-        if (missionResult.completed) {
-          showPointsEarned(missionResult.reward.points, missionResult.message);
-        } else {
-          showPointsEarned(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado');
+      const wasAlreadyCommented = actionsPerformed.comments.has(videoId);
+
+      // Solo dar puntos si es la primera vez que comenta en este video
+      if (!wasAlreadyCommented) {
+        try {
+          await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
+          const missionResult = await missionsService.trackComment('video', videoId);
+          if (missionResult.completed) {
+            showPointsEarned(missionResult.reward.points, missionResult.message);
+          } else {
+            showPointsEarned(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado');
+          }
+          
+          // Marcar como acción realizada
+          setActionsPerformed(prev => ({
+            ...prev,
+            comments: new Set([...prev.comments, videoId])
+          }));
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
         }
-      } catch (pointsError) {
-        console.error('Error al otorgar puntos:', pointsError);
       }
 
       setNewComment('');
@@ -811,6 +945,18 @@ const ReelsContainer = ({
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count?.toString() || '0';
+  };
+
+  const formatTimeAgo = (date) => {
+    const now = new Date();
+    const commentDate = new Date(date);
+    const diffInSeconds = Math.floor((now - commentDate) / 1000);
+    
+    if (diffInSeconds < 60) return 'Ahora';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
+    return `${Math.floor(diffInSeconds / 604800)}sem`;
   };
 
   // ===============================
@@ -1012,6 +1158,8 @@ const ReelsContainer = ({
     );
   }
 
+  const currentVideo = videos[currentIndex];
+
   return (
     <div className={`
       relative overflow-hidden bg-black
@@ -1048,32 +1196,32 @@ const ReelsContainer = ({
       </div>
 
       {/* CONTROLES LATERALES - DESKTOP */}
-      {isDesktop && videos[currentIndex] && (
+      {isDesktop && currentVideo && (
         <div className="absolute right-8 top-1/2 transform -translate-y-1/2 flex flex-col items-center space-y-6 z-50">
           
           {/* Avatar */}
           <div className="relative">
-            <Link to={`/profile/${videos[currentIndex]?.creator?.id}`}>
+            <Link to={`/profile/${currentVideo?.creator?.id}`}>
               <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform">
-                {videos[currentIndex]?.creator?.avatar ? (
+                {currentVideo?.creator?.avatar ? (
                   <img 
-                    src={videos[currentIndex].creator.avatar} 
-                    alt={videos[currentIndex].creator.name}
+                    src={currentVideo.creator.avatar} 
+                    alt={currentVideo.creator.name}
                     className="w-full h-full object-cover"
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                     <span className="text-white font-bold text-xl">
-                      {videos[currentIndex]?.creator?.name?.charAt(0) || 'U'}
+                      {currentVideo?.creator?.name?.charAt(0) || 'U'}
                     </span>
                   </div>
                 )}
               </div>
             </Link>
             
-            {!followedCreators.has(videos[currentIndex]?.creator?.id) && (
+            {!followedCreators.has(currentVideo?.creator?.id) && (
               <button
-                onClick={() => handleFollow(videos[currentIndex]?.creator?.id)}
+                onClick={() => handleFollow(currentVideo?.creator?.id)}
                 className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
               >
                 <Icon name="Plus" size={18} color="white" />
@@ -1082,50 +1230,50 @@ const ReelsContainer = ({
           </div>
 
           {/* Like */}
-          <button onClick={() => handleLike(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
-            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(videos[currentIndex]?.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
-              <Icon name="ThumbsUp" size={28} className={likedVideos.has(videos[currentIndex]?.id) ? 'fill-current' : ''} />
+          <button onClick={() => handleLike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo?.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
+              <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
             </div>
             <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-              {formatCount(videos[currentIndex]?.likes || 0)}
+              {formatCount(currentVideo?.likes || 0)}
             </span>
           </button>
 
           {/* Dislike */}
-          <button onClick={() => handleDislike(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
-            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(videos[currentIndex]?.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
-              <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(videos[currentIndex]?.id) ? 'fill-current' : ''} />
+          <button onClick={() => handleDislike(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo?.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
+              <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
             </div>
           </button>
 
           {/* Comentarios */}
-          <button onClick={() => handleOpenComments(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+          <button onClick={() => handleOpenComments(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
             <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
               <Icon name="MessageCircle" size={28} />
             </div>
             <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-              {formatCount(videos[currentIndex]?.comments || 0)}
+              {formatCount(currentVideo?.comments || 0)}
             </span>
           </button>
 
           {/* Guardar */}
-          <button onClick={() => handleSave(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
-            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(videos[currentIndex]?.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
-              <Icon name="Bookmark" size={28} className={savedVideos.has(videos[currentIndex]?.id) ? 'fill-current' : ''} />
+          <button onClick={() => handleSave(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo?.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
+              <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo?.id) ? 'fill-current' : ''} />
             </div>
           </button>
 
           {/* Compartir */}
-          <button onClick={() => handleShare(videos[currentIndex])} className="flex flex-col items-center space-y-1 group">
+          <button onClick={() => handleShare(currentVideo)} className="flex flex-col items-center space-y-1 group">
             <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
               <Icon name="Share2" size={28} />
             </div>
           </button>
 
           {/* Volumen */}
-          <button onClick={() => handleMuteToggle(videos[currentIndex]?.id)} className="flex flex-col items-center space-y-1 group">
+          <button onClick={() => handleMuteToggle(currentVideo?.id)} className="flex flex-col items-center space-y-1 group">
             <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
-              <Icon name={mutedVideos.has(videos[currentIndex]?.id) ? 'VolumeX' : 'Volume2'} size={28} />
+              <Icon name={mutedVideos.has(currentVideo?.id) ? 'VolumeX' : 'Volume2'} size={28} />
             </div>
           </button>
 
@@ -1175,7 +1323,7 @@ const ReelsContainer = ({
 
       {/* INSTRUCCIONES */}
       {currentIndex === 0 && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none">
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none z-40">
           <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
             <p className={isDesktop ? 'text-base' : 'text-sm'}>
               {isDesktop ? 'Usa flechas ↑↓ o rueda del mouse' : 'Desliza ↑↓ para navegar'}
@@ -1183,6 +1331,200 @@ const ReelsContainer = ({
             <p className={`opacity-75 ${isDesktop ? 'text-sm' : 'text-xs'}`}>
               Toca para pausar
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE COMENTARIOS */}
+      {showCommentsModal && currentVideo && (
+        <div 
+          className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseComments();
+          }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleCloseComments} />
+          
+          {/* Modal */}
+          <div className={`
+            relative bg-white rounded-t-3xl md:rounded-2xl shadow-2xl
+            w-full md:w-[480px] md:max-w-[90vw]
+            ${isDesktop ? 'h-[600px]' : 'h-[75vh]'}
+            flex flex-col
+            animate-slide-up
+          `}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-800">
+                {formatCount(currentVideo.comments || 0)} comentarios
+              </h3>
+              <button 
+                onClick={handleCloseComments}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+              >
+                <Icon name="X" size={20} className="text-gray-600" />
+              </button>
+            </div>
+
+            {/* Lista de comentarios */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {comments[currentVideo.id]?.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <Icon name="MessageCircle" size={48} className="mb-2" />
+                  <p>No hay comentarios aún</p>
+                  <p className="text-sm">Sé el primero en comentar</p>
+                </div>
+              ) : (
+                comments[currentVideo.id]?.map((comment) => (
+                  <div key={comment.id} className="space-y-2">
+                    {/* Comentario principal */}
+                    <div className="flex space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-400 to-pink-400">
+                          {comment.user?.avatar ? (
+                            <img src={comment.user.avatar} alt={comment.user.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                              {comment.user?.name?.charAt(0) || 'U'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-sm text-gray-800">
+                            {comment.user?.username || comment.user?.name || 'Usuario'}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {formatTimeAgo(comment.created_at)}
+                          </span>
+                        </div>
+                        
+                        <p className="text-sm text-gray-700 mt-1 break-words">
+                          {comment.content}
+                        </p>
+                        
+                        <button
+                          onClick={() => handleReply(comment.id, comment.user?.username || comment.user?.name)}
+                          className="text-xs text-gray-500 hover:text-gray-700 mt-2 font-medium"
+                        >
+                          Responder
+                        </button>
+
+                        {/* Respuestas */}
+                        {comment.replies?.length > 0 && (
+                          <div className="mt-3">
+                            <button
+                              onClick={() => toggleReplies(comment.id)}
+                              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                              {showReplies[comment.id] 
+                                ? 'Ocultar respuestas' 
+                                : `Ver ${comment.replies.length} respuesta${comment.replies.length > 1 ? 's' : ''}`
+                              }
+                            </button>
+                            
+                            {showReplies[comment.id] && (
+                              <div className="mt-3 space-y-3 ml-4 border-l-2 border-gray-200 pl-4">
+                                {comment.replies.map((reply) => (
+                                  <div key={reply.id} className="flex space-x-2">
+                                    <div className="flex-shrink-0">
+                                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-purple-400">
+                                        {reply.user?.avatar ? (
+                                          <img src={reply.user.avatar} alt={reply.user.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
+                                            {reply.user?.name?.charAt(0) || 'U'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-semibold text-xs text-gray-800">
+                                          {reply.user?.username || reply.user?.name || 'Usuario'}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          {formatTimeAgo(reply.created_at)}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-700 mt-1 break-words">
+                                        {reply.content}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Input de comentario */}
+            <div className="border-t border-gray-200 p-4">
+              {replyingTo && (
+                <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded-lg">
+                  <span className="text-xs text-blue-700">
+                    Respondiendo a comentario
+                  </span>
+                  <button 
+                    onClick={handleCancelReply}
+                    className="text-blue-700 hover:text-blue-900"
+                  >
+                    <Icon name="X" size={16} />
+                  </button>
+                </div>
+              )}
+              
+              <div className="flex items-end space-x-2">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500">
+                    {currentUser?.avatar ? (
+                      <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                        {currentUser?.name?.charAt(0) || 'U'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex-1 relative">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Agrega un comentario..."
+                    rows={1}
+                    className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddComment(currentVideo.id);
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => handleAddComment(currentVideo.id)}
+                    disabled={!newComment.trim()}
+                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                      newComment.trim() 
+                        ? 'bg-purple-500 hover:bg-purple-600 text-white' 
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <Icon name="Send" size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
