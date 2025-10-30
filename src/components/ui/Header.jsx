@@ -1,15 +1,110 @@
 // src/components/ui/Header.jsx
-// ACTUALIZADO: Con Panel Admin integrado y Branding Dinámico
+// ACTUALIZADO: Con contador de puntos en tiempo real + animaciones
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePoints } from '../../contexts/PointsContext'; // ✅ NUEVO
 import { useBranding } from '../../hooks/useBranding';
 import AppIcon from '../AppIcon';
 import Button from './Button';
 
+// ============================================================================
+// COMPONENTE DE CONTADOR DE PUNTOS ANIMADO
+// ============================================================================
+const AnimatedPointsCounter = ({ points, animation }) => {
+  const [displayPoints, setDisplayPoints] = useState(points);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    if (animation.show) {
+      setIsAnimating(true);
+      
+      // Animar el cambio de puntos
+      const startPoints = displayPoints;
+      const endPoints = points;
+      const duration = 800; // 800ms
+      const startTime = Date.now();
+
+      const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Easing function (easeOutCubic)
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        const currentPoints = Math.round(startPoints + (endPoints - startPoints) * easeProgress);
+
+        setDisplayPoints(currentPoints);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          setIsAnimating(false);
+        }
+      };
+
+      requestAnimationFrame(animate);
+    } else {
+      setDisplayPoints(points);
+    }
+  }, [points, animation.show]);
+
+  return (
+    <span 
+      className={`font-mono text-sm font-medium text-accent transition-all duration-300 ${
+        isAnimating ? 'scale-110' : 'scale-100'
+      }`}
+    >
+      {displayPoints.toLocaleString()}
+    </span>
+  );
+};
+
+// ============================================================================
+// COMPONENTE DE NOTIFICACIÓN FLOTANTE DE PUNTOS
+// ============================================================================
+const FloatingPointsNotification = ({ animation }) => {
+  if (!animation.show) return null;
+
+  const isEarn = animation.type === 'earn';
+
+  return (
+    <div 
+      className="fixed top-20 right-4 z-[9999] pointer-events-none animate-slide-in-right"
+      style={{
+        animation: 'slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s'
+      }}
+    >
+      <div className={`${
+        isEarn 
+          ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+          : 'bg-gradient-to-r from-red-500 to-orange-600'
+        } text-white px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3`}
+      >
+        <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center animate-bounce">
+          <AppIcon 
+            name={isEarn ? "TrendingUp" : "TrendingDown"} 
+            size={18} 
+            className="text-white" 
+          />
+        </div>
+        <div>
+          <p className="font-bold text-base">
+            {isEarn ? '+' : '-'}{animation.amount} puntos
+          </p>
+          {animation.message && (
+            <p className="text-xs text-white/90">{animation.message}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Header = () => {
   const { user, signOut, loading } = useAuth();
-  const { branding } = useBranding(); // ✅ Hook de branding
+  const { points, pointsAnimation, totalPoints } = usePoints(); // ✅ NUEVO
+  const { branding } = useBranding();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,308 +166,339 @@ const Header = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          
-          {/* LOGO - ✅ Ahora usa branding dinámico */}
-          <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-            {branding.logo.primary ? (
-              // Si hay logo personalizado, mostrarlo
-              <img 
-                src={branding.logo.primary} 
-                alt={branding.texts.appName || 'Logo'} 
-                className="h-8 object-contain"
-                onError={(e) => {
-                  // Si falla la carga, mostrar icono por defecto
-                  e.target.style.display = 'none';
-                  e.target.nextElementSibling.style.display = 'flex';
+    <>
+      {/* Notificación flotante de puntos */}
+      <FloatingPointsNotification animation={pointsAnimation} />
+
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            
+            {/* LOGO */}
+            <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+              {branding.logo.primary ? (
+                <img 
+                  src={branding.logo.primary} 
+                  alt={branding.texts.appName || 'Logo'} 
+                  className="h-8 object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              
+              <div 
+                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                style={{ 
+                  display: branding.logo.primary ? 'none' : 'flex',
+                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
                 }}
-              />
-            ) : null}
-            
-            {/* Icono por defecto (se muestra si no hay logo o si falla) */}
-            <div 
-              className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-              style={{ 
-                display: branding.logo.primary ? 'none' : 'flex',
-                backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-              }}
-            >
-              <Icon name="Video" size={20} color="white" />
-            </div>
-            
-            {/* Nombre de la app - Solo si NO hay logo */}
-{!branding.logo.primary && (
-  <span 
-    className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-    style={{
-      backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-    }}
-  >
-    {branding.texts.appName || 'Radeisan'}
-  </span>
-)}
-          </Link>
-
-          {/* NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS) */}
-          {user && (
-            <nav className="hidden md:flex items-center space-x-1">
-              <button
-                onClick={handleHomeNavigate}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
               >
-                <Icon name="Home" size={18} />
-                <span>Inicio</span>
-              </button>
+                <Icon name="Video" size={20} color="white" />
+              </div>
+              
+              {!branding.logo.primary && (
+                <span 
+                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                  }}
+                >
+                  {branding.texts.appName || 'Radeisan'}
+                </span>
+              )}
+            </Link>
 
-              <button
-                onClick={() => handleOrientationNavigate('vertical')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isOrientationActive('vertical')
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
-              >
-                <Icon name="Smartphone" size={18} />
-                <span>Reels</span>
-              </button>
-
-              <button
-                onClick={() => handleOrientationNavigate('horizontal')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isOrientationActive('horizontal')
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
-              >
-                <Icon name="Monitor" size={18} />
-                <span>Videos</span>
-              </button>
-
-              <Link
-                to="/marketplace"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/marketplace' 
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
-              >
-                <Icon name="Store" size={18} />
-                <span>Tienda</span>
-              </Link>
-
-              <Link
-                to="/rewards"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/rewards' 
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
-              >
-                <Icon name="Gift" size={18} />
-                <span>Recompensas</span>
-              </Link>
-
-              <Link
-                to="/profile"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === '/profile' 
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                }`}
-              >
-                <Icon name="User" size={18} />
-                <span>Perfil</span>
-              </Link>
-
-              {/* PANEL ADMIN - Solo para administradores */}
-              {user.isAdmin && (
-                <Link
-                  to="/admin"
+            {/* NAVEGACIÓN CENTRAL */}
+            {user && (
+              <nav className="hidden md:flex items-center space-x-1">
+                <button
+                  onClick={handleHomeNavigate}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname.startsWith('/admin')
+                    location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
                       ? 'bg-primary/10 text-primary' 
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
-                  <Icon name="Shield" size={18} />
-                  <span>Admin</span>
+                  <Icon name="Home" size={18} />
+                  <span>Inicio</span>
+                </button>
+
+                <button
+                  onClick={() => handleOrientationNavigate('vertical')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isOrientationActive('vertical')
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="Smartphone" size={18} />
+                  <span>Reels</span>
+                </button>
+
+                <button
+                  onClick={() => handleOrientationNavigate('horizontal')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isOrientationActive('horizontal')
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="Monitor" size={18} />
+                  <span>Videos</span>
+                </button>
+
+                <Link
+                  to="/marketplace"
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/marketplace' 
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="Store" size={18} />
+                  <span>Tienda</span>
                 </Link>
-              )}
-            </nav>
-          )}
 
-          {/* SECCIÓN DERECHA */}
-          <div className="flex items-center space-x-4">
-            
-            {user ? (
-              <>
-                {/* Balance de Puntos */}
-                <div className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full">
-                  <Icon name="Star" size={16} color="var(--color-accent)" />
-                  <span className="font-mono text-sm font-medium text-accent">
-                    {user.points?.toLocaleString() || '0'}
-                  </span>
-                </div>
+                <Link
+                  to="/rewards"
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/rewards' 
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="Gift" size={18} />
+                  <span>Recompensas</span>
+                </Link>
 
-                {/* Botón de Subir Contenido */}
-                <Button size="sm" asChild className="hidden md:flex">
-                  <Link to="/upload">
-                    <Icon name="Plus" size={16} className="mr-2" />
-                    Subir
-                  </Link>
-                </Button>
+                <Link
+                  to="/profile"
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/profile' 
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="User" size={18} />
+                  <span>Perfil</span>
+                </Link>
 
-                {/* Notificaciones */}
-                <Button variant="ghost" size="icon" className="relative">
-                  <Icon name="Bell" size={20} />
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
-                </Button>
-
-                {/* Menú de Usuario */}
-                <div className="relative" ref={userMenuRef}>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleUserMenu}
-                    className="rounded-full"
+                {user.isAdmin && (
+                  <Link
+                    to="/admin"
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      location.pathname.startsWith('/admin')
+                        ? 'bg-primary/10 text-primary' 
+                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                    }`}
                   >
-                    <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
-                      {user.avatar_url ? (
-                        <img 
-                          src={user.avatar_url} 
-                          alt={user.name || 'Avatar'} 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Icon name="User" size={18} color="white" />
-                      )}
-                    </div>
+                    <Icon name="Shield" size={18} />
+                    <span>Admin</span>
+                  </Link>
+                )}
+              </nav>
+            )}
+
+            {/* SECCIÓN DERECHA */}
+            <div className="flex items-center space-x-4">
+              
+              {user ? (
+                <>
+                  {/* Balance de Puntos - ✅ ACTUALIZADO CON ANIMACIÓN */}
+                  <div className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group">
+                    <Icon name="Star" size={16} color="var(--color-accent)" className="group-hover:scale-110 transition-transform" />
+                    <AnimatedPointsCounter 
+                      points={totalPoints} 
+                      animation={pointsAnimation}
+                    />
+                  </div>
+
+                  {/* Botón de Subir Contenido */}
+                  <Button size="sm" asChild className="hidden md:flex">
+                    <Link to="/upload">
+                      <Icon name="Plus" size={16} className="mr-2" />
+                      Subir
+                    </Link>
                   </Button>
 
-                  {/* Dropdown Menu */}
-                  {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
-                      <div className="py-1">
-                        {/* Información del Usuario */}
-                        <div className="px-4 py-2 border-b border-border">
-                          <div className="text-sm font-medium text-popover-foreground truncate">
-                            {user.name || 'Usuario'}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {user.email}
-                          </div>
-                          {user.isAdmin && (
-                            <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                              <Icon name="Shield" size={12} className="mr-1" />
-                              {user.role === 'super_admin' ? 'Super Admin' : 
-                               user.role === 'admin' ? 'Admin' : 'Moderador'}
+                  {/* Notificaciones */}
+                  <Button variant="ghost" size="icon" className="relative">
+                    <Icon name="Bell" size={20} />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
+                  </Button>
+
+                  {/* Menú de Usuario */}
+                  <div className="relative" ref={userMenuRef}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleUserMenu}
+                      className="rounded-full"
+                    >
+                      <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
+                        {user.avatar_url ? (
+                          <img 
+                            src={user.avatar_url} 
+                            alt={user.name || 'Avatar'} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Icon name="User" size={18} color="white" />
+                        )}
+                      </div>
+                    </Button>
+
+                    {/* Dropdown Menu */}
+                    {isUserMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
+                        <div className="py-1">
+                          {/* Información del Usuario */}
+                          <div className="px-4 py-2 border-b border-border">
+                            <div className="text-sm font-medium text-popover-foreground truncate">
+                              {user.name || 'Usuario'}
                             </div>
-                          )}
-                        </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {user.email}
+                            </div>
+                            
+                            {/* ✅ NUEVO: Mostrar puntos en el menú */}
+                            <div className="mt-2 flex items-center gap-2 px-2 py-1 bg-accent/10 rounded-md">
+                              <Icon name="Star" size={14} color="var(--color-accent)" />
+                              <span className="text-sm font-mono font-bold text-accent">
+                                {totalPoints.toLocaleString()}
+                              </span>
+                              <span className="text-xs text-muted-foreground">pts</span>
+                            </div>
 
-                        {/* Enlaces del Menú */}
-                        <Link
-                          to="/profile"
-                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="User" size={16} className="mr-2" />
-                          Mi Perfil
-                        </Link>
+                            {user.isAdmin && (
+                              <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                <Icon name="Shield" size={12} className="mr-1" />
+                                {user.role === 'super_admin' ? 'Super Admin' : 
+                                 user.role === 'admin' ? 'Admin' : 'Moderador'}
+                              </div>
+                            )}
+                          </div>
 
-                        {user.is_business_account && (
+                          {/* Enlaces del Menú */}
                           <Link
-                            to="/business"
+                            to="/profile"
                             className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                             onClick={() => setIsUserMenuOpen(false)}
                           >
-                            <Icon name="Building" size={16} className="mr-2" />
-                            Mi Negocio
+                            <Icon name="User" size={16} className="mr-2" />
+                            Mi Perfil
                           </Link>
-                        )}
 
-                        <Link
-                          to="/rewards"
-                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="Gift" size={16} className="mr-2" />
-                          Mis Recompensas
-                        </Link>
-
-                        {/* PANEL ADMIN en el menú - Solo para administradores */}
-                        {user.isAdmin && (
-                          <>
-                            <div className="border-t border-border my-1"></div>
+                          {user.is_business_account && (
                             <Link
-                              to="/admin"
-                              className="flex items-center px-4 py-2 text-sm text-primary hover:bg-primary/10 transition-colors font-medium"
+                              to="/business"
+                              className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                               onClick={() => setIsUserMenuOpen(false)}
                             >
-                              <Icon name="Shield" size={16} className="mr-2" />
-                              Panel de Administración
+                              <Icon name="Building" size={16} className="mr-2" />
+                              Mi Negocio
                             </Link>
-                          </>
-                        )}
+                          )}
 
-                        <div className="border-t border-border my-1"></div>
+                          <Link
+                            to="/rewards"
+                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <Icon name="Gift" size={16} className="mr-2" />
+                            Mis Recompensas
+                          </Link>
 
-                        {/* Configuración */}
-                        <Link
-                          to="/settings"
-                          className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        >
-                          <Icon name="Settings" size={16} className="mr-2" />
-                          Configuración
-                        </Link>
+                          {user.isAdmin && (
+                            <>
+                              <div className="border-t border-border my-1"></div>
+                              <Link
+                                to="/admin"
+                                className="flex items-center px-4 py-2 text-sm text-primary hover:bg-primary/10 transition-colors font-medium"
+                                onClick={() => setIsUserMenuOpen(false)}
+                              >
+                                <Icon name="Shield" size={16} className="mr-2" />
+                                Panel de Administración
+                              </Link>
+                            </>
+                          )}
 
-                        <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
-                          <Icon name="HelpCircle" size={16} className="mr-2" />
-                          Ayuda
-                        </button>
+                          <div className="border-t border-border my-1"></div>
 
-                        <div className="border-t border-border my-1"></div>
+                          <Link
+                            to="/settings"
+                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <Icon name="Settings" size={16} className="mr-2" />
+                            Configuración
+                          </Link>
 
-                        {/* Cerrar Sesión */}
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                          disabled={loading}
-                        >
-                          <Icon name="LogOut" size={16} className="mr-2" />
-                          {loading ? 'Cerrando...' : 'Cerrar Sesión'}
-                        </button>
+                          <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
+                            <Icon name="HelpCircle" size={16} className="mr-2" />
+                            Ayuda
+                          </button>
+
+                          <div className="border-t border-border my-1"></div>
+
+                          <button
+                            onClick={handleLogout}
+                            className="flex items-center w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                            disabled={loading}
+                          >
+                            <Icon name="LogOut" size={16} className="mr-2" />
+                            {loading ? 'Cerrando...' : 'Cerrar Sesión'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center space-x-4">
-                <Link
-                  to="/login"
-                  className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-                >
-                  Iniciar Sesión
-                </Link>
-                <Button size="sm" asChild>
-                  <Link to="/register">
-                    Registrarse
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center space-x-4">
+                  <Link
+                    to="/login"
+                    className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Iniciar Sesión
                   </Link>
-                </Button>
-              </div>
-            )}
+                  <Button size="sm" asChild>
+                    <Link to="/register">
+                      Registrarse
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* ✅ NUEVO: Estilos CSS para animaciones */}
+      <style jsx>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes fadeOut {
+          from {
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </>
   );
 };
 
