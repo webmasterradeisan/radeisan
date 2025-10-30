@@ -36,9 +36,24 @@ const ReelsCarouselDesktop = ({
     videoCountersReceived: Object.keys(videoCounters).length
   });
 
-  // ✅ Helper para obtener contador actualizado
-  const getVideoCounter = (videoId, type) => {
-    return videoCounters[videoId]?.[type] || 0;
+  // ✅ Helper para obtener contador actualizado (con fallback a datos originales)
+  const getVideoCounter = (video, type) => {
+    // Primero intentar obtener del videoCounters (tiempo real)
+    if (videoCounters[video.id]?.[type] !== undefined) {
+      return videoCounters[video.id][type];
+    }
+    
+    // Fallback a los datos originales del video
+    switch(type) {
+      case 'likes':
+        return video.likes || video.likes_count || 0;
+      case 'comments':
+        return video.comments || video.comments_count || 0;
+      case 'views':
+        return video.views || video.views_count || 0;
+      default:
+        return 0;
+    }
   };
 
   // Verificar posición del scroll para mostrar/ocultar botones
@@ -69,6 +84,51 @@ const ReelsCarouselDesktop = ({
       };
     }
   }, [videos]);
+
+  // ✅ NUEVO: Scroll con rueda del mouse
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleWheel = (e) => {
+      // Solo si el cursor está sobre el carousel
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        container.scrollBy({
+          left: e.deltaY > 0 ? 100 : -100,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // ✅ NUEVO: Navegación con teclado (flechas)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Solo si el carousel está en viewport
+      const container = scrollRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const isInViewport = rect.top < window.innerHeight && rect.bottom > 0;
+      
+      if (!isInViewport) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        scrollLeft();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        scrollRight();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Navegación con botones
   const scrollLeft = () => {
@@ -184,10 +244,10 @@ const ReelsCarouselDesktop = ({
             ))
           ) : (
             videos.map((reel, index) => {
-              // ✅ Obtener contadores actualizados en tiempo real
-              const currentLikes = getVideoCounter(reel.id, 'likes');
-              const currentComments = getVideoCounter(reel.id, 'comments');
-              const currentViews = getVideoCounter(reel.id, 'views');
+              // ✅ Obtener contadores actualizados en tiempo real (con fallback)
+              const currentLikes = getVideoCounter(reel, 'likes');
+              const currentComments = getVideoCounter(reel, 'comments');
+              const currentViews = getVideoCounter(reel, 'views');
 
               return (
                 <div
