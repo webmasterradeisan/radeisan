@@ -24,8 +24,8 @@ const FloatingPointsNotification = ({ points, message, show, onHide, isMobile, i
     <div 
   className={`fixed pointer-events-none z-[99999] ${
     isMobile 
-      ? 'bottom-[150px] left-1/2 transform -translate-x-1/2'  // Ambas notificaciones aquí en móvil
-      : 'bottom-[150px] left-1/2 transform -translate-x-1/2'  // Ambas notificaciones aquí en desktop
+      ? 'bottom-[280px] right-[80px]'  // Cerca del botón like en móvil
+      : 'top-[35%] right-[120px]'      // Cerca del botón like en desktop
   }`}
   style={{ 
     animation: 'bounce 0.5s ease-in-out 3'
