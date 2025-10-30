@@ -1,9 +1,9 @@
 // src/components/ui/Header.jsx
-// ACTUALIZADO: Con contador de puntos en tiempo real + animaciones
+// VERSIÓN CON DEBUGGING - Para diagnosticar el problema de puntos
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePoints } from '../../contexts/PointsContext'; // ✅ NUEVO
+import { usePoints } from '../../contexts/PointsContext';
 import { useBranding } from '../../hooks/useBranding';
 import AppIcon from '../AppIcon';
 import Button from './Button';
@@ -15,22 +15,24 @@ const AnimatedPointsCounter = ({ points, animation }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
 
+  // 🔍 DEBUG: Mostrar en consola
+  useEffect(() => {
+    console.log('🎯 AnimatedPointsCounter - Puntos:', points);
+  }, [points]);
+
   useEffect(() => {
     if (animation.show) {
       setIsAnimating(true);
       
-      // Animar el cambio de puntos
       const startPoints = displayPoints;
       const endPoints = points;
-      const duration = 800; // 800ms
+      const duration = 800;
       const startTime = Date.now();
 
       const animate = () => {
         const now = Date.now();
         const elapsed = now - startTime;
         const progress = Math.min(elapsed / duration, 1);
-
-        // Easing function (easeOutCubic)
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         const currentPoints = Math.round(startPoints + (endPoints - startPoints) * easeProgress);
 
@@ -61,7 +63,7 @@ const AnimatedPointsCounter = ({ points, animation }) => {
 };
 
 // ============================================================================
-// COMPONENTE DE NOTIFICACIÓN FLOTANTE DE PUNTOS
+// COMPONENTE DE NOTIFICACIÓN FLOTANTE
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -103,14 +105,23 @@ const FloatingPointsNotification = ({ animation }) => {
 
 const Header = () => {
   const { user, signOut, loading } = useAuth();
-  const { points, pointsAnimation, totalPoints } = usePoints(); // ✅ NUEVO
+  const { points, pointsAnimation, totalPoints, loading: pointsLoading } = usePoints();
   const { branding } = useBranding();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
 
-  // Close menu when clicking outside
+  // 🔍 DEBUG: Mostrar estado de puntos en consola
+  useEffect(() => {
+    console.log('🔍 Header - Estado de Puntos:', {
+      totalPoints,
+      points,
+      loading: pointsLoading,
+      user: user?.id
+    });
+  }, [totalPoints, points, pointsLoading, user]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
@@ -124,7 +135,6 @@ const Header = () => {
     };
   }, []);
 
-  // Close menu on route change
   useEffect(() => {
     setIsUserMenuOpen(false);
   }, [location.pathname]);
@@ -167,7 +177,6 @@ const Header = () => {
 
   return (
     <>
-      {/* Notificación flotante de puntos */}
       <FloatingPointsNotification animation={pointsAnimation} />
 
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
@@ -306,16 +315,31 @@ const Header = () => {
               
               {user ? (
                 <>
-                  {/* Balance de Puntos - ✅ ACTUALIZADO CON ANIMACIÓN */}
-                  <div className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group">
-                    <Icon name="Star" size={16} color="var(--color-accent)" className="group-hover:scale-110 transition-transform" />
-                    <AnimatedPointsCounter 
-                      points={totalPoints} 
-                      animation={pointsAnimation}
+                  {/* 🔍 DEBUG: Balance de Puntos con información adicional */}
+                  <div 
+                    className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group"
+                    title={`Total: ${totalPoints} | Free: ${points.free} | Premium: ${points.premium} | Loading: ${pointsLoading}`}
+                  >
+                    <Icon 
+                      name="Star" 
+                      size={16} 
+                      color="var(--color-accent)" 
+                      className="group-hover:scale-110 transition-transform" 
                     />
+                    {pointsLoading ? (
+                      <span className="text-xs text-muted-foreground">Cargando...</span>
+                    ) : (
+                      <AnimatedPointsCounter 
+                        points={totalPoints} 
+                        animation={pointsAnimation}
+                      />
+                    )}
+                    {/* 🔍 Badge DEBUG - Quitar en producción */}
+                    <span className="text-[10px] bg-red-500 text-white px-1 rounded">
+                      {totalPoints}
+                    </span>
                   </div>
 
-                  {/* Botón de Subir Contenido */}
                   <Button size="sm" asChild className="hidden md:flex">
                     <Link to="/upload">
                       <Icon name="Plus" size={16} className="mr-2" />
@@ -323,7 +347,6 @@ const Header = () => {
                     </Link>
                   </Button>
 
-                  {/* Notificaciones */}
                   <Button variant="ghost" size="icon" className="relative">
                     <Icon name="Bell" size={20} />
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
@@ -350,11 +373,9 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
-                          {/* Información del Usuario */}
                           <div className="px-4 py-2 border-b border-border">
                             <div className="text-sm font-medium text-popover-foreground truncate">
                               {user.name || 'Usuario'}
@@ -363,7 +384,7 @@ const Header = () => {
                               {user.email}
                             </div>
                             
-                            {/* ✅ NUEVO: Mostrar puntos en el menú */}
+                            {/* Balance de puntos en el menú */}
                             <div className="mt-2 flex items-center gap-2 px-2 py-1 bg-accent/10 rounded-md">
                               <Icon name="Star" size={14} color="var(--color-accent)" />
                               <span className="text-sm font-mono font-bold text-accent">
@@ -381,7 +402,6 @@ const Header = () => {
                             )}
                           </div>
 
-                          {/* Enlaces del Menú */}
                           <Link
                             to="/profile"
                             className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
@@ -476,7 +496,6 @@ const Header = () => {
         </div>
       </header>
 
-      {/* ✅ NUEVO: Estilos CSS para animaciones */}
       <style jsx>{`
         @keyframes slideInRight {
           from {
