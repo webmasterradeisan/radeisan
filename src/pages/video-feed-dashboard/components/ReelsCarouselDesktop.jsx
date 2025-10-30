@@ -40,11 +40,9 @@ const ReelsCarouselDesktop = ({
 
   // ✅ NUEVO: Sincronizar videoCounters con estado local para forzar re-render
   useEffect(() => {
-    if (Object.keys(videoCounters).length > 0) {
-      console.log('🔄 Actualizando contadores locales:', videoCounters);
-      setLocalCounters({...videoCounters});
-    }
-  }, [videoCounters]);
+    console.log('🔄 videoCounters cambió:', videoCounters);
+    setLocalCounters(videoCounters);
+  }, [JSON.stringify(videoCounters)]); // ✅ Deep comparison
 
   // ✅ Helper para obtener contador actualizado (con fallback a datos originales)
   const getVideoCounter = (video, type) => {
@@ -258,6 +256,13 @@ const ReelsCarouselDesktop = ({
               const currentLikes = getVideoCounter(reel, 'likes');
               const currentComments = getVideoCounter(reel, 'comments');
               const currentViews = getVideoCounter(reel, 'views');
+
+              console.log(`📊 Reel ${reel.id}:`, {
+                likes: currentLikes,
+                comments: currentComments,
+                views: currentViews,
+                fromCounters: !!localCounters[reel.id]
+              });
 
               return (
                 <div
