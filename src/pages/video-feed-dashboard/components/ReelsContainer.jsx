@@ -16,16 +16,16 @@ const FloatingPointsNotification = ({ points, message, show, onHide, isMobile, i
       const timer = setTimeout(onHide, 2500);
       return () => clearTimeout(timer);
     }
-  }, [show, onHide]);
+  }, [show, onHide, points, message, isAlreadyEarned]);
 
   if (!show) return null;
 
   return (
     <div 
-      className={`fixed pointer-events-none animate-bounce z-[99999] ${
+      className={`fixed pointer-events-none z-[99999] ${
         isMobile 
-          ? 'bottom-[280px] right-20' 
-          : 'top-[45%] right-[calc(100%-220px)]'
+          ? 'bottom-[150px] left-1/2 transform -translate-x-1/2' 
+          : 'top-[20%] left-1/2 transform -translate-x-1/2'
       }`}
       style={{ 
         animation: 'bounce 0.5s ease-in-out 3'
@@ -35,20 +35,20 @@ const FloatingPointsNotification = ({ points, message, show, onHide, isMobile, i
         isAlreadyEarned 
           ? 'bg-gradient-to-r from-gray-500 to-gray-600' 
           : 'bg-gradient-to-r from-purple-500 to-pink-500'
-        } text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-2 transform transition-all duration-300`}>
-        <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
-          <Icon name={isAlreadyEarned ? "Info" : "Star"} size={16} className={isAlreadyEarned ? "text-gray-300" : "text-yellow-300"} />
+        } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300`}>
+        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
+          <Icon name={isAlreadyEarned ? "Info" : "Star"} size={20} className={isAlreadyEarned ? "text-gray-300" : "text-yellow-300"} />
         </div>
         <div>
           {isAlreadyEarned ? (
             <>
-              <p className="font-bold text-base">Ya ganaste puntos</p>
-              <p className="text-xs text-gray-100 whitespace-nowrap">con este reel</p>
+              <p className="font-bold text-lg">Ya ganaste puntos</p>
+              <p className="text-sm text-gray-100 whitespace-nowrap">con este reel</p>
             </>
           ) : (
             <>
-              <p className="font-bold text-base">+{points} puntos</p>
-              {message && <p className="text-xs text-purple-100 whitespace-nowrap">{message}</p>}
+              <p className="font-bold text-lg">+{points} puntos</p>
+              {message && <p className="text-sm text-purple-100 whitespace-nowrap">{message}</p>}
             </>
           )}
         </div>
@@ -609,7 +609,15 @@ const ReelsContainer = ({
       const wasAlreadyLiked = actionsPerformed.likes.has(videoId);
       const isCurrentlyLiked = newLikedVideos.has(videoId);
       
+      console.log('👍 Estado del like:', {
+        videoId,
+        wasAlreadyLiked,
+        isCurrentlyLiked,
+        actionsPerformed: Array.from(actionsPerformed.likes)
+      });
+      
       if (isCurrentlyLiked) {
+        // Quitar like (NO modificar actionsPerformed aquí)
         newLikedVideos.delete(videoId);
         
         setVideoCounters(prev => ({
@@ -627,7 +635,10 @@ const ReelsContainer = ({
           .eq('user_id', user.id);
 
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        
+        console.log('✅ Like removido');
       } else {
+        // Dar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
 
@@ -645,9 +656,14 @@ const ReelsContainer = ({
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
+        // Verificar si ya había ganado puntos ANTES
         if (wasAlreadyLiked) {
+          // Ya ganó puntos con este reel antes
+          console.log('⚠️ Usuario ya ganó puntos con este reel');
           showPointsEarned(0, '', true);
         } else {
+          // Primera vez que da like a este reel, gana puntos
+          console.log('🎉 Primera vez dando like, ganando puntos');
           try {
             await addFreePoints(5, 'Like en video', 'video', videoId);
             const missionResult = await missionsService.trackGiveLike('video', videoId);
@@ -657,6 +673,7 @@ const ReelsContainer = ({
               showPointsEarned(5, 'Like en video', false);
             }
             
+            // Marcar que ya ganó puntos con este video (SOLO la primera vez)
             setActionsPerformed(prev => ({
               ...prev,
               likes: new Set([...prev.likes, videoId])
