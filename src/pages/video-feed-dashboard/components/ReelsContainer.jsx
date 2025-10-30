@@ -9,7 +9,7 @@ import useIsMobile from 'hooks/useIsMobile';
 // ===============================
 // COMPONENTE DE NOTIFICACIÓN FLOTANTE DE PUNTOS
 // ===============================
-const FloatingPointsNotification = ({ points, message, show, onHide }) => {
+const FloatingPointsNotification = ({ points, message, show, onHide, isMobile }) => {
   useEffect(() => {
     if (show) {
       console.log('🎉 Mostrando notificación de puntos:', points, message);
@@ -22,21 +22,22 @@ const FloatingPointsNotification = ({ points, message, show, onHide }) => {
 
   return (
     <div 
-      className="fixed top-20 right-4 animate-bounce pointer-events-none"
+      className={`fixed pointer-events-none animate-bounce z-[99999] ${
+        isMobile 
+          ? 'bottom-[280px] right-20' 
+          : 'top-[45%] right-[calc(100%-220px)]'
+      }`}
       style={{ 
-        zIndex: 99999,
-        position: 'fixed',
-        top: '80px',
-        right: '16px'
+        animation: 'bounce 0.5s ease-in-out 3'
       }}
     >
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300">
-        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
-          <Icon name="Star" size={20} className="text-yellow-300" />
+      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-2 transform transition-all duration-300">
+        <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
+          <Icon name="Star" size={16} className="text-yellow-300" />
         </div>
         <div>
-          <p className="font-bold text-lg">+{points} puntos</p>
-          {message && <p className="text-xs text-purple-100">{message}</p>}
+          <p className="font-bold text-base">+{points} puntos</p>
+          {message && <p className="text-xs text-purple-100 whitespace-nowrap">{message}</p>}
         </div>
       </div>
     </div>
