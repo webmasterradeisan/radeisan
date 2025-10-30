@@ -22,15 +22,15 @@ const FloatingPointsNotification = ({ points, message, show, onHide, isMobile, i
 
   return (
     <div 
-      className={`fixed pointer-events-none z-[99999] ${
-        isMobile 
-          ? 'bottom-[150px] left-1/2 transform -translate-x-1/2' 
-          : 'top-[20%] left-1/2 transform -translate-x-1/2'
-      }`}
-      style={{ 
-        animation: 'bounce 0.5s ease-in-out 3'
-      }}
-    >
+  className={`fixed pointer-events-none z-[99999] ${
+    isMobile 
+      ? 'bottom-[150px] left-1/2 transform -translate-x-1/2'  // Ambas notificaciones aquí en móvil
+      : 'bottom-[150px] left-1/2 transform -translate-x-1/2'  // Ambas notificaciones aquí en desktop
+  }`}
+  style={{ 
+    animation: 'bounce 0.5s ease-in-out 3'
+  }}
+>
       <div className={`${
         isAlreadyEarned 
           ? 'bg-gradient-to-r from-gray-500 to-gray-600' 
