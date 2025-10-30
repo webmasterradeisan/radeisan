@@ -1,61 +1,22 @@
+// src/components/ReelsContainer.jsx
+// ============================================================================
+// REELS CONTAINER - Integrado con Sistema de Puntos
+// ============================================================================
+// Componente principal para visualización de reels con:
+// - Sistema de puntos integrado (usa PointsContext)
+// - Likes, comentarios, guardados, compartir
+// - Modal de comentarios funcional
+// - Seguir creadores
+// - Tracking de misiones
+// ============================================================================
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
-import { addFreePoints } from 'services/pointsService';
+import { usePoints } from 'contexts/PointsContext';
 import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
-
-// ===============================
-// COMPONENTE DE NOTIFICACIÓN FLOTANTE DE PUNTOS
-// ===============================
-const FloatingPointsNotification = ({ points, message, show, onHide, isMobile, isAlreadyEarned }) => {
-  useEffect(() => {
-    if (show) {
-      console.log('🎉 Mostrando notificación de puntos:', points, message, 'Ya ganado:', isAlreadyEarned);
-      const timer = setTimeout(onHide, 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [show, onHide, points, message, isAlreadyEarned]);
-
-  if (!show) return null;
-
-  return (
-    <div 
-      className="fixed pointer-events-none z-[99999] bottom-[280px] right-[80px]"
-      style={{ 
-        animation: 'bounce 0.5s ease-in-out 3'
-      }}
-    >
-      <div className={`${
-        isAlreadyEarned 
-          ? 'bg-gradient-to-r from-gray-500 to-gray-600' 
-          : 'bg-gradient-to-r from-purple-500 to-pink-500'
-        } text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 transform transition-all duration-300`}>
-        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
-          <Icon 
-            name={isAlreadyEarned ? "Info" : "Star"} 
-            size={20} 
-            className={isAlreadyEarned ? "text-gray-300" : "text-yellow-300"} 
-          />
-        </div>
-        <div>
-          {isAlreadyEarned ? (
-            <>
-              <p className="font-bold text-lg">Ya ganaste puntos</p>
-              <p className="text-sm text-gray-100 whitespace-nowrap">con este reel</p>
-            </>
-          ) : (
-            <>
-              <p className="font-bold text-lg">+{points} puntos</p>
-              {message && <p className="text-sm text-purple-100 whitespace-nowrap">{message}</p>}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
@@ -71,6 +32,9 @@ const ReelsContainer = ({
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
+
+  // ✅ INTEGRACIÓN CON SISTEMA DE PUNTOS
+  const { addPoints } = usePoints();
 
   // Estados principales
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -93,14 +57,6 @@ const ReelsContainer = ({
   const [replyingTo, setReplyingTo] = useState(null);
   const [showReplies, setShowReplies] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
-
-  // Estados de notificación de puntos
-  const [pointsNotification, setPointsNotification] = useState({
-    show: false,
-    points: 0,
-    message: '',
-    isAlreadyEarned: false
-  });
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
@@ -271,21 +227,6 @@ const ReelsContainer = ({
     });
     setVideoCounters(initialCounters);
   }, [videos]);
-
-  // ===============================
-  // FUNCIÓN PARA MOSTRAR NOTIFICACIÓN DE PUNTOS
-  // ===============================
-  const showPointsEarned = useCallback((points, message = '', isAlreadyEarned = false) => {
-    console.log('🎉 Mostrando notificación de puntos:', points, message, 'Ya ganado:', isAlreadyEarned);
-    setPointsNotification({ show: true, points, message, isAlreadyEarned });
-    if (onPointsEarned && !isAlreadyEarned) {
-      onPointsEarned(points);
-    }
-  }, [onPointsEarned]);
-
-  const hidePointsNotification = useCallback(() => {
-    setPointsNotification({ show: false, points: 0, message: '', isAlreadyEarned: false });
-  }, []);
 
   // ===============================
   // FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
@@ -484,7 +425,8 @@ const ReelsContainer = ({
         missionsService.trackWatchVideo(currentVideoData.id, currentVideo.currentTime)
           .then(result => {
             if (result.completed) {
-              showPointsEarned(result.reward.points, result.message);
+              // ✅ Usar addPoints del contexto
+              addPoints(result.reward.points, result.message, 'free');
             }
           })
           .catch(error => console.error('Error tracking video:', error));
@@ -502,7 +444,7 @@ const ReelsContainer = ({
       currentVideo.removeEventListener('loadeddata', handleLoadedData);
       currentVideo.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [currentIndex, videos, videoWatchedIds, showPointsEarned]);
+  }, [currentIndex, videos, videoWatchedIds, addPoints]);
 
   // ===============================
   // PLAY/PAUSE
@@ -617,7 +559,7 @@ const ReelsContainer = ({
       });
       
       if (isCurrentlyLiked) {
-        // Quitar like - NO MOSTRAR AVISO
+        // Quitar like
         newLikedVideos.delete(videoId);
         
         setVideoCounters(prev => ({
@@ -636,9 +578,9 @@ const ReelsContainer = ({
 
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
         
-        console.log('✅ Like removido - sin aviso');
+        console.log('✅ Like removido');
       } else {
-        // Dar like - MOSTRAR AVISO INSTANTÁNEO
+        // Dar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
 
@@ -656,24 +598,18 @@ const ReelsContainer = ({
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // MOSTRAR AVISO INMEDIATAMENTE según el caso
-        if (wasAlreadyLiked) {
-          // Ya ganó puntos con este reel antes
-          console.log('⚠️ Usuario ya ganó puntos con este reel - mostrando aviso');
-          showPointsEarned(0, '', true);
-        } else {
-          // Primera vez que da like a este reel, gana puntos
-          console.log('🎉 Primera vez dando like - ganando puntos y mostrando aviso');
+        // Dar puntos solo si es la primera vez con este video
+        if (!wasAlreadyLiked) {
+          console.log('🎉 Primera vez dando like - ganando puntos');
           try {
-            await addFreePoints(5, 'Like en video', 'video', videoId);
+            // ✅ Usar addPoints del contexto
+            addPoints(5, 'Like en video', 'free');
+            
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             if (missionResult.completed) {
-              showPointsEarned(missionResult.reward.points, missionResult.message, false);
-            } else {
-              showPointsEarned(5, 'Like en video', false);
+              addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
-            // Marcar que ya ganó puntos con este video (SOLO la primera vez)
             setActionsPerformed(prev => ({
               ...prev,
               likes: new Set([...prev.likes, videoId])
@@ -762,8 +698,8 @@ const ReelsContainer = ({
 
         if (!wasAlreadySaved) {
           try {
-            await addFreePoints(2, 'Guardar video', 'video', videoId);
-            showPointsEarned(2, 'Video guardado');
+            // ✅ Usar addPoints del contexto
+            addPoints(2, 'Video guardado', 'free');
             
             setActionsPerformed(prev => ({
               ...prev,
@@ -821,12 +757,12 @@ const ReelsContainer = ({
         
         if (!wasAlreadyFollowed) {
           try {
-            await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
+            // ✅ Usar addPoints del contexto
+            addPoints(10, 'Seguiste a un creador', 'free');
+            
             const missionResult = await missionsService.trackFollowUser(creatorId);
             if (missionResult.completed) {
-              showPointsEarned(missionResult.reward.points, missionResult.message);
-            } else {
-              showPointsEarned(10, 'Seguiste a un creador');
+              addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
             setActionsPerformed(prev => ({
@@ -869,7 +805,9 @@ const ReelsContainer = ({
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            await addFreePoints(3, 'Compartir video', 'video', video.id);
+            // ✅ Usar addPoints del contexto
+            addPoints(3, 'Video compartido', 'free');
+            
             const missionResult = await missionsService.trackShareContent(
               'video', 
               video.id, 
@@ -877,9 +815,7 @@ const ReelsContainer = ({
             );
             
             if (missionResult.completed) {
-              showPointsEarned(missionResult.reward.points, missionResult.message);
-            } else {
-              showPointsEarned(3, 'Video compartido');
+              addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
             setActionsPerformed(prev => ({
@@ -1012,7 +948,6 @@ const ReelsContainer = ({
     }
     
     console.log('🗨️ Abriendo modal de comentarios para video:', videoId);
-    console.log('📹 Video debe SEGUIR reproduciéndose');
     setShowCommentsModal(true);
     setReplyingTo(null);
     setNewComment('');
@@ -1064,9 +999,6 @@ const ReelsContainer = ({
 
       if (error) {
         console.error('❌ Error de Supabase:', error);
-        console.error('❌ Código:', error.code);
-        console.error('❌ Mensaje:', error.message);
-        console.error('❌ Detalles:', error.details);
         alert(`Error al comentar: ${error.message}`);
         throw error;
       }
@@ -1088,12 +1020,12 @@ const ReelsContainer = ({
       if (!wasAlreadyCommented) {
         try {
           console.log('🎁 Otorgando puntos...');
-          await addFreePoints(3, replyingTo ? 'Responder comentario' : 'Comentar video', 'video', videoId);
+          // ✅ Usar addPoints del contexto
+          addPoints(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado', 'free');
+          
           const missionResult = await missionsService.trackComment('video', videoId);
           if (missionResult.completed) {
-            showPointsEarned(missionResult.reward.points, missionResult.message);
-          } else {
-            showPointsEarned(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado');
+            addPoints(missionResult.reward.points, missionResult.message, 'free');
           }
           
           setActionsPerformed(prev => ({
@@ -1125,7 +1057,6 @@ const ReelsContainer = ({
     } catch (error) {
       console.error('❌ ===== ERROR GENERAL AL COMENTAR =====');
       console.error('❌ Error:', error);
-      console.error('❌ Stack:', error.stack);
       alert('Error al agregar comentario. Revisa la consola para más detalles.');
     }
   };
@@ -1203,423 +1134,556 @@ const ReelsContainer = ({
   }
 
   return (
-    <>
-      <FloatingPointsNotification
-        points={pointsNotification.points}
-        message={pointsNotification.message}
-        show={pointsNotification.show}
-        onHide={hidePointsNotification}
-        isMobile={isMobile}
-        isAlreadyEarned={pointsNotification.isAlreadyEarned}
-      />
-      
-      <div className="relative w-full h-full bg-white overflow-hidden">
-        <div className="flex h-full w-full items-center justify-center">
-          <div 
-            className={`
-              relative overflow-hidden flex-shrink-0
-              ${isDesktop 
-                ? showCommentsModal 
-                  ? 'w-[55%]' 
-                  : 'w-full max-w-[500px]'
-                : 'w-full'
-              }
-              ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}
-            `}
+    <div className="relative w-full h-full bg-white overflow-hidden">
+      <div className="flex h-full w-full items-center justify-center">
+        <div 
+          className={`
+            relative overflow-hidden flex-shrink-0
+            ${isDesktop 
+              ? showCommentsModal 
+                ? 'w-[55%]' 
+                : 'w-full max-w-[500px]'
+              : 'w-full'
+            }
+            ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}
+          `}
+        >
+          <div
+            ref={containerRef}
+            className={`w-full h-full relative transition-transform duration-500`}
+            style={{ 
+              transform: `translateY(${-currentIndex * 100}%)`,
+              transition: enableTransition ? 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
+            }}
+            onClick={handlePlayPause}
+            onTouchStart={isMobile ? handleTouchStart : undefined}
+            onTouchMove={isMobile ? handleTouchMove : undefined}
+            onTouchEnd={isMobile ? handleTouchEnd : undefined}
           >
-            <div
-              ref={containerRef}
-              className={`w-full h-full relative transition-transform duration-500`}
-              style={{ 
-                transform: `translateY(${-currentIndex * 100}%)`,
-                transition: enableTransition ? 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-              }}
-              onClick={handlePlayPause}
-              onTouchStart={isMobile ? handleTouchStart : undefined}
-              onTouchMove={isMobile ? handleTouchMove : undefined}
-              onTouchEnd={isMobile ? handleTouchEnd : undefined}
-            >
-              {videos.map((video, index) => (
-                <div 
-                  key={video.id} 
-                  className="w-full h-full flex-shrink-0 relative bg-black snap-start"
-                  style={{ height: '100%' }}
-                >
-                  <video
-                    ref={el => videoRefs.current[index] = el}
-                    className="absolute w-full h-full object-cover"
-                    src={video.video_url || video.videoUrl}
-                    loop
-                    playsInline
-                    preload="auto"
-                    onLoadedData={() => setLoadingVideo(false)}
-                    onError={(e) => console.error('Error de video:', e)}
-                  />
+            {videos.map((video, index) => (
+              <div 
+                key={video.id} 
+                className="w-full h-full flex-shrink-0 relative bg-black snap-start"
+                style={{ height: '100%' }}
+              >
+                <video
+                  ref={el => videoRefs.current[index] = el}
+                  className="absolute w-full h-full object-cover"
+                  src={video.video_url || video.videoUrl}
+                  loop
+                  playsInline
+                  preload="auto"
+                  onLoadedData={() => setLoadingVideo(false)}
+                  onError={(e) => console.error('Error de video:', e)}
+                />
 
-                  {loadingVideo && index === currentIndex && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                      <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  )}
-
-                  {isMobile && (
-                    <div 
-                      className="absolute bottom-8 left-4 right-24 z-10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
-                        <div className="flex items-center space-x-2 mb-3">
-                          <Link 
-                            to={`/profile/${video.creator?.id}`} 
-                            className="font-bold hover:underline text-base text-white drop-shadow-lg"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
-                          </Link>
-                          
-                          {currentUser?.id !== video.creator?.id && (
-                            <button
-                              onClick={(e) => handleFollow(video.creator?.id, e)}
-                              className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
-                                followedCreators.has(video.creator?.id)
-                                  ? 'bg-white/20 text-white border border-white/30'
-                                  : 'bg-pink-600 text-white hover:bg-pink-700'
-                              }`}
-                            >
-                              {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
-                            </button>
-                          )}
-                          
-                          <span className="text-gray-200 text-sm">•</span>
-                          <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
-                        </div>
-
-                        <div className="mb-3">
-                          <p className="text-sm leading-relaxed line-clamp-3 text-white drop-shadow-lg">
-                            {video.description || video.title}
-                          </p>
-                        </div>
-
-                        {video.tags && video.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {video.tags.slice(0, 3).map((tag, tagIndex) => (
-                              <span key={tagIndex} className="text-sm font-semibold text-white drop-shadow-lg">
-                                #{tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center space-x-2 text-sm">
-                          <Icon name="Music" size={14} color="white" />
-                          <span className="truncate text-white drop-shadow-lg">
-                            {video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {isDesktop && (
-                    <div 
-                      className="absolute bottom-4 left-4 right-4 z-10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Link 
-                            to={`/profile/${video.creator?.id}`} 
-                            className="font-bold hover:underline text-base text-white drop-shadow-lg"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
-                          </Link>
-                          
-                          {currentUser?.id !== video.creator?.id && (
-                            <button
-                              onClick={(e) => handleFollow(video.creator?.id, e)}
-                              className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
-                                followedCreators.has(video.creator?.id)
-                                  ? 'bg-white/20 text-white border border-white/30'
-                                  : 'bg-pink-600 text-white hover:bg-pink-700'
-                              }`}
-                            >
-                              {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
-                            </button>
-                          )}
-                          
-                          <span className="text-gray-200 text-sm">•</span>
-                          <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
-                        </div>
-
-                        <div className="mb-2">
-                          <p className="text-sm leading-relaxed line-clamp-2 text-white drop-shadow-lg">
-                            {video.description || video.title}
-                          </p>
-                        </div>
-
-                        {video.tags && video.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {video.tags.slice(0, 3).map((tag, tagIndex) => (
-                              <span key={tagIndex} className="text-xs font-semibold text-white drop-shadow-lg">
-                                #{tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {!isAutoPlaying && index === currentIndex && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center">
-                        <Icon name="Play" size={32} color="white" />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
-                    <div 
-                      className="h-full bg-red-500 transition-all"
-                      style={{ 
-                        width: index === currentIndex ? '100%' : '0%',
-                        transitionDuration: index === currentIndex ? `${video.duration || 30}s` : '0s',
-                        transitionTimingFunction: 'linear'
-                      }}
-                    />
+                {loadingVideo && index === currentIndex && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                    <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
                   </div>
+                )}
+
+                {/* INFO DEL VIDEO - MOBILE */}
+                {isMobile && (
+                  <div 
+                    className="absolute bottom-8 left-4 right-24 z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Link 
+                          to={`/profile/${video.creator?.id}`} 
+                          className="font-bold hover:underline text-base text-white drop-shadow-lg"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
+                        </Link>
+                        
+                        {currentUser?.id !== video.creator?.id && (
+                          <button
+                            onClick={(e) => handleFollow(video.creator?.id, e)}
+                            className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
+                              followedCreators.has(video.creator?.id)
+                                ? 'bg-white/20 text-white border border-white/30'
+                                : 'bg-pink-600 text-white hover:bg-pink-700'
+                            }`}
+                          >
+                            {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
+                          </button>
+                        )}
+                        
+                        <span className="text-gray-200 text-sm">•</span>
+                        <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
+                      </div>
+
+                      <div className="mb-3">
+                        <p className="text-sm leading-relaxed line-clamp-3 text-white drop-shadow-lg">
+                          {video.description || video.title}
+                        </p>
+                      </div>
+
+                      {video.tags && video.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {video.tags.slice(0, 3).map((tag, tagIndex) => (
+                            <span key={tagIndex} className="text-sm font-semibold text-white drop-shadow-lg">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center space-x-2 text-sm">
+                        <Icon name="Music" size={14} color="white" />
+                        <span className="truncate text-white drop-shadow-lg">
+                          {video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* INFO DEL VIDEO - DESKTOP */}
+                {isDesktop && (
+                  <div 
+                    className="absolute bottom-4 left-4 right-4 z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Link 
+                          to={`/profile/${video.creator?.id}`} 
+                          className="font-bold hover:underline text-base text-white drop-shadow-lg"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
+                        </Link>
+                        
+                        {currentUser?.id !== video.creator?.id && (
+                          <button
+                            onClick={(e) => handleFollow(video.creator?.id, e)}
+                            className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
+                              followedCreators.has(video.creator?.id)
+                                ? 'bg-white/20 text-white border border-white/30'
+                                : 'bg-pink-600 text-white hover:bg-pink-700'
+                            }`}
+                          >
+                            {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
+                          </button>
+                        )}
+                        
+                        <span className="text-gray-200 text-sm">•</span>
+                        <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
+                      </div>
+
+                      <div className="mb-2">
+                        <p className="text-sm leading-relaxed line-clamp-2 text-white drop-shadow-lg">
+                          {video.description || video.title}
+                        </p>
+                      </div>
+
+                      {video.tags && video.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {video.tags.slice(0, 3).map((tag, tagIndex) => (
+                            <span key={tagIndex} className="text-xs font-semibold text-white drop-shadow-lg">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!isAutoPlaying && index === currentIndex && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center">
+                      <Icon name="Play" size={32} color="white" />
+                    </div>
+                  </div>
+                )}
+
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
+                  <div 
+                    className="h-full bg-red-500 transition-all"
+                    style={{ 
+                      width: index === currentIndex ? '100%' : '0%',
+                      transitionDuration: index === currentIndex ? `${video.duration || 30}s` : '0s',
+                      transitionTimingFunction: 'linear'
+                    }}
+                  />
                 </div>
-              ))}
+              </div>
+            ))}
+            
+            {(loading || (currentIndex >= videos.length - 2 && hasMore)) && (
+              <div className="w-full h-full flex-shrink-0 relative bg-black/80 flex flex-col items-center justify-center text-white p-8">
+                <Icon name="Loader" size={48} className="animate-spin text-pink-500 mb-4" />
+                <p className="text-lg font-semibold">Cargando más videos...</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* BOTONES DE ACCIÓN - MOBILE */}
+        {currentVideo && isMobile && (
+          <div 
+            className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <div className="relative">
+              <Link 
+                to={`/profile/${currentVideo.creator?.id}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
+                  {currentVideo.creator?.avatar ? (
+                    <img src={currentVideo.creator.avatar} alt={currentVideo.creator.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-lg">
+                        {currentVideo.creator?.name?.charAt(0) || 'U'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Link>
               
-              {(loading || (currentIndex >= videos.length - 2 && hasMore)) && (
-                <div className="w-full h-full flex-shrink-0 relative bg-black/80 flex flex-col items-center justify-center text-white p-8">
-                  <Icon name="Loader" size={48} className="animate-spin text-pink-500 mb-4" />
-                  <p className="text-lg font-semibold">Cargando más videos...</p>
+              {!followedCreators.has(currentVideo.creator?.id) && currentUser?.id !== currentVideo.creator?.id && (
+                <button
+                  onClick={(e) => handleFollow(currentVideo.creator?.id, e)}
+                  className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
+                >
+                  <Icon name="Plus" size={16} color="white" />
+                </button>
+              )}
+            </div>
+
+            <button 
+              onClick={(e) => handleLike(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${likedVideos.has(currentVideo.id) ? 'text-red-500' : 'text-white hover:scale-110'}`}>
+                <Icon name="ThumbsUp" size={26} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
+              </div>
+              <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
+            </button>
+
+            <button 
+              onClick={(e) => handleDislike(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${dislikedVideos.has(currentVideo.id) ? 'text-gray-400' : 'text-white hover:scale-110'}`}>
+                <Icon name="ThumbsDown" size={26} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
+              </div>
+            </button>
+
+            <button 
+              onClick={(e) => handleOpenComments(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
+                <Icon name="MessageCircle" size={26} />
+              </div>
+              <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'comments'))}</span>
+            </button>
+
+            <button 
+              onClick={(e) => handleSave(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${savedVideos.has(currentVideo.id) ? 'text-yellow-400' : 'text-white hover:scale-110'}`}>
+                <Icon name="Bookmark" size={26} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
+              </div>
+            </button>
+
+            <button 
+              onClick={(e) => handleShare(currentVideo, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
+                <Icon name="Share2" size={26} />
+              </div>
+            </button>
+
+            <button 
+              onClick={(e) => handleMuteToggle(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1"
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
+                <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={26} />
+              </div>
+            </button>
+
+            <button 
+              className="flex flex-col items-center mt-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-lg">
+                <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
+                  <Icon name="Music" size={18} color="white" />
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* BOTONES DE ACCIÓN - DESKTOP */}
+        {currentVideo && isDesktop && (
+          <div 
+            className="flex flex-col items-center space-y-6 ml-6 z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative">
+              <Link 
+                to={`/profile/${currentVideo.creator?.id}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform bg-white">
+                  {currentVideo.creator?.avatar ? (
+                    <img 
+                      src={currentVideo.creator.avatar} 
+                      alt={currentVideo.creator.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-xl">
+                        {currentVideo.creator?.name?.charAt(0) || 'U'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Link>
+              
+              {!followedCreators.has(currentVideo.creator?.id) && currentUser?.id !== currentVideo.creator?.id && (
+                <button
+                  onClick={(e) => handleFollow(currentVideo.creator?.id, e)}
+                  className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
+                >
+                  <Icon name="Plus" size={18} color="white" />
+                </button>
+              )}
+            </div>
+
+            <button 
+              onClick={(e) => handleLike(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
+                <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
+              </div>
+              <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
+                {formatCount(getVideoCounter(currentVideo.id, 'likes'))}
+              </span>
+            </button>
+
+            <button 
+              onClick={(e) => handleDislike(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
+                <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
+              </div>
+            </button>
+
+            <button 
+              onClick={(e) => handleOpenComments(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
+                <Icon name="MessageCircle" size={28} />
+              </div>
+              <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
+                {formatCount(getVideoCounter(currentVideo.id, 'comments'))}
+              </span>
+            </button>
+
+            <button 
+              onClick={(e) => handleSave(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
+                <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
+              </div>
+            </button>
+
+            <button 
+              onClick={(e) => handleShare(currentVideo, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
+                <Icon name="Share2" size={28} />
+              </div>
+            </button>
+
+            <button 
+              onClick={(e) => handleMuteToggle(currentVideo.id, e)} 
+              className="flex flex-col items-center space-y-1 group"
+            >
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
+                <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={28} />
+              </div>
+            </button>
+
+            <button 
+              className="flex flex-col items-center mt-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform">
+                <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
+                  <Icon name="Music" size={20} color="white" />
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL DE COMENTARIOS */}
+      {showCommentsModal && currentVideo && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
+          onClick={handleCloseComments}
+        >
+          <div 
+            className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del modal */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Comentarios</h3>
+              <button
+                onClick={handleCloseComments}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            {/* Lista de comentarios */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {comments[currentVideo.id]?.length > 0 ? (
+                comments[currentVideo.id].map((comment) => (
+                  <div key={comment.id} className="space-y-2">
+                    <div className="flex space-x-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                        {comment.user.avatar ? (
+                          <img src={comment.user.avatar} alt={comment.user.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                            <span className="text-white text-xs font-bold">
+                              {comment.user.name?.charAt(0) || 'U'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-sm">{comment.user.name}</span>
+                          <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
+                        </div>
+                        <p className="text-sm mt-1">{comment.content}</p>
+                        <button
+                          onClick={() => handleReply(comment.id, comment.user.username)}
+                          className="text-xs text-gray-500 hover:text-gray-700 mt-1"
+                        >
+                          Responder
+                        </button>
+
+                        {/* Respuestas */}
+                        {comment.replies && comment.replies.length > 0 && (
+                          <div className="mt-2">
+                            {!showReplies[comment.id] ? (
+                              <button
+                                onClick={() => toggleReplies(comment.id)}
+                                className="text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                Ver {comment.replies.length} respuesta{comment.replies.length > 1 ? 's' : ''}
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => toggleReplies(comment.id)}
+                                  className="text-xs text-blue-600 hover:text-blue-700 mb-2"
+                                >
+                                  Ocultar respuestas
+                                </button>
+                                <div className="space-y-2 pl-4 border-l-2 border-gray-200">
+                                  {comment.replies.map((reply) => (
+                                    <div key={reply.id} className="flex space-x-2">
+                                      <div className="w-6 h-6 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                                        {reply.user.avatar ? (
+                                          <img src={reply.user.avatar} alt={reply.user.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                                            <span className="text-white text-[10px] font-bold">
+                                              {reply.user.name?.charAt(0) || 'U'}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="font-semibold text-xs">{reply.user.name}</span>
+                                          <span className="text-[10px] text-gray-500">{formatTimeAgo(reply.created_at)}</span>
+                                        </div>
+                                        <p className="text-xs mt-0.5">{reply.content}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Icon name="MessageCircle" size={48} className="mx-auto mb-2 text-gray-300" />
+                  <p>No hay comentarios aún</p>
+                  <p className="text-sm">¡Sé el primero en comentar!</p>
                 </div>
               )}
             </div>
+
+            {/* Input de comentario */}
+            <div className="p-4 border-t">
+              {replyingTo && (
+                <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded">
+                  <span className="text-sm text-blue-700">Respondiendo...</span>
+                  <button
+                    onClick={handleCancelReply}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    <Icon name="X" size={16} />
+                  </button>
+                </div>
+              )}
+              <div className="flex space-x-2">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Escribe un comentario..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={2}
+                />
+                <button
+                  onClick={() => handleAddComment(currentVideo.id)}
+                  disabled={!newComment.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Icon name="Send" size={20} />
+                </button>
+              </div>
+            </div>
           </div>
-
-          {currentVideo && (
-            <>
-              {isMobile && (
-                <div 
-                  className="absolute bottom-20 right-4 flex flex-col items-center space-y-5 z-10"
-                  onClick={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                >
-                  <div className="relative">
-                    <Link 
-                      to={`/profile/${currentVideo.creator?.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
-                        {currentVideo.creator?.avatar ? (
-                          <img src={currentVideo.creator.avatar} alt={currentVideo.creator.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">
-                              {currentVideo.creator?.name?.charAt(0) || 'U'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-                    
-                    {!followedCreators.has(currentVideo.creator?.id) && currentUser?.id !== currentVideo.creator?.id && (
-                      <button
-                        onClick={(e) => handleFollow(currentVideo.creator?.id, e)}
-                        className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
-                      >
-                        <Icon name="Plus" size={16} color="white" />
-                      </button>
-                    )}
-                  </div>
-
-                  <button 
-                    onClick={(e) => handleLike(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1"
-                  >
-                    <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${likedVideos.has(currentVideo.id) ? 'text-red-500' : 'text-white hover:scale-110'}`}>
-                      <Icon name="ThumbsUp" size={26} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                    </div>
-                    <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleDislike(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1"
-                  >
-                    <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${dislikedVideos.has(currentVideo.id) ? 'text-gray-400' : 'text-white hover:scale-110'}`}>
-                      <Icon name="ThumbsDown" size={26} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleOpenComments(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1"
-                  >
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
-                      <Icon name="MessageCircle" size={26} />
-                    </div>
-                    <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'comments'))}</span>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleSave(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1"
-                  >
-                    <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${savedVideos.has(currentVideo.id) ? 'text-yellow-400' : 'text-white hover:scale-110'}`}>
-                      <Icon name="Bookmark" size={26} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleShare(currentVideo, e)} 
-                    className="flex flex-col items-center space-y-1"
-                  >
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
-                      <Icon name="Share2" size={26} />
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleMuteToggle(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1"
-                  >
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
-                      <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={26} />
-                    </div>
-                  </button>
-
-                  <button 
-                    className="flex flex-col items-center mt-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-lg">
-                      <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
-                        <Icon name="Music" size={18} color="white" />
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              )}
-
-              {isDesktop && (
-                <div 
-                  className="flex flex-col items-center space-y-6 ml-6 z-50"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="relative">
-                    <Link 
-                      to={`/profile/${currentVideo.creator?.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform bg-white">
-                        {currentVideo.creator?.avatar ? (
-                          <img 
-                            src={currentVideo.creator.avatar} 
-                            alt={currentVideo.creator.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                            <span className="text-white font-bold text-xl">
-                              {currentVideo.creator?.name?.charAt(0) || 'U'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-                    
-                    {!followedCreators.has(currentVideo.creator?.id) && currentUser?.id !== currentVideo.creator?.id && (
-                      <button
-                        onClick={(e) => handleFollow(currentVideo.creator?.id, e)}
-                        className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"
-                      >
-                        <Icon name="Plus" size={18} color="white" />
-                      </button>
-                    )}
-                  </div>
-
-                  <button 
-                    onClick={(e) => handleLike(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1 group"
-                  >
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
-                      <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                    </div>
-                    <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                      {formatCount(getVideoCounter(currentVideo.id, 'likes'))}
-                    </span>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleDislike(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1 group"
-                  >
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
-                      <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleOpenComments(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1 group"
-                  >
-                    <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
-                      <Icon name="MessageCircle" size={28} />
-                    </div>
-                    <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                      {formatCount(getVideoCounter(currentVideo.id, 'comments'))}
-                    </span>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleSave(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1 group"
-                  >
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
-                      <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleShare(currentVideo, e)} 
-                    className="flex flex-col items-center space-y-1 group"
-                  >
-                    <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
-                      <Icon name="Share2" size={28} />
-                    </div>
-                  </button>
-
-                  <button 
-                    onClick={(e) => handleMuteToggle(currentVideo.id, e)} 
-                    className="flex flex-col items-center space-y-1 group"
-                  >
-                    <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
-                      <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={28} />
-                    </div>
-                  </button>
-
-                  <button 
-                    className="flex flex-col items-center mt-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform">
-                      <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
-                        <Icon name="Music" size={20} color="white" />
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </>
-          )}
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 };
 
