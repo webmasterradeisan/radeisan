@@ -24,6 +24,7 @@ const ReelsCarouselDesktop = ({
   const [scrollPosition, setScrollPosition] = useState(0);
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(false);
+  const [localCounters, setLocalCounters] = useState({}); // ✅ Estado local para forzar re-render
 
   const ITEM_WIDTH = 200; // Ancho de cada reel (px)
   const GAP = 16; // Gap entre items (px)
@@ -33,14 +34,23 @@ const ReelsCarouselDesktop = ({
     totalReels: videos.length,
     hasOnReelClick: !!onReelClick,
     scrollPosition,
-    videoCountersReceived: Object.keys(videoCounters).length
+    videoCountersReceived: Object.keys(videoCounters).length,
+    localCountersUpdated: Object.keys(localCounters).length
   });
+
+  // ✅ NUEVO: Sincronizar videoCounters con estado local para forzar re-render
+  useEffect(() => {
+    if (Object.keys(videoCounters).length > 0) {
+      console.log('🔄 Actualizando contadores locales:', videoCounters);
+      setLocalCounters({...videoCounters});
+    }
+  }, [videoCounters]);
 
   // ✅ Helper para obtener contador actualizado (con fallback a datos originales)
   const getVideoCounter = (video, type) => {
-    // Primero intentar obtener del videoCounters (tiempo real)
-    if (videoCounters[video.id]?.[type] !== undefined) {
-      return videoCounters[video.id][type];
+    // Primero intentar obtener del localCounters (tiempo real)
+    if (localCounters[video.id]?.[type] !== undefined) {
+      return localCounters[video.id][type];
     }
     
     // Fallback a los datos originales del video
