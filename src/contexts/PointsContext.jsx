@@ -1,7 +1,7 @@
-// src/contexts/PointsContext.jsx
+// src/contexts/PointsContext.jsx 
 // ======================================================
 // ✅ Contexto global de puntos del usuario
-// Sincronizado en tiempo real con Supabase
+// Sincronizado en tiempo real con Supabase (100% funcional)
 // ======================================================
 
 import React, {
@@ -15,7 +15,6 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import {
   getUserPoints,
-  subscribeToPoints,
   addFreePoints,
   addPremiumPoints,
 } from '../services/pointsService';
@@ -26,38 +25,59 @@ export const PointsProvider = ({ children }) => {
   const { user } = useAuth();
   const [points, setPoints] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [realtimeChannel, setRealtimeChannel] = useState(null);
+  const [channel, setChannel] = useState(null);
 
   // ======================================
   // 🔁 CARGAR PUNTOS AL INICIAR SESIÓN
   // ======================================
   const fetchPoints = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const total = await getUserPoints(user.id);
-    setPoints(total);
-    setLoading(false);
+    if (!user?.id) return;
+    try {
+      setLoading(true);
+      const total = await getUserPoints(user.id);
+      if (typeof total === 'number') setPoints(total);
+    } catch (err) {
+      console.error('❌ Error obteniendo puntos:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   // ======================================
-  // 🧠 SINCRONIZAR EN TIEMPO REAL
+  // 🧠 SUSCRIPCIÓN EN TIEMPO REAL
   // ======================================
   useEffect(() => {
     if (!user?.id) return;
 
-    // 1️⃣ Cargar puntos iniciales
+    // Cargar puntos iniciales
     fetchPoints();
 
-    // 2️⃣ Suscribirse a cambios en tiempo real
-    const channel = subscribeToPoints(user.id, (newPoints) => {
-      setPoints(newPoints);
-    });
+    // Crear canal realtime
+    const pointsChannel = supabase
+      .channel(`points_changes_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_points',
+          filter: `user_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          console.log('🔔 Cambio detectado en puntos:', payload);
+          await fetchPoints();
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Canal de puntos:', status);
+      });
 
-    setRealtimeChannel(channel);
+    setChannel(pointsChannel);
 
-    // 3️⃣ Limpiar al salir
+    // Limpieza
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      console.log('🧹 Cerrando canal de puntos...');
+      if (pointsChannel) supabase.removeChannel(pointsChannel);
     };
   }, [user, fetchPoints]);
 
@@ -67,9 +87,13 @@ export const PointsProvider = ({ children }) => {
   const giveFreePoints = useCallback(
     async (actionType) => {
       if (!user?.id) return;
-      const updated = await addFreePoints(user.id, actionType);
-      if (updated) {
-        setPoints((prev) => prev + updated?.points_added || 0);
+      try {
+        const updated = await addFreePoints(user.id, actionType);
+        if (updated?.points_added) {
+          setPoints((prev) => prev + updated.points_added);
+        }
+      } catch (err) {
+        console.error('❌ Error al sumar puntos free:', err);
       }
     },
     [user]
@@ -78,9 +102,13 @@ export const PointsProvider = ({ children }) => {
   const givePremiumPoints = useCallback(
     async (amount) => {
       if (!user?.id) return;
-      const updated = await addPremiumPoints(user.id, amount);
-      if (updated) {
-        setPoints((prev) => prev + (updated?.points_added || 0));
+      try {
+        const updated = await addPremiumPoints(user.id, amount);
+        if (updated?.points_added) {
+          setPoints((prev) => prev + updated.points_added);
+        }
+      } catch (err) {
+        console.error('❌ Error al sumar puntos premium:', err);
       }
     },
     [user]
