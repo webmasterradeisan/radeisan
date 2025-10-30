@@ -1,4 +1,4 @@
-// src/contexts/PointsContext.jsx 
+// src/contexts/PointsContext.jsx
 // ======================================================
 // ✅ Contexto global de puntos del usuario
 // Sincronizado en tiempo real con Supabase (100% funcional)
