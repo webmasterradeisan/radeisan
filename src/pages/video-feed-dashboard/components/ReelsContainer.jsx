@@ -69,6 +69,9 @@ const ReelsContainer = ({
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
   
+  // Estados de contadores en tiempo real (optimistic updates)
+  const [videoCounters, setVideoCounters] = useState({});
+  
   // Estados de comentarios
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [comments, setComments] = useState({});
@@ -240,6 +243,21 @@ const ReelsContainer = ({
   }, []);
 
   // ===============================
+  // INICIALIZAR CONTADORES DE VIDEOS
+  // ===============================
+  useEffect(() => {
+    const initialCounters = {};
+    videos.forEach(video => {
+      initialCounters[video.id] = {
+        likes: video.likes || video.likes_count || 0,
+        comments: video.comments || video.comments_count || 0,
+        views: video.views || video.views_count || 0
+      };
+    });
+    setVideoCounters(initialCounters);
+  }, [videos]);
+
+  // ===============================
   // FUNCIÓN PARA MOSTRAR NOTIFICACIÓN DE PUNTOS
   // ===============================
   const showPointsEarned = useCallback((points, message = '') => {
@@ -406,7 +424,7 @@ const ReelsContainer = ({
   }, [currentIndex, isAutoPlaying, videos, mutedVideos, getInitialReelIndex]);
 
   // ===============================
-  // TRACKING DE VISUALIZACIÓN
+  // TRACKING DE VISUALIZACIÓN Y VISTAS
   // ===============================
   useEffect(() => {
     const currentVideo = videoRefs.current[currentIndex];
@@ -418,9 +436,41 @@ const ReelsContainer = ({
     const handleCanPlay = () => setLoadingVideo(false);
     const handleLoadedData = () => setLoadingVideo(false);
 
-    const handleTimeUpdate = () => {
+    let viewCounted = false;
+
+    const handleTimeUpdate = async () => {
       const watchedPercent = (currentVideo.currentTime / currentVideo.duration) * 100;
       
+      // Contar vista al 30% de reproducción (solo una vez por video)
+      if (watchedPercent > 30 && !viewCounted && !videoWatchedIds.has(currentVideoData.id)) {
+        viewCounted = true;
+        
+        // Incrementar contador local inmediatamente (optimistic update)
+        setVideoCounters(prev => ({
+          ...prev,
+          [currentVideoData.id]: {
+            ...prev[currentVideoData.id],
+            views: (prev[currentVideoData.id]?.views || 0) + 1
+          }
+        }));
+
+        // Actualizar en base de datos
+        try {
+          const { error } = await supabase.rpc('increment_video_views', { 
+            video_id: currentVideoData.id 
+          });
+          
+          if (error) {
+            console.error('Error incrementando vistas:', error);
+          } else {
+            console.log('✅ Vista registrada para video:', currentVideoData.id);
+          }
+        } catch (err) {
+          console.error('Error al incrementar vistas:', err);
+        }
+      }
+      
+      // Tracking de misión al 80%
       if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
         setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
         
@@ -550,9 +600,21 @@ const ReelsContainer = ({
       const newLikedVideos = new Set(likedVideos);
       const newDislikedVideos = new Set(dislikedVideos);
       const wasAlreadyLiked = actionsPerformed.likes.has(videoId);
+      const isCurrentlyLiked = newLikedVideos.has(videoId);
       
-      if (newLikedVideos.has(videoId)) {
+      if (isCurrentlyLiked) {
+        // Quitar like
         newLikedVideos.delete(videoId);
+        
+        // Actualizar contador local inmediatamente (optimistic update)
+        setVideoCounters(prev => ({
+          ...prev,
+          [videoId]: {
+            ...prev[videoId],
+            likes: Math.max(0, (prev[videoId]?.likes || 0) - 1)
+          }
+        }));
+        
         await supabase
           .from('video_likes')
           .delete()
@@ -561,8 +623,18 @@ const ReelsContainer = ({
 
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
       } else {
+        // Dar like
         newLikedVideos.add(videoId);
         newDislikedVideos.delete(videoId);
+
+        // Actualizar contador local inmediatamente (optimistic update)
+        setVideoCounters(prev => ({
+          ...prev,
+          [videoId]: {
+            ...prev[videoId],
+            likes: (prev[videoId]?.likes || 0) + 1
+          }
+        }));
 
         await supabase
           .from('video_likes')
@@ -570,6 +642,7 @@ const ReelsContainer = ({
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
+        // Mostrar notificación de puntos solo si es la primera vez
         if (!wasAlreadyLiked) {
           try {
             await addFreePoints(5, 'Like en video', 'video', videoId);
@@ -700,43 +773,56 @@ const ReelsContainer = ({
         return;
       }
 
-      if (followedCreators.has(creatorId)) {
-        return;
-      }
-
-      const wasAlreadyFollowed = actionsPerformed.follows.has(creatorId);
-
       const newFollowedCreators = new Set(followedCreators);
-      newFollowedCreators.add(creatorId);
-      setFollowedCreators(newFollowedCreators);
+      const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
 
-      await supabase
-        .from('follows')
-        .insert({ 
-          follower_id: user.id, 
-          following_id: creatorId 
-        });
+      if (isCurrentlyFollowing) {
+        // Dejar de seguir
+        newFollowedCreators.delete(creatorId);
+        
+        await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', creatorId);
+        
+        console.log('✅ Dejaste de seguir al creador:', creatorId);
+      } else {
+        // Seguir
+        newFollowedCreators.add(creatorId);
+        
+        await supabase
+          .from('follows')
+          .insert({ 
+            follower_id: user.id, 
+            following_id: creatorId 
+          });
 
-      if (!wasAlreadyFollowed) {
-        try {
-          await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
-          const missionResult = await missionsService.trackFollowUser(creatorId);
-          if (missionResult.completed) {
-            showPointsEarned(missionResult.reward.points, missionResult.message);
-          } else {
-            showPointsEarned(10, 'Seguiste a un creador');
+        const wasAlreadyFollowed = actionsPerformed.follows.has(creatorId);
+        
+        if (!wasAlreadyFollowed) {
+          try {
+            await addFreePoints(10, 'Seguir creador', 'follow', creatorId);
+            const missionResult = await missionsService.trackFollowUser(creatorId);
+            if (missionResult.completed) {
+              showPointsEarned(missionResult.reward.points, missionResult.message);
+            } else {
+              showPointsEarned(10, 'Seguiste a un creador');
+            }
+            
+            setActionsPerformed(prev => ({
+              ...prev,
+              follows: new Set([...prev.follows, creatorId])
+            }));
+          } catch (pointsError) {
+            console.error('Error al otorgar puntos:', pointsError);
           }
-          
-          setActionsPerformed(prev => ({
-            ...prev,
-            follows: new Set([...prev.follows, creatorId])
-          }));
-        } catch (pointsError) {
-          console.error('Error al otorgar puntos:', pointsError);
         }
       }
+      
+      setFollowedCreators(newFollowedCreators);
     } catch (error) {
-      console.error('Error siguiendo creador:', error);
+      console.error('Error siguiendo/dejando de seguir creador:', error);
     }
   };
 
@@ -1002,6 +1088,17 @@ const ReelsContainer = ({
         }
       }
 
+      // Actualizar contador local inmediatamente (optimistic update)
+      if (!replyingTo) {
+        setVideoCounters(prev => ({
+          ...prev,
+          [videoId]: {
+            ...prev[videoId],
+            comments: (prev[videoId]?.comments || 0) + 1
+          }
+        }));
+      }
+
       setNewComment('');
       setReplyingTo(null);
       
@@ -1060,6 +1157,11 @@ const ReelsContainer = ({
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
     return `${Math.floor(diffInSeconds / 604800)}sem`;
+  };
+
+  // Helper para obtener contador actualizado
+  const getVideoCounter = (videoId, type) => {
+    return videoCounters[videoId]?.[type] || 0;
   };
 
   // ===============================
@@ -1150,7 +1252,7 @@ const ReelsContainer = ({
                     </div>
                   )}
 
-                  {/* INFORMACIÓN DEL VIDEO (Solo en mobile) */}
+            {/* INFORMACIÓN DEL VIDEO (Solo en mobile) */}
                   {isMobile && (
                     <div 
                       className="absolute bottom-8 left-4 right-24 z-10"
@@ -1165,6 +1267,20 @@ const ReelsContainer = ({
                           >
                             @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
                           </Link>
+                          
+                          {currentUser?.id !== video.creator?.id && (
+                            <button
+                              onClick={(e) => handleFollow(video.creator?.id, e)}
+                              className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
+                                followedCreators.has(video.creator?.id)
+                                  ? 'bg-white/20 text-white border border-white/30'
+                                  : 'bg-pink-600 text-white hover:bg-pink-700'
+                              }`}
+                            >
+                              {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
+                            </button>
+                          )}
+                          
                           <span className="text-gray-200 text-sm">•</span>
                           <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
                         </div>
@@ -1210,6 +1326,20 @@ const ReelsContainer = ({
                           >
                             @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
                           </Link>
+                          
+                          {currentUser?.id !== video.creator?.id && (
+                            <button
+                              onClick={(e) => handleFollow(video.creator?.id, e)}
+                              className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
+                                followedCreators.has(video.creator?.id)
+                                  ? 'bg-white/20 text-white border border-white/30'
+                                  : 'bg-pink-600 text-white hover:bg-pink-700'
+                              }`}
+                            >
+                              {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
+                            </button>
+                          )}
+                          
                           <span className="text-gray-200 text-sm">•</span>
                           <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
                         </div>
@@ -1265,52 +1395,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* FLECHAS DE NAVEGACIÓN DESKTOP */}
-            {isDesktop && (
-              <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between pointer-events-none">
-                <button
-                  onClick={navigatePrevious}
-                  disabled={currentIndex === 0}
-                  className={`
-                    absolute top-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
-                    w-12 h-12 bg-white/80 backdrop-blur-sm rounded-full 
-                    flex items-center justify-center transition-all shadow-lg
-                    hover:bg-white hover:scale-110
-                    ${currentIndex === 0 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
-                  `}
-                >
-                  <Icon name="ChevronUp" size={24} className="text-gray-800" />
-                </button>
-
-                <button
-                  onClick={navigateNext}
-                  disabled={currentIndex === videos.length - 1}
-                  className={`
-                    absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
-                    w-12 h-12 bg-white/80 backdrop-blur-sm rounded-full 
-                    flex items-center justify-center transition-all shadow-lg
-                    hover:bg-white hover:scale-110
-                    ${currentIndex === videos.length - 1 ? 'opacity-30 cursor-not-allowed' : 'opacity-80 hover:opacity-100'}
-                  `}
-                >
-                  <Icon name="ChevronDown" size={24} className="text-gray-800" />
-                </button>
-              </div>
-            )}
-
-            {/* INSTRUCCIONES */}
-            {currentIndex === 0 && (
-              <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-white text-center pointer-events-none z-40">
-                <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
-                  <p className={isDesktop ? 'text-base' : 'text-sm'}>
-                    {isDesktop ? 'Usa flechas ↑↓ o rueda del mouse' : 'Desliza ↑↓ para navegar'}
-                  </p>
-                  <p className={`opacity-75 ${isDesktop ? 'text-sm' : 'text-xs'}`}>
-                    Toca para pausar
-                  </p>
-                </div>
-              </div>
-            )}
+            {/* INSTRUCCIONES REMOVIDAS - Ya no se muestran */}
           </div>
 
           {/* CONTROLES LATERALES CON BOTONES DEL DOCUMENTO 1 */}
@@ -1361,7 +1446,7 @@ const ReelsContainer = ({
                     <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${likedVideos.has(currentVideo.id) ? 'text-red-500' : 'text-white hover:scale-110'}`}>
                       <Icon name="ThumbsUp" size={26} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
                     </div>
-                    <span className="font-semibold text-xs text-white">{formatCount(currentVideo.likes || 0)}</span>
+                    <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
                   </button>
 
                   {/* Dislike */}
@@ -1382,7 +1467,7 @@ const ReelsContainer = ({
                     <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
                       <Icon name="MessageCircle" size={26} />
                     </div>
-                    <span className="font-semibold text-xs text-white">{formatCount(currentVideo.comments || 0)}</span>
+                    <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'comments'))}</span>
                   </button>
 
                   {/* Guardar */}
@@ -1478,7 +1563,7 @@ const ReelsContainer = ({
                       <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
                     </div>
                     <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                      {formatCount(currentVideo.likes || 0)}
+                      {formatCount(getVideoCounter(currentVideo.id, 'likes'))}
                     </span>
                   </button>
 
@@ -1501,7 +1586,7 @@ const ReelsContainer = ({
                       <Icon name="MessageCircle" size={28} />
                     </div>
                     <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">
-                      {formatCount(currentVideo.comments || 0)}
+                      {formatCount(getVideoCounter(currentVideo.id, 'comments'))}
                     </span>
                   </button>
 
@@ -1557,7 +1642,7 @@ const ReelsContainer = ({
               <div className="flex items-center justify-between p-4 border-b border-gray-200">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <Icon name="MessageCircle" size={20} />
-                  {formatCount(currentVideo.comments || 0)} comentarios
+                  {formatCount(getVideoCounter(currentVideo.id, 'comments'))} comentarios
                 </h3>
                 <button 
                   onClick={handleCloseComments}
@@ -1593,7 +1678,7 @@ const ReelsContainer = ({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2">
                             <span className="font-semibold text-sm text-gray-800">
-                              {comment.user?.name || 'Usuario'}
+                              @{comment.user?.username || comment.user?.name || 'usuario'}
                             </span>
                             <span className="text-xs text-gray-400">
                               {formatTimeAgo(comment.created_at)}
@@ -1643,7 +1728,7 @@ const ReelsContainer = ({
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center space-x-2">
                                           <span className="font-semibold text-xs text-gray-800">
-                                            {reply.user?.name || 'Usuario'}
+                                            @{reply.user?.username || reply.user?.name || 'usuario'}
                                           </span>
                                           <span className="text-xs text-gray-400">
                                             {formatTimeAgo(reply.created_at)}
@@ -1759,7 +1844,7 @@ const ReelsContainer = ({
             <div className="relative bg-white rounded-t-3xl shadow-2xl w-full h-[75vh] flex flex-col animate-slide-up z-[101]">
               <div className="flex items-center justify-between p-4 border-b border-gray-200">
                 <h3 className="text-lg font-bold text-gray-800">
-                  {formatCount(currentVideo.comments || 0)} comentarios
+                  {formatCount(getVideoCounter(currentVideo.id, 'comments'))} comentarios
                 </h3>
                 <button 
                   onClick={handleCloseComments}
@@ -1795,7 +1880,7 @@ const ReelsContainer = ({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2">
                             <span className="font-semibold text-sm text-gray-800">
-                              {comment.user?.name || 'Usuario'}
+                              @{comment.user?.username || comment.user?.name || 'usuario'}
                             </span>
                             <span className="text-xs text-gray-400">
                               {formatTimeAgo(comment.created_at)}
@@ -1844,7 +1929,7 @@ const ReelsContainer = ({
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center space-x-2">
                                           <span className="font-semibold text-xs text-gray-800">
-                                            {reply.user?.name || 'Usuario'}
+                                            @{reply.user?.username || reply.user?.name || 'usuario'}
                                           </span>
                                           <span className="text-xs text-gray-400">
                                             {formatTimeAgo(reply.created_at)}
