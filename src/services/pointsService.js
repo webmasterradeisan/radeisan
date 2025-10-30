@@ -1,33 +1,104 @@
 // src/services/pointsService.js
+// ======================================================
+// ✅ Servicio central de puntos — sincronizado con Supabase
+// ======================================================
+
 import { supabase } from '../lib/supabase';
 
-// ✅ Obtener total de puntos de un usuario desde función SQL
-export const getUserTotalPoints = async (userId) => {
-  const { data, error } = await supabase.rpc('get_user_total_points', {
-    p_user_id: userId,
-  });
-  if (error) throw error;
-  return data || 0;
-};
+/**
+ * Obtiene el total actual de puntos del usuario
+ */
+export async function getUserPoints(userId) {
+  if (!userId) return 0;
 
-// ✅ Agregar puntos gratis (acciones normales)
-export const addFreePoints = async (userId, typeId = 1, reason = 'acción gratuita') => {
-  const { error } = await supabase.rpc('add_free_points', {
-    p_user_id: userId,
-    p_type_id: typeId,
-    p_reason: reason,
-  });
-  if (error) throw error;
-  return true;
-};
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('points')
+    .eq('id', userId)
+    .single();
 
-// ✅ Agregar puntos premium (por compras u otros)
-export const addPremiumPoints = async (userId, typeId = 2, reason = 'premium') => {
-  const { error } = await supabase.rpc('add_premium_points', {
-    p_user_id: userId,
-    p_type_id: typeId,
-    p_reason: reason,
-  });
-  if (error) throw error;
-  return true;
-};
+  if (error) {
+    console.warn('⚠️ Error obteniendo puntos:', error.message);
+    return 0;
+  }
+
+  return data?.points || 0;
+}
+
+/**
+ * Añade puntos "gratuitos" (por acciones dentro de la app)
+ * Usa la función RPC add_free_points() que actualiza user_profiles.points
+ */
+export async function addFreePoints(userId, actionType) {
+  if (!userId || !actionType) {
+    console.error('❌ Falta userId o actionType en addFreePoints');
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('add_free_points', {
+      p_user_id: userId,
+      p_action_type: actionType
+    });
+
+    if (error) throw error;
+
+    console.log(`⭐ Puntos añadidos (${actionType}):`, data);
+    return data;
+  } catch (err) {
+    console.error('💥 Error en addFreePoints:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Añade puntos "premium" (compras, suscripciones, etc.)
+ */
+export async function addPremiumPoints(userId, amount) {
+  if (!userId || !amount) {
+    console.error('❌ Falta userId o amount en addPremiumPoints');
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('add_premium_points', {
+      p_user_id: userId,
+      p_amount: amount
+    });
+
+    if (error) throw error;
+
+    console.log(`💎 Puntos premium añadidos:`, data);
+    return data;
+  } catch (err) {
+    console.error('💥 Error en addPremiumPoints:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Escucha cambios en tiempo real en los puntos del usuario
+ */
+export function subscribeToPoints(userId, callback) {
+  if (!userId) return null;
+
+  const channel = supabase
+    .channel(`realtime-points-${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'user_profiles',
+        filter: `id=eq.${userId}`,
+      },
+      (payload) => {
+        const newPoints = payload.new?.points ?? 0;
+        console.log('🔁 Realtime update de puntos:', newPoints);
+        callback(newPoints);
+      }
+    )
+    .subscribe();
+
+  return channel;
+}
