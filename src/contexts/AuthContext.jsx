@@ -1,9 +1,5 @@
 // src/contexts/AuthContext.jsx
-// ======================================================
-// ✅ Contexto de Autenticación con Supabase
-// Integrado con sistema de puntos (sin romper nada existente)
-// ======================================================
-
+// AuthContext ESTABLE - Fix para timeout de perfil y compatibilidad con sistema de puntos
 import React, {
   createContext,
   useContext,
@@ -11,8 +7,8 @@ import React, {
   useEffect,
   useCallback,
   useRef,
-} from 'react';
-import { supabase } from '../lib/supabase';
+} from "react";
+import { supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
 
@@ -20,102 +16,210 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const sessionRef = useRef(null);
+  const timeoutRef = useRef(null);
 
-  // ======================================================
-  // 🔐 Cargar sesión y perfil inicial
-  // ======================================================
-  const fetchUserProfile = useCallback(async (userId) => {
-    if (!userId) return null;
+  // =============================================
+  // SIGN IN / SIGN UP / SIGN OUT
+  // =============================================
 
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (error) {
-      console.error('❌ Error cargando perfil:', error.message);
-      return null;
+  // 🔹 Iniciar sesión
+  const signIn = useCallback(async (email, password) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error("❌ Error en signIn:", err.message);
+      throw err;
     }
-
-    return data;
   }, []);
 
-  const loadUserSession = useCallback(async () => {
+  // 🔹 Registro de usuario
+  const signUp = useCallback(async (email, password, extraData = {}) => {
     try {
-      setLoading(true);
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData?.session || null;
-      sessionRef.current = session;
-      const currentUser = session?.user || null;
-      setUser(currentUser);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: extraData },
+      });
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error("❌ Error en signUp:", err.message);
+      throw err;
+    }
+  }, []);
 
-      if (currentUser?.id) {
-        const profileData = await fetchUserProfile(currentUser.id);
-        setProfile(profileData);
+  // 🔹 Cerrar sesión
+  const signOut = useCallback(async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setUser(null);
+      setProfile(null);
+    } catch (err) {
+      console.error("❌ Error en signOut:", err.message);
+    }
+  }, []);
+
+  // =============================================
+  // PERFIL DE USUARIO (tabla user_profiles)
+  // =============================================
+
+  const fetchUserProfile = useCallback(async (userId) => {
+    if (!userId) return null;
+    try {
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        console.error("❌ Error cargando perfil:", error);
+        return null;
+      }
+
+      setProfile(data || null);
+      return data;
+    } catch (err) {
+      console.error("❌ Error en fetchUserProfile:", err.message);
+      return null;
+    }
+  }, []);
+
+  // 🔹 Actualizar perfil
+  const updateProfile = useCallback(
+    async (updates) => {
+      if (!user) throw new Error("No hay usuario autenticado");
+      try {
+        const { error } = await supabase
+          .from("user_profiles")
+          .update(updates)
+          .eq("id", user.id);
+        if (error) throw error;
+        await fetchUserProfile(user.id);
+      } catch (err) {
+        console.error("❌ Error al actualizar perfil:", err.message);
+      }
+    },
+    [user, fetchUserProfile]
+  );
+
+  // =============================================
+  // ESCUCHAR SESIONES DE SUPABASE
+  // =============================================
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+
+    const initSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session;
+      if (session?.user && active) {
+        setUser(session.user);
+        await fetchUserProfile(session.user.id);
       } else {
+        setUser(null);
         setProfile(null);
       }
-    } catch (err) {
-      console.error('💥 Error cargando sesión:', err.message);
-    } finally {
       setLoading(false);
-    }
-  }, [fetchUserProfile]);
+    };
 
-  // ======================================================
-  // ♻️ Suscribirse a cambios de sesión (login/logout)
-  // ======================================================
-  useEffect(() => {
-    loadUserSession();
+    initSession();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      sessionRef.current = session;
-      setUser(session?.user || null);
-
-      if (session?.user) {
-        fetchUserProfile(session.user.id).then(setProfile);
-      } else {
-        setProfile(null);
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        if (session?.user) {
+          setUser(session.user);
+          fetchUserProfile(session.user.id);
+        } else {
+          setUser(null);
+          setProfile(null);
+        }
+      }, 250);
     });
 
     return () => {
+      active = false;
+      clearTimeout(timeoutRef.current);
       subscription.unsubscribe();
     };
-  }, [loadUserSession, fetchUserProfile]);
+  }, [fetchUserProfile]);
 
-  // ======================================================
-  // 🚪 Funciones de autenticación pública
-  // ======================================================
-  const signOut = useCallback(async () => {
+  // =============================================
+  // RESTABLECER CONTRASEÑA
+  // =============================================
+  const resetPassword = useCallback(async (email) => {
     try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setProfile(null);
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+      return true;
     } catch (err) {
-      console.error('❌ Error cerrando sesión:', err.message);
+      console.error("❌ Error en resetPassword:", err.message);
+      return false;
     }
   }, []);
 
-  const refreshProfile = useCallback(async () => {
-    if (!user?.id) return;
-    const updated = await fetchUserProfile(user.id);
-    setProfile(updated);
-  }, [user, fetchUserProfile]);
+  // =============================================
+  // ACTUALIZAR CONTRASEÑA (una vez logueado)
+  // =============================================
+  const updatePassword = useCallback(async (newPassword) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error("❌ Error al actualizar contraseña:", err.message);
+      return false;
+    }
+  }, []);
 
-  // ======================================================
-  // ✅ Contexto listo
-  // ======================================================
+  // =============================================
+  // VERIFICACIÓN DE EMAIL
+  // =============================================
+  const sendEmailVerification = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuario no autenticado");
+
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: user.email,
+      });
+      if (error) throw error;
+
+      return true;
+    } catch (err) {
+      console.error("❌ Error en sendEmailVerification:", err.message);
+      return false;
+    }
+  }, []);
+
+  // =============================================
+  // CONTEXTO FINAL
+  // =============================================
   const value = {
     user,
     profile,
     loading,
-    refreshProfile,
+    isAuthenticated: !!user,
+    signIn,
+    signUp,
     signOut,
+    updateProfile,
+    fetchUserProfile,
+    resetPassword,
+    updatePassword,
+    sendEmailVerification,
   };
 
   return (
@@ -125,11 +229,7 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// ======================================================
-// Hook para acceder fácilmente al AuthContext
-// ======================================================
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth debe usarse dentro de un <AuthProvider>');
-  return ctx;
-};
+// =============================================
+// HOOK DE USO
+// =============================================
+export const useAuth = () => useContext(AuthContext);
