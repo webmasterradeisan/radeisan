@@ -9,10 +9,10 @@ import useIsMobile from 'hooks/useIsMobile';
 // ===============================
 // COMPONENTE DE NOTIFICACIÓN FLOTANTE DE PUNTOS
 // ===============================
-const FloatingPointsNotification = ({ points, message, show, onHide, isMobile }) => {
+const FloatingPointsNotification = ({ points, message, show, onHide, isMobile, isAlreadyEarned }) => {
   useEffect(() => {
     if (show) {
-      console.log('🎉 Mostrando notificación de puntos:', points, message);
+      console.log('🎉 Mostrando notificación de puntos:', points, message, 'Ya ganado:', isAlreadyEarned);
       const timer = setTimeout(onHide, 2500);
       return () => clearTimeout(timer);
     }
@@ -31,13 +31,26 @@ const FloatingPointsNotification = ({ points, message, show, onHide, isMobile })
         animation: 'bounce 0.5s ease-in-out 3'
       }}
     >
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-2 transform transition-all duration-300">
+      <div className={`${
+        isAlreadyEarned 
+          ? 'bg-gradient-to-r from-gray-500 to-gray-600' 
+          : 'bg-gradient-to-r from-purple-500 to-pink-500'
+        } text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-2 transform transition-all duration-300`}>
         <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center animate-pulse">
-          <Icon name="Star" size={16} className="text-yellow-300" />
+          <Icon name={isAlreadyEarned ? "Info" : "Star"} size={16} className={isAlreadyEarned ? "text-gray-300" : "text-yellow-300"} />
         </div>
         <div>
-          <p className="font-bold text-base">+{points} puntos</p>
-          {message && <p className="text-xs text-purple-100 whitespace-nowrap">{message}</p>}
+          {isAlreadyEarned ? (
+            <>
+              <p className="font-bold text-base">Ya ganaste puntos</p>
+              <p className="text-xs text-gray-100 whitespace-nowrap">con este reel</p>
+            </>
+          ) : (
+            <>
+              <p className="font-bold text-base">+{points} puntos</p>
+              {message && <p className="text-xs text-purple-100 whitespace-nowrap">{message}</p>}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -85,7 +98,8 @@ const ReelsContainer = ({
   const [pointsNotification, setPointsNotification] = useState({
     show: false,
     points: 0,
-    message: ''
+    message: '',
+    isAlreadyEarned: false
   });
 
   // Estados de tracking de misiones y acciones realizadas
@@ -261,16 +275,16 @@ const ReelsContainer = ({
   // ===============================
   // FUNCIÓN PARA MOSTRAR NOTIFICACIÓN DE PUNTOS
   // ===============================
-  const showPointsEarned = useCallback((points, message = '') => {
-    console.log('🎉 Mostrando notificación de puntos:', points, message);
-    setPointsNotification({ show: true, points, message });
-    if (onPointsEarned) {
+  const showPointsEarned = useCallback((points, message = '', isAlreadyEarned = false) => {
+    console.log('🎉 Mostrando notificación de puntos:', points, message, 'Ya ganado:', isAlreadyEarned);
+    setPointsNotification({ show: true, points, message, isAlreadyEarned });
+    if (onPointsEarned && !isAlreadyEarned) {
       onPointsEarned(points);
     }
   }, [onPointsEarned]);
 
   const hidePointsNotification = useCallback(() => {
-    setPointsNotification({ show: false, points: 0, message: '' });
+    setPointsNotification({ show: false, points: 0, message: '', isAlreadyEarned: false });
   }, []);
 
   // ===============================
@@ -643,15 +657,19 @@ const ReelsContainer = ({
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // Mostrar notificación de puntos solo si es la primera vez
-        if (!wasAlreadyLiked) {
+        // Mostrar notificación: si ya ganó puntos antes, mostrar mensaje diferente
+        if (wasAlreadyLiked) {
+          // Ya había ganado puntos con este reel antes
+          showPointsEarned(0, '', true); // isAlreadyEarned = true
+        } else {
+          // Primera vez que da like a este reel, gana puntos
           try {
             await addFreePoints(5, 'Like en video', 'video', videoId);
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             if (missionResult.completed) {
-              showPointsEarned(missionResult.reward.points, missionResult.message);
+              showPointsEarned(missionResult.reward.points, missionResult.message, false);
             } else {
-              showPointsEarned(5, 'Like en video');
+              showPointsEarned(5, 'Like en video', false);
             }
             
             setActionsPerformed(prev => ({
@@ -999,7 +1017,6 @@ const ReelsContainer = ({
     setReplyingTo(null);
     setNewComment('');
     await loadComments(videoId);
-    // ✅ NO pausar el video - continúa reproduciéndose
   };
 
   const handleCloseComments = () => {
@@ -1195,6 +1212,8 @@ const ReelsContainer = ({
         message={pointsNotification.message}
         show={pointsNotification.show}
         onHide={hidePointsNotification}
+        isMobile={isMobile}
+        isAlreadyEarned={pointsNotification.isAlreadyEarned}
       />
       
       <div className="relative w-full h-full bg-white overflow-hidden">
@@ -1253,7 +1272,7 @@ const ReelsContainer = ({
                     </div>
                   )}
 
-            {/* INFORMACIÓN DEL VIDEO (Solo en mobile) */}
+                  {/* INFORMACIÓN DEL VIDEO (Solo en mobile) */}
                   {isMobile && (
                     <div 
                       className="absolute bottom-8 left-4 right-24 z-10"
@@ -1395,11 +1414,9 @@ const ReelsContainer = ({
                 </div>
               )}
             </div>
-
-            {/* INSTRUCCIONES REMOVIDAS - Ya no se muestran */}
           </div>
 
-          {/* CONTROLES LATERALES CON BOTONES DEL DOCUMENTO 1 */}
+          {/* CONTROLES LATERALES CON BOTONES */}
           {currentVideo && (
             <>
               {/* MOBILE - Botones dentro del reel */}
@@ -1793,6 +1810,73 @@ const ReelsContainer = ({
                         setNewComment(e.target.value);
                       }}
                       placeholder="Agrega un comentario..."
+                      rows={1}
+                      className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchMove={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onMouseUp={(e) => e.stopPropagation()}
+                      onInput={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAddComment(currentVideo.id);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        console.log('🔘 Botón enviar (mobile) clickeado');
+                        handleAddComment(currentVideo.id);
+                      }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      disabled={!newComment.trim()}
+                      className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                        newComment.trim() 
+                          ? 'bg-purple-500 hover:bg-purple-600 text-white cursor-pointer' 
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <Icon name="Send" size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
+export default ReelsContainer;
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500">
+                      {currentUser?.avatar ? (
+                        <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                          {currentUser?.name?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 relative">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setNewComment(e.target.value);
+                      }}
+                      placeholder="Agrega un comentario..."
                       rows={2}
                       className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
                       onClick={(e) => e.stopPropagation()}
@@ -1975,70 +2059,3 @@ const ReelsContainer = ({
                 
                 <div className="flex items-end space-x-2">
                   <div className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500">
-                      {currentUser?.avatar ? (
-                        <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white font-bold">
-                          {currentUser?.name?.charAt(0) || 'U'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 relative">
-                    <textarea
-                      value={newComment}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        setNewComment(e.target.value);
-                      }}
-                      placeholder="Agrega un comentario..."
-                      rows={1}
-                      className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-full resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={(e) => e.stopPropagation()}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onTouchMove={(e) => e.stopPropagation()}
-                      onTouchEnd={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onMouseUp={(e) => e.stopPropagation()}
-                      onInput={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleAddComment(currentVideo.id);
-                        }
-                      }}
-                    />
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        console.log('🔘 Botón enviar (mobile) clickeado');
-                        handleAddComment(currentVideo.id);
-                      }}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      disabled={!newComment.trim()}
-                      className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                        newComment.trim() 
-                          ? 'bg-purple-500 hover:bg-purple-600 text-white cursor-pointer' 
-                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <Icon name="Send" size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  );
-};
-
-export default ReelsContainer;
