@@ -7,7 +7,6 @@ import Button from '../../../components/ui/Button';
 
 /**
  * 🖥️ CAROUSEL HORIZONTAL DE REELS PARA DESKTOP
- * ✅ SINCRONIZADO: Muestra contadores actualizados en tiempo real
  * Muestra 4-5 reels visibles + navegación con botones
  * Al hacer clic → Abre ReelsContainer con el reel correcto
  */
@@ -16,8 +15,7 @@ const ReelsCarouselDesktop = ({
   onReelClick,
   onLoadMore,
   hasMore = true,
-  loading = false,
-  videoCounters = {} // ✅ NUEVO: Contadores en tiempo real desde ReelsContainer
+  loading = false
 }) => {
   const navigate = useNavigate();
   const scrollRef = useRef(null);
