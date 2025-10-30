@@ -1,6 +1,5 @@
 // src/components/ui/Header.jsx
-// VERSIÓN FINAL: Diseño original + sistema de puntos sin romper nada
-
+// ✅ Versión Final Integrada con PointsContext (100% funcional)
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,13 +8,12 @@ import { useBranding } from '../../hooks/useBranding';
 import AppIcon from '../AppIcon';
 import Button from './Button';
 
-// -------------------- COMPONENTE DE CONTADOR DE PUNTOS --------------------
 const AnimatedPointsCounter = ({ points, animation }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    if (animation?.show) {
+    if (animation.show) {
       setIsAnimating(true);
       const start = displayPoints;
       const end = points;
@@ -34,11 +32,11 @@ const AnimatedPointsCounter = ({ points, animation }) => {
     } else {
       setDisplayPoints(points);
     }
-  }, [points, animation]);
+  }, [points, animation.show]);
 
   return (
     <span
-      className={`font-mono text-sm font-medium text-accent transition-all duration-300 ${
+      className={`font-mono text-sm font-medium text-accent transition-transform ${
         isAnimating ? 'scale-110' : 'scale-100'
       }`}
     >
@@ -47,14 +45,15 @@ const AnimatedPointsCounter = ({ points, animation }) => {
   );
 };
 
-// -------------------- NOTIFICACIÓN DE PUNTOS --------------------
 const FloatingPointsNotification = ({ animation }) => {
-  if (!animation?.show) return null;
+  if (!animation.show) return null;
   const isEarn = animation.type === 'earn';
   return (
     <div
       className="fixed top-20 right-4 z-[9999] pointer-events-none animate-slide-in-right"
-      style={{ animation: 'slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s' }}
+      style={{
+        animation: 'slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s',
+      }}
     >
       <div
         className={`${
@@ -78,27 +77,23 @@ const FloatingPointsNotification = ({ animation }) => {
   );
 };
 
-// -------------------- HEADER PRINCIPAL --------------------
 const Header = () => {
   const { user, signOut, loading } = useAuth();
-  const { points, totalPoints, pointsAnimation, loading: pointsLoading, refreshPoints } = usePoints();
+  const { points, pointsAnimation, totalPoints, loading: pointsLoading } = usePoints();
   const { branding } = useBranding();
-
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
 
   useEffect(() => {
-    if (user?.id) refreshPoints(user.id);
-  }, [user, refreshPoints]);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setIsUserMenuOpen(false);
+    const handleClickOutside = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setIsUserMenuOpen(false);
+      }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => setIsUserMenuOpen(false), [location.pathname]);
@@ -107,17 +102,24 @@ const Header = () => {
 
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
-    await signOut();
-    navigate('/', { replace: true });
+    try {
+      await signOut();
+      navigate('/', { replace: true });
+    } catch (error) {
+      console.error('Error during logout:', error);
+      navigate('/', { replace: true });
+    }
   };
 
-  const handleHomeNavigate = () => navigate('/dashboard', { replace: true, state: { orientation: 'all' } });
-  const handleOrientationNavigate = (o) => navigate('/dashboard', { state: { orientation: o } });
-  const isOrientationActive = (o) =>
-    location.pathname === '/dashboard' && location.state?.orientation === o;
+  const handleOrientationNavigate = (orientation) => {
+    navigate('/dashboard', { state: { orientation } });
+  };
 
-  const Icon = ({ name, size = 20, className = '' }) => (
-    <AppIcon name={name} size={size} className={className} />
+  const isOrientationActive = (orientation) =>
+    location.pathname === '/dashboard' && location.state?.orientation === orientation;
+
+  const Icon = ({ name, size = 20, color = 'currentColor', className = '' }) => (
+    <AppIcon name={name} size={size} color={color} className={className} />
   );
 
   return (
@@ -127,38 +129,46 @@ const Header = () => {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            {/* LOGO */}
             <Link to={user ? '/dashboard' : '/'} className="flex items-center space-x-2">
               {branding.logo.primary ? (
                 <img
                   src={branding.logo.primary}
-                  alt="Logo"
+                  alt={branding.texts.appName || 'Logo'}
                   className="h-8 object-contain"
-                  onError={(e) => (e.target.style.display = 'none')}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
                 />
-              ) : (
-                <div
-                  className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+              ) : null}
+              <div
+                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                style={{
+                  display: branding.logo.primary ? 'none' : 'flex',
+                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`,
+                }}
+              >
+                <Icon name="Video" size={20} color="white" />
+              </div>
+              {!branding.logo.primary && (
+                <span
+                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
                   style={{
                     backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`,
                   }}
                 >
-                  <Icon name="Video" size={20} className="text-white" />
-                </div>
+                  {branding.texts.appName || 'Radeisan'}
+                </span>
               )}
-              <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                {branding.texts.appName || 'Radeisan'}
-              </span>
             </Link>
 
-            {/* NAV CENTRAL */}
+            {/* NAVEGACIÓN */}
             {user && (
               <nav className="hidden md:flex items-center space-x-1">
                 <button
-                  onClick={handleHomeNavigate}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm ${
-                    location.pathname === '/dashboard' &&
-                    (!location.state?.orientation || location.state?.orientation === 'all')
+                  onClick={() => navigate('/dashboard')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/dashboard' && !location.state?.orientation
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
@@ -166,10 +176,9 @@ const Header = () => {
                   <Icon name="Home" size={18} />
                   <span>Inicio</span>
                 </button>
-
                 <button
                   onClick={() => handleOrientationNavigate('vertical')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isOrientationActive('vertical')
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
@@ -178,10 +187,9 @@ const Header = () => {
                   <Icon name="Smartphone" size={18} />
                   <span>Reels</span>
                 </button>
-
                 <button
                   onClick={() => handleOrientationNavigate('horizontal')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isOrientationActive('horizontal')
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
@@ -190,42 +198,23 @@ const Header = () => {
                   <Icon name="Monitor" size={18} />
                   <span>Videos</span>
                 </button>
-
-                <Link
-                  to="/marketplace"
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm ${
-                    location.pathname === '/marketplace'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Store" size={18} />
-                  <span>Tienda</span>
-                </Link>
-                <Link
-                  to="/rewards"
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm ${
-                    location.pathname === '/rewards'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Gift" size={18} />
-                  <span>Recompensas</span>
-                </Link>
               </nav>
             )}
 
-            {/* DERECHA */}
+            {/* SECCIÓN DERECHA */}
             <div className="flex items-center space-x-4">
               {user ? (
                 <>
-                  {/* PUNTOS */}
                   <div
-                    className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer"
+                    className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group"
                     title={`Total: ${totalPoints}`}
                   >
-                    <Icon name="Star" size={16} className="text-accent" />
+                    <Icon
+                      name="Star"
+                      size={16}
+                      color="var(--color-accent)"
+                      className="group-hover:scale-110 transition-transform"
+                    />
                     {pointsLoading ? (
                       <span className="text-xs text-muted-foreground">Cargando...</span>
                     ) : (
@@ -235,43 +224,64 @@ const Header = () => {
 
                   <Button size="sm" asChild className="hidden md:flex">
                     <Link to="/upload">
-                      <Icon name="Plus" size={16} className="mr-2" /> Subir
+                      <Icon name="Plus" size={16} className="mr-2" />
+                      Subir
                     </Link>
                   </Button>
 
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className="relative">
                     <Icon name="Bell" size={20} />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
                   </Button>
 
-                  {/* USUARIO */}
                   <div className="relative" ref={userMenuRef}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={toggleUserMenu}
-                      className="rounded-full"
-                    >
+                    <Button variant="ghost" size="icon" onClick={toggleUserMenu} className="rounded-full">
                       <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
                         {user.avatar_url ? (
-                          <img src={user.avatar_url} alt="avatar" className="w-full h-full" />
+                          <img src={user.avatar_url} alt={user.name || 'Avatar'} className="w-full h-full object-cover" />
                         ) : (
-                          <Icon name="User" size={18} className="text-white" />
+                          <Icon name="User" size={18} color="white" />
                         )}
                       </div>
                     </Button>
-
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
                           <div className="px-4 py-2 border-b border-border">
-                            <div className="text-sm font-medium">{user.name}</div>
-                            <div className="text-xs text-muted-foreground">{user.email}</div>
+                            <div className="text-sm font-medium truncate">{user.name || 'Usuario'}</div>
+                            <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                            <div className="mt-2 flex items-center gap-2 px-2 py-1 bg-accent/10 rounded-md">
+                              <Icon name="Star" size={14} color="var(--color-accent)" />
+                              <span className="text-sm font-mono font-bold text-accent">
+                                {totalPoints.toLocaleString()}
+                              </span>
+                              <span className="text-xs text-muted-foreground">pts</span>
+                            </div>
                           </div>
+                          <Link
+                            to="/profile"
+                            className="flex items-center px-4 py-2 text-sm hover:bg-muted transition-colors"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <Icon name="User" size={16} className="mr-2" />
+                            Mi Perfil
+                          </Link>
+                          <Link
+                            to="/rewards"
+                            className="flex items-center px-4 py-2 text-sm hover:bg-muted transition-colors"
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <Icon name="Gift" size={16} className="mr-2" />
+                            Mis Recompensas
+                          </Link>
+                          <div className="border-t border-border my-1" />
                           <button
                             onClick={handleLogout}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors"
+                            className="flex items-center w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                            disabled={loading}
                           >
-                            Cerrar sesión
+                            <Icon name="LogOut" size={16} className="mr-2" />
+                            {loading ? 'Cerrando...' : 'Cerrar Sesión'}
                           </button>
                         </div>
                       </div>
@@ -282,9 +292,9 @@ const Header = () => {
                 <div className="flex items-center space-x-4">
                   <Link
                     to="/login"
-                    className="text-sm font-medium text-muted-foreground hover:text-primary"
+                    className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
                   >
-                    Iniciar sesión
+                    Iniciar Sesión
                   </Link>
                   <Button size="sm" asChild>
                     <Link to="/register">Registrarse</Link>
@@ -296,7 +306,6 @@ const Header = () => {
         </div>
       </header>
 
-      {/* ✅ Animaciones CSS cerradas correctamente */}
       <style jsx>{`
         @keyframes slideInRight {
           from {
@@ -309,9 +318,11 @@ const Header = () => {
           }
         }
         @keyframes fadeOut {
+          from {
+            opacity: 1;
+          }
           to {
             opacity: 0;
-            transform: translateY(-10px);
           }
         }
       `}</style>
