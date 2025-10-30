@@ -1,5 +1,5 @@
 // src/pages/video-feed-dashboard/components/ReelsCarouselDesktop.jsx
-// ✅ ACTUALIZADO: Pasa ID del video además del índice para reproducción correcta
+// ✅ ACTUALIZADO: Sincronizado en tiempo real con ReelsContainer
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button';
 
 /**
  * 🖥️ CAROUSEL HORIZONTAL DE REELS PARA DESKTOP
+ * ✅ SINCRONIZADO: Muestra contadores actualizados en tiempo real
  * Muestra 4-5 reels visibles + navegación con botones
  * Al hacer clic → Abre ReelsContainer con el reel correcto
  */
@@ -15,7 +16,8 @@ const ReelsCarouselDesktop = ({
   onReelClick,
   onLoadMore,
   hasMore = true,
-  loading = false
+  loading = false,
+  videoCounters = {} // ✅ NUEVO: Contadores en tiempo real desde ReelsContainer
 }) => {
   const navigate = useNavigate();
   const scrollRef = useRef(null);
@@ -30,8 +32,14 @@ const ReelsCarouselDesktop = ({
   console.log('🖥️ ReelsCarouselDesktop renderizado:', {
     totalReels: videos.length,
     hasOnReelClick: !!onReelClick,
-    scrollPosition
+    scrollPosition,
+    videoCountersReceived: Object.keys(videoCounters).length
   });
+
+  // ✅ Helper para obtener contador actualizado
+  const getVideoCounter = (videoId, type) => {
+    return videoCounters[videoId]?.[type] || 0;
+  };
 
   // Verificar posición del scroll para mostrar/ocultar botones
   const checkScrollPosition = () => {
@@ -83,9 +91,7 @@ const ReelsCarouselDesktop = ({
     }
   };
 
-  // ===============================
-  // ✅ HANDLER ACTUALIZADO: Pasa el reel completo para obtener su ID
-  // ===============================
+  // Handler para click en reel
   const handleReelClick = (reel, reelIndex) => {
     console.log('🎯 Desktop Carousel: Click en reel');
     console.log('   📍 Índice en carrusel:', reelIndex);
@@ -93,12 +99,10 @@ const ReelsCarouselDesktop = ({
     console.log('   📹 Título:', reel.title);
     
     if (onReelClick) {
-      // ✅ Pasar ÍNDICE Y ID al handler padre
       onReelClick(reelIndex, reel.id);
     } else {
-    // ✅ CORREGIDO: Navegar con ID en lugar de índice
-    navigate(`/reels?id=${reel.id}`);
-  }
+      navigate(`/reels?id=${reel.id}`);
+    }
   };
 
   // Navegar a página completa de reels
@@ -108,7 +112,7 @@ const ReelsCarouselDesktop = ({
 
   // Empty state
   if (!loading && videos.length === 0) {
-    return null; // No mostrar nada si no hay reels
+    return null;
   }
 
   return (
@@ -179,96 +183,103 @@ const ReelsCarouselDesktop = ({
               </div>
             ))
           ) : (
-            videos.map((reel, index) => (
-              <div
-                key={reel.id}
-                className="flex-shrink-0 cursor-pointer group/reel"
-                style={{ width: ITEM_WIDTH }}
-                onClick={() => handleReelClick(reel, index)}
-              >
-                {/* Thumbnail Container (9:16 aspect ratio) */}
-                <div className="relative w-full aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-md">
-                  {/* Thumbnail Image */}
-                  <img
-                    src={reel.thumbnail || reel.thumbnail_url || '/api/placeholder/200/356'}
-                    alt={reel.title || 'Reel sin título'}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover/reel:scale-110"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.target.src = '/api/placeholder/200/356';
-                    }}
-                  />
+            videos.map((reel, index) => {
+              // ✅ Obtener contadores actualizados en tiempo real
+              const currentLikes = getVideoCounter(reel.id, 'likes');
+              const currentComments = getVideoCounter(reel.id, 'comments');
+              const currentViews = getVideoCounter(reel.id, 'views');
 
-                  {/* Overlay con gradiente */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30">
-                    {/* Duración (esquina superior derecha) */}
-                    <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
-                      {formatDuration(reel.duration || reel.duration_seconds || 30)}
-                    </div>
+              return (
+                <div
+                  key={reel.id}
+                  className="flex-shrink-0 cursor-pointer group/reel"
+                  style={{ width: ITEM_WIDTH }}
+                  onClick={() => handleReelClick(reel, index)}
+                >
+                  {/* Thumbnail Container (9:16 aspect ratio) */}
+                  <div className="relative w-full aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-md">
+                    {/* Thumbnail Image */}
+                    <img
+                      src={reel.thumbnail || reel.thumbnail_url || '/api/placeholder/200/356'}
+                      alt={reel.title || 'Reel sin título'}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover/reel:scale-110"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.src = '/api/placeholder/200/356';
+                      }}
+                    />
 
-                    {/* Views (esquina superior izquierda) */}
-                    <div className="absolute top-2 left-2">
-                      <div className="flex items-center space-x-1 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
-                        <Icon name="Eye" size={12} />
-                        <span>{formatNumber(reel.views || reel.views_count || 0)}</span>
+                    {/* Overlay con gradiente */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30">
+                      {/* Duración (esquina superior derecha) */}
+                      <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+                        {formatDuration(reel.duration || reel.duration_seconds || 30)}
                       </div>
-                    </div>
 
-                    {/* Información inferior */}
-                    <div className="absolute bottom-0 left-0 right-0 p-3">
-                      {/* Estadísticas */}
-                      <div className="flex items-center space-x-3 text-white text-xs mb-2">
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Heart" size={12} />
-                          <span>{formatNumber(reel.likes || reel.likes_count || 0)}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icon name="MessageCircle" size={12} />
-                          <span>{formatNumber(reel.comments || reel.comments_count || 0)}</span>
+                      {/* ✅ Views actualizadas (esquina superior izquierda) */}
+                      <div className="absolute top-2 left-2">
+                        <div className="flex items-center space-x-1 bg-black/70 text-white text-xs px-2 py-1 rounded backdrop-blur-sm">
+                          <Icon name="Eye" size={12} />
+                          <span>{formatNumber(currentViews)}</span>
                         </div>
                       </div>
 
-                      {/* Título */}
-                      <h3 className="text-white text-sm font-medium line-clamp-2 leading-tight mb-2">
-                        {reel.title || 'Sin título'}
-                      </h3>
+                      {/* Información inferior */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        {/* ✅ Estadísticas actualizadas en tiempo real */}
+                        <div className="flex items-center space-x-3 text-white text-xs mb-2">
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Heart" size={12} />
+                            <span>{formatNumber(currentLikes)}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="MessageCircle" size={12} />
+                            <span>{formatNumber(currentComments)}</span>
+                          </div>
+                        </div>
 
-                      {/* Creador */}
-                      <div className="flex items-center space-x-2">
-                        <img
-                          src={reel.creator?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(reel.creator?.username || 'User')}`}
-                          alt={reel.creator?.name || 'Usuario'}
-                          className="w-5 h-5 rounded-full border border-white/30"
-                        />
-                        <p className="text-white/90 text-xs truncate">
-                          @{reel.creator?.username || reel.creator?.name || 'usuario'}
-                        </p>
+                        {/* Título */}
+                        <h3 className="text-white text-sm font-medium line-clamp-2 leading-tight mb-2">
+                          {reel.title || 'Sin título'}
+                        </h3>
+
+                        {/* Creador */}
+                        <div className="flex items-center space-x-2">
+                          <img
+                            src={reel.creator?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(reel.creator?.username || 'User')}`}
+                            alt={reel.creator?.name || 'Usuario'}
+                            className="w-5 h-5 rounded-full border border-white/30"
+                          />
+                          <p className="text-white/90 text-xs truncate">
+                            @{reel.creator?.username || reel.creator?.name || 'usuario'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Play Button Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/30">
-                    <div className="w-14 h-14 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center border-2 border-white/50 transform group-hover/reel:scale-110 transition-transform duration-200">
-                      <Icon name="Play" size={24} color="white" />
+                    {/* Play Button Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/30">
+                      <div className="w-14 h-14 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center border-2 border-white/50 transform group-hover/reel:scale-110 transition-transform duration-200">
+                        <Icon name="Play" size={24} color="white" />
+                      </div>
                     </div>
+
+                    {/* Borde de hover */}
+                    <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary rounded-lg transition-colors duration-200"></div>
                   </div>
 
-                  {/* Borde de hover */}
-                  <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary rounded-lg transition-colors duration-200"></div>
+                  {/* Info debajo del thumbnail */}
+                  <div className="mt-2 px-1">
+                    <p className="text-sm text-foreground font-medium line-clamp-1">
+                      {reel.title || 'Sin título'}
+                    </p>
+                    <p className="text-xs text-muted-foreground line-clamp-1">
+                      @{reel.creator?.username || reel.creator?.name || 'usuario'}
+                    </p>
+                  </div>
                 </div>
-
-                {/* Info debajo del thumbnail (opcional) */}
-                <div className="mt-2 px-1">
-                  <p className="text-sm text-foreground font-medium line-clamp-1">
-                    {reel.title || 'Sin título'}
-                  </p>
-                  <p className="text-xs text-muted-foreground line-clamp-1">
-                    @{reel.creator?.username || reel.creator?.name || 'usuario'}
-                  </p>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {/* Load More Indicator */}
