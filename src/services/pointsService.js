@@ -3,6 +3,15 @@
 
 import { supabase } from '../lib/supabase';
 
+// ========================================
+// ✅ NUEVO: Sistema de Callback para PointsContext
+// ========================================
+let pointsContextCallback = null;
+
+export const setPointsContextCallback = (callback) => {
+  pointsContextCallback = callback;
+};
+
 /**
  * ========================================
  * SERVICIO DE PUNTOS DUAL
@@ -153,6 +162,11 @@ export const addFreePoints = async (points, reason, referenceType = null, refere
 
     if (error) throw error;
 
+    // ✅ NUEVO: Notificar al contexto de puntos
+    if (pointsContextCallback) {
+      pointsContextCallback(points, reason, 'free');
+    }
+
     return {
       success: true,
       points_added: points,
@@ -190,6 +204,11 @@ export const addPremiumPoints = async (points, reason = 'Compra de puntos premiu
     });
 
     if (error) throw error;
+
+    // ✅ NUEVO: Notificar al contexto de puntos
+    if (pointsContextCallback) {
+      pointsContextCallback(points, reason, 'premium');
+    }
 
     return {
       success: true,
@@ -239,6 +258,11 @@ export const deductPoints = async (points, reason, referenceType = null, referen
     });
 
     if (error) throw error;
+
+    // ✅ NUEVO: Notificar al contexto de puntos (gasto)
+    if (pointsContextCallback) {
+      pointsContextCallback(-points, reason, 'spend');
+    }
 
     return {
       success: true,
