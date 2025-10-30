@@ -1,70 +1,22 @@
 // src/services/pointsService.js
-// ======================================================
-// ✅ Servicio global para manejar el sistema de puntos
-// ======================================================
-
 import { supabase } from '../lib/supabase';
 
-/**
- * 🧮 Calcula los puntos de un video según sus datos
- * (duración, etiquetas, etc.)
- * -> Si no lo usas en el flujo actual, no pasa nada. No interfiere.
- */
-export const calculateVideoPoints = (videoData = {}) => {
-  const basePoints = 10;
-  const durationBonus = videoData?.duration > 60 ? 5 : 0;
-  const tagsBonus = Array.isArray(videoData?.tags) ? videoData.tags.length : 0;
-  return basePoints + durationBonus + tagsBonus;
+// ===================================================
+// SISTEMA GLOBAL DE CALLBACK PARA SINCRONIZAR CONTEXTO
+// ===================================================
+let pointsContextCallback = null;
+
+export const setPointsContextCallback = (callback) => {
+  pointsContextCallback = callback;
 };
 
-/**
- * 🎁 Otorga puntos gratuitos al usuario autenticado.
- * Se registra en la tabla "user_points_history" y se suma en "user_profiles"
- */
-export const addFreePoints = async (points, reason = 'Acción libre', category = 'general', relatedId = null) => {
-  try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) throw new Error('Usuario no autenticado');
-
-    const userId = user.id;
-
-    // 🔹 Inserta en el historial
-    const { error: insertError } = await supabase
-      .from('user_points_history')
-      .insert({
-        user_id: userId,
-        points,
-        reason,
-        category,
-        related_id: relatedId,
-        created_at: new Date().toISOString()
-      });
-
-    if (insertError) throw insertError;
-
-    // 🔹 Actualiza el total en user_profiles
-    const { error: updateError } = await supabase.rpc('increment_user_points', {
-      user_id: userId,
-      points_to_add: points
-    });
-
-    if (updateError) throw updateError;
-
-    console.log(`✅ +${points} puntos otorgados (${reason})`);
-    return { success: true, points, reason };
-  } catch (error) {
-    console.error('❌ Error al otorgar puntos:', error.message || error);
-    return { success: false, error: error.message || error };
-  }
-};
-
-/**
- * 🔄 Obtiene el balance actual de puntos del usuario autenticado
- */
+// ===================================================
+// FUNCIÓN: Obtener los puntos actuales del usuario
+// ===================================================
 export const getUserPoints = async () => {
   try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) throw new Error('Usuario no autenticado');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 0;
 
     const { data, error } = await supabase
       .from('user_profiles')
@@ -75,62 +27,114 @@ export const getUserPoints = async () => {
     if (error) throw error;
 
     return data?.points || 0;
-  } catch (error) {
-    console.error('Error obteniendo puntos del usuario:', error.message || error);
+  } catch (err) {
+    console.error('❌ Error al obtener puntos del usuario:', err.message);
     return 0;
   }
 };
 
-/**
- * 📡 Suscribe en tiempo real a cambios en los puntos del usuario
- * Llama al callback cada vez que los puntos cambian
- */
-export const subscribeToPoints = (userId, callback) => {
+// ===================================================
+// FUNCIÓN: Suscribirse a cambios en tiempo real
+// ===================================================
+export const subscribeToPoints = (userId, onPointsChange) => {
   if (!userId) return null;
 
-  console.log('📡 Subscribiendo a cambios de puntos para:', userId);
-
   const channel = supabase
-    .channel(`points-${userId}`)
+    .channel('realtime-points')
     .on(
       'postgres_changes',
       {
-        event: '*',
+        event: 'UPDATE',
         schema: 'public',
         table: 'user_profiles',
-        filter: `id=eq.${userId}`
+        filter: `id=eq.${userId}`,
       },
-      async (payload) => {
-        console.log('⚡ Actualización detectada:', payload);
-        const newPoints = payload.new?.points ?? payload.old?.points ?? 0;
-        callback(newPoints);
+      (payload) => {
+        const newPoints = payload.new?.points ?? 0;
+        onPointsChange(newPoints);
       }
     )
-    .subscribe((status) => {
-      console.log(`🔌 Canal de puntos (${userId}):`, status);
-    });
+    .subscribe();
 
-  return channel;
+  return () => supabase.removeChannel(channel);
 };
 
-/**
- * 🧾 Obtiene el historial de puntos del usuario
- */
-export const getPointsHistory = async () => {
+// ===================================================
+// FUNCIÓN: Agregar puntos GRATIS
+// ===================================================
+export const addFreePoints = async (points, reason = 'acción gratuita', referenceType = null, referenceId = null) => {
   try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) throw new Error('Usuario no autenticado');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
 
-    const { data, error } = await supabase
-      .from('user_points_history')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // Llamar función RPC
+    const { data, error } = await supabase.rpc('add_free_points', {
+      p_user_id: user.id,
+      p_points: points,
+      p_reason: reason,
+      p_reference_type: referenceType,
+      p_reference_id: referenceId,
+    });
 
     if (error) throw error;
-    return data || [];
-  } catch (error) {
-    console.error('Error obteniendo historial de puntos:', error.message || error);
-    return [];
+
+    // ✅ Notificar al contexto global
+    if (pointsContextCallback) {
+      pointsContextCallback(points, reason, 'free');
+    }
+
+    return {
+      success: true,
+      points_added: points,
+      new_balance: data,
+    };
+  } catch (err) {
+    console.error('❌ Error al agregar puntos gratis:', err.message);
+    throw err;
   }
+};
+
+// ===================================================
+// FUNCIÓN: Agregar puntos PREMIUM (comprados o bonus VIP)
+// ===================================================
+export const addPremiumPoints = async (points, reason = 'puntos premium', referenceType = null, referenceId = null) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase.rpc('add_premium_points', {
+      p_user_id: user.id,
+      p_points: points,
+      p_reason: reason,
+      p_reference_type: referenceType,
+      p_reference_id: referenceId,
+    });
+
+    if (error) throw error;
+
+    // ✅ Notificar al contexto global
+    if (pointsContextCallback) {
+      pointsContextCallback(points, reason, 'premium');
+    }
+
+    return {
+      success: true,
+      points_added: points,
+      new_balance: data,
+    };
+  } catch (err) {
+    console.error('❌ Error al agregar puntos premium:', err.message);
+    throw err;
+  }
+};
+
+// ===================================================
+// OPCIONAL: Calcular puntos por video (si aplica)
+// ===================================================
+export const calculateVideoPoints = (durationInSeconds) => {
+  // Reglas básicas: puedes personalizar
+  if (durationInSeconds < 30) return 1;
+  if (durationInSeconds < 60) return 3;
+  if (durationInSeconds < 180) return 5;
+  return 10;
 };
