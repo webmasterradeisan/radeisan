@@ -1195,6 +1195,44 @@ const ReelsContainer = ({
                     </div>
                   )}
 
+                  {/* INFORMACIÓN DEL VIDEO - DESKTOP (abajo del video) */}
+                  {isDesktop && (
+                    <div 
+                      className="absolute bottom-4 left-4 right-4 z-10"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Link 
+                            to={`/profile/${video.creator?.id}`} 
+                            className="font-bold hover:underline text-base text-white drop-shadow-lg"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
+                          </Link>
+                          <span className="text-gray-200 text-sm">•</span>
+                          <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
+                        </div>
+
+                        <div className="mb-2">
+                          <p className="text-sm leading-relaxed line-clamp-2 text-white drop-shadow-lg">
+                            {video.description || video.title}
+                          </p>
+                        </div>
+
+                        {video.tags && video.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {video.tags.slice(0, 3).map((tag, tagIndex) => (
+                              <span key={tagIndex} className="text-xs font-semibold text-white drop-shadow-lg">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* INDICADOR DE PLAY/PAUSE */}
                   {!isAutoPlaying && index === currentIndex && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
