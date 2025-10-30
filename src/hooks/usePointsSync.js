@@ -1,27 +1,39 @@
 // src/hooks/usePointsSync.js
-// ============================================================================
-// Hook para sincronizar pointsService con PointsContext
-// ============================================================================
+// ======================================================
+// ✅ Hook que sincroniza los puntos globales del usuario
+// con Supabase en tiempo real
+// ======================================================
 
 import { useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { usePoints } from '../contexts/PointsContext';
-import { setPointsContextCallback } from '../services/pointsService';
+import { subscribeToPoints } from '../services/pointsService';
+import { supabase } from '../lib/supabase';
 
-export const usePointsSync = () => {
-  const { addPoints, deductPoints } = usePoints();
+export function usePointsSync() {
+  const { user } = useAuth();
+  const { refreshPoints } = usePoints();
 
   useEffect(() => {
-    // Configurar callback en pointsService
-    setPointsContextCallback((points, message, type) => {
-      if (points > 0) {
-        addPoints(points, message, type);
-      } else if (points < 0) {
-        deductPoints(Math.abs(points), message);
-      }
+    if (!user?.id) return;
+
+    console.log('🔄 usePointsSync iniciado para usuario:', user.id);
+
+    // 1️⃣ Cargar puntos iniciales al montar
+    refreshPoints();
+
+    // 2️⃣ Escuchar actualizaciones en tiempo real
+    const channel = subscribeToPoints(user.id, (newPoints) => {
+      console.log('⚡ Actualización de puntos recibida:', newPoints);
+      refreshPoints();
     });
 
+    // 3️⃣ Limpieza
     return () => {
-      setPointsContextCallback(null);
+      if (channel) {
+        console.log('🧹 Eliminando canal de puntos');
+        supabase.removeChannel(channel);
+      }
     };
-  }, [addPoints, deductPoints]);
-};
+  }, [user, refreshPoints]);
+}
