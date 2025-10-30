@@ -1,6 +1,7 @@
 // src/contexts/PointsContext.jsx
 // ======================================================
-// ✅ Contexto global de puntos del usuario (estable y sin loops)
+// ✅ Contexto global y estable de puntos (100% compatible con Supabase v2)
+// Sin bloqueos, sin bucles infinitos, sin errores t.unsubscribe
 // ======================================================
 
 import React, {
@@ -26,31 +27,34 @@ export const PointsProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // ======================================================
-  // 🔁 CARGAR PUNTOS UNA SOLA VEZ AL ENTRAR
+  // 🔁 Cargar puntos iniciales del usuario
   // ======================================================
   const fetchPoints = useCallback(async () => {
     if (!user?.id) return;
     try {
       const total = await getUserPoints(user.id);
-      if (typeof total === 'number') setPoints(total);
-    } catch (err) {
-      console.error('❌ Error obteniendo puntos:', err);
+      if (typeof total === 'number') {
+        setPoints(total);
+      }
+    } catch (error) {
+      console.error('❌ Error al obtener puntos:', error);
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
 
   // ======================================================
-  // 🧠 SUSCRIPCIÓN EN TIEMPO REAL (SIN LOOP)
+  // 🧠 Suscripción en tiempo real segura (sin loops)
   // ======================================================
   useEffect(() => {
     if (!user?.id) return;
 
-    setLoading(true);
-    fetchPoints();
+    fetchPoints(); // cargar puntos iniciales
+
+    console.log('📡 Suscribiendo a cambios en user_points...');
 
     const channel = supabase
-      .channel(`points_changes_${user.id}`)
+      .channel(`user_points_${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -60,20 +64,28 @@ export const PointsProvider = ({ children }) => {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('🔔 Cambio detectado en puntos:', payload);
-          fetchPoints(); // solo actualiza sin cambiar dependencias
+          console.log('🎯 Cambio detectado en user_points:', payload);
+          // Actualizamos solo si cambió el balance
+          if (payload?.new?.total_points !== undefined) {
+            setPoints(payload.new.total_points);
+          } else {
+            fetchPoints(); // fallback si no hay total_points
+          }
         }
       )
-      .subscribe(); // ⚠️ sin callback
+      .subscribe((status) => {
+        console.log('📡 Estado de canal realtime:', status);
+      });
 
+    // Cleanup al desmontar
     return () => {
-      console.log('🧹 Canal cerrado');
+      console.log('🧹 Cerrando canal realtime de puntos');
       supabase.removeChannel(channel);
     };
   }, [user?.id, fetchPoints]);
 
   // ======================================================
-  // ➕ FUNCIONES PÚBLICAS
+  // ➕ Funciones públicas
   // ======================================================
   const giveFreePoints = useCallback(
     async (actionType) => {
@@ -81,7 +93,7 @@ export const PointsProvider = ({ children }) => {
       try {
         const updated = await addFreePoints(user.id, actionType);
         if (updated?.points_added) {
-          setPoints((p) => p + updated.points_added);
+          setPoints((prev) => prev + updated.points_added);
         }
       } catch (err) {
         console.error('❌ Error sumando puntos free:', err);
@@ -96,7 +108,7 @@ export const PointsProvider = ({ children }) => {
       try {
         const updated = await addPremiumPoints(user.id, amount);
         if (updated?.points_added) {
-          setPoints((p) => p + updated.points_added);
+          setPoints((prev) => prev + updated.points_added);
         }
       } catch (err) {
         console.error('❌ Error sumando puntos premium:', err);
@@ -105,6 +117,9 @@ export const PointsProvider = ({ children }) => {
     [user?.id]
   );
 
+  // ======================================================
+  // 💾 Valor expuesto al contexto
+  // ======================================================
   const value = {
     points,
     loading,
@@ -121,7 +136,7 @@ export const PointsProvider = ({ children }) => {
 };
 
 // ======================================================
-// ✅ Hook para usar fácilmente el contexto
+// ✅ Hook para usar el contexto fácilmente
 // ======================================================
 export const usePoints = () => {
   const ctx = useContext(PointsContext);
