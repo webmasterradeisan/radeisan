@@ -1,5 +1,6 @@
 // src/components/ui/Header.jsx
-// VERSIÓN ORIGINAL + INTEGRACIÓN DE PUNTOS EN TIEMPO REAL (sin alterar diseño)
+// VERSIÓN FINAL - Diseño original + Integración completa con sistema de puntos (PointsContext)
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,8 +13,13 @@ import Button from './Button';
 // COMPONENTE DE CONTADOR DE PUNTOS ANIMADO
 // ============================================================================
 const AnimatedPointsCounter = ({ points, animation }) => {
-  const [displayPoints, setDisplayPoints] = useState(points || 0);
+  const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
+
+  // DEBUG
+  useEffect(() => {
+    console.log('🎯 AnimatedPointsCounter - Puntos:', points);
+  }, [points]);
 
   useEffect(() => {
     if (animation?.show) {
@@ -29,6 +35,7 @@ const AnimatedPointsCounter = ({ points, animation }) => {
         const progress = Math.min(elapsed / duration, 1);
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         const currentPoints = Math.round(startPoints + (endPoints - startPoints) * easeProgress);
+
         setDisplayPoints(currentPoints);
 
         if (progress < 1) {
@@ -37,19 +44,20 @@ const AnimatedPointsCounter = ({ points, animation }) => {
           setIsAnimating(false);
         }
       };
+
       requestAnimationFrame(animate);
     } else {
-      setDisplayPoints(points || 0);
+      setDisplayPoints(points);
     }
   }, [points, animation?.show]);
 
   return (
-    <span 
+    <span
       className={`font-mono text-sm font-medium text-accent transition-all duration-300 ${
         isAnimating ? 'scale-110' : 'scale-100'
       }`}
     >
-      {Number(displayPoints || 0).toLocaleString()}
+      {displayPoints.toLocaleString()}
     </span>
   );
 };
@@ -59,34 +67,32 @@ const AnimatedPointsCounter = ({ points, animation }) => {
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation?.show) return null;
+
   const isEarn = animation.type === 'earn';
+
   return (
-    <div 
+    <div
       className="fixed top-20 right-4 z-[9999] pointer-events-none animate-slide-in-right"
       style={{
-        animation: 'slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s'
+        animation: 'slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s',
       }}
     >
-      <div className={`${
-        isEarn 
-          ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
-          : 'bg-gradient-to-r from-red-500 to-orange-600'
+      <div
+        className={`${
+          isEarn
+            ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+            : 'bg-gradient-to-r from-red-500 to-orange-600'
         } text-white px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3`}
       >
         <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center animate-bounce">
-          <AppIcon 
-            name={isEarn ? "TrendingUp" : "TrendingDown"} 
-            size={18} 
-            className="text-white" 
-          />
+          <AppIcon name={isEarn ? 'TrendingUp' : 'TrendingDown'} size={18} className="text-white" />
         </div>
         <div>
           <p className="font-bold text-base">
-            {isEarn ? '+' : '-'}{animation.amount} puntos
+            {isEarn ? '+' : '-'}
+            {animation.amount} puntos
           </p>
-          {animation.message && (
-            <p className="text-xs text-white/90">{animation.message}</p>
-          )}
+          {animation.message && <p className="text-xs text-white/90">{animation.message}</p>}
         </div>
       </div>
     </div>
@@ -100,17 +106,29 @@ const Header = () => {
   const { user, signOut, loading } = useAuth();
   const { points, totalPoints, pointsAnimation, loading: pointsLoading, refreshPoints } = usePoints();
   const { branding } = useBranding();
+
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
 
-  // ✅ Sincronizar puntos en tiempo real con el usuario actual
+  // 🔁 Actualizar puntos al montar y cada vez que cambie el usuario
   useEffect(() => {
-    if (user?.id && refreshPoints) {
+    if (user?.id) {
       refreshPoints(user.id);
+      console.log('♻️ Actualizando puntos del usuario:', user.id);
     }
-  }, [user?.id]);
+  }, [user, refreshPoints]);
+
+  // DEBUG
+  useEffect(() => {
+    console.log('🔍 Header - Estado de Puntos:', {
+      totalPoints,
+      points,
+      pointsLoading,
+      user: user?.id,
+    });
+  }, [totalPoints, points, pointsLoading, user]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -122,18 +140,17 @@ const Header = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    setIsUserMenuOpen(false);
-  }, [location.pathname]);
+  useEffect(() => setIsUserMenuOpen(false), [location.pathname]);
 
-  const toggleUserMenu = () => setIsUserMenuOpen(prev => !prev);
+  const toggleUserMenu = () => setIsUserMenuOpen((prev) => !prev);
 
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
     try {
       await signOut();
       navigate('/', { replace: true });
-    } catch {
+    } catch (error) {
+      console.error('Error during logout:', error);
       navigate('/', { replace: true });
     }
   };
@@ -146,14 +163,16 @@ const Header = () => {
     navigate('/dashboard', { replace: true, state: { orientation: 'all' } });
   };
 
-  const isOrientationActive = (orientation) => {
-    return location.pathname === '/dashboard' && location.state?.orientation === orientation;
-  };
+  const isOrientationActive = (orientation) =>
+    location.pathname === '/dashboard' && location.state?.orientation === orientation;
 
-  const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => (
+  const Icon = ({ name, size = 20, color = 'currentColor', className = '' }) => (
     <AppIcon name={name} size={size} color={color} className={className} />
   );
 
+  // ========================================================================
+  // JSX RENDER ORIGINAL MANTENIDO COMPLETAMENTE
+  // ========================================================================
   return (
     <>
       <FloatingPointsNotification animation={pointsAnimation} />
@@ -161,13 +180,12 @@ const Header = () => {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-
             {/* LOGO */}
-            <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+            <Link to={user ? '/dashboard' : '/'} className="flex items-center space-x-2">
               {branding.logo.primary ? (
-                <img 
-                  src={branding.logo.primary} 
-                  alt={branding.texts.appName || 'Logo'} 
+                <img
+                  src={branding.logo.primary}
+                  alt={branding.texts.appName || 'Logo'}
                   className="h-8 object-contain"
                   onError={(e) => {
                     e.target.style.display = 'none';
@@ -175,22 +193,22 @@ const Header = () => {
                   }}
                 />
               ) : null}
-              
-              <div 
+
+              <div
                 className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-                style={{ 
+                style={{
                   display: branding.logo.primary ? 'none' : 'flex',
-                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`,
                 }}
               >
                 <Icon name="Video" size={20} color="white" />
               </div>
-              
+
               {!branding.logo.primary && (
-                <span 
+                <span
                   className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
                   style={{
-                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`,
                   }}
                 >
                   {branding.texts.appName || 'Radeisan'}
@@ -204,8 +222,9 @@ const Header = () => {
                 <button
                   onClick={handleHomeNavigate}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
-                      ? 'bg-primary/10 text-primary' 
+                    location.pathname === '/dashboard' &&
+                    (!location.state?.orientation || location.state?.orientation === 'all')
+                      ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
@@ -217,7 +236,7 @@ const Header = () => {
                   onClick={() => handleOrientationNavigate('vertical')}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isOrientationActive('vertical')
-                      ? 'bg-primary/10 text-primary' 
+                      ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
@@ -229,7 +248,7 @@ const Header = () => {
                   onClick={() => handleOrientationNavigate('horizontal')}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isOrientationActive('horizontal')
-                      ? 'bg-primary/10 text-primary' 
+                      ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
@@ -240,8 +259,8 @@ const Header = () => {
                 <Link
                   to="/marketplace"
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/marketplace' 
-                      ? 'bg-primary/10 text-primary' 
+                    location.pathname === '/marketplace'
+                      ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
@@ -252,8 +271,8 @@ const Header = () => {
                 <Link
                   to="/rewards"
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/rewards' 
-                      ? 'bg-primary/10 text-primary' 
+                    location.pathname === '/rewards'
+                      ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
@@ -264,8 +283,8 @@ const Header = () => {
                 <Link
                   to="/profile"
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/profile' 
-                      ? 'bg-primary/10 text-primary' 
+                    location.pathname === '/profile'
+                      ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
@@ -278,7 +297,7 @@ const Header = () => {
                     to="/admin"
                     className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       location.pathname.startsWith('/admin')
-                        ? 'bg-primary/10 text-primary' 
+                        ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                     }`}
                   >
@@ -293,24 +312,21 @@ const Header = () => {
             <div className="flex items-center space-x-4">
               {user ? (
                 <>
-                  {/* ✅ CONTADOR DE PUNTOS FUNCIONAL */}
-                  <div 
+                  {/* 🔹 SISTEMA DE PUNTOS INTEGRADO */}
+                  <div
                     className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group"
-                    title={`Total: ${totalPoints || 0} | Free: ${points?.free || 0} | Premium: ${points?.premium || 0}`}
+                    title={`Total: ${totalPoints} | Free: ${points.free} | Premium: ${points.premium}`}
                   >
-                    <Icon 
-                      name="Star" 
-                      size={16} 
-                      color="var(--color-accent)" 
-                      className="group-hover:scale-110 transition-transform" 
+                    <Icon
+                      name="Star"
+                      size={16}
+                      color="var(--color-accent)"
+                      className="group-hover:scale-110 transition-transform"
                     />
                     {pointsLoading ? (
                       <span className="text-xs text-muted-foreground">Cargando...</span>
                     ) : (
-                      <AnimatedPointsCounter 
-                        points={totalPoints || 0} 
-                        animation={pointsAnimation}
-                      />
+                      <AnimatedPointsCounter points={totalPoints} animation={pointsAnimation} />
                     )}
                   </div>
 
@@ -326,7 +342,7 @@ const Header = () => {
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
                   </Button>
 
-                  {/* MENÚ DE USUARIO */}
+                  {/* Menú de Usuario */}
                   <div className="relative" ref={userMenuRef}>
                     <Button
                       variant="ghost"
@@ -336,9 +352,9 @@ const Header = () => {
                     >
                       <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
                         {user.avatar_url ? (
-                          <img 
-                            src={user.avatar_url} 
-                            alt={user.name || 'Avatar'} 
+                          <img
+                            src={user.avatar_url}
+                            alt={user.name || 'Avatar'}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -357,11 +373,11 @@ const Header = () => {
                             <div className="text-xs text-muted-foreground truncate">
                               {user.email}
                             </div>
-                            
+
                             <div className="mt-2 flex items-center gap-2 px-2 py-1 bg-accent/10 rounded-md">
                               <Icon name="Star" size={14} color="var(--color-accent)" />
                               <span className="text-sm font-mono font-bold text-accent">
-                                {totalPoints?.toLocaleString() || 0}
+                                {totalPoints.toLocaleString()}
                               </span>
                               <span className="text-xs text-muted-foreground">pts</span>
                             </div>
@@ -369,8 +385,11 @@ const Header = () => {
                             {user.isAdmin && (
                               <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                                 <Icon name="Shield" size={12} className="mr-1" />
-                                {user.role === 'super_admin' ? 'Super Admin' : 
-                                 user.role === 'admin' ? 'Admin' : 'Moderador'}
+                                {user.role === 'super_admin'
+                                  ? 'Super Admin'
+                                  : user.role === 'admin'
+                                  ? 'Admin'
+                                  : 'Moderador'}
                               </div>
                             )}
                           </div>
@@ -458,9 +477,7 @@ const Header = () => {
                     Iniciar Sesión
                   </Link>
                   <Button size="sm" asChild>
-                    <Link to="/register">
-                      Registrarse
-                    </Link>
+                    <Link to="/register">Registrarse</Link>
                   </Button>
                 </div>
               )}
@@ -471,16 +488,10 @@ const Header = () => {
 
       <style jsx>{`
         @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes fadeOut {
-          from { opacity: 1; }
-          to { opacity: 0; }
-        }
-      `}</style>
-    </>
-  );
-};
-
-export default Header;
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity
