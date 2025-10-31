@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.jsx
-// AuthContext HÍBRIDO - VERSIÓN CORREGIDA
+// AuthContext HÍBRIDO - VERSIÓN CORREGIDA CON FOREIGN KEY EXPLÍCITA
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }) => {
           avatar_url, 
           email, 
           full_name,
-          admin_role:admin_roles(role_name, permissions, is_active)
+          admin_role:admin_roles!admin_roles_user_id_fkey(role_name, permissions, is_active)
         `)
         .eq('id', userId)
         .maybeSingle();
