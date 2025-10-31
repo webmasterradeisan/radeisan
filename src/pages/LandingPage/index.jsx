@@ -1,8 +1,58 @@
-// src/pages/LandingPage/index.jsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Icon from '../../components/AppIcon';
-import { useAuth } from '../../contexts/AuthContext';
+import { Video, Play, ShoppingBag, Gift, Users, TrendingUp, Shield, Check, Zap, DollarSign, Twitter, Instagram, Youtube, X, Coins, Star, Calendar } from 'lucide-react';
+
+// URL del video promocional - EDITABLE
+const PROMOTIONAL_VIDEO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+
+// ===============================
+// MODAL DE VIDEO
+// ===============================
+const VideoModal = ({ isOpen, onClose, videoUrl }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      
+      {/* Modal Content */}
+      <div className="relative z-10 w-full max-w-5xl mx-4">
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+        >
+          <X size={32} />
+        </button>
+        
+        <div className="bg-black rounded-2xl overflow-hidden shadow-2xl">
+          <div className="aspect-video">
+            <iframe
+              src={videoUrl}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ===============================
 // HEADER PÚBLICO
@@ -13,28 +63,18 @@ const PublicHeader = () => (
       <div className="flex items-center justify-between h-16">
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2">
-          <div className="w-10 h-10 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
-            <Icon name="Video" size={20} color="white" />
-          </div>
+          <img 
+            src="https://i.ibb.co/vxYspn2x/Radeisan-Logo-Transparente-1.png" 
+            alt="Radeisan"
+            className="h-10 w-auto"
+          />
           <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Radeisan
           </span>
         </Link>
 
-        {/* Navegación pública */}
+        {/* Navegación pública - vacía según requerimientos */}
         <nav className="hidden md:flex items-center space-x-8">
-          <Link 
-            to="/features" 
-            className="text-gray-600 hover:text-primary transition-colors font-medium"
-          >
-            Características
-          </Link>
-          <Link 
-            to="/about" 
-            className="text-gray-600 hover:text-primary transition-colors font-medium"
-          >
-            Nosotros
-          </Link>
         </nav>
 
         {/* Botones de autenticación */}
@@ -60,7 +100,7 @@ const PublicHeader = () => (
 // ===============================
 // HERO SECTION
 // ===============================
-const HeroSection = () => (
+const HeroSection = ({ onOpenVideo }) => (
   <section className="pt-24 pb-16 lg:pb-24 bg-gradient-to-br from-gray-50 to-white">
     <div className="container mx-auto px-4">
       <div className="max-w-6xl mx-auto">
@@ -76,7 +116,7 @@ const HeroSection = () => (
             </h1>
             
             <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-              La plataforma social donde tu creatividad tiene recompensa. 
+              La plataforma social colombiana donde tu creatividad tiene recompensa. 
               Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.
             </p>
 
@@ -88,10 +128,10 @@ const HeroSection = () => (
                 Únete Gratis Ahora
               </Link>
               <Link 
-                to="/features"
+                to="/login"
                 className="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-full text-lg font-semibold hover:border-primary hover:text-primary transition-all duration-300"
               >
-                Explorar Características
+                Ingresa Aquí
               </Link>
             </div>
 
@@ -115,13 +155,21 @@ const HeroSection = () => (
           {/* Visual/Video Placeholder */}
           <div className="relative">
             <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-2xl p-8 lg:p-12">
-              <div className="aspect-video bg-white rounded-xl shadow-2xl flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-20 h-20 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Icon name="Play" size={32} color="white" />
+              <div 
+                className="aspect-video bg-white rounded-xl shadow-2xl flex items-center justify-center cursor-pointer hover:shadow-3xl transition-all duration-300 group relative overflow-hidden"
+                onClick={onOpenVideo}
+              >
+                <img 
+                  src="https://i.ibb.co/vxYspn2x/Radeisan-Logo-Transparente-1.png" 
+                  alt="Video Promocional"
+                  className="absolute inset-0 w-full h-full object-contain p-8 opacity-20"
+                />
+                <div className="text-center relative z-10">
+                  <div className="w-20 h-20 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <Play size={32} className="text-white" />
                   </div>
-                  <p className="text-gray-600 font-medium">Video Promocional</p>
-                  <p className="text-sm text-gray-500">Próximamente</p>
+                  <p className="text-gray-600 font-medium">Ver Video Promocional</p>
+                  <p className="text-sm text-gray-500">Descubre cómo funciona</p>
                 </div>
               </div>
             </div>
@@ -142,32 +190,32 @@ const HeroSection = () => (
 const FeaturesSection = () => {
   const features = [
     {
-      icon: "Video",
+      icon: Video,
       title: "Feed de Videos Inteligente",
-      description: "Descubre contenido personalizado y gana puntos mientras disfrutas de videos increíbles de creadores españoles."
+      description: "Descubre contenido personalizado y gana puntos mientras disfrutas de videos increíbles de creadores colombianos."
     },
     {
-      icon: "ShoppingBag",
+      icon: ShoppingBag,
       title: "Marketplace Integrado", 
       description: "Conecta con negocios locales, descubre productos únicos y apoya a emprendedores de tu comunidad."
     },
     {
-      icon: "Gift",
+      icon: Gift,
       title: "Sistema de Recompensas",
       description: "Convierte tu actividad en la plataforma en puntos canjeables por premios, descuentos y beneficios exclusivos."
     },
     {
-      icon: "Users",
+      icon: Users,
       title: "Comunidad Vibrante",
       description: "Únete a una comunidad de creadores y empresarios que comparten tu pasión por el contenido de calidad."
     },
     {
-      icon: "TrendingUp",
+      icon: TrendingUp,
       title: "Monetización Real",
       description: "Múltiples formas de generar ingresos: patrocinios, colaboraciones, ventas y programa de afiliados."
     },
     {
-      icon: "Shield",
+      icon: Shield,
       title: "Plataforma Segura",
       description: "Protección avanzada de datos, verificación de cuentas y herramientas anti-spam para una experiencia segura."
     }
@@ -199,7 +247,7 @@ const FeaturesSection = () => {
                 className="bg-gray-50 rounded-2xl p-8 hover:bg-white hover:shadow-xl transition-all duration-300 border border-transparent hover:border-gray-200"
               >
                 <div className="w-16 h-16 bg-gradient-to-r from-primary to-secondary rounded-xl flex items-center justify-center mb-6">
-                  <Icon name={feature.icon} size={24} color="white" />
+                  <feature.icon size={24} className="text-white" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-4">
                   {feature.title}
@@ -209,6 +257,139 @@ const FeaturesSection = () => {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ===============================
+// SISTEMA DE PUNTOS SECTION
+// ===============================
+const PointsSystemSection = () => {
+  return (
+    <section className="py-24 bg-gradient-to-br from-gray-50 to-white">
+      <div className="container mx-auto px-4">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+              Gana puntos con{' '}
+              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                cada acción
+              </span>
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              En Radeisan tu actividad tiene valor. Completa misiones diarias, interactúa con contenido 
+              y gana puntos para canjear por recompensas increíbles
+            </p>
+          </div>
+
+          {/* Tipos de Puntos */}
+          <div className="grid md:grid-cols-2 gap-8 mb-16">
+            {/* Puntos Gratis */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg border-2 border-gray-200">
+              <div className="flex items-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-r from-gray-400 to-gray-600 rounded-full flex items-center justify-center mr-4">
+                  <Star size={28} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Puntos Gratis</h3>
+                  <p className="text-gray-600">Gánalos con tu actividad</p>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-4 leading-relaxed">
+                Obtén puntos completando misiones diarias, interactuando con contenido y siendo parte activa de la comunidad. 
+                Estos puntos son canjeables en nuestra tienda por recompensas exclusivas.
+              </p>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Valor por punto:</span>
+                  <span className="text-2xl font-bold text-gray-700">1x</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Puntos Premium */}
+            <div className="bg-white rounded-2xl p-8 shadow-lg border-2 border-green-500">
+              <div className="flex items-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center mr-4">
+                  <Coins size={28} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Puntos Premium</h3>
+                  <p className="text-gray-600">Cómpralos y obtén más valor</p>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-4 leading-relaxed">
+                Adquiere puntos premium para obtener mayor poder de compra en la tienda. 
+                Cada punto premium tiene más valor que los puntos gratis, permitiéndote acceder a recompensas exclusivas más rápido.
+              </p>
+              <div className="bg-green-100 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Valor por punto:</span>
+                  <span className="text-2xl font-bold text-green-600">2.5x</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Misiones Diarias */}
+          <div className="bg-white rounded-2xl p-8 shadow-lg">
+            <div className="flex items-center mb-8">
+              <Calendar size={32} className="text-primary mr-4" />
+              <h3 className="text-3xl font-bold text-gray-900">Misiones Diarias</h3>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { task: "Iniciar sesión", points: 10, icon: Check },
+                { task: "Dar 10 me gusta", points: 5, icon: Star },
+                { task: "Publicar video, foto o reel", points: 30, icon: Video },
+                { task: "Apoyar a tu influencer favorito", points: 2, icon: Users },
+              ].map((mission, index) => (
+                <div 
+                  key={index}
+                  className="bg-gradient-to-br from-gray-50 to-white p-6 rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <mission.icon size={24} className="text-primary" />
+                    <span className="bg-gradient-to-r from-gray-400 to-gray-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                      +{mission.points} pts
+                    </span>
+                  </div>
+                  <p className="text-gray-900 font-semibold">{mission.task}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Bonus Racha */}
+            <div className="mt-8 bg-gradient-to-r from-primary to-secondary rounded-xl p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xl font-bold mb-2">🔥 Bonus por Racha</h4>
+                  <p className="text-white/90">
+                    Completa todas las misiones diarias por 10 días consecutivos y gana <strong>100 puntos extra</strong>
+                  </p>
+                </div>
+                <div className="text-5xl font-bold">+100</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Canjea tus puntos */}
+          <div className="mt-12 text-center">
+            <div className="inline-block bg-gradient-to-r from-primary/10 to-secondary/10 rounded-2xl p-8">
+              <Gift size={48} className="text-primary mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                Canjea tus puntos en nuestra tienda
+              </h3>
+              <p className="text-gray-600 max-w-2xl">
+                Ambos tipos de puntos son válidos para canjear en la tienda por recompensas increíbles: 
+                productos exclusivos, descuentos, merchandising y mucho más
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -232,7 +413,7 @@ const TestimonialsSection = () => {
       name: "Carlos Ruiz",
       role: "Emprendedor",
       avatar: "https://ui-avatars.com/api/?name=Carlos+Ruiz&background=457B9D&color=ffffff", 
-      content: "Nuestra empresa local encontró su audiencia perfecta en Radeisan. Las ventas aumentaron un 300% en el primer trimestre.",
+      content: "Mi negocio local encontró su audiencia perfecta en Radeisan. Las ventas aumentaron un 300% en el primer trimestre.",
       earnings: "15K en ventas"
     },
     {
@@ -240,12 +421,12 @@ const TestimonialsSection = () => {
       role: "Influencer",
       avatar: "https://ui-avatars.com/api/?name=Ana+Martin&background=F77F00&color=ffffff",
       content: "La comunidad de Radeisan es increíble. Colaboraciones auténticas, audiencia comprometida y herramientas profesionales.",
-      earnings: "1.8/mes"
+      earnings: "1.8K/mes"
     }
   ];
 
   return (
-    <section className="py-24 bg-gradient-to-br from-gray-50 to-white">
+    <section className="py-24 bg-white">
       <div className="container mx-auto px-4">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
@@ -257,7 +438,7 @@ const TestimonialsSection = () => {
               </span>
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Miles de creadores y empresarios ya están construyendo su futuro en Radeisan
+              Miles de creadores y empresarios colombianos ya están construyendo su futuro en Radeisan
             </p>
           </div>
 
@@ -308,7 +489,7 @@ const CallToActionSection = () => (
           ¿Listo para transformar tu contenido en ingresos?
         </h2>
         <p className="text-xl mb-12 opacity-90">
-          Únete a miles de creadores que ya están monetizando su pasión en Radeisan. 
+          Únete a miles de creadores colombianos que ya están monetizando su pasión en Radeisan. 
           Es gratis, es fácil y puedes empezar ahora mismo.
         </p>
 
@@ -320,7 +501,7 @@ const CallToActionSection = () => (
             Crear Cuenta Gratuita
           </Link>
           <div className="flex items-center text-white/80">
-            <Icon name="Check" size={20} className="mr-2" />
+            <Check size={20} className="mr-2" />
             <span>Sin tarjeta de crédito requerida</span>
           </div>
         </div>
@@ -328,15 +509,15 @@ const CallToActionSection = () => (
         {/* Features list */}
         <div className="mt-12 grid md:grid-cols-3 gap-8 text-left">
           <div className="flex items-center">
-            <Icon name="Zap" size={24} className="mr-3 text-yellow-300" />
+            <Zap size={24} className="mr-3 text-yellow-300" />
             <span>Configuración en 5 minutos</span>
           </div>
           <div className="flex items-center">
-            <Icon name="Users" size={24} className="mr-3 text-yellow-300" />
+            <Users size={24} className="mr-3 text-yellow-300" />
             <span>Comunidad de +10K creadores</span>
           </div>
           <div className="flex items-center">
-            <Icon name="DollarSign" size={24} className="mr-3 text-yellow-300" />
+            <DollarSign size={24} className="mr-3 text-yellow-300" />
             <span>Múltiples formas de monetizar</span>
           </div>
         </div>
@@ -356,26 +537,28 @@ const PublicFooter = () => (
           {/* Brand */}
           <div className="md:col-span-2">
             <div className="flex items-center space-x-2 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
-                <Icon name="Video" size={20} color="white" />
-              </div>
+              <img 
+                src="https://i.ibb.co/vxYspn2x/Radeisan-Logo-Transparente-1.png" 
+                alt="Radeisan"
+                className="h-10 w-auto"
+              />
               <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
                 Radeisan
               </span>
             </div>
             <p className="text-gray-400 mb-6 leading-relaxed">
-              La plataforma social donde tu creatividad tiene recompensa. 
+              La plataforma social colombiana donde tu creatividad tiene recompensa. 
               Conectamos creadores con audiencias y empresas con oportunidades reales de crecimiento.
             </p>
             <div className="flex space-x-4">
               <a href="#" className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary transition-colors">
-                <Icon name="Twitter" size={20} />
+                <Twitter size={20} />
               </a>
               <a href="#" className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary transition-colors">
-                <Icon name="Instagram" size={20} />
+                <Instagram size={20} />
               </a>
               <a href="#" className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary transition-colors">
-                <Icon name="Youtube" size={20} />
+                <Youtube size={20} />
               </a>
             </div>
           </div>
@@ -384,10 +567,10 @@ const PublicFooter = () => (
           <div>
             <h3 className="font-bold mb-4">Plataforma</h3>
             <ul className="space-y-2 text-gray-400">
-              <li><Link to="/features" className="hover:text-white transition-colors">Características</Link></li>
-              <li><Link to="/about" className="hover:text-white transition-colors">Sobre Nosotros</Link></li>
               <li><a href="#" className="hover:text-white transition-colors">Precios</a></li>
               <li><a href="#" className="hover:text-white transition-colors">API</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Ayuda</a></li>
             </ul>
           </div>
 
@@ -421,67 +604,51 @@ const PublicFooter = () => (
 // COMPONENTE PRINCIPAL
 // ===============================
 const LandingPage = () => {
-  const navigate = useNavigate();
-  const { isAuthenticated, loading } = useAuth();
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
-  // ✅ REDIRECCIÓN AUTOMÁTICA SI ESTÁ AUTENTICADO
-  useEffect(() => {
-    if (!loading && isAuthenticated) {
-      console.log('✅ Usuario autenticado detectado en landing, redirigiendo al dashboard...');
-      navigate('/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, loading, navigate]);
-
-  // SEO nativo sin dependencias externas
+  // SEO
   useEffect(() => {
     document.title = 'Radeisan - Crea, comparte y gana con tu contenido';
     
-    // Meta description
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
       metaDescription.setAttribute('content', 'La plataforma social colombiana donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.');
     } else {
       const meta = document.createElement('meta');
       meta.name = 'description';
-      meta.content = 'La plataforma social donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.';
+      meta.content = 'La plataforma social colombiana donde tu creatividad tiene recompensa. Conecta con tu audiencia, monetiza tu contenido y descubre oportunidades ilimitadas.';
       document.getElementsByTagName('head')[0].appendChild(meta);
     }
 
-    // Meta keywords
     const metaKeywords = document.querySelector('meta[name="keywords"]');
     if (metaKeywords) {
-      metaKeywords.setAttribute('content', 'creador contenido, social media, monetización, videos, España, influencer, emprendedor');
+      metaKeywords.setAttribute('content', 'creador contenido, social media, monetización, videos, Colombia, influencer, emprendedor, puntos, recompensas');
     } else {
       const meta = document.createElement('meta');
       meta.name = 'keywords';
-      meta.content = 'creador contenido, social media, monetización, videos, España, influencer, emprendedor';
+      meta.content = 'creador contenido, social media, monetización, videos, Colombia, influencer, emprendedor, puntos, recompensas';
       document.getElementsByTagName('head')[0].appendChild(meta);
     }
   }, []);
 
-  // Mostrar loading mientras verifica autenticación
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Cargando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Solo mostrar landing si NO está autenticado
   return (
     <div className="min-h-screen">
       <PublicHeader />
       <main>
-        <HeroSection />
+        <HeroSection onOpenVideo={() => setIsVideoModalOpen(true)} />
         <FeaturesSection />
+        <PointsSystemSection />
         <TestimonialsSection />
         <CallToActionSection />
       </main>
       <PublicFooter />
+      
+      {/* Video Modal */}
+      <VideoModal 
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        videoUrl={PROMOTIONAL_VIDEO_URL}
+      />
     </div>
   );
 };
