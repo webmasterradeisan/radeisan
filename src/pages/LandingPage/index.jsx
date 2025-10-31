@@ -524,9 +524,9 @@ const PublicFooter = () => (
   <footer className="bg-gray-900 text-white py-16">
     <div className="container mx-auto px-4">
       <div className="max-w-6xl mx-auto">
-        <div className="grid md:grid-cols-4 gap-8 mb-12">
+        <div className="grid md:grid-cols-1 gap-8 mb-12">
           {/* Brand */}
-          <div className="md:col-span-2">
+          <div>
             <div className="flex items-center space-x-2 mb-6">
               <img 
                 src="https://i.ibb.co/vxYspn2x/Radeisan-Logo-Transparente-1.png" 
@@ -552,28 +552,6 @@ const PublicFooter = () => (
                 <Youtube size={20} />
               </a>
             </div>
-          </div>
-
-          {/* Enlaces rápidos */}
-          <div>
-            <h3 className="font-bold mb-4">Plataforma</h3>
-            <ul className="space-y-2 text-gray-400">
-              <li><a href="#" className="hover:text-white transition-colors">Precios</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">API</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Ayuda</a></li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div>
-            <h3 className="font-bold mb-4">Legal</h3>
-            <ul className="space-y-2 text-gray-400">
-              <li><Link to="/terms" className="hover:text-white transition-colors">Términos de Uso</Link></li>
-              <li><Link to="/privacy" className="hover:text-white transition-colors">Privacidad</Link></li>
-              <li><a href="#" className="hover:text-white transition-colors">Cookies</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Contacto</a></li>
-            </ul>
           </div>
         </div>
 
