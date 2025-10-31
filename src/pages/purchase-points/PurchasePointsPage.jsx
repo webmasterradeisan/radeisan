@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase.js';
-import paymentService from '../../services/paymentService';
-import { useAuth } from '../../contexts/AuthContext';
-import { usePoints } from '../../contexts/PointsContext';
-import Header from '../../components/ui/Header';
+import { supabase } from '../lib/supabase';
+import paymentService from '../services/paymentService';
+import { useAuth } from '../contexts/AuthContext';
+import { usePoints } from '../contexts/PointsContext';
+import Header from '../components/ui/Header';
 import { 
   CreditCard, Package, Star, Award, CheckCircle, 
   ArrowRight, Sparkles, Clock, ShieldCheck, AlertCircle,
@@ -44,14 +44,22 @@ const PurchasePointsPage = () => {
 
     try {
       // Inicializar servicio de pagos
-      await paymentService.initialize();
+      const initResult = await paymentService.initialize();
+      if (!initResult.success) {
+        throw new Error(initResult.error || 'Error al inicializar servicio de pagos');
+      }
 
-      // Cargar paquetes activos
-      const { data: packagesData, error: packagesError } = await supabase.rpc('get_active_packages');
+      // Cargar paquetes activos directamente desde Supabase
+      const { data: packagesData, error: packagesError } = await supabase
+        .from('premium_points_packages')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
       if (packagesError) throw packagesError;
       setPackages(packagesData || []);
 
-      // Obtener pasarelas activas
+      // Obtener pasarelas activas del servicio
       const activeGateways = paymentService.getActiveGateways();
       setGateways(activeGateways);
 
@@ -67,7 +75,7 @@ const PurchasePointsPage = () => {
       }
     } catch (err) {
       console.error('Error loading data:', err);
-      setError('Error al cargar los paquetes. Por favor recarga la página.');
+      setError(err.message || 'Error al cargar los paquetes. Por favor recarga la página.');
     } finally {
       setLoading(false);
     }
@@ -77,6 +85,13 @@ const PurchasePointsPage = () => {
   const handlePurchase = async () => {
     if (!selectedPackage || !selectedGateway) {
       setError('Por favor selecciona un paquete y método de pago');
+      return;
+    }
+
+    // Validar el paquete antes de proceder
+    const validation = paymentService.validatePackage(selectedPackage);
+    if (!validation.valid) {
+      setError(validation.error);
       return;
     }
 
@@ -93,11 +108,11 @@ const PurchasePointsPage = () => {
         throw new Error(result.error);
       }
 
-      // El usuario será redirigido a la pasarela de pago
-      // Cuando regrese, se actualizarán los puntos
+      // El usuario será redirigido a la pasarela de pago automáticamente
+      // Cuando regrese, se actualizarán los puntos mediante webhook
     } catch (err) {
       console.error('Error purchasing:', err);
-      setError('Error al procesar la compra: ' + err.message);
+      setError(err.message || 'Error al procesar la compra. Por favor intenta de nuevo.');
       setPurchasing(false);
     }
   };
