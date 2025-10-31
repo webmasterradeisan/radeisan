@@ -7,7 +7,7 @@ import { usePoints } from '../../contexts/PointsContext';
 import { 
   CreditCard, Package, Star, Award, CheckCircle, 
   ArrowRight, Sparkles, Clock, ShieldCheck, AlertCircle,
-  TrendingUp, Gift, Zap
+  TrendingUp, Gift, Zap, Wallet
 } from 'lucide-react';
 
 const PurchasePointsPage = () => {
@@ -179,41 +179,58 @@ const PurchasePointsPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      {/* Header con balance */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* ===================================== */}
+        {/* HEADER DE PÁGINA (sin sticky) */}
+        {/* ===================================== */}
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full p-2">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
-                <Sparkles className="h-8 w-8 text-yellow-500" />
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                 Comprar Puntos Premium
               </h1>
-              <p className="text-gray-600 text-sm mt-1">
+              <p className="text-gray-600 text-sm">
                 Obtén puntos para canjear por increíbles recompensas
               </p>
             </div>
-            
-            {/* Balance actual */}
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
-              <p className="text-sm opacity-90">Tu Balance</p>
-              <div className="flex items-center gap-3 mt-1">
-                <div className="text-center">
-                  <p className="text-xs opacity-75">Gratis</p>
-                  <p className="text-lg font-bold">{points?.free || 0}</p>
-                </div>
-                <div className="w-px h-8 bg-white opacity-30"></div>
-                <div className="text-center">
-                  <p className="text-xs opacity-75">Premium</p>
-                  <p className="text-lg font-bold text-green-300">{points?.premium || 0}</p>
-                </div>
+          </div>
+        </div>
+
+        {/* ===================================== */}
+        {/* BALANCE ACTUAL - Card Destacada */}
+        {/* ===================================== */}
+        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl p-6 mb-6 shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 backdrop-blur-sm rounded-full p-3">
+                <Wallet className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white/90 text-sm font-medium">Tu Balance Actual</p>
+                <p className="text-white text-xs mt-0.5">Disponible para canjear</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-white/80 text-xs">Puntos Gratis</p>
+                <p className="text-white text-2xl font-bold">{points?.free || 0}</p>
+              </div>
+              <div className="w-px h-12 bg-white/30"></div>
+              <div className="text-right">
+                <p className="text-white/80 text-xs">Puntos Premium</p>
+                <p className="text-green-300 text-2xl font-bold">{points?.premium || 0}</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Error Message */}
+        {/* ===================================== */}
+        {/* ERROR MESSAGE */}
+        {/* ===================================== */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -224,7 +241,9 @@ const PurchasePointsPage = () => {
           </div>
         )}
 
-        {/* Beneficios */}
+        {/* ===================================== */}
+        {/* BENEFICIOS */}
+        {/* ===================================== */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-100">
             <div className="flex items-center gap-3">
@@ -263,7 +282,9 @@ const PurchasePointsPage = () => {
           </div>
         </div>
 
-        {/* Paquetes */}
+        {/* ===================================== */}
+        {/* PAQUETES */}
+        {/* ===================================== */}
         <div className="mb-8">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Elige tu Paquete</h2>
           
@@ -350,7 +371,9 @@ const PurchasePointsPage = () => {
           </div>
         </div>
 
-        {/* Métodos de Pago */}
+        {/* ===================================== */}
+        {/* MÉTODOS DE PAGO */}
+        {/* ===================================== */}
         {selectedPackage && (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -471,9 +494,11 @@ const PurchasePointsPage = () => {
           </div>
         )}
 
-        {/* Historial de Compras */}
+        {/* ===================================== */}
+        {/* HISTORIAL DE COMPRAS */}
+        {/* ===================================== */}
         {purchaseHistory.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-20">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <Clock className="h-6 w-6" />
