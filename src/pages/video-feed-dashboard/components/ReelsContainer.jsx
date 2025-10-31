@@ -2,6 +2,7 @@
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
 // ============================================================================
+// ✅ CORREGIDO: Verificaciones de seguridad para comment.user
 // Componente principal para visualización de reels con:
 // - Sistema de puntos integrado (usa PointsContext)
 // - Likes, comentarios, guardados, compartir
@@ -1540,7 +1541,7 @@ const ReelsContainer = ({
         )}
       </div>
 
-      {/* MODAL DE COMENTARIOS */}
+      {/* MODAL DE COMENTARIOS - ✅ CORREGIDO CON VERIFICACIONES DE SEGURIDAD */}
       {showCommentsModal && currentVideo && (
         <div 
           className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
@@ -1568,24 +1569,26 @@ const ReelsContainer = ({
                   <div key={comment.id} className="space-y-2">
                     <div className="flex space-x-3">
                       <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
-                        {comment.user.avatar ? (
-                          <img src={comment.user.avatar} alt={comment.user.name} className="w-full h-full object-cover" />
+                        {/* ✅ VERIFICACIÓN DE SEGURIDAD: comment.user */}
+                        {comment.user?.avatar ? (
+                          <img src={comment.user.avatar} alt={comment.user.name || 'Usuario'} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                             <span className="text-white text-xs font-bold">
-                              {comment.user.name?.charAt(0) || 'U'}
+                              {comment.user?.name?.charAt(0) || 'U'}
                             </span>
                           </div>
                         )}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-sm">{comment.user.name}</span>
+                          {/* ✅ VERIFICACIÓN DE SEGURIDAD: comment.user.name */}
+                          <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
                           <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
                         </div>
                         <p className="text-sm mt-1">{comment.content}</p>
                         <button
-                          onClick={() => handleReply(comment.id, comment.user.username)}
+                          onClick={() => handleReply(comment.id, comment.user?.username || comment.user?.name || 'usuario')}
                           className="text-xs text-gray-500 hover:text-gray-700 mt-1"
                         >
                           Responder
@@ -1613,19 +1616,21 @@ const ReelsContainer = ({
                                   {comment.replies.map((reply) => (
                                     <div key={reply.id} className="flex space-x-2">
                                       <div className="w-6 h-6 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
-                                        {reply.user.avatar ? (
-                                          <img src={reply.user.avatar} alt={reply.user.name} className="w-full h-full object-cover" />
+                                        {/* ✅ VERIFICACIÓN DE SEGURIDAD: reply.user */}
+                                        {reply.user?.avatar ? (
+                                          <img src={reply.user.avatar} alt={reply.user.name || 'Usuario'} className="w-full h-full object-cover" />
                                         ) : (
                                           <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
                                             <span className="text-white text-[10px] font-bold">
-                                              {reply.user.name?.charAt(0) || 'U'}
+                                              {reply.user?.name?.charAt(0) || 'U'}
                                             </span>
                                           </div>
                                         )}
                                       </div>
                                       <div className="flex-1">
                                         <div className="flex items-center space-x-2">
-                                          <span className="font-semibold text-xs">{reply.user.name}</span>
+                                          {/* ✅ VERIFICACIÓN DE SEGURIDAD: reply.user.name */}
+                                          <span className="font-semibold text-xs">{reply.user?.name || 'Usuario'}</span>
                                           <span className="text-[10px] text-gray-500">{formatTimeAgo(reply.created_at)}</span>
                                         </div>
                                         <p className="text-xs mt-0.5">{reply.content}</p>
