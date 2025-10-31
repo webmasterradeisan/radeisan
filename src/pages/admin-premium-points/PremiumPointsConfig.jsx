@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../supabase';
+import { supabase } from '../../supabase.js';
 import { 
   Plus, Edit2, Trash2, Save, X, DollarSign, Package, 
   CreditCard, Settings, TrendingUp, Eye, EyeOff, AlertCircle,
