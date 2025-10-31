@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Sparkles, ArrowRight, Home } from 'lucide-react';
 import { usePoints } from '../../contexts/PointsContext';
-import paymentService from '../../services/paymentService';
+import paymentService from '../../services/paymentService.js';
 
 const PurchaseSuccess = () => {
   const navigate = useNavigate();
