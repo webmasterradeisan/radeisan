@@ -1541,16 +1541,154 @@ const ReelsContainer = ({
         )}
       </div>
 
-      {/* MODAL DE COMENTARIOS - ✅ CORREGIDO CON VERIFICACIONES DE SEGURIDAD */}
+      {/* PANEL/MODAL DE COMENTARIOS - ✅ CORREGIDO CON VERIFICACIONES DE SEGURIDAD */}
       {showCommentsModal && currentVideo && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-          onClick={handleCloseComments}
-        >
-          <div 
-            className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <>
+          {/* MOBILE: Modal overlay centrado */}
+          {isMobile && (
+            <div 
+              className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
+              onClick={handleCloseComments}
+            >
+              <div 
+                className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header del modal */}
+                <div className="flex items-center justify-between p-4 border-b">
+                  <h3 className="text-lg font-semibold">Comentarios</h3>
+                  <button
+                    onClick={handleCloseComments}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <Icon name="X" size={20} />
+                  </button>
+                </div>
+
+                {/* Lista de comentarios */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {comments[currentVideo.id]?.length > 0 ? (
+                    comments[currentVideo.id].map((comment) => (
+                      <div key={comment.id} className="space-y-2">
+                        <div className="flex space-x-3">
+                          <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                            {/* ✅ VERIFICACIÓN DE SEGURIDAD: comment.user */}
+                            {comment.user?.avatar ? (
+                              <img src={comment.user.avatar} alt={comment.user.name || 'Usuario'} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                                <span className="text-white text-xs font-bold">
+                                  {comment.user?.name?.charAt(0) || 'U'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              {/* ✅ VERIFICACIÓN DE SEGURIDAD: comment.user.name */}
+                              <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
+                              <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
+                            </div>
+                            <p className="text-sm mt-1">{comment.content}</p>
+                            <button
+                              onClick={() => handleReply(comment.id, comment.user?.username || comment.user?.name || 'usuario')}
+                              className="text-xs text-gray-500 hover:text-gray-700 mt-1"
+                            >
+                              Responder
+                            </button>
+
+                            {/* Respuestas */}
+                            {comment.replies && comment.replies.length > 0 && (
+                              <div className="mt-2">
+                                {!showReplies[comment.id] ? (
+                                  <button
+                                    onClick={() => toggleReplies(comment.id)}
+                                    className="text-xs text-blue-600 hover:text-blue-700"
+                                  >
+                                    Ver {comment.replies.length} respuesta{comment.replies.length > 1 ? 's' : ''}
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => toggleReplies(comment.id)}
+                                      className="text-xs text-blue-600 hover:text-blue-700 mb-2"
+                                    >
+                                      Ocultar respuestas
+                                    </button>
+                                    <div className="space-y-2 pl-4 border-l-2 border-gray-200">
+                                      {comment.replies.map((reply) => (
+                                        <div key={reply.id} className="flex space-x-2">
+                                          <div className="w-6 h-6 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                                            {/* ✅ VERIFICACIÓN DE SEGURIDAD: reply.user */}
+                                            {reply.user?.avatar ? (
+                                              <img src={reply.user.avatar} alt={reply.user.name || 'Usuario'} className="w-full h-full object-cover" />
+                                            ) : (
+                                              <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                                                <span className="text-white text-[10px] font-bold">
+                                                  {reply.user?.name?.charAt(0) || 'U'}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="flex-1">
+                                            <div className="flex items-center space-x-2">
+                                              {/* ✅ VERIFICACIÓN DE SEGURIDAD: reply.user.name */}
+                                              <span className="font-semibold text-xs">{reply.user?.name || 'Usuario'}</span>
+                                              <span className="text-[10px] text-gray-500">{formatTimeAgo(reply.created_at)}</span>
+                                            </div>
+                                            <p className="text-xs mt-0.5">{reply.content}</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Icon name="MessageCircle" size={48} className="mx-auto mb-2 text-gray-300" />
+                      <p>No hay comentarios aún</p>
+                      <p className="text-sm">¡Sé el primero en comentar!</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Input de comentario */}
+                <div className="p-4 border-t">
+                  {replyingTo && (
+                    <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded">
+                      <span className="text-sm text-blue-700">Respondiendo...</span>
+                      <button
+                        onClick={handleCancelReply}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Icon name="X" size={16} />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex space-x-2">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Escribe un comentario..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows={2}
+                    />
+                    <button
+                      onClick={() => handleAddComment(currentVideo.id)}
+                      disabled={!newComment.trim()}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Icon name="Send" size={20} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             {/* Header del modal */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
@@ -1685,8 +1823,148 @@ const ReelsContainer = ({
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          )}
+
+          {/* DESKTOP: Panel lateral derecho */}
+          {isDesktop && (
+            <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4">
+              {/* Header del panel */}
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="text-lg font-semibold">Comentarios</h3>
+                <button
+                  onClick={handleCloseComments}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <Icon name="X" size={20} />
+                </button>
+              </div>
+
+              {/* Lista de comentarios */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {comments[currentVideo.id]?.length > 0 ? (
+                  comments[currentVideo.id].map((comment) => (
+                    <div key={comment.id} className="space-y-2">
+                      <div className="flex space-x-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                          {/* ✅ VERIFICACIÓN DE SEGURIDAD: comment.user */}
+                          {comment.user?.avatar ? (
+                            <img src={comment.user.avatar} alt={comment.user.name || 'Usuario'} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">
+                                {comment.user?.name?.charAt(0) || 'U'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            {/* ✅ VERIFICACIÓN DE SEGURIDAD: comment.user.name */}
+                            <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
+                            <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
+                          </div>
+                          <p className="text-sm mt-1">{comment.content}</p>
+                          <button
+                            onClick={() => handleReply(comment.id, comment.user?.username || comment.user?.name || 'usuario')}
+                            className="text-xs text-gray-500 hover:text-gray-700 mt-1"
+                          >
+                            Responder
+                          </button>
+
+                          {/* Respuestas */}
+                          {comment.replies && comment.replies.length > 0 && (
+                            <div className="mt-2">
+                              {!showReplies[comment.id] ? (
+                                <button
+                                  onClick={() => toggleReplies(comment.id)}
+                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                >
+                                  Ver {comment.replies.length} respuesta{comment.replies.length > 1 ? 's' : ''}
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => toggleReplies(comment.id)}
+                                    className="text-xs text-blue-600 hover:text-blue-700 mb-2"
+                                  >
+                                    Ocultar respuestas
+                                  </button>
+                                  <div className="space-y-2 pl-4 border-l-2 border-gray-200">
+                                    {comment.replies.map((reply) => (
+                                      <div key={reply.id} className="flex space-x-2">
+                                        <div className="w-6 h-6 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                                          {/* ✅ VERIFICACIÓN DE SEGURIDAD: reply.user */}
+                                          {reply.user?.avatar ? (
+                                            <img src={reply.user.avatar} alt={reply.user.name || 'Usuario'} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                                              <span className="text-white text-[10px] font-bold">
+                                                {reply.user?.name?.charAt(0) || 'U'}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex-1">
+                                          <div className="flex items-center space-x-2">
+                                            {/* ✅ VERIFICACIÓN DE SEGURIDAD: reply.user.name */}
+                                            <span className="font-semibold text-xs">{reply.user?.name || 'Usuario'}</span>
+                                            <span className="text-[10px] text-gray-500">{formatTimeAgo(reply.created_at)}</span>
+                                          </div>
+                                          <p className="text-xs mt-0.5">{reply.content}</p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Icon name="MessageCircle" size={48} className="mx-auto mb-2 text-gray-300" />
+                    <p>No hay comentarios aún</p>
+                    <p className="text-sm">¡Sé el primero en comentar!</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Input de comentario */}
+              <div className="p-4 border-t">
+                {replyingTo && (
+                  <div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded">
+                    <span className="text-sm text-blue-700">Respondiendo...</span>
+                    <button
+                      onClick={handleCancelReply}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Icon name="X" size={16} />
+                    </button>
+                  </div>
+                )}
+                <div className="flex space-x-2">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Escribe un comentario..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={2}
+                  />
+                  <button
+                    onClick={() => handleAddComment(currentVideo.id)}
+                    disabled={!newComment.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Icon name="Send" size={20} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
