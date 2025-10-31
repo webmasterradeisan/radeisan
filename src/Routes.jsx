@@ -298,7 +298,9 @@ const Routes = () => {
                 path="/purchase-points" 
                 element={
                   <ProtectedRoute>
-                    <PurchasePointsPage />
+                    <MobileLayoutWrapper>
+                      <PurchasePointsPage />
+                    </MobileLayoutWrapper>
                   </ProtectedRoute>
                 } 
               />
@@ -308,7 +310,9 @@ const Routes = () => {
                 path="/comprar-puntos" 
                 element={
                   <ProtectedRoute>
-                    <PurchasePointsPage />
+                    <MobileLayoutWrapper>
+                      <PurchasePointsPage />
+                    </MobileLayoutWrapper>
                   </ProtectedRoute>
                 } 
               />
