@@ -160,7 +160,7 @@ const HeroSection = ({ onOpenVideo }) => (
                 onClick={onOpenVideo}
               >
                 <img 
-                  src="https://i.ibb.co/vxYspn2x/Radeisan-Logo-Transparente-1.png" 
+                  src="https://i.ibb.co/FqNGRrS4/radeisan-background.jpg" 
                   alt="Video Promocional"
                   className="absolute inset-0 w-full h-full object-contain p-8 opacity-20"
                 />
