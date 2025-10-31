@@ -156,20 +156,21 @@ const HeroSection = ({ onOpenVideo }) => (
           <div className="relative">
             <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-2xl p-8 lg:p-12">
               <div 
-                className="aspect-video bg-white rounded-xl shadow-2xl flex items-center justify-center cursor-pointer hover:shadow-3xl transition-all duration-300 group relative overflow-hidden"
+                className="aspect-video rounded-xl shadow-2xl flex items-center justify-center cursor-pointer hover:shadow-3xl transition-all duration-300 group relative overflow-hidden"
                 onClick={onOpenVideo}
               >
                 <img 
                   src="https://i.ibb.co/FqNGRrS4/radeisan-background.jpg" 
                   alt="Video Promocional"
-                  className="absolute inset-0 w-full h-full object-contain p-8 opacity-20"
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
+                <div className="absolute inset-0 bg-black/60"></div>
                 <div className="text-center relative z-10">
                   <div className="w-20 h-20 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
                     <Play size={32} className="text-white" />
                   </div>
-                  <p className="text-gray-600 font-medium">Ver Video Promocional</p>
-                  <p className="text-sm text-gray-500">Descubre cómo funciona</p>
+                  <p className="text-white font-medium">Ver Video Promocional</p>
+                  <p className="text-sm text-gray-200">Descubre cómo funciona</p>
                 </div>
               </div>
             </div>
