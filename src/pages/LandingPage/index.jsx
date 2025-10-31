@@ -69,7 +69,7 @@ const PublicHeader = () => (
             className="h-10 w-auto"
           />
           <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Radeisan
+            
           </span>
         </Link>
 
