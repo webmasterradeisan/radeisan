@@ -1,8 +1,9 @@
 // src/pages/points-rewards-store/index.jsx
-// PointsRewardsStore con integración real de Supabase
+// PointsRewardsStore - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePoints } from '../../contexts/PointsContext'; // ✅ NUEVO: Importar usePoints
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import RewardCard from './components/RewardCard';
@@ -122,11 +123,10 @@ const useRewards = () => {
   };
 };
 
-// Hook para manejar puntos del usuario
-const useUserPoints = () => {
+// ✅ MODIFICADO: Hook para estadísticas de puntos (complementa al Context)
+const usePointsStats = () => {
   const { user } = useAuth();
-  const [pointsData, setPointsData] = useState({
-    currentPoints: 0,
+  const [stats, setStats] = useState({
     pointsEarnedToday: 0,
     pointsEarnedThisWeek: 0,
     pointsEarnedThisMonth: 0,
@@ -136,23 +136,12 @@ const useUserPoints = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Obtener balance y estadísticas de puntos
-  const fetchPointsData = useCallback(async () => {
+  const fetchStats = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       setLoading(true);
       setError(null);
-
-      // Obtener balance actual
-      const { data: balanceData, error: balanceError } = await supabase
-        .rpc('get_user_points_balance', { target_user_id: user.id });
-
-      if (balanceError && balanceError.code !== 'PGRST116') { // PGRST116 = function not found
-        throw balanceError;
-      }
-
-      const currentPoints = balanceData || 0;
 
       // Obtener transacciones para estadísticas
       const today = new Date();
@@ -200,8 +189,7 @@ const useUserPoints = () => {
         .filter(t => t.points_change < 0)
         .reduce((sum, t) => sum + t.points_change, 0));
 
-      setPointsData({
-        currentPoints,
+      setStats({
         pointsEarnedToday,
         pointsEarnedThisWeek,
         pointsEarnedThisMonth,
@@ -210,11 +198,9 @@ const useUserPoints = () => {
       });
 
     } catch (err) {
-      console.error('Error fetching points data:', err);
+      console.error('Error fetching points stats:', err);
       setError(err.message);
-      // Fallback con datos mock si hay error
-      setPointsData({
-        currentPoints: 0,
+      setStats({
         pointsEarnedToday: 0,
         pointsEarnedThisWeek: 0,
         pointsEarnedThisMonth: 0,
@@ -227,14 +213,14 @@ const useUserPoints = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    fetchPointsData();
-  }, [fetchPointsData]);
+    fetchStats();
+  }, [fetchStats]);
 
   return {
-    ...pointsData,
+    ...stats,
     loading,
     error,
-    refreshBalance: fetchPointsData
+    refresh: fetchStats
   };
 };
 
@@ -288,9 +274,10 @@ const usePointsTransactions = () => {
   };
 };
 
-// Hook para canjear recompensas
+// ✅ MODIFICADO: Hook para canjear recompensas con integración al Context
 const useRewardRedemption = () => {
   const { user } = useAuth();
+  const { deductPoints, refreshPoints } = usePoints(); // ✅ NUEVO: Usar funciones del Context
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -303,15 +290,11 @@ const useRewardRedemption = () => {
       setLoading(true);
       setError(null);
 
-      // Verificar balance de puntos actual
-      const { data: balanceData } = await supabase
-        .rpc('get_user_points_balance', { target_user_id: user.id });
-
-      const currentBalance = balanceData || 0;
-
-      if (currentBalance < reward.pointsCost) {
-        throw new Error('Puntos insuficientes para este canje');
-      }
+      console.log('🎁 Iniciando canje de recompensa:', {
+        rewardId: reward.id,
+        title: reward.title,
+        cost: reward.pointsCost
+      });
 
       // Verificar stock disponible
       const { data: rewardData } = await supabase
@@ -323,8 +306,6 @@ const useRewardRedemption = () => {
       if (rewardData.stock_quantity === 0) {
         throw new Error('Recompensa agotada');
       }
-
-      // TODO: Verificar límite por usuario si es necesario
 
       // Procesar el canje según el tipo de recompensa
       let redemptionResult = {};
@@ -346,9 +327,36 @@ const useRewardRedemption = () => {
           throw new Error('Tipo de recompensa no soportado');
       }
 
-      // Crear transacción de puntos (esto debería ser manejado por el backend)
-      // Por ahora es un placeholder
-      console.log(`Reward redeemed: -${reward.pointsCost} points for ${reward.title}`);
+      // ✅ NUEVO: Deducir puntos usando el Context
+      deductPoints(reward.pointsCost, `Canje: ${reward.title}`);
+
+      // Actualizar el stock de la recompensa
+      if (rewardData.stock_quantity > 0) {
+        await supabase
+          .from('rewards')
+          .update({ 
+            stock_quantity: rewardData.stock_quantity - 1,
+            redeemed_count: reward.redeemedCount + 1
+          })
+          .eq('id', reward.id);
+      }
+
+      // Registrar el canje en la tabla de redemptions
+      await supabase
+        .from('redemptions')
+        .insert({
+          user_id: user.id,
+          reward_id: reward.id,
+          points_spent: reward.pointsCost,
+          status: 'pending',
+          delivery_details: deliveryDetails,
+          redemption_data: redemptionResult
+        });
+
+      console.log('✅ Canje completado exitosamente');
+
+      // ✅ NUEVO: Refrescar puntos desde el servidor
+      await refreshPoints();
 
       return {
         success: true,
@@ -356,7 +364,7 @@ const useRewardRedemption = () => {
       };
 
     } catch (err) {
-      console.error('Error redeeming reward:', err);
+      console.error('❌ Error al canjear recompensa:', err);
       setError(err.message);
       return {
         success: false,
@@ -365,7 +373,7 @@ const useRewardRedemption = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, deductPoints, refreshPoints]);
 
   return {
     redeemReward,
@@ -422,6 +430,7 @@ const getTransactionIcon = (type) => {
 // Procesar diferentes tipos de recompensas
 const processInstantReward = async (reward, userId) => {
   // Lógica para recompensas instantáneas (ej: destacar video)
+  console.log('⚡ Procesando recompensa instantánea');
   return {
     type: 'instant',
     message: 'Recompensa aplicada instantáneamente',
@@ -433,6 +442,8 @@ const processCodeReward = async (reward, userId) => {
   // Generar código de descuento único
   const code = `RADEISAN${Date.now()}${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
   
+  console.log('🔑 Generando código de descuento:', code);
+  
   return {
     type: 'code',
     code: code,
@@ -443,6 +454,8 @@ const processCodeReward = async (reward, userId) => {
 
 const processPhysicalReward = async (reward, userId, deliveryDetails) => {
   // Lógica para productos físicos
+  console.log('📦 Procesando envío de producto físico');
+  
   return {
     type: 'physical',
     trackingNumber: `RDS${Date.now()}`,
@@ -454,6 +467,8 @@ const processPhysicalReward = async (reward, userId, deliveryDetails) => {
 
 const processServiceReward = async (reward, userId, serviceDetails) => {
   // Lógica para servicios/bookings
+  console.log('📅 Procesando reserva de servicio');
+  
   return {
     type: 'service',
     bookingId: `BK${Date.now()}`,
@@ -477,15 +492,27 @@ const REWARD_CATEGORIES = [
 // ===============================
 const PointsRewardsStore = () => {
   const { user } = useAuth();
-  const { rewards, loading, error, refresh } = useRewards();
+  
+  // ✅ NUEVO: Usar puntos del Context en tiempo real
   const { 
-    currentPoints, 
+    totalPoints,
+    freePoints,
+    premiumPoints,
+    loading: pointsLoading 
+  } = usePoints();
+  
+  const { rewards, loading, error, refresh } = useRewards();
+  
+  // ✅ MODIFICADO: Solo estadísticas adicionales
+  const { 
     pointsEarnedToday, 
     pointsEarnedThisWeek,
-    loading: pointsLoading,
-    refreshBalance 
-  } = useUserPoints();
-  const { transactions, loading: transactionsLoading } = usePointsTransactions();
+    totalPointsEarned,
+    totalPointsSpent,
+    loading: statsLoading 
+  } = usePointsStats();
+  
+  const { transactions, loading: transactionsLoading, refresh: refreshTransactions } = usePointsTransactions();
   const { redeemReward, loading: redemptionLoading } = useRewardRedemption();
 
   const [activeCategory, setActiveCategory] = useState('all');
@@ -528,18 +555,18 @@ const PointsRewardsStore = () => {
   // COMPUTED VALUES
   // ===============================
 
-  // Filtrar recompensas que el usuario puede costear
+  // ✅ MODIFICADO: Usar totalPoints del Context
   const affordableRewards = useMemo(() => {
-    return rewards.filter(reward => currentPoints >= reward.pointsCost);
-  }, [rewards, currentPoints]);
+    return rewards.filter(reward => totalPoints >= reward.pointsCost);
+  }, [rewards, totalPoints]);
 
   // Próxima recompensa alcanzable
   const nextRewardThreshold = useMemo(() => {
     const unaffordable = rewards
-      .filter(reward => reward.pointsCost > currentPoints)
+      .filter(reward => reward.pointsCost > totalPoints)
       .sort((a, b) => a.pointsCost - b.pointsCost);
     return unaffordable.length > 0 ? unaffordable[0].pointsCost : null;
-  }, [rewards, currentPoints]);
+  }, [rewards, totalPoints]);
 
   // Recompensas destacadas
   const featuredRewards = useMemo(() => {
@@ -563,36 +590,50 @@ const PointsRewardsStore = () => {
   }, []);
 
   const handleRewardClick = useCallback((reward) => {
-    if (currentPoints >= reward.pointsCost && reward.isAvailable) {
+    if (totalPoints >= reward.pointsCost && reward.isAvailable) {
       setSelectedReward(reward);
       setIsRedemptionModalOpen(true);
     }
-  }, [currentPoints]);
+  }, [totalPoints]);
 
   const handleRedemption = useCallback(async (reward, deliveryDetails = {}) => {
     try {
+      console.log('🎁 Iniciando proceso de canje...');
+      
       const result = await redeemReward(reward, deliveryDetails);
       
       if (result.success) {
-        // Actualizar balance de puntos
-        await refreshBalance();
+        console.log('✅ Canje exitoso, actualizando datos...');
+        
         // Actualizar lista de recompensas
         await refresh({ ...filters, category: activeCategory, searchQuery, sortBy });
+        
+        // Refrescar transacciones
+        await refreshTransactions();
+        
         // Cerrar modal
         setIsRedemptionModalOpen(false);
         setSelectedReward(null);
         
-        // TODO: Mostrar mensaje de éxito con detalles del canje
-        console.log('Redemption successful:', result);
+        // Mostrar notificación de éxito
+        console.log('🎉 Recompensa canjeada:', result);
+        
+        // TODO: Mostrar toast/notification con los detalles
+        alert(`¡Recompensa canjeada exitosamente! ${result.message || ''}`);
+      } else {
+        console.error('❌ Error en el canje:', result.error);
+        alert(`Error: ${result.error}`);
       }
     } catch (error) {
-      console.error('Redemption failed:', error);
+      console.error('❌ Error en handleRedemption:', error);
+      alert(`Error: ${error.message}`);
     }
-  }, [redeemReward, refreshBalance, refresh, filters, activeCategory, searchQuery, sortBy]);
+  }, [redeemReward, refresh, refreshTransactions, filters, activeCategory, searchQuery, sortBy]);
 
   const handleWaitlist = useCallback((reward) => {
     // TODO: Implementar lista de espera
-    console.log('Added to waitlist:', reward);
+    console.log('📋 Agregado a lista de espera:', reward);
+    alert('Has sido agregado a la lista de espera. Te notificaremos cuando esté disponible.');
   }, []);
 
   // ===============================
@@ -682,13 +723,15 @@ const PointsRewardsStore = () => {
               <div className="lg:col-span-4 xl:col-span-3">
                 <div className="sticky top-32 space-y-6">
                   
-                  {/* Points Balance Card */}
+                  {/* ✅ MODIFICADO: Points Balance Card con datos del Context */}
                   <PointsBalanceCard
-                    currentPoints={currentPoints}
+                    currentPoints={totalPoints}
+                    freePoints={freePoints}
+                    premiumPoints={premiumPoints}
                     pointsEarnedToday={pointsEarnedToday}
                     pointsEarnedThisWeek={pointsEarnedThisWeek}
                     nextRewardThreshold={nextRewardThreshold}
-                    loading={pointsLoading}
+                    loading={pointsLoading || statsLoading}
                   />
 
                   {/* Quick Stats */}
@@ -706,6 +749,15 @@ const PointsRewardsStore = () => {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Destacadas</span>
                         <span className="font-medium">{featuredRewards.length}</span>
+                      </div>
+                      <div className="h-px bg-border my-2" />
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Total ganado</span>
+                        <span className="font-medium text-green-600">{totalPointsEarned.toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Total gastado</span>
+                        <span className="font-medium text-red-600">{totalPointsSpent.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -802,7 +854,7 @@ const PointsRewardsStore = () => {
                         <RewardCard
                           key={reward.id}
                           reward={reward}
-                          userPoints={currentPoints}
+                          userPoints={totalPoints}
                           onRedeem={handleRewardClick}
                           onWaitlist={handleWaitlist}
                           compact
@@ -835,7 +887,7 @@ const PointsRewardsStore = () => {
                         <RewardCard
                           key={reward.id}
                           reward={reward}
-                          userPoints={currentPoints}
+                          userPoints={totalPoints}
                           onRedeem={handleRewardClick}
                           onWaitlist={handleWaitlist}
                           layout={viewMode}
@@ -853,7 +905,7 @@ const PointsRewardsStore = () => {
         {selectedReward && (
           <RedemptionModal
             reward={selectedReward}
-            userPoints={currentPoints}
+            userPoints={totalPoints}
             isOpen={isRedemptionModalOpen}
             onClose={() => {
               setIsRedemptionModalOpen(false);
@@ -877,7 +929,7 @@ const PointsRewardsStore = () => {
         </div>
 
         {/* Welcome Message for New Users */}
-        {!loading && currentPoints === 0 && user && (
+        {!loading && totalPoints === 0 && user && (
           <div className="fixed bottom-4 left-4 max-w-sm bg-card border rounded-lg p-4 shadow-lg z-50">
             <div className="flex items-start space-x-3">
               <div className="w-10 h-10 bg-accent/10 rounded-full flex items-center justify-center flex-shrink-0">
@@ -889,6 +941,18 @@ const PointsRewardsStore = () => {
                   Ve videos, sube contenido y gana puntos para canjear por recompensas increíbles.
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Debug Info - Solo en development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="fixed bottom-4 right-24 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
+            <div className="space-y-1">
+              <div>Total: {totalPoints}</div>
+              <div>Gratis: {freePoints}</div>
+              <div>Premium: {premiumPoints}</div>
+              <div>Canjeables: {affordableRewards.length}/{rewards.length}</div>
             </div>
           </div>
         )}
