@@ -30,7 +30,7 @@ import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
-import PurchasePointsPage from './pages/purchase-points/PurchasePointsPage';
+import PurchasePointsPage from './pages/PurchasePointsPage';
 import PurchaseSuccess from './pages/purchase-points/PurchaseSuccess';
 import PurchaseFailure from './pages/purchase-points/PurchaseFailure';
 import PurchasePending from './pages/purchase-points/PurchasePending';
