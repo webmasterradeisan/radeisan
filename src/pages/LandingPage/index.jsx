@@ -303,12 +303,7 @@ const PointsSystemSection = () => {
                 Obtén puntos completando misiones diarias, interactuando con contenido y siendo parte activa de la comunidad. 
                 Estos puntos son canjeables en nuestra tienda por recompensas exclusivas.
               </p>
-              <div className="bg-gray-100 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Valor por punto:</span>
-                  <span className="text-2xl font-bold text-gray-700">1x</span>
-                </div>
-              </div>
+              
             </div>
 
             {/* Puntos Premium */}
@@ -326,12 +321,7 @@ const PointsSystemSection = () => {
                 Adquiere puntos premium para obtener mayor poder de compra en la tienda. 
                 Cada punto premium tiene más valor que los puntos gratis, permitiéndote acceder a recompensas exclusivas más rápido.
               </p>
-              <div className="bg-green-100 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Valor por punto:</span>
-                  <span className="text-2xl font-bold text-green-600">2.5x</span>
-                </div>
-              </div>
+              
             </div>
           </div>
 
@@ -543,7 +533,7 @@ const PublicFooter = () => (
                 className="h-10 w-auto"
               />
               <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                Radeisan
+                
               </span>
             </div>
             <p className="text-gray-400 mb-6 leading-relaxed">
