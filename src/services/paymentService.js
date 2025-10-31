@@ -4,7 +4,7 @@
  * Para compra de puntos premium en Colombia
  */
 
-import { supabase } from '../../lib/supabase.js';
+import { supabase } from '../lib/supabase.js';
 
 // ==========================================
 // CONFIGURACIÓN GENERAL
