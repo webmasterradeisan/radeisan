@@ -1,8 +1,9 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - CORREGIDO para leer orientación REAL de BD
+// UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePoints } from '../../contexts/PointsContext'; // ✅ NUEVO: Importar usePoints
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import ProfileTabs from './components/ProfileTabs';
@@ -115,7 +116,7 @@ const useUserProfile = () => {
   };
 };
 
-// Hook para videos horizontales - CORREGIDO para usar orientación real de BD
+// Hook para videos horizontales
 const useUserVideos = (userId) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +143,6 @@ const useUserVideos = (userId) => {
 
       console.log('🎬 Fetching HORIZONTAL videos for user ID:', userId);
 
-      // CORREGIDO: Consulta que incluye campos de orientación REAL
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -181,7 +181,6 @@ const useUserVideos = (userId) => {
 
       console.log('🔍 Filtrando videos por orientación REAL de BD...');
       
-      // CORREGIDO: Filtrar usando orientación REAL de BD
       const allVideos = data || [];
       const horizontalVideos = allVideos.filter(video => {
         const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
@@ -200,7 +199,6 @@ const useUserVideos = (userId) => {
 
       setVideos(horizontalVideos);
 
-      // Calcular estadísticas usando solo videos horizontales
       const videoStats = horizontalVideos.reduce(
         (acc, video) => ({
           totalVideos: acc.totalVideos + 1,
@@ -243,7 +241,7 @@ const useUserVideos = (userId) => {
   };
 };
 
-// Hook para reels (videos verticales) - CORREGIDO para usar orientación real de BD
+// Hook para reels (videos verticales)
 const useUserReels = (userId) => {
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -270,7 +268,6 @@ const useUserReels = (userId) => {
 
       console.log('📱 Fetching VERTICAL videos (reels) for user ID:', userId);
 
-      // CORREGIDO: Consulta que incluye campos de orientación REAL
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -309,7 +306,6 @@ const useUserReels = (userId) => {
 
       console.log('🔍 Filtrando reels por orientación REAL de BD...');
 
-      // CORREGIDO: Filtrar usando orientación REAL de BD
       const allVideos = data || [];
       const verticalVideos = allVideos.filter(video => {
         const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
@@ -328,7 +324,6 @@ const useUserReels = (userId) => {
 
       setReels(verticalVideos);
 
-      // Calcular estadísticas usando solo reels
       const reelStats = verticalVideos.reduce(
         (acc, reel) => ({
           totalReels: acc.totalReels + 1,
@@ -441,20 +436,107 @@ const useUserPhotos = (userId) => {
   };
 };
 
-// Hook para historial de puntos - MOCK
-const usePointsHistory = () => {
-  const [transactions] = useState([]);
-  const [summary] = useState({
+// ✅ NUEVO: Hook para historial de puntos REAL
+const usePointsHistory = (userId) => {
+  const [transactions, setTransactions] = useState([]);
+  const [summary, setSummary] = useState({
     currentBalance: 0,
     totalEarned: 0,
-    totalSpent: 0
+    totalSpent: 0,
+    freePoints: 0,
+    premiumPoints: 0
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchPointsHistory = useCallback(async () => {
+    if (!userId) {
+      console.log('💰 No userId provided for points history');
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('💰 Fetching points history for user:', userId);
+
+      // Obtener transacciones
+      const { data: transactionsData, error: transError } = await supabase
+        .from('points_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (transError) {
+        console.error('❌ Error fetching transactions:', transError);
+        throw transError;
+      }
+
+      // Obtener balance actual
+      const { data: pointsData, error: pointsError } = await supabase
+        .from('points_types')
+        .select('free_points, premium_points')
+        .eq('user_id', userId)
+        .single();
+
+      if (pointsError && pointsError.code !== 'PGRST116') {
+        console.error('❌ Error fetching points balance:', pointsError);
+      }
+
+      const freePoints = pointsData?.free_points || 0;
+      const premiumPoints = pointsData?.premium_points || 0;
+      const currentBalance = freePoints + premiumPoints;
+
+      // Calcular totales
+      const totalEarned = transactionsData
+        ?.filter(t => t.points_change > 0)
+        .reduce((sum, t) => sum + t.points_change, 0) || 0;
+
+      const totalSpent = Math.abs(
+        transactionsData
+          ?.filter(t => t.points_change < 0)
+          .reduce((sum, t) => sum + t.points_change, 0) || 0
+      );
+
+      console.log('✅ Points history fetched:', {
+        transactions: transactionsData?.length || 0,
+        currentBalance,
+        totalEarned,
+        totalSpent
+      });
+
+      setTransactions(transactionsData || []);
+      setSummary({
+        currentBalance,
+        totalEarned,
+        totalSpent,
+        freePoints,
+        premiumPoints
+      });
+
+    } catch (err) {
+      console.error('💥 Error in fetchPointsHistory:', err);
+      setError(err.message);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchPointsHistory();
+  }, [fetchPointsHistory]);
 
   return {
     transactions,
     summary,
-    loading: false,
-    error: null
+    loading,
+    error,
+    refresh: fetchPointsHistory
   };
 };
 
@@ -956,6 +1038,15 @@ const ReelsGridComponent = ({
 
 const UserProfileSettings = () => {
   const { user, isAuthenticated, signOut } = useAuth();
+  
+  // ✅ NUEVO: Usar el hook de puntos real
+  const { 
+    totalPoints, 
+    freePoints, 
+    premiumPoints, 
+    loading: pointsLoading 
+  } = usePoints();
+  
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
@@ -992,10 +1083,17 @@ const UserProfileSettings = () => {
     refresh: refreshPhotos
   } = useUserPhotos(user?.id);
 
-  const { transactions, summary } = usePointsHistory();
+  // ✅ MODIFICADO: Usar hook real de historial de puntos
+  const { 
+    transactions, 
+    summary,
+    loading: pointsHistoryLoading,
+    refresh: refreshPointsHistory
+  } = usePointsHistory(user?.id);
+  
   const { purchases } = usePurchaseHistory();
 
-  // Formatear datos del usuario
+  // ✅ MODIFICADO: Formatear datos del usuario CON PUNTOS REALES
   const userData = useMemo(() => {
     if (!profileData) return null;
 
@@ -1014,12 +1112,17 @@ const UserProfileSettings = () => {
       coverImage: profileData.cover_image_url,
       website: profileData.website || '',
       location: profileData.location || '',
-      points: profileData.points || 0,
+      
+      // ✅ MODIFICADO: Usar puntos del Context en lugar de profileData
+      points: totalPoints,
+      freePoints: freePoints,
+      premiumPoints: premiumPoints,
+      
       isBusinessAccount: profileData.is_business_account || false,
       isVerified: profileData.is_verified || false,
       joinedAt: profileData.created_at,
       
-      // Contadores CORREGIDOS
+      // Contadores
       videosCount: videos.length,
       reelsCount: reels.length,
       photosCount: photos.length,
@@ -1033,7 +1136,7 @@ const UserProfileSettings = () => {
       
       achievements: []
     };
-  }, [profileData, videos, reels, photos, videoStats, reelStats]);
+  }, [profileData, videos, reels, photos, videoStats, reelStats, totalPoints, freePoints, premiumPoints]);
 
   // Calcular contadores para tabs
   const tabCounts = useMemo(() => ({
@@ -1310,7 +1413,7 @@ const UserProfileSettings = () => {
           <PointsHistory 
             transactions={transactions}
             summary={summary}
-            loading={false}
+            loading={pointsHistoryLoading}
           />
         );
 
@@ -1492,8 +1595,8 @@ const UserProfileSettings = () => {
                           </div>
                         )}
 
-                        {/* Stats CORREGIDAS */}
-                        <div className="flex flex-wrap gap-6 text-sm">
+                        {/* Stats */}
+                        <div className="flex flex-wrap gap-6 text-sm mb-4">
                           <div className="flex items-center space-x-1">
                             <Icon name="Monitor" size={16} className="text-blue-600" />
                             <span className="font-semibold">{userData?.videosCount || 0}</span>
@@ -1520,6 +1623,51 @@ const UserProfileSettings = () => {
                             <span className="text-muted-foreground">likes</span>
                           </div>
                         </div>
+
+                        {/* ✅ NUEVO: Tarjeta de Balance de Puntos */}
+                        <div className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg p-4 max-w-md">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium mb-1">
+                                Balance de Puntos
+                              </p>
+                              {pointsLoading ? (
+                                <div className="h-8 w-32 bg-yellow-200/50 dark:bg-yellow-800/50 animate-pulse rounded" />
+                              ) : (
+                                <>
+                                  <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
+                                    {totalPoints.toLocaleString()}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    <span className="text-green-600 dark:text-green-400 font-medium">
+                                      {freePoints.toLocaleString()} gratis
+                                    </span>
+                                    {' + '}
+                                    <span className="text-purple-600 dark:text-purple-400 font-medium">
+                                      {premiumPoints.toLocaleString()} premium
+                                    </span>
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0">
+                              <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center shadow-lg">
+                                <Icon name="Star" size={32} className="text-white" />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Link a tab de puntos */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full mt-3 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
+                            onClick={() => setActiveTab('points')}
+                          >
+                            <Icon name="TrendingUp" size={14} className="mr-2" />
+                            Ver historial de puntos
+                          </Button>
+                        </div>
                       </div>
 
                       {/* Botones de acción */}
@@ -1542,7 +1690,7 @@ const UserProfileSettings = () => {
             {/* Profile Tabs */}
             <div className="mb-8">
               <div className="border-b border-border">
-                <nav className="flex space-x-8">
+                <nav className="flex space-x-8 overflow-x-auto">
                   {[
                     { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
@@ -1642,11 +1790,12 @@ const UserProfileSettings = () => {
 
       {/* Debug Info - Solo en development */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs">
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
           <div className="space-y-1">
             <div>Videos H: {videos.length}</div>
             <div>Reels V: {reels.length}</div>
             <div>Fotos: {photos.length}</div>
+            <div>Puntos: {totalPoints}</div>
             <div>Tab: {activeTab}</div>
           </div>
         </div>
