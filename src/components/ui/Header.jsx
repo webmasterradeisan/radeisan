@@ -345,6 +345,16 @@ const Header = () => {
                     )}
                   </div>
 
+                  {/* Botón para Comprar Puntos */}
+<Link 
+  to="/purchase-points"
+  className="hidden md:flex items-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+>
+  <Icon name="Sparkles" size={18} className="text-white" />
+  Comprar Puntos
+</Link>
+
+
                   {/* Botón de Subir Contenido */}
                   <Button size="sm" asChild className="hidden md:flex">
                     <Link to="/upload">
