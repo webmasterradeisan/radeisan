@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Clock, RefreshCw, Home, AlertCircle } from 'lucide-react';
-import paymentService from '../../services/paymentService';
+import paymentService from '../../services/paymentService.js';
 
 const PurchasePending = () => {
   const navigate = useNavigate();
