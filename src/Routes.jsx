@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN COMPLETA CON PANEL ADMIN Y SISTEMA DE PUNTOS
+// src/Routes.jsx - VERSIÓN COMPLETA CON PANEL ADMIN Y SISTEMA DE PUNTOS PREMIUM
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -29,6 +29,12 @@ import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
+// ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
+import PurchasePointsPage from './pages/purchase-points/PurchasePointsPage';
+import PurchaseSuccess from './pages/purchase-points/PurchaseSuccess';
+import PurchaseFailure from './pages/purchase-points/PurchaseFailure';
+import PurchasePending from './pages/purchase-points/PurchasePending';
+
 // ===============================
 // COMPONENTES DEL PANEL ADMIN
 // ===============================
@@ -45,6 +51,9 @@ import RewardsManagement from './pages/admin-rewards/RewardsManagement';
 import BrandingSettings from './pages/admin-settings/BrandingSettings';
 import ContentModeration from './pages/admin-moderation/ContentModeration';
 import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics';
+
+// ✅ NUEVO - GESTIÓN DE PUNTOS PREMIUM (ADMIN)
+import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfig';
 
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
@@ -282,6 +291,58 @@ const Routes = () => {
                 } 
               />
 
+              {/* =================== 💎 SISTEMA DE COMPRA DE PUNTOS PREMIUM =================== */}
+              
+              {/* Página principal de compra */}
+              <Route 
+                path="/purchase-points" 
+                element={
+                  <ProtectedRoute>
+                    <PurchasePointsPage />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* Ruta alternativa en español */}
+              <Route 
+                path="/comprar-puntos" 
+                element={
+                  <ProtectedRoute>
+                    <PurchasePointsPage />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* Rutas de retorno de pasarelas de pago */}
+              <Route 
+                path="/purchase/success" 
+                element={
+                  <ProtectedRoute>
+                    <PurchaseSuccess />
+                  </ProtectedRoute>
+                } 
+              />
+
+              <Route 
+                path="/purchase/failure" 
+                element={
+                  <ProtectedRoute>
+                    <PurchaseFailure />
+                  </ProtectedRoute>
+                } 
+              />
+
+              <Route 
+                path="/purchase/pending" 
+                element={
+                  <ProtectedRoute>
+                    <PurchasePending />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* =================== OTRAS RUTAS PROTEGIDAS =================== */}
+
               <Route 
                 path="/saved" 
                 element={
@@ -349,6 +410,16 @@ const Routes = () => {
                   element={
                     <ProtectedAdminRoute requiredPermission="manage_points">
                       <PointsRulesEditor />
+                    </ProtectedAdminRoute>
+                  } 
+                />
+
+                {/* 💎 NUEVO - Puntos Premium - ✅ REAL */}
+                <Route 
+                  path="premium-points" 
+                  element={
+                    <ProtectedAdminRoute requiredPermission="manage_points">
+                      <PremiumPointsConfig />
                     </ProtectedAdminRoute>
                   } 
                 />
@@ -434,6 +505,9 @@ const Routes = () => {
               <Route path="/home" element={<Navigate to="/dashboard" replace />} />
               <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
               <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
+              
+              {/* Redirect de compra (por si alguien usa /buy-points) */}
+              <Route path="/buy-points" element={<Navigate to="/purchase-points" replace />} />
 
               {/* =================== 404 =================== */}
               
