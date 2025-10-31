@@ -5,6 +5,7 @@
 // ✅ CORREGIDO: Verificaciones de seguridad para comment.user
 // ✅ CORREGIDO: Estructura JSX del modal
 // ✅ NUEVO: Avisos de puntos cerca del botón like
+// ✅ CORREGIDO: Sistema de tracking persistente para likes
 // Componente principal para visualización de reels con:
 // - Sistema de puntos integrado (usa PointsContext)
 // - Likes, comentarios, guardados, compartir
@@ -621,7 +622,7 @@ const ReelsContainer = ({
   }, [currentIndex, videos.length, showCommentsModal]);
 
   // ===============================
-  // ACCIONES
+  // ✅✅✅ ACCIONES - LIKE CON TRACKING PERSISTENTE CORREGIDO ✅✅✅
   // ===============================
   
   const handleLike = async (videoId, e) => {
@@ -639,8 +640,12 @@ const ReelsContainer = ({
 
       const newLikedVideos = new Set(likedVideos);
       const newDislikedVideos = new Set(dislikedVideos);
-      const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId); // ✅ Ya ganó puntos con este video antes
-      const isCurrentlyLiked = newLikedVideos.has(videoId); // ✅ Tiene like actualmente
+      
+      // ✅ VERIFICAR SI YA GANÓ PUNTOS CON ESTE VIDEO ANTES
+      const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
+      
+      // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE
+      const isCurrentlyLiked = newLikedVideos.has(videoId);
       
       console.log('👍 Estado del like:', {
         videoId,
@@ -744,7 +749,7 @@ const ReelsContainer = ({
           // YA GANÓ PUNTOS ANTES
           // ==============================
           console.log('ℹ️ El usuario ya ganó puntos con este video anteriormente');
-          showPointsNotification('Ya ganaste puntos con este video', videoId);
+          showPointsNotification('Ya ganaste puntos con este reel', videoId);
         }
       }
       
