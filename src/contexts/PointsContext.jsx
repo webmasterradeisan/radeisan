@@ -1,13 +1,14 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - Gestión Global del Sistema de Puntos
+// POINTS CONTEXT - Gestión Global del Sistema de Puntos (ACTUALIZADO)
 // ============================================================================
-// Maneja el estado de puntos del usuario en tiempo real y proporciona
-// funciones para actualizar puntos con animaciones y notificaciones
+// CAMBIOS:
+// - Reemplaza Realtime por Polling (consultas cada 30 segundos)
+// - Usa el servicio actualizado con RPC
+// - Evita problemas de recursión infinita en políticas RLS
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { getUserPoints } from '../services/pointsService';
 
@@ -47,7 +48,7 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
-  const realtimeChannelRef = useRef(null);
+  const pollingIntervalRef = useRef(null); // ✅ NUEVO: Polling en lugar de Realtime
 
   // ============================================================================
   // CARGAR PUNTOS INICIALES
@@ -62,6 +63,7 @@ export const PointsProvider = ({ children }) => {
     try {
       console.log('💰 Cargando puntos para usuario:', user.id);
       
+      // ✅ Usa el servicio actualizado que llama a la función RPC
       const pointsData = await getUserPoints(user.id);
 
       console.log('✅ Puntos cargados:', pointsData);
@@ -88,62 +90,36 @@ export const PointsProvider = ({ children }) => {
   }, [loadPoints]);
 
   // ============================================================================
-  // SUSCRIPCIÓN EN TIEMPO REAL (REALTIME)
+  // POLLING - Consultar puntos cada 30 segundos (REEMPLAZA REALTIME)
   // ============================================================================
   useEffect(() => {
     if (!user || !isAuthenticated) {
-      // Limpiar suscripción si no hay usuario
-      if (realtimeChannelRef.current) {
-        console.log('🔌 Desconectando realtime - no hay usuario');
-        supabase.removeChannel(realtimeChannelRef.current);
-        realtimeChannelRef.current = null;
+      // Limpiar polling si no hay usuario
+      if (pollingIntervalRef.current) {
+        console.log('⏹️ Deteniendo polling - no hay usuario');
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
       return;
     }
 
-    console.log('🔌 Configurando realtime para puntos del usuario:', user.id);
+    console.log('🔄 Iniciando polling de puntos (cada 30 segundos)');
 
-    // Crear canal de Realtime
-    const channel = supabase
-      .channel(`points:${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // UPDATE, INSERT, DELETE
-          schema: 'public',
-          table: 'points_types',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('🔔 Cambio en puntos detectado (Realtime):', payload);
-          
-          if (payload.new && mountedRef.current) {
-            const newPoints = {
-              free: payload.new.free_points || 0,
-              premium: payload.new.premium_points || 0,
-              total: (payload.new.free_points || 0) + (payload.new.premium_points || 0),
-              loading: false
-            };
+    // Configurar intervalo de polling
+    pollingIntervalRef.current = setInterval(() => {
+      console.log('🔄 Polling: Actualizando puntos...');
+      loadPoints();
+    }, 30000); // 30 segundos
 
-            console.log('✅ Actualizando puntos desde realtime:', newPoints);
-            setPoints(newPoints);
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Estado de suscripción realtime:', status);
-      });
-
-    realtimeChannelRef.current = channel;
-
+    // Cleanup
     return () => {
-      console.log('🧹 Limpiando suscripción realtime');
-      if (realtimeChannelRef.current) {
-        supabase.removeChannel(realtimeChannelRef.current);
-        realtimeChannelRef.current = null;
+      console.log('🧹 Limpiando polling');
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
     };
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated, loadPoints]);
 
   // ============================================================================
   // FUNCIÓN PARA AÑADIR PUNTOS CON ANIMACIÓN
@@ -282,8 +258,8 @@ export const PointsProvider = ({ children }) => {
         clearTimeout(animationTimeoutRef.current);
       }
       
-      if (realtimeChannelRef.current) {
-        supabase.removeChannel(realtimeChannelRef.current);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
     };
   }, []);
