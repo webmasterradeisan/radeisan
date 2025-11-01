@@ -43,38 +43,66 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
+      console.log('🔧 Iniciando carga de datos...');
+
       // Inicializar servicio de pagos
+      console.log('1️⃣ Inicializando paymentService...');
       const initResult = await paymentService.initialize();
-      if (!initResult.success) {
-        throw new Error(initResult.error || 'Error al inicializar servicio de pagos');
+      console.log('✅ Resultado de inicialización:', initResult);
+
+      if (!initResult || !initResult.success) {
+        throw new Error(initResult?.error || 'Error al inicializar servicio de pagos');
       }
 
       // Cargar paquetes activos directamente desde Supabase
+      console.log('2️⃣ Cargando paquetes...');
       const { data: packagesData, error: packagesError } = await supabase
         .from('premium_points_packages')
         .select('*')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
 
-      if (packagesError) throw packagesError;
+      if (packagesError) {
+        console.error('❌ Error cargando paquetes:', packagesError);
+        throw packagesError;
+      }
+
+      console.log('✅ Paquetes cargados:', packagesData?.length || 0);
       setPackages(packagesData || []);
 
       // Obtener pasarelas activas del servicio
+      console.log('3️⃣ Obteniendo pasarelas activas...');
       const activeGateways = paymentService.getActiveGateways();
-      setGateways(activeGateways);
+      console.log('✅ Pasarelas activas:', activeGateways);
+      console.log('📊 Cantidad de pasarelas:', activeGateways?.length || 0);
+      
+      setGateways(activeGateways || []);
 
       // Establecer pasarela predeterminada
-      if (activeGateways.length > 0) {
-        setSelectedGateway(paymentService.getDefaultGateway());
+      if (activeGateways && activeGateways.length > 0) {
+        const defaultGateway = paymentService.getDefaultGateway();
+        console.log('✅ Pasarela predeterminada:', defaultGateway);
+        setSelectedGateway(defaultGateway);
+      } else {
+        console.warn('⚠️ No hay pasarelas activas disponibles');
       }
 
       // Cargar historial de compras
+      console.log('4️⃣ Cargando historial de compras...');
       const history = await paymentService.getUserPurchaseHistory(user.id, 10);
-      if (history.success) {
-        setPurchaseHistory(history.purchases);
+      if (history && history.success) {
+        console.log('✅ Historial cargado:', history.purchases?.length || 0, 'compras');
+        setPurchaseHistory(history.purchases || []);
       }
+
+      console.log('🎉 Carga de datos completada exitosamente');
     } catch (err) {
-      console.error('Error loading data:', err);
+      console.error('❌ Error loading data:', err);
+      console.error('📋 Detalles del error:', {
+        message: err.message,
+        stack: err.stack,
+        error: err
+      });
       setError(err.message || 'Error al cargar los paquetes. Por favor recarga la página.');
     } finally {
       setLoading(false);
@@ -173,7 +201,8 @@ const PurchasePointsPage = () => {
     );
   }
 
-  if (gateways.length === 0) {
+  // ✅ CORRECCIÓN: Solo mostrar error si ya terminó de cargar y realmente no hay pasarelas
+  if (!loading && gateways.length === 0) {
     return (
       <>
         <Header />
