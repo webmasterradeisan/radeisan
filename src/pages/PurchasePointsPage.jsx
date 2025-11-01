@@ -54,13 +54,21 @@ const PurchasePointsPage = () => {
         throw new Error(initResult?.error || 'Error al inicializar servicio de pagos');
       }
 
-      // Cargar paquetes activos directamente desde Supabase
-      console.log('2️⃣ Cargando paquetes...');
+      // ==========================================
+      // ✅ CAMBIO PRINCIPAL: Usar RPC en lugar de query directa
+      // ==========================================
+      
+      // ❌ ANTES (causaba recursión infinita):
+      // const { data: packagesData, error: packagesError } = await supabase
+      //   .from('premium_points_packages')
+      //   .select('*')
+      //   .eq('is_active', true)
+      //   .order('display_order', { ascending: true });
+
+      // ✅ DESPUÉS (sin recursión):
+      console.log('2️⃣ Cargando paquetes usando RPC...');
       const { data: packagesData, error: packagesError } = await supabase
-        .from('premium_points_packages')
-        .select('*')
-        .eq('is_active', true)
-        .order('display_order', { ascending: true });
+        .rpc('get_active_packages');
 
       if (packagesError) {
         console.error('❌ Error cargando paquetes:', packagesError);
