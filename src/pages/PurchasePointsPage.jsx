@@ -54,18 +54,7 @@ const PurchasePointsPage = () => {
         throw new Error(initResult?.error || 'Error al inicializar servicio de pagos');
       }
 
-      // ==========================================
-      // ✅ CAMBIO PRINCIPAL: Usar RPC en lugar de query directa
-      // ==========================================
-      
-      // ❌ ANTES (causaba recursión infinita):
-      // const { data: packagesData, error: packagesError } = await supabase
-      //   .from('premium_points_packages')
-      //   .select('*')
-      //   .eq('is_active', true)
-      //   .order('display_order', { ascending: true });
-
-      // ✅ DESPUÉS (sin recursión):
+      // Cargar paquetes usando RPC
       console.log('2️⃣ Cargando paquetes usando RPC...');
       const { data: packagesData, error: packagesError } = await supabase
         .rpc('get_active_packages');
@@ -119,35 +108,88 @@ const PurchasePointsPage = () => {
 
   // Manejar compra
   const handlePurchase = async () => {
+    console.log('🎯 handlePurchase() iniciado');
+    console.log('📦 Datos recibidos:', {
+      selectedPackage: selectedPackage,
+      selectedGateway: selectedGateway,
+      packageId: selectedPackage?.id,
+      gatewayName: selectedGateway?.gateway_name
+    });
+
     if (!selectedPackage || !selectedGateway) {
-      setError('Por favor selecciona un paquete y método de pago');
+      const errorMsg = 'Por favor selecciona un paquete y método de pago';
+      console.error('❌ Validación fallida:', errorMsg);
+      setError(errorMsg);
       return;
     }
 
     // Validar el paquete antes de proceder
+    console.log('🔍 Validando paquete...');
     const validation = paymentService.validatePackage(selectedPackage);
+    console.log('📋 Resultado validación:', validation);
+    
     if (!validation.valid) {
+      console.error('❌ Paquete inválido:', validation.error);
       setError(validation.error);
       return;
     }
 
+    console.log('✅ Validación exitosa, iniciando compra...');
     setPurchasing(true);
     setError(null);
 
     try {
+      console.log('🔄 Llamando a paymentService.purchasePackage...');
+      console.log('📤 Parámetros:', {
+        packageName: selectedPackage.name,
+        packageId: selectedPackage.id,
+        gatewayName: selectedGateway.gateway_name,
+        price: selectedPackage.price_cop
+      });
+
       const result = await paymentService.purchasePackage(
         selectedPackage, 
         selectedGateway.gateway_name
       );
 
+      console.log('📦 Resultado de purchasePackage:', result);
+      console.log('📊 Resultado completo (stringified):', JSON.stringify(result, null, 2));
+
       if (!result.success) {
-        throw new Error(result.error);
+        console.error('❌ Compra falló:', result.error);
+        throw new Error(result.error || 'Error desconocido en la compra');
       }
 
-      // El usuario será redirigido a la pasarela de pago automáticamente
-      // Cuando regrese, se actualizarán los puntos mediante webhook
+      console.log('✅ Compra exitosa, procesando redirección...');
+      
+      // El resultado puede venir con diferentes propiedades según la pasarela
+      if (result.paymentUrl) {
+        console.log('🔗 Redirigiendo a paymentUrl:', result.paymentUrl);
+        window.location.href = result.paymentUrl;
+      } else if (result.checkoutUrl) {
+        console.log('🔗 Redirigiendo a checkoutUrl:', result.checkoutUrl);
+        window.location.href = result.checkoutUrl;
+      } else {
+        console.warn('⚠️ No se encontró URL de pago en el resultado');
+        console.log('📋 Revisando estructura del resultado:', Object.keys(result));
+        
+        // Para MercadoPago, el checkout se abre automáticamente
+        if (result.gateway === 'mercadopago') {
+          console.log('✅ MercadoPago: checkout debería abrirse automáticamente');
+          // El checkout ya fue abierto por el servicio
+        } else {
+          throw new Error('No se recibió URL de pago y la pasarela no es MercadoPago');
+        }
+      }
+
     } catch (err) {
-      console.error('Error purchasing:', err);
+      console.error('❌ Error en handlePurchase:', err);
+      console.error('📋 Detalles del error:', {
+        message: err.message,
+        stack: err.stack,
+        error: err
+      });
+      
       setError(err.message || 'Error al procesar la compra. Por favor intenta de nuevo.');
       setPurchasing(false);
     }
@@ -209,7 +251,6 @@ const PurchasePointsPage = () => {
     );
   }
 
-  // ✅ CORRECCIÓN: Solo mostrar error si ya terminó de cargar y realmente no hay pasarelas
   if (!loading && gateways.length === 0) {
     return (
       <>
@@ -238,19 +279,11 @@ const PurchasePointsPage = () => {
 
   return (
     <>
-      {/* ===================================== */}
-      {/* HEADER FIJO */}
-      {/* ===================================== */}
       <Header />
 
-      {/* ===================================== */}
-      {/* CONTENIDO PRINCIPAL */}
-      {/* ===================================== */}
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-16">
         <div className="max-w-7xl mx-auto px-4 py-6">
-          {/* ===================================== */}
           {/* TÍTULO DE PÁGINA */}
-          {/* ===================================== */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full p-2">
@@ -267,9 +300,7 @@ const PurchasePointsPage = () => {
             </div>
           </div>
 
-          {/* ===================================== */}
-          {/* BALANCE ACTUAL - Card Destacada */}
-          {/* ===================================== */}
+          {/* BALANCE ACTUAL */}
           <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl p-6 mb-6 shadow-xl">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -296,9 +327,7 @@ const PurchasePointsPage = () => {
             </div>
           </div>
 
-          {/* ===================================== */}
           {/* ERROR MESSAGE */}
-          {/* ===================================== */}
           {error && (
             <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -309,9 +338,7 @@ const PurchasePointsPage = () => {
             </div>
           )}
 
-          {/* ===================================== */}
           {/* BENEFICIOS */}
-          {/* ===================================== */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-100">
               <div className="flex items-center gap-3">
@@ -350,9 +377,7 @@ const PurchasePointsPage = () => {
             </div>
           </div>
 
-          {/* ===================================== */}
           {/* PAQUETES */}
-          {/* ===================================== */}
           <div className="mb-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Elige tu Paquete</h2>
             
@@ -371,7 +396,6 @@ const PurchasePointsPage = () => {
                         : 'border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg'
                     } ${pkg.is_featured ? 'border-yellow-400' : ''}`}
                   >
-                    {/* Badge destacado */}
                     {pkg.is_featured && (
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg">
                         <Star className="h-3 w-3" />
@@ -379,14 +403,12 @@ const PurchasePointsPage = () => {
                       </div>
                     )}
 
-                    {/* Checkmark si está seleccionado */}
                     {isSelected && (
                       <div className="absolute top-4 right-4 bg-blue-500 rounded-full p-1">
                         <CheckCircle className="h-5 w-5 text-white" />
                       </div>
                     )}
 
-                    {/* Contenido */}
                     <div className="text-center">
                       <Package className="h-12 w-12 mx-auto mb-3 text-blue-600" />
                       
@@ -398,7 +420,6 @@ const PurchasePointsPage = () => {
                         {pkg.description}
                       </p>
 
-                      {/* Puntos */}
                       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-3 mb-4">
                         <p className="text-3xl font-bold text-blue-600 flex items-center justify-center gap-2">
                           <Award className="h-6 w-6" />
@@ -407,7 +428,6 @@ const PurchasePointsPage = () => {
                         <p className="text-xs text-gray-600">Puntos Premium</p>
                       </div>
 
-                      {/* Precio */}
                       <div className="mb-4">
                         {pkg.discount_percentage > 0 ? (
                           <>
@@ -428,7 +448,6 @@ const PurchasePointsPage = () => {
                         )}
                       </div>
 
-                      {/* Valor por punto */}
                       <p className="text-xs text-gray-500">
                         ${Math.round(finalPrice / pkg.points_amount)} COP por punto
                       </p>
@@ -439,9 +458,7 @@ const PurchasePointsPage = () => {
             </div>
           </div>
 
-          {/* ===================================== */}
           {/* MÉTODOS DE PAGO */}
-          {/* ===================================== */}
           {selectedPackage && (
             <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
               <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -537,7 +554,17 @@ const PurchasePointsPage = () => {
                 </div>
 
                 <button
-                  onClick={handlePurchase}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    console.log('🖱️ Click en botón Continuar al Pago detectado');
+                    console.log('📊 Estado actual:', {
+                      selectedPackage: selectedPackage?.name,
+                      selectedGateway: selectedGateway?.display_name,
+                      purchasing,
+                      disabled: !selectedGateway || purchasing
+                    });
+                    handlePurchase();
+                  }}
                   disabled={!selectedGateway || purchasing}
                   className="w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-4 rounded-lg hover:from-blue-700 hover:to-purple-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -562,9 +589,7 @@ const PurchasePointsPage = () => {
             </div>
           )}
 
-          {/* ===================================== */}
           {/* HISTORIAL DE COMPRAS */}
-          {/* ===================================== */}
           {purchaseHistory.length > 0 && (
             <div className="bg-white rounded-xl shadow-lg p-6 mb-24">
               <div className="flex items-center justify-between mb-4">
