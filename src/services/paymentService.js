@@ -1,7 +1,6 @@
 /**
- * RADEISAN - Payment Service
- * Integración completa con MercadoPago y Bold.co
- * Para compra de puntos premium en Colombia
+ * RADEISAN - Payment Service (Versión Simplificada)
+ * Sin Edge Functions - Solo RPCs
  */
 
 import { supabase } from '../lib/supabase.js';
@@ -13,15 +12,9 @@ import { supabase } from '../lib/supabase.js';
 const PAYMENT_CONFIG = {
   mercadopago: {
     scriptUrl: 'https://sdk.mercadopago.com/js/v2',
-    checkoutUrl: 'https://api.mercadopago.com/checkout/preferences',
-  },
-  bold: {
-    scriptUrl: 'https://checkout.bold.co/library/boldPaymentButton.js',
-    apiUrl: 'https://api.bold.co/v1',
   },
   webhookUrls: {
     mercadopago: `${window.location.origin}/api/webhooks/mercadopago`,
-    bold: `${window.location.origin}/api/webhooks/bold`,
   }
 };
 
@@ -32,7 +25,6 @@ const PAYMENT_CONFIG = {
 class PaymentService {
   constructor() {
     this.mercadopagoInstance = null;
-    this.boldInstance = null;
     this.activeGateways = [];
     this.defaultGateway = null;
     this.initialized = false;
@@ -45,7 +37,6 @@ class PaymentService {
     try {
       console.log('🔧 [PaymentService] Iniciando inicialización...');
       
-      // Cargar pasarelas activas desde Supabase
       console.log('📡 [PaymentService] Llamando a supabase.rpc("get_active_gateways")...');
       const { data, error } = await supabase.rpc('get_active_gateways');
       
@@ -61,7 +52,6 @@ class PaymentService {
         cantidad: data?.length || 0
       });
       
-      // Asignar pasarelas
       this.activeGateways = Array.isArray(data) ? data : [];
       console.log(`📊 [PaymentService] Pasarelas activas cargadas: ${this.activeGateways.length}`);
       
@@ -78,35 +68,19 @@ class PaymentService {
         console.warn('⚠️ [PaymentService] No se encontraron pasarelas activas');
       }
       
-      // Establecer pasarela predeterminada
       this.defaultGateway = this.activeGateways.find(g => g.is_default) || this.activeGateways[0] || null;
       if (this.defaultGateway) {
         console.log('✅ [PaymentService] Pasarela predeterminada:', this.defaultGateway.display_name);
-      } else {
-        console.warn('⚠️ [PaymentService] No hay pasarela predeterminada');
       }
       
-      // Inicializar cada pasarela activa
-      for (const gateway of this.activeGateways) {
-        console.log(`🔌 [PaymentService] Inicializando ${gateway.gateway_name}...`);
-        
-        if (gateway.gateway_name === 'mercadopago') {
-          const mpResult = await this.initializeMercadoPago(gateway);
-          console.log(`${mpResult ? '✅' : '❌'} [PaymentService] MercadoPago ${mpResult ? 'inicializado' : 'falló'}`);
-        } else if (gateway.gateway_name === 'bold') {
-          const boldResult = await this.initializeBold(gateway);
-          console.log(`${boldResult ? '✅' : '❌'} [PaymentService] Bold ${boldResult ? 'inicializado' : 'falló'}`);
-        }
+      // Inicializar MercadoPago si está disponible
+      const mpGateway = this.activeGateways.find(g => g.gateway_name === 'mercadopago');
+      if (mpGateway) {
+        await this.initializeMercadoPago(mpGateway);
       }
       
-      // Marcar como inicializado
       this.initialized = true;
       console.log('🎉 [PaymentService] Servicio completamente inicializado');
-      console.log('📊 [PaymentService] Estado final:', {
-        initialized: this.initialized,
-        gatewaysCount: this.activeGateways.length,
-        defaultGateway: this.defaultGateway?.display_name || 'ninguna'
-      });
       
       return { 
         success: true, 
@@ -116,21 +90,13 @@ class PaymentService {
       
     } catch (error) {
       console.error('❌ [PaymentService] Error fatal al inicializar:', error);
-      console.error('📋 [PaymentService] Detalles del error:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-      
-      // NO establecer initialized = true si hubo error
       this.initialized = false;
       this.activeGateways = [];
       this.defaultGateway = null;
       
       return { 
         success: false, 
-        error: error.message || 'Error desconocido al inicializar servicio de pagos',
+        error: error.message || 'Error desconocido',
         details: error
       };
     }
@@ -162,7 +128,7 @@ class PaymentService {
   }
 
   // ==========================================
-  // MERCADOPAGO - INTEGRACIÓN
+  // MERCADOPAGO - INTEGRACIÓN SIMPLIFICADA
   // ==========================================
 
   /**
@@ -172,43 +138,12 @@ class PaymentService {
     try {
       console.log('🔧 [MercadoPago] Iniciando inicialización...');
       
-      // Cargar SDK de MercadoPago
       if (!window.MercadoPago) {
         console.log('📥 [MercadoPago] Cargando SDK...');
         await this.loadScript(PAYMENT_CONFIG.mercadopago.scriptUrl);
       } else {
         console.log('✅ [MercadoPago] SDK ya estaba cargado');
       }
-
-      // Obtener credenciales desde admin
-      console.log('🔑 [MercadoPago] Obteniendo credenciales...');
-      const { data: config, error } = await supabase.rpc('get_gateways_config_admin');
-      
-      if (error) {
-        console.error('❌ [MercadoPago] Error obteniendo config:', error);
-        throw error;
-      }
-
-      const mercadopagoConfig = config?.find(g => g.gateway_name === 'mercadopago');
-      
-      if (!mercadopagoConfig) {
-        console.warn('⚠️ [MercadoPago] No se encontró configuración');
-        return false;
-      }
-      
-      if (!mercadopagoConfig.credentials?.public_key) {
-        console.error('❌ [MercadoPago] Public key no configurada');
-        throw new Error('MercadoPago public key no configurada');
-      }
-
-      // Inicializar instancia de MercadoPago
-      console.log('🔌 [MercadoPago] Inicializando instancia con public key');
-      this.mercadopagoInstance = new window.MercadoPago(
-        mercadopagoConfig.credentials.public_key,
-        {
-          locale: 'es-CO'
-        }
-      );
 
       console.log('✅ [MercadoPago] Inicializado exitosamente');
       return true;
@@ -220,168 +155,38 @@ class PaymentService {
   }
 
   /**
-   * Crear preferencia de pago en MercadoPago
+   * Crear preferencia de pago (SIMPLIFICADO - sin Edge Function)
    */
   async createMercadoPagoPreference(packageData, userId) {
     try {
-      // 1. Crear compra pendiente en la base de datos
-      const { data: purchaseId, error: purchaseError } = await supabase.rpc(
-        'create_pending_purchase',
-        {
-          p_user_id: userId,
-          p_package_id: packageData.id,
-          p_gateway_name: 'mercadopago',
-          p_ip_address: null,
-          p_user_agent: navigator.userAgent
-        }
-      );
-
-      if (purchaseError) throw purchaseError;
-
-      // 2. Crear preferencia en MercadoPago
-      const { data: preference, error: preferenceError } = await supabase.functions.invoke(
-        'create-mercadopago-preference',
-        {
-          body: {
-            purchase_id: purchaseId,
-            package_data: {
-              title: packageData.name,
-              description: packageData.description,
-              quantity: 1,
-              currency_id: 'COP',
-              unit_price: parseFloat(packageData.price_cop)
-            },
-            payer: {
-              email: userId
-            },
-            back_urls: {
-              success: `${window.location.origin}/purchase/success`,
-              failure: `${window.location.origin}/purchase/failure`,
-              pending: `${window.location.origin}/purchase/pending`
-            },
-            auto_return: 'approved',
-            notification_url: PAYMENT_CONFIG.webhookUrls.mercadopago,
-            metadata: {
-              purchase_id: purchaseId,
-              user_id: userId
-            }
-          }
-        }
-      );
-
-      if (preferenceError) throw preferenceError;
-
-      return {
-        success: true,
-        preferenceId: preference.id,
-        purchaseId: purchaseId
-      };
-    } catch (error) {
-      console.error('Error creating MercadoPago preference:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Abrir checkout de MercadoPago
-   */
-  async openMercadoPagoCheckout(preferenceId) {
-    try {
-      if (!this.mercadopagoInstance) {
-        throw new Error('MercadoPago no está inicializado');
-      }
-
-      this.mercadopagoInstance.checkout({
-        preference: {
-          id: preferenceId
-        },
-        autoOpen: true
+      console.log('🔧 [MercadoPago] Creando preferencia de pago...');
+      
+      // Llamar a función RPC en lugar de Edge Function
+      const { data, error } = await supabase.rpc('create_mercadopago_preference', {
+        p_user_id: userId,
+        p_package_id: packageData.id,
+        p_gateway_name: 'mercadopago'
       });
 
-      return { success: true };
-    } catch (error) {
-      console.error('Error opening MercadoPago checkout:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // ==========================================
-  // BOLD.CO - INTEGRACIÓN
-  // ==========================================
-
-  /**
-   * Inicializar Bold.co
-   */
-  async initializeBold(gateway) {
-    try {
-      console.log('🔧 [Bold] Iniciando inicialización...');
-      
-      // Cargar SDK de Bold
-      if (!window.BoldCheckout) {
-        console.log('📥 [Bold] Cargando SDK...');
-        await this.loadScript(PAYMENT_CONFIG.bold.scriptUrl);
-      } else {
-        console.log('✅ [Bold] SDK ya estaba cargado');
+      if (error) {
+        console.error('❌ [MercadoPago] Error en RPC:', error);
+        throw error;
       }
 
-      console.log('✅ [Bold] Inicializado exitosamente');
-      return true;
-      
-    } catch (error) {
-      console.error('❌ [Bold] Error al inicializar:', error);
-      return false;
-    }
-  }
+      console.log('✅ [MercadoPago] Preferencia creada:', data);
 
-  /**
-   * Crear intención de pago en Bold.co
-   */
-  async createBoldPaymentIntent(packageData, userId) {
-    try {
-      const { data: purchaseId, error: purchaseError } = await supabase.rpc(
-        'create_pending_purchase',
-        {
-          p_user_id: userId,
-          p_package_id: packageData.id,
-          p_gateway_name: 'bold',
-          p_ip_address: null,
-          p_user_agent: navigator.userAgent
-        }
-      );
-
-      if (purchaseError) throw purchaseError;
-
-      const { data: intent, error: intentError } = await supabase.functions.invoke(
-        'create-bold-payment-intent',
-        {
-          body: {
-            purchase_id: purchaseId,
-            amount: parseFloat(packageData.price_cop),
-            currency: 'COP',
-            description: `${packageData.name} - ${packageData.points_amount} puntos`,
-            redirect_url: `${window.location.origin}/purchase/success`,
-            metadata: {
-              purchase_id: purchaseId,
-              user_id: userId,
-              package_id: packageData.id
-            }
-          }
-        }
-      );
-
-      if (intentError) throw intentError;
+      if (!data || !data.success) {
+        throw new Error(data?.error || 'Error al crear preferencia');
+      }
 
       return {
         success: true,
-        intentId: intent.id,
-        checkoutUrl: intent.checkout_url,
-        purchaseId: purchaseId
+        purchaseId: data.purchase_id,
+        packageData: data
       };
+      
     } catch (error) {
-      console.error('Error creating Bold payment intent:', error);
+      console.error('❌ [MercadoPago] Error:', error);
       return {
         success: false,
         error: error.message
@@ -390,33 +195,77 @@ class PaymentService {
   }
 
   /**
-   * Abrir checkout de Bold.co
+   * Procesar compra con MercadoPago (SIMPLIFICADO)
    */
-  async openBoldCheckout(checkoutUrl) {
+  async processMercadoPagoPurchase(packageData, userId) {
     try {
-      window.location.href = checkoutUrl;
-      return { success: true };
+      console.log('🔧 [MercadoPago] Procesando compra...');
+      
+      // Crear preferencia
+      const preference = await this.createMercadoPagoPreference(packageData, userId);
+      
+      if (!preference.success) {
+        throw new Error(preference.error);
+      }
+
+      // FLUJO SIMPLIFICADO: Mostrar información al usuario
+      const message = `
+Compra registrada exitosamente!
+
+Paquete: ${packageData.name}
+Puntos: ${packageData.points_amount}
+Precio: $${this.calculateDiscountedPrice(packageData.price_cop, packageData.discount_percentage).toLocaleString()} COP
+
+ID de compra: ${preference.purchaseId}
+
+NOTA: Este es un flujo simplificado de desarrollo.
+Para completar el pago en producción, necesitarás:
+1. Configurar credenciales de MercadoPago
+2. Implementar Edge Functions
+3. Configurar webhooks
+
+Por ahora, la compra se ha registrado como PENDIENTE en la base de datos.
+      `;
+
+      alert(message);
+      
+      // Redirigir a página de confirmación
+      window.location.href = `/purchase/pending?purchase_id=${preference.purchaseId}`;
+
+      return {
+        success: true,
+        purchaseId: preference.purchaseId,
+        gateway: 'mercadopago'
+      };
+      
     } catch (error) {
-      console.error('Error opening Bold checkout:', error);
-      return { success: false, error: error.message };
+      console.error('❌ [MercadoPago] Error procesando:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
   // ==========================================
-  // FUNCIONES PRINCIPALES DE COMPRA
+  // FUNCIONES PRINCIPALES
   // ==========================================
 
   /**
-   * Iniciar proceso de compra con la pasarela especificada
+   * Iniciar proceso de compra
    */
   async purchasePackage(packageData, gatewayName = null) {
     try {
+      console.log('🛒 [PaymentService] Iniciando compra...');
+      
+      // Verificar autenticación
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
         throw new Error('Usuario no autenticado');
       }
 
+      // Determinar pasarela
       const gateway = gatewayName 
         ? this.activeGateways.find(g => g.gateway_name === gatewayName)
         : this.getDefaultGateway();
@@ -425,87 +274,23 @@ class PaymentService {
         throw new Error('No hay pasarelas de pago disponibles');
       }
 
+      console.log('🏦 [PaymentService] Usando pasarela:', gateway.display_name);
+
+      // Procesar según la pasarela
       if (gateway.gateway_name === 'mercadopago') {
         return await this.processMercadoPagoPurchase(packageData, user.id);
-      } else if (gateway.gateway_name === 'bold') {
-        return await this.processBoldPurchase(packageData, user.id);
       }
 
       throw new Error('Pasarela no soportada');
+      
     } catch (error) {
-      console.error('Error in purchasePackage:', error);
+      console.error('❌ [PaymentService] Error en purchasePackage:', error);
       return {
         success: false,
         error: error.message
       };
     }
   }
-
-  /**
-   * Procesar compra con MercadoPago
-   */
-  async processMercadoPagoPurchase(packageData, userId) {
-    try {
-      const preference = await this.createMercadoPagoPreference(packageData, userId);
-      
-      if (!preference.success) {
-        throw new Error(preference.error);
-      }
-
-      const checkout = await this.openMercadoPagoCheckout(preference.preferenceId);
-      
-      if (!checkout.success) {
-        throw new Error(checkout.error);
-      }
-
-      return {
-        success: true,
-        purchaseId: preference.purchaseId,
-        gateway: 'mercadopago'
-      };
-    } catch (error) {
-      console.error('Error processing MercadoPago purchase:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Procesar compra con Bold.co
-   */
-  async processBoldPurchase(packageData, userId) {
-    try {
-      const intent = await this.createBoldPaymentIntent(packageData, userId);
-      
-      if (!intent.success) {
-        throw new Error(intent.error);
-      }
-
-      const checkout = await this.openBoldCheckout(intent.checkoutUrl);
-      
-      if (!checkout.success) {
-        throw new Error(checkout.error);
-      }
-
-      return {
-        success: true,
-        purchaseId: intent.purchaseId,
-        gateway: 'bold'
-      };
-    } catch (error) {
-      console.error('Error processing Bold purchase:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  // ==========================================
-  // VERIFICACIÓN DE ESTADO DE COMPRA
-  // ==========================================
 
   /**
    * Verificar estado de una compra
@@ -538,10 +323,12 @@ class PaymentService {
    */
   async getUserPurchaseHistory(userId, limit = 20) {
     try {
-      const { data, error } = await supabase.rpc('get_user_purchases', {
-        p_user_id: userId,
-        p_limit: limit
-      });
+      const { data, error } = await supabase
+        .from('premium_purchases')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
       if (error) throw error;
 
