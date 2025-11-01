@@ -296,54 +296,57 @@ Por ahora, la compra se ha registrado como PENDIENTE en la base de datos.
    * Verificar estado de una compra
    */
   async checkPurchaseStatus(purchaseId) {
-    try {
-      const { data, error } = await supabase
-        .from('premium_purchases')
-        .select('*')
-        .eq('id', purchaseId)
-        .single();
+  try {
+    const { data, error } = await supabase.rpc('get_purchase_status', {
+      p_purchase_id: purchaseId
+    });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      return {
-        success: true,
-        purchase: data
-      };
-    } catch (error) {
-      console.error('Error checking purchase status:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+    if (!data || !data.success) {
+      throw new Error(data?.error || 'Error al obtener estado de compra');
     }
+
+    return {
+      success: true,
+      purchase: data.purchase
+    };
+  } catch (error) {
+    console.error('Error checking purchase status:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
+}
 
   /**
    * Obtener historial de compras del usuario
    */
   async getUserPurchaseHistory(userId, limit = 20) {
-    try {
-      const { data, error } = await supabase
-        .from('premium_purchases')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+  try {
+    const { data, error } = await supabase.rpc('get_user_purchases', {
+      p_limit: limit
+    });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      return {
-        success: true,
-        purchases: data || []
-      };
-    } catch (error) {
-      console.error('Error getting purchase history:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+    if (!data || !data.success) {
+      throw new Error(data?.error || 'Error al obtener historial');
     }
+
+    return {
+      success: true,
+      purchases: data.purchases || []
+    };
+  } catch (error) {
+    console.error('Error getting purchase history:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
+}
 
   // ==========================================
   // FUNCIONES AUXILIARES
