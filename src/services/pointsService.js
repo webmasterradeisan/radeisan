@@ -1,22 +1,21 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - Interacción con Supabase
+// SERVICIO DE PUNTOS - Interacción con Supabase (ACTUALIZADO)
 // ============================================================================
-// Maneja todas las operaciones relacionadas con puntos:
-// - Consultar balance de puntos
-// - Agregar puntos gratis (por acciones)
-// - Agregar puntos premium (comprados)
-// - Deducir puntos (por canjes)
+// CAMBIOS:
+// - getUserPoints() ahora usa RPC en lugar de consulta directa
+// - Evita problemas de recursión infinita en políticas RLS
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 
 // ============================================================================
-// OBTENER PUNTOS DEL USUARIO
+// OBTENER PUNTOS DEL USUARIO (ACTUALIZADO - USA RPC)
 // ============================================================================
 
 /**
  * Obtiene el balance completo de puntos de un usuario
+ * ACTUALIZADO: Usa función RPC para evitar problemas de RLS
  * @param {string} userId - ID del usuario
  * @returns {Promise<{free: number, premium: number, total: number}>}
  */
@@ -29,26 +28,22 @@ export const getUserPoints = async (userId) => {
 
     console.log('📊 Consultando puntos para usuario:', userId);
 
-    // Consultar tabla points_types (tabla principal)
-    const { data, error } = await supabase
-      .from('points_types')
-      .select('free_points, premium_points')
-      .eq('user_id', userId)
-      .single();
+    // ✅ USAR FUNCIÓN RPC EN LUGAR DE CONSULTA DIRECTA
+    const { data, error } = await supabase.rpc('get_user_points', {
+      p_user_id: userId
+    });
 
     if (error) {
-      // Si el usuario no tiene registro aún (PGRST116), retornar 0
-      if (error.code === 'PGRST116') {
-        console.log('ℹ️ Usuario sin registro de puntos, retornando 0');
-        return { free: 0, premium: 0, total: 0 };
-      }
+      console.error('❌ Error en RPC get_user_points:', error);
       throw error;
     }
 
+    // La función RPC retorna un objeto JSON con la estructura:
+    // { free_points: number, premium_points: number, total_points: number }
     const points = {
       free: data?.free_points || 0,
       premium: data?.premium_points || 0,
-      total: (data?.free_points || 0) + (data?.premium_points || 0)
+      total: data?.total_points || 0
     };
 
     console.log('✅ Puntos obtenidos:', points);
