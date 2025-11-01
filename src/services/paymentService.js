@@ -34,6 +34,7 @@ class PaymentService {
     this.mercadopagoInstance = null;
     this.boldInstance = null;
     this.activeGateways = [];
+    this.defaultGateway = null;
     this.initialized = false;
   }
 
@@ -42,27 +43,96 @@ class PaymentService {
    */
   async initialize() {
     try {
+      console.log('🔧 [PaymentService] Iniciando inicialización...');
+      
       // Cargar pasarelas activas desde Supabase
+      console.log('📡 [PaymentService] Llamando a supabase.rpc("get_active_gateways")...');
       const { data, error } = await supabase.rpc('get_active_gateways');
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ [PaymentService] Error en RPC get_active_gateways:', error);
+        throw error;
+      }
       
-      this.activeGateways = data || [];
+      console.log('✅ [PaymentService] Respuesta de RPC recibida:', {
+        data,
+        tipo: typeof data,
+        esArray: Array.isArray(data),
+        cantidad: data?.length || 0
+      });
+      
+      // Asignar pasarelas
+      this.activeGateways = Array.isArray(data) ? data : [];
+      console.log(`📊 [PaymentService] Pasarelas activas cargadas: ${this.activeGateways.length}`);
+      
+      if (this.activeGateways.length > 0) {
+        console.log('📋 [PaymentService] Lista de pasarelas:', 
+          this.activeGateways.map(g => ({
+            name: g.gateway_name,
+            display: g.display_name,
+            active: g.is_active,
+            default: g.is_default
+          }))
+        );
+      } else {
+        console.warn('⚠️ [PaymentService] No se encontraron pasarelas activas');
+      }
+      
+      // Establecer pasarela predeterminada
+      this.defaultGateway = this.activeGateways.find(g => g.is_default) || this.activeGateways[0] || null;
+      if (this.defaultGateway) {
+        console.log('✅ [PaymentService] Pasarela predeterminada:', this.defaultGateway.display_name);
+      } else {
+        console.warn('⚠️ [PaymentService] No hay pasarela predeterminada');
+      }
       
       // Inicializar cada pasarela activa
       for (const gateway of this.activeGateways) {
+        console.log(`🔌 [PaymentService] Inicializando ${gateway.gateway_name}...`);
+        
         if (gateway.gateway_name === 'mercadopago') {
-          await this.initializeMercadoPago(gateway);
+          const mpResult = await this.initializeMercadoPago(gateway);
+          console.log(`${mpResult ? '✅' : '❌'} [PaymentService] MercadoPago ${mpResult ? 'inicializado' : 'falló'}`);
         } else if (gateway.gateway_name === 'bold') {
-          await this.initializeBold(gateway);
+          const boldResult = await this.initializeBold(gateway);
+          console.log(`${boldResult ? '✅' : '❌'} [PaymentService] Bold ${boldResult ? 'inicializado' : 'falló'}`);
         }
       }
       
+      // Marcar como inicializado
       this.initialized = true;
-      return { success: true, gateways: this.activeGateways };
+      console.log('🎉 [PaymentService] Servicio completamente inicializado');
+      console.log('📊 [PaymentService] Estado final:', {
+        initialized: this.initialized,
+        gatewaysCount: this.activeGateways.length,
+        defaultGateway: this.defaultGateway?.display_name || 'ninguna'
+      });
+      
+      return { 
+        success: true, 
+        gateways: this.activeGateways,
+        count: this.activeGateways.length
+      };
+      
     } catch (error) {
-      console.error('Error initializing payment service:', error);
-      return { success: false, error: error.message };
+      console.error('❌ [PaymentService] Error fatal al inicializar:', error);
+      console.error('📋 [PaymentService] Detalles del error:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      
+      // NO establecer initialized = true si hubo error
+      this.initialized = false;
+      this.activeGateways = [];
+      this.defaultGateway = null;
+      
+      return { 
+        success: false, 
+        error: error.message || 'Error desconocido al inicializar servicio de pagos',
+        details: error
+      };
     }
   }
 
@@ -70,6 +140,12 @@ class PaymentService {
    * Obtener pasarelas activas
    */
   getActiveGateways() {
+    if (!this.initialized) {
+      console.warn('⚠️ [PaymentService] getActiveGateways() llamado antes de inicializar');
+      return [];
+    }
+    
+    console.log('📊 [PaymentService] getActiveGateways() retornando:', this.activeGateways.length, 'pasarelas');
     return this.activeGateways;
   }
 
@@ -77,7 +153,12 @@ class PaymentService {
    * Obtener pasarela predeterminada
    */
   getDefaultGateway() {
-    return this.activeGateways.find(g => g.is_default) || this.activeGateways[0];
+    if (!this.initialized) {
+      console.warn('⚠️ [PaymentService] getDefaultGateway() llamado antes de inicializar');
+      return null;
+    }
+    
+    return this.defaultGateway;
   }
 
   // ==========================================
@@ -89,23 +170,39 @@ class PaymentService {
    */
   async initializeMercadoPago(gateway) {
     try {
+      console.log('🔧 [MercadoPago] Iniciando inicialización...');
+      
       // Cargar SDK de MercadoPago
       if (!window.MercadoPago) {
+        console.log('📥 [MercadoPago] Cargando SDK...');
         await this.loadScript(PAYMENT_CONFIG.mercadopago.scriptUrl);
+      } else {
+        console.log('✅ [MercadoPago] SDK ya estaba cargado');
       }
 
       // Obtener credenciales desde admin
+      console.log('🔑 [MercadoPago] Obteniendo credenciales...');
       const { data: config, error } = await supabase.rpc('get_gateways_config_admin');
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ [MercadoPago] Error obteniendo config:', error);
+        throw error;
+      }
 
       const mercadopagoConfig = config?.find(g => g.gateway_name === 'mercadopago');
       
-      if (!mercadopagoConfig?.credentials?.public_key) {
+      if (!mercadopagoConfig) {
+        console.warn('⚠️ [MercadoPago] No se encontró configuración');
+        return false;
+      }
+      
+      if (!mercadopagoConfig.credentials?.public_key) {
+        console.error('❌ [MercadoPago] Public key no configurada');
         throw new Error('MercadoPago public key no configurada');
       }
 
       // Inicializar instancia de MercadoPago
+      console.log('🔌 [MercadoPago] Inicializando instancia con public key');
       this.mercadopagoInstance = new window.MercadoPago(
         mercadopagoConfig.credentials.public_key,
         {
@@ -113,10 +210,11 @@ class PaymentService {
         }
       );
 
-      console.log('✅ MercadoPago inicializado');
+      console.log('✅ [MercadoPago] Inicializado exitosamente');
       return true;
+      
     } catch (error) {
-      console.error('Error initializing MercadoPago:', error);
+      console.error('❌ [MercadoPago] Error al inicializar:', error);
       return false;
     }
   }
@@ -133,15 +231,14 @@ class PaymentService {
           p_user_id: userId,
           p_package_id: packageData.id,
           p_gateway_name: 'mercadopago',
-          p_ip_address: null, // Se puede obtener del cliente si es necesario
+          p_ip_address: null,
           p_user_agent: navigator.userAgent
         }
       );
 
       if (purchaseError) throw purchaseError;
 
-      // 2. Crear preferencia en MercadoPago (esto debe hacerse en el backend por seguridad)
-      // Llamar a tu función Edge de Supabase
+      // 2. Crear preferencia en MercadoPago
       const { data: preference, error: preferenceError } = await supabase.functions.invoke(
         'create-mercadopago-preference',
         {
@@ -155,7 +252,7 @@ class PaymentService {
               unit_price: parseFloat(packageData.price_cop)
             },
             payer: {
-              email: userId // Se debe obtener el email del usuario
+              email: userId
             },
             back_urls: {
               success: `${window.location.origin}/purchase/success`,
@@ -197,7 +294,6 @@ class PaymentService {
         throw new Error('MercadoPago no está inicializado');
       }
 
-      // Abrir modal de checkout
       this.mercadopagoInstance.checkout({
         preference: {
           id: preferenceId
@@ -221,15 +317,21 @@ class PaymentService {
    */
   async initializeBold(gateway) {
     try {
+      console.log('🔧 [Bold] Iniciando inicialización...');
+      
       // Cargar SDK de Bold
       if (!window.BoldCheckout) {
+        console.log('📥 [Bold] Cargando SDK...');
         await this.loadScript(PAYMENT_CONFIG.bold.scriptUrl);
+      } else {
+        console.log('✅ [Bold] SDK ya estaba cargado');
       }
 
-      console.log('✅ Bold.co inicializado');
+      console.log('✅ [Bold] Inicializado exitosamente');
       return true;
+      
     } catch (error) {
-      console.error('Error initializing Bold:', error);
+      console.error('❌ [Bold] Error al inicializar:', error);
       return false;
     }
   }
@@ -239,7 +341,6 @@ class PaymentService {
    */
   async createBoldPaymentIntent(packageData, userId) {
     try {
-      // 1. Crear compra pendiente en la base de datos
       const { data: purchaseId, error: purchaseError } = await supabase.rpc(
         'create_pending_purchase',
         {
@@ -253,7 +354,6 @@ class PaymentService {
 
       if (purchaseError) throw purchaseError;
 
-      // 2. Crear intención de pago en Bold (debe hacerse en el backend)
       const { data: intent, error: intentError } = await supabase.functions.invoke(
         'create-bold-payment-intent',
         {
@@ -294,12 +394,7 @@ class PaymentService {
    */
   async openBoldCheckout(checkoutUrl) {
     try {
-      // Opción 1: Redirigir a la URL de checkout
       window.location.href = checkoutUrl;
-
-      // Opción 2: Abrir en nueva ventana (descomentar si prefieres esto)
-      // window.open(checkoutUrl, '_blank', 'width=800,height=600');
-
       return { success: true };
     } catch (error) {
       console.error('Error opening Bold checkout:', error);
@@ -316,14 +411,12 @@ class PaymentService {
    */
   async purchasePackage(packageData, gatewayName = null) {
     try {
-      // Verificar que el usuario esté autenticado
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
         throw new Error('Usuario no autenticado');
       }
 
-      // Determinar qué pasarela usar
       const gateway = gatewayName 
         ? this.activeGateways.find(g => g.gateway_name === gatewayName)
         : this.getDefaultGateway();
@@ -332,7 +425,6 @@ class PaymentService {
         throw new Error('No hay pasarelas de pago disponibles');
       }
 
-      // Procesar según la pasarela
       if (gateway.gateway_name === 'mercadopago') {
         return await this.processMercadoPagoPurchase(packageData, user.id);
       } else if (gateway.gateway_name === 'bold') {
@@ -354,14 +446,12 @@ class PaymentService {
    */
   async processMercadoPagoPurchase(packageData, userId) {
     try {
-      // 1. Crear preferencia
       const preference = await this.createMercadoPagoPreference(packageData, userId);
       
       if (!preference.success) {
         throw new Error(preference.error);
       }
 
-      // 2. Abrir checkout
       const checkout = await this.openMercadoPagoCheckout(preference.preferenceId);
       
       if (!checkout.success) {
@@ -387,14 +477,12 @@ class PaymentService {
    */
   async processBoldPurchase(packageData, userId) {
     try {
-      // 1. Crear intención de pago
       const intent = await this.createBoldPaymentIntent(packageData, userId);
       
       if (!intent.success) {
         throw new Error(intent.error);
       }
 
-      // 2. Abrir checkout
       const checkout = await this.openBoldCheckout(intent.checkoutUrl);
       
       if (!checkout.success) {
@@ -479,7 +567,6 @@ class PaymentService {
    */
   loadScript(src) {
     return new Promise((resolve, reject) => {
-      // Verificar si el script ya está cargado
       const existingScript = document.querySelector(`script[src="${src}"]`);
       if (existingScript) {
         resolve();
@@ -573,60 +660,6 @@ class PaymentService {
 const paymentService = new PaymentService();
 
 export default paymentService;
-
-// ==========================================
-// EXPORTAR FUNCIONES ADICIONALES
-// ==========================================
-
-/**
- * Hook para usar el servicio de pagos en componentes React
- */
-export const usePaymentService = () => {
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState(null);
-
-  const initialize = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await paymentService.initialize();
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      return result;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const purchase = async (packageData, gatewayName = null) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await paymentService.purchasePackage(packageData, gatewayName);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      return result;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return {
-    paymentService,
-    loading,
-    error,
-    initialize,
-    purchase
-  };
-};
 
 // ==========================================
 // CONSTANTES EXPORTADAS
