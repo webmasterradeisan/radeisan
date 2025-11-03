@@ -55,6 +55,9 @@ import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics';
 // ✅ NUEVO - GESTIÓN DE PUNTOS PREMIUM (ADMIN)
 import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfig';
 
+// ✅ NUEVO - GESTIÓN DE TRANSACCIONES (ADMIN)
+import TransactionsManagement from './pages/admin/TransactionsManagement';
+
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
 // ===============================
@@ -424,6 +427,16 @@ const Routes = () => {
                   element={
                     <ProtectedAdminRoute requiredPermission="manage_points">
                       <PremiumPointsConfig />
+                    </ProtectedAdminRoute>
+                  } 
+                />
+
+                {/* 💰 NUEVO - Gestión de Transacciones - ✅ REAL */}
+                <Route 
+                  path="transactions" 
+                  element={
+                    <ProtectedAdminRoute requiredPermission="manage_transactions">
+                      <TransactionsManagement />
                     </ProtectedAdminRoute>
                   } 
                 />
