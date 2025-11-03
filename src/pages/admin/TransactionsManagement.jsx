@@ -55,12 +55,18 @@ const TransactionsManagement = () => {
       const result = await getTransactions(params);
       
       if (result.success) {
-        setTransactions(result.data.transactions);
+        setTransactions(result.data.transactions || []);
+        
+        // 🔧 FIX: Mapear correctamente los campos del backend
+        const paginationData = result.data.pagination || {};
+        const totalCount = paginationData.total || 0;
+        const totalPages = Math.ceil(totalCount / pagination.limit);
+        
         setPagination(prev => ({
           ...prev,
           currentPage: page,
-          totalPages: result.data.pagination.total_pages,
-          totalCount: result.data.pagination.total_count
+          totalPages: totalPages,
+          totalCount: totalCount
         }));
       } else {
         toast.error('Error al cargar transacciones');
