@@ -263,7 +263,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
               <span>{filteredItems.length} secciones disponibles</span>
             </div>
 
-            
+            <a
               href="/dashboard"
               className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors"
             >
