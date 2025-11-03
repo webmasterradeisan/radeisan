@@ -28,7 +28,7 @@ const getMenuItems = () => [
     path: '/admin',
     icon: 'LayoutDashboard',
     description: 'Estadísticas generales',
-    requiredPermission: null, // Todos los admins pueden ver
+    requiredPermission: null,
     badge: null
   },
   {
@@ -136,39 +136,18 @@ const getMenuItems = () => [
 // COMPONENTE PRINCIPAL
 // ============================================
 
-/**
- * Sidebar del panel de administración
- * @param {Object} props
- * @param {boolean} props.isOpen - Estado del sidebar (abierto/cerrado)
- * @param {boolean} props.isMobile - Si está en vista mobile
- * @param {Function} props.onClose - Callback para cerrar el sidebar
- * @returns {React.ReactElement}
- */
 const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
   const location = useLocation();
   const { canAccess, roleType, roleName } = useAdminRole();
 
-  // ============================================
-  // FUNCIONES
-  // ============================================
-
-  /**
-   * Filtrar items del menú según permisos
-   */
   const getFilteredMenuItems = () => {
     const items = getMenuItems();
     return items.filter(item => {
-      // Si no requiere permiso, mostrar a todos los admins
       if (!item.requiredPermission) return true;
-      
-      // Verificar si tiene el permiso requerido
       return canAccess(item.requiredPermission);
     });
   };
 
-  /**
-   * Verificar si una ruta está activa
-   */
   const isActiveRoute = (path) => {
     if (path === '/admin') {
       return location.pathname === '/admin';
@@ -178,13 +157,8 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
 
   const filteredItems = getFilteredMenuItems();
 
-  // ============================================
-  // RENDERIZADO
-  // ============================================
-
   return (
     <>
-      {/* Sidebar Container */}
       <aside
         className={`
           fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-gray-200
@@ -194,12 +168,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
           flex flex-col
         `}
       >
-        {/* ============================================ */}
-        {/* HEADER DEL SIDEBAR */}
-        {/* ============================================ */}
-
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          {/* Logo y Nombre */}
           <div className="flex items-center space-x-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600">
               <AppIcon name="Shield" className="w-5 h-5 text-white" />
@@ -210,7 +179,6 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
             </div>
           </div>
 
-          {/* Botón cerrar (solo mobile) */}
           {isMobile && (
             <button
               onClick={onClose}
@@ -221,10 +189,6 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
             </button>
           )}
         </div>
-
-        {/* ============================================ */}
-        {/* ROL DEL USUARIO */}
-        {/* ============================================ */}
 
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center space-x-2">
@@ -242,10 +206,6 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
             )}
           </div>
         </div>
-
-        {/* ============================================ */}
-        {/* NAVEGACIÓN */}
-        {/* ============================================ */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-1">
@@ -268,7 +228,6 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
                     title={item.description}
                   >
                     <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      {/* Icono */}
                       <AppIcon
                         name={item.icon}
                         className={`
@@ -276,21 +235,17 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
                           ${isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
                         `}
                       />
-
-                      {/* Nombre */}
                       <span className="truncate text-sm">
                         {item.name}
                       </span>
                     </div>
 
-                    {/* Badge de notificaciones (si existe) */}
                     {item.badge && (
                       <span className="ml-2 flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-medium">
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
                     )}
 
-                    {/* Indicador de activo */}
                     {isActive && (
                       <div className="ml-2 w-1 h-6 bg-blue-600 rounded-full" />
                     )}
@@ -301,19 +256,13 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
           </ul>
         </nav>
 
-        {/* ============================================ */}
-        {/* FOOTER DEL SIDEBAR */}
-        {/* ============================================ */}
-
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="space-y-2">
-            {/* Indicador de accesos */}
             <div className="flex items-center space-x-2 text-xs text-gray-500">
               <AppIcon name="CheckCircle2" className="w-4 h-4 text-green-600" />
               <span>{filteredItems.length} secciones disponibles</span>
             </div>
 
-            {/* Volver al sitio */}
             
               href="/dashboard"
               className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors"
