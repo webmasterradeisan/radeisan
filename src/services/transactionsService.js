@@ -4,7 +4,7 @@
  * RADEISAN Platform
  */
 
-import { supabase } from '../supabase';
+import { supabase } from '../lib/supabase';
 
 /**
  * Obtiene transacciones con filtros opcionales y paginación
