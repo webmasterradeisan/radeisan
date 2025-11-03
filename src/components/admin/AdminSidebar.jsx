@@ -1,8 +1,8 @@
 // ============================================
 // COMPONENTE: AdminSidebar
 // ============================================
-// NavegaciÃ³n lateral del panel de administraciÃ³n
-// Con menÃº dinÃ¡mico basado en permisos
+// Navegación lateral del panel de administración
+// Con menú dinámico basado en permisos
 // ============================================
 
 import React from 'react';
@@ -15,11 +15,11 @@ import { useAdminRole } from '../../hooks/useAdminRole';
 import AppIcon from '../AppIcon';
 
 // ============================================
-// CONFIGURACIÃ“N DEL MENÃš
+// CONFIGURACIÓN DEL MENÚ
 // ============================================
 
 /**
- * Obtiene los items del menÃº con sus permisos requeridos
+ * Obtiene los items del menú con sus permisos requeridos
  */
 const getMenuItems = () => [
   {
@@ -27,7 +27,7 @@ const getMenuItems = () => [
     name: 'Dashboard',
     path: '/admin',
     icon: 'LayoutDashboard',
-    description: 'EstadÃ­sticas generales',
+    description: 'Estadísticas generales',
     requiredPermission: null, // Todos los admins pueden ver
     badge: null
   },
@@ -36,16 +36,16 @@ const getMenuItems = () => [
     name: 'Usuarios',
     path: '/admin/users',
     icon: 'Users',
-    description: 'GestiÃ³n de usuarios',
+    description: 'Gestión de usuarios',
     requiredPermission: 'manage_users',
     badge: null
   },
   {
     id: 'categories',
-    name: 'CategorÃ­as',
+    name: 'Categorías',
     path: '/admin/categories',
     icon: 'FolderTree',
-    description: 'GestiÃ³n de categorÃ­as',
+    description: 'Gestión de categorías',
     requiredPermission: 'manage_categories',
     badge: null
   },
@@ -54,7 +54,7 @@ const getMenuItems = () => [
     name: 'Sistema de Puntos',
     path: '/admin/points',
     icon: 'Coins',
-    description: 'ConfiguraciÃ³n de puntos',
+    description: 'Configuración de puntos',
     requiredPermission: 'manage_points',
     badge: null
   },
@@ -68,11 +68,20 @@ const getMenuItems = () => [
     badge: null
   },
   {
+    id: 'transactions',
+    name: 'Transacciones',
+    path: '/admin/transactions',
+    icon: 'Receipt',
+    description: 'Gestión de transacciones y pagos',
+    requiredPermission: 'manage_transactions',
+    badge: null
+  },
+  {
     id: 'missions',
     name: 'Misiones Diarias',
     path: '/admin/missions',
     icon: 'Target',
-    description: 'GestiÃ³n de misiones',
+    description: 'Gestión de misiones',
     requiredPermission: 'manage_missions',
     badge: null
   },
@@ -81,16 +90,16 @@ const getMenuItems = () => [
     name: 'Recompensas',
     path: '/admin/rewards',
     icon: 'Gift',
-    description: 'GestiÃ³n de recompensas',
+    description: 'Gestión de recompensas',
     requiredPermission: 'manage_rewards',
     badge: null
   },
   {
     id: 'moderation',
-    name: 'ModeraciÃ³n',
+    name: 'Moderación',
     path: '/admin/moderation',
     icon: 'Shield',
-    description: 'Reportes y moderaciÃ³n',
+    description: 'Reportes y moderación',
     requiredPermission: 'moderate_content',
     badge: null
   },
@@ -99,13 +108,13 @@ const getMenuItems = () => [
     name: 'Analytics',
     path: '/admin/analytics',
     icon: 'BarChart3',
-    description: 'EstadÃ­sticas avanzadas',
+    description: 'Estadísticas avanzadas',
     requiredPermission: 'view_analytics',
     badge: null
   },
   {
     id: 'settings',
-    name: 'ConfiguraciÃ³n',
+    name: 'Configuración',
     path: '/admin/settings',
     icon: 'Settings',
     description: 'Branding y ajustes',
@@ -128,10 +137,10 @@ const getMenuItems = () => [
 // ============================================
 
 /**
- * Sidebar del panel de administraciÃ³n
+ * Sidebar del panel de administración
  * @param {Object} props
  * @param {boolean} props.isOpen - Estado del sidebar (abierto/cerrado)
- * @param {boolean} props.isMobile - Si estÃ¡ en vista mobile
+ * @param {boolean} props.isMobile - Si está en vista mobile
  * @param {Function} props.onClose - Callback para cerrar el sidebar
  * @returns {React.ReactElement}
  */
@@ -144,7 +153,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
   // ============================================
 
   /**
-   * Filtrar items del menÃº segÃºn permisos
+   * Filtrar items del menú según permisos
    */
   const getFilteredMenuItems = () => {
     const items = getMenuItems();
@@ -158,7 +167,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
   };
 
   /**
-   * Verificar si una ruta estÃ¡ activa
+   * Verificar si una ruta está activa
    */
   const isActiveRoute = (path) => {
     if (path === '/admin') {
@@ -201,12 +210,12 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
             </div>
           </div>
 
-          {/* BotÃ³n cerrar (solo mobile) */}
+          {/* Botón cerrar (solo mobile) */}
           {isMobile && (
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors lg:hidden"
-              aria-label="Cerrar menÃº"
+              aria-label="Cerrar menú"
             >
               <AppIcon name="X" className="w-5 h-5 text-gray-500" />
             </button>
@@ -235,7 +244,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
         </div>
 
         {/* ============================================ */}
-        {/* NAVEGACIÃ“N */}
+        {/* NAVEGACIÓN */}
         {/* ============================================ */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -305,7 +314,7 @@ const AdminSidebar = ({ isOpen, isMobile, onClose }) => {
             </div>
 
             {/* Volver al sitio */}
-            <a
+            
               href="/dashboard"
               className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors"
             >
