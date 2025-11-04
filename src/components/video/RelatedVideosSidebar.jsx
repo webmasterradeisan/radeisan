@@ -2,7 +2,8 @@
 // ============================================================================
 // SIDEBAR DE VIDEOS RELACIONADOS - Estilo YouTube Mejorado
 // ============================================================================
-// ✅ Carrusel de Shorts/Reels integrado
+// ✅ Carrusel de REELS integrado (antes "Shorts")
+// ✅ Thumbnails arreglados
 // ✅ Videos relacionados horizontales
 // ✅ Información completa del creador
 // ✅ Filtros inteligentes
@@ -16,9 +17,9 @@ import Icon from 'components/AppIcon';
 import Image from 'components/AppImage';
 
 // ===============================
-// COMPONENTE: CARRUSEL DE SHORTS
+// COMPONENTE: CARRUSEL DE REELS (antes Shorts)
 // ===============================
-const ShortsCarousel = ({ shorts = [], onShortClick }) => {
+const ReelsCarousel = ({ reels = [], onReelClick }) => {
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -37,7 +38,7 @@ const ShortsCarousel = ({ shorts = [], onShortClick }) => {
       container.addEventListener('scroll', checkScroll);
       return () => container.removeEventListener('scroll', checkScroll);
     }
-  }, [shorts]);
+  }, [reels]);
 
   const scroll = (direction) => {
     if (!scrollRef.current) return;
@@ -45,16 +46,16 @@ const ShortsCarousel = ({ shorts = [], onShortClick }) => {
     scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
   };
 
-  if (!shorts || shorts.length === 0) return null;
+  if (!reels || reels.length === 0) return null;
 
   return (
     <div className="mb-6">
-      {/* Header */}
+      {/* Header - ✅ Cambiado de "Shorts" a "Reels" */}
       <div className="flex items-center gap-2 mb-3">
         <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
           <Icon name="Play" size={16} className="text-white" />
         </div>
-        <h3 className="text-base font-semibold text-foreground">Shorts</h3>
+        <h3 className="text-base font-semibold text-foreground">Reels</h3>
       </div>
 
       {/* Carrusel */}
@@ -69,25 +70,36 @@ const ShortsCarousel = ({ shorts = [], onShortClick }) => {
           </button>
         )}
 
-        {/* Contenedor de shorts */}
+        {/* Contenedor de reels */}
         <div
           ref={scrollRef}
           className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {shorts.slice(0, 12).map((short) => (
+          {reels.slice(0, 12).map((reel) => (
             <div
-              key={short.id}
-              onClick={() => onShortClick?.(short)}
-              className="flex-shrink-0 w-[140px] cursor-pointer group/short"
+              key={reel.id}
+              onClick={() => onReelClick?.(reel)}
+              className="flex-shrink-0 w-[140px] cursor-pointer group/reel"
             >
-              {/* Thumbnail */}
+              {/* ✅ Thumbnail arreglado */}
               <div className="relative aspect-[9/16] rounded-xl overflow-hidden bg-muted mb-2">
-                <Image
-                  src={short.thumbnail}
-                  alt={short.title}
-                  className="w-full h-full object-cover group-hover/short:scale-105 transition-transform duration-300"
-                />
+                {reel.thumbnail || reel.thumbnail_url ? (
+                  <img
+                    src={reel.thumbnail || reel.thumbnail_url}
+                    alt={reel.title}
+                    onError={(e) => {
+                      // Fallback si la imagen no carga
+                      e.target.src = '/default-thumbnail.jpg';
+                    }}
+                    className="w-full h-full object-cover group-hover/reel:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  // Placeholder si no hay thumbnail
+                  <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                    <Icon name="Video" size={32} className="text-muted-foreground" />
+                  </div>
+                )}
                 
                 {/* Overlay con views */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
@@ -95,15 +107,15 @@ const ShortsCarousel = ({ shorts = [], onShortClick }) => {
                     <div className="flex items-center gap-1 text-white text-xs">
                       <Icon name="Play" size={12} />
                       <span className="font-medium">
-                        {formatViews(short.views_count || short.views)}
+                        {formatViews(reel.views_count || reel.views)}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Play icon en hover */}
-                <div className="absolute inset-0 bg-black/0 group-hover/short:bg-black/20 transition-colors flex items-center justify-center">
-                  <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover/short:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-black/0 group-hover/reel:bg-black/20 transition-colors flex items-center justify-center">
+                  <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity">
                     <Icon name="Play" size={16} className="ml-0.5" />
                   </div>
                 </div>
@@ -111,7 +123,7 @@ const ShortsCarousel = ({ shorts = [], onShortClick }) => {
 
               {/* Título */}
               <p className="text-xs font-medium text-foreground line-clamp-2 leading-tight">
-                {short.title}
+                {reel.title}
               </p>
             </div>
           ))}
@@ -140,13 +152,24 @@ const VideoCard = ({ video, onClick, showIndex, index }) => {
       onClick={onClick}
       className="flex gap-3 cursor-pointer group mb-3"
     >
-      {/* Thumbnail */}
+      {/* ✅ Thumbnail arreglado */}
       <div className="relative w-40 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-muted">
-        <Image
-          src={video.thumbnail}
-          alt={video.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
+        {video.thumbnail || video.thumbnail_url ? (
+          <img
+            src={video.thumbnail || video.thumbnail_url}
+            alt={video.title}
+            onError={(e) => {
+              // Fallback si la imagen no carga
+              e.target.src = '/default-thumbnail.jpg';
+            }}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          // Placeholder si no hay thumbnail
+          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+            <Icon name="Video" size={24} className="text-muted-foreground" />
+          </div>
+        )}
         
         {/* Duration Badge */}
         {video.duration && (
@@ -271,8 +294,8 @@ const RelatedVideosSidebar = ({
   const navigate = useNavigate();
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
-  const [shorts, setShorts] = useState([]);
-  const [loadingShorts, setLoadingShorts] = useState(false);
+  const [reels, setReels] = useState([]);
+  const [loadingReels, setLoadingReels] = useState(false);
 
   // Filtrar videos (excluir el actual, solo horizontales y ordenar aleatoriamente)
   useEffect(() => {
@@ -308,18 +331,18 @@ const RelatedVideosSidebar = ({
     }
   }, [videos, currentVideoId]);
 
-  // Cargar Shorts
+  // Cargar Reels (antes Shorts)
   useEffect(() => {
-    loadShorts();
+    loadReels();
   }, []);
 
-  const loadShorts = async () => {
+  const loadReels = async () => {
     try {
-      setLoadingShorts(true);
-      console.log('🎬 Cargando Shorts...');
+      setLoadingReels(true);
+      console.log('🎬 Cargando Reels...');
       
-      // Obtener shorts (videos verticales cortos)
-      const { data: shortsData, error } = await supabase
+      // Obtener reels (videos verticales cortos)
+      const { data: reelsData, error } = await supabase
         .from('videos')
         .select('*')
         .eq('is_published', true)
@@ -328,16 +351,16 @@ const RelatedVideosSidebar = ({
         .limit(20);
 
       if (error) {
-        console.error('❌ Error al cargar shorts:', error);
+        console.error('❌ Error al cargar reels:', error);
         throw error;
       }
 
-      console.log('✅ Shorts encontrados:', shortsData?.length || 0);
+      console.log('✅ Reels encontrados:', reelsData?.length || 0);
 
       // Cargar información de creadores
-      if (shortsData && shortsData.length > 0) {
-        const userIds = [...new Set(shortsData.map(v => v.user_id).filter(Boolean))];
-        console.log('👥 User IDs de shorts:', userIds.length);
+      if (reelsData && reelsData.length > 0) {
+        const userIds = [...new Set(reelsData.map(v => v.user_id).filter(Boolean))];
+        console.log('👥 User IDs de reels:', userIds.length);
         
         if (userIds.length > 0) {
           const { data: creatorsData, error: creatorsError } = await supabase
@@ -346,9 +369,9 @@ const RelatedVideosSidebar = ({
             .in('id', userIds);
           
           if (creatorsError) {
-            console.error('❌ Error al cargar creadores de shorts:', creatorsError);
+            console.error('❌ Error al cargar creadores de reels:', creatorsError);
           } else if (creatorsData) {
-            console.log('✅ Creadores de shorts cargados:', creatorsData.length);
+            console.log('✅ Creadores de reels cargados:', creatorsData.length);
             const creatorsMap = {};
             creatorsData.forEach(creator => {
               creatorsMap[creator.id] = {
@@ -360,22 +383,22 @@ const RelatedVideosSidebar = ({
               };
             });
             
-            shortsData.forEach(short => {
-              if (short.user_id && creatorsMap[short.user_id]) {
-                short.creator = creatorsMap[short.user_id];
+            reelsData.forEach(reel => {
+              if (reel.user_id && creatorsMap[reel.user_id]) {
+                reel.creator = creatorsMap[reel.user_id];
               }
             });
           }
         }
       }
 
-      setShorts(shortsData || []);
-      console.log('🎬 Shorts cargados y listos:', shortsData?.length || 0);
+      setReels(reelsData || []);
+      console.log('🎬 Reels cargados y listos:', reelsData?.length || 0);
     } catch (err) {
-      console.error('❌ Error al cargar shorts:', err);
-      setShorts([]); // Continuar sin shorts si hay error
+      console.error('❌ Error al cargar reels:', err);
+      setReels([]); // Continuar sin reels si hay error
     } finally {
-      setLoadingShorts(false);
+      setLoadingReels(false);
     }
   };
 
@@ -389,8 +412,8 @@ const RelatedVideosSidebar = ({
     }
   };
 
-  const handleShortClick = (short) => {
-    navigate(`/reels?id=${short.id}`);
+  const handleReelClick = (reel) => {
+    navigate(`/reels?id=${reel.id}`);
   };
 
   // Filtros
@@ -461,17 +484,17 @@ const RelatedVideosSidebar = ({
   console.log('📊 Estado actual:', {
     videosRecibidos: videos.length,
     videosFiltrados: filteredVideos.length,
-    shortsDisponibles: shorts.length,
-    loadingShorts
+    reelsDisponibles: reels.length,
+    loadingReels
   });
 
   return (
     <div className={className}>
-      {/* Carrusel de Shorts */}
-      {!loadingShorts && shorts.length > 0 && (
-        <ShortsCarousel 
-          shorts={shorts} 
-          onShortClick={handleShortClick}
+      {/* Carrusel de Reels (antes Shorts) */}
+      {!loadingReels && reels.length > 0 && (
+        <ReelsCarousel 
+          reels={reels} 
+          onReelClick={handleReelClick}
         />
       )}
 
