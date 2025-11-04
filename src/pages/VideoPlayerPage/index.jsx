@@ -87,7 +87,10 @@ const VideoPlayerPage = () => {
 
   // ✅ ESTADOS PARA MINI-PLAYER ARRASTRABLE
   const [isMinimized, setIsMinimized] = useState(false);
-  const [miniPlayerPosition, setMiniPlayerPosition] = useState({ x: 20, y: 20 });
+  const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
+    x: window.innerWidth - 420, // 20px desde el borde derecho
+    y: window.innerHeight - 280  // 20px desde el borde inferior
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
@@ -196,40 +199,82 @@ const VideoPlayerPage = () => {
   // ===============================
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
-    const miniVideo = miniVideoRef.current;
     
-    if (!mainVideo || !miniVideo) return;
+    if (!mainVideo) {
+      console.error('No se encontró el video principal');
+      return;
+    }
 
-    // Sincronizar estado antes de minimizar
-    miniVideo.currentTime = mainVideo.currentTime;
-    miniVideo.volume = mainVideo.volume;
-    miniVideo.muted = mainVideo.muted;
+    console.log('Minimizando video...');
     
+    // Guardar el estado actual
+    const wasPlaying = !mainVideo.paused;
+    
+    // Primero establecer el estado de minimizado
     setIsMinimized(true);
     
-    // Reproducir en mini-player si estaba reproduciendo
-    if (!mainVideo.paused) {
-      miniVideo.play().catch(err => console.log('Mini-player play error:', err));
-    }
+    // Esperar un frame para que el mini-player se renderice
+    requestAnimationFrame(() => {
+      const miniVideo = miniVideoRef.current;
+      
+      if (miniVideo) {
+        // Sincronizar estado
+        miniVideo.currentTime = mainVideo.currentTime;
+        miniVideo.volume = mainVideo.volume;
+        miniVideo.muted = mainVideo.muted;
+        
+        console.log('Mini-player sincronizado:', {
+          currentTime: miniVideo.currentTime,
+          wasPlaying
+        });
+        
+        // Reproducir si estaba reproduciendo
+        if (wasPlaying) {
+          miniVideo.play().catch(err => console.log('Mini-player play error:', err));
+        }
+      } else {
+        console.error('No se encontró el mini-player video ref');
+      }
+    });
   };
 
   const handleMaximize = () => {
-    const mainVideo = videoRef.current;
     const miniVideo = miniVideoRef.current;
+    const mainVideo = videoRef.current;
     
-    if (!mainVideo || !miniVideo) return;
+    if (!miniVideo || !mainVideo) {
+      console.error('No se encontraron los videos');
+      return;
+    }
 
-    // Sincronizar estado antes de maximizar
-    mainVideo.currentTime = miniVideo.currentTime;
-    mainVideo.volume = miniVideo.volume;
-    mainVideo.muted = miniVideo.muted;
+    console.log('Maximizando video...');
     
+    // Guardar el estado actual del mini-player
+    const wasPlaying = !miniVideo.paused;
+    const currentTime = miniVideo.currentTime;
+    const currentVolume = miniVideo.volume;
+    const isMutedNow = miniVideo.muted;
+
+    // Primero quitar el mini-player
     setIsMinimized(false);
     
-    // Reproducir en player principal si estaba reproduciendo
-    if (!miniVideo.paused) {
-      mainVideo.play().catch(err => console.log('Main player play error:', err));
-    }
+    // Esperar un frame para que el player principal se renderice
+    requestAnimationFrame(() => {
+      // Sincronizar estado
+      mainVideo.currentTime = currentTime;
+      mainVideo.volume = currentVolume;
+      mainVideo.muted = isMutedNow;
+      
+      console.log('Player principal sincronizado:', {
+        currentTime: mainVideo.currentTime,
+        wasPlaying
+      });
+      
+      // Reproducir si estaba reproduciendo
+      if (wasPlaying) {
+        mainVideo.play().catch(err => console.log('Main player play error:', err));
+      }
+    });
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1094,7 +1139,10 @@ const VideoPlayerPage = () => {
 
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={handleMinimize}
+                            onClick={() => {
+                              console.log('🔽 Click en botón minimizar');
+                              handleMinimize();
+                            }}
                             className="hover:bg-white/20 p-2 rounded-full transition-colors"
                             title="Minimizar"
                           >
@@ -1416,12 +1464,13 @@ const VideoPlayerPage = () => {
       {/* ✅ MINI-PLAYER ARRASTRABLE CON VIDEO REPRODUCIENDO */}
       {isMinimized && video && (
         <div
-          className="fixed z-50 bg-black rounded-lg shadow-2xl border-2 border-primary"
+          className="fixed bg-black rounded-lg shadow-2xl border-2 border-primary"
           style={{
             left: `${miniPlayerPosition.x}px`,
             top: `${miniPlayerPosition.y}px`,
             width: '400px',
-            cursor: isDragging ? 'grabbing' : 'grab'
+            cursor: isDragging ? 'grabbing' : 'grab',
+            zIndex: 9999
           }}
           onMouseDown={handleMouseDown}
         >
