@@ -90,26 +90,11 @@ const VideoPlayerPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Refs
+  // Refs - ✅ SOLO UN REF PARA EL VIDEO
   const videoRef = useRef(null);
-  const miniVideoRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
   const miniPlayerRef = useRef(null);
-
-  // ===============================
-  // ✅ DEBUGGING - Ver estado del mini-player
-  // ===============================
-  useEffect(() => {
-    if (isMinimized) {
-      console.log('🔍 Mini-player activado:', {
-        isMinimized,
-        position: miniPlayerPosition,
-        videoRef: !!miniVideoRef.current,
-        video: !!video
-      });
-    }
-  }, [isMinimized, miniPlayerPosition, video]);
 
   // ===============================
   // ✅ CONTROLES DE TECLADO
@@ -118,7 +103,7 @@ const VideoPlayerPage = () => {
     const handleKeyPress = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-      const currentVideo = isMinimized ? miniVideoRef.current : videoRef.current;
+      const currentVideo = videoRef.current;
       if (!currentVideo) return;
 
       switch (e.key) {
@@ -158,7 +143,7 @@ const VideoPlayerPage = () => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [isMinimized, volume]);
+  }, [volume]);
 
   // ===============================
   // ✅ FUNCIONES DE DRAG & DROP
@@ -178,8 +163,6 @@ const VideoPlayerPage = () => {
       x: clientX - miniPlayerPosition.x,
       y: clientY - miniPlayerPosition.y
     });
-    
-    console.log('🖱️ Drag iniciado:', { clientX, clientY, offset: dragOffset });
   };
 
   const handleMouseMove = useCallback((e) => {
@@ -207,7 +190,6 @@ const VideoPlayerPage = () => {
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
-      console.log('🖱️ Drag finalizado');
       setIsDragging(false);
     }
   }, [isDragging]);
@@ -232,68 +214,12 @@ const VideoPlayerPage = () => {
   // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - CORREGIDA
   // ===============================
   const handleMinimize = () => {
-    const mainVideo = videoRef.current;
-    const miniVideo = miniVideoRef.current;
-    
-    console.log('📦 Minimizando...', { mainVideo: !!mainVideo, miniVideo: !!miniVideo });
-    
-    if (!mainVideo || !miniVideo) {
-      console.error('❌ Videos no disponibles');
-      return;
-    }
-
-    // Pausar el video principal
-    mainVideo.pause();
-
-    // Sincronizar estado en mini-player
-    miniVideo.currentTime = mainVideo.currentTime;
-    miniVideo.volume = mainVideo.volume;
-    miniVideo.muted = mainVideo.muted;
-    
     setIsMinimized(true);
-    setIsPlaying(false);
-    
-    // Reproducir automáticamente en mini-player después de un momento
-    setTimeout(() => {
-      if (miniVideoRef.current) {
-        miniVideoRef.current.play()
-          .then(() => {
-            console.log('✅ Mini-player reproduciendo');
-            setIsPlaying(true);
-          })
-          .catch(err => console.error('❌ Error al reproducir mini-player:', err));
-      }
-    }, 100);
+    // El video continúa reproduciéndose automáticamente
   };
 
   const handleMaximize = () => {
-    const mainVideo = videoRef.current;
-    const miniVideo = miniVideoRef.current;
-    
-    console.log('📺 Maximizando...');
-    
-    if (!mainVideo || !miniVideo) return;
-
-    // Pausar mini-player
-    miniVideo.pause();
-
-    // Sincronizar estado
-    mainVideo.currentTime = miniVideo.currentTime;
-    mainVideo.volume = miniVideo.volume;
-    mainVideo.muted = miniVideo.muted;
-    
     setIsMinimized(false);
-    
-    // Reproducir en player principal si estaba reproduciendo
-    if (!miniVideo.paused) {
-      mainVideo.play()
-        .then(() => {
-          console.log('✅ Player principal reproduciendo');
-          setIsPlaying(true);
-        })
-        .catch(err => console.error('❌ Error al reproducir player principal:', err));
-    }
-
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -884,7 +810,7 @@ const VideoPlayerPage = () => {
   // ===============================
 
   const togglePlayPause = () => {
-    const currentVideo = isMinimized ? miniVideoRef.current : videoRef.current;
+    const currentVideo = videoRef.current;
     if (!currentVideo) return;
 
     if (currentVideo.paused) {
@@ -901,7 +827,6 @@ const VideoPlayerPage = () => {
     setVolume(newVolume);
     
     if (videoRef.current) videoRef.current.volume = newVolume;
-    if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
     
     setIsMuted(newVolume === 0);
   };
@@ -911,19 +836,17 @@ const VideoPlayerPage = () => {
     setIsMuted(newMuted);
     
     if (videoRef.current) videoRef.current.muted = newMuted;
-    if (miniVideoRef.current) miniVideoRef.current.muted = newMuted;
     
     if (newMuted) {
       setVolume(0);
     } else if (volume === 0) {
       setVolume(0.5);
       if (videoRef.current) videoRef.current.volume = 0.5;
-      if (miniVideoRef.current) miniVideoRef.current.volume = 0.5;
     }
   };
 
   const handleTimeUpdate = () => {
-    const currentVideo = isMinimized ? miniVideoRef.current : videoRef.current;
+    const currentVideo = videoRef.current;
     if (!currentVideo) return;
 
     setProgress((currentVideo.currentTime / currentVideo.duration) * 100);
@@ -982,7 +905,7 @@ const VideoPlayerPage = () => {
       clearTimeout(controlsTimeoutRef.current);
     }
     controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) {
+      if (isPlaying && !isMinimized) {
         setShowControls(false);
       }
     }, 3000);
@@ -1092,11 +1015,11 @@ const VideoPlayerPage = () => {
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
-              {/* ✅ Video Player Principal - SIEMPRE VISIBLE */}
+              {/* ✅ Video Player Principal */}
               <div
                 ref={containerRef}
-                className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-opacity duration-300 ${
-                  isMinimized ? 'opacity-30' : 'opacity-100'
+                className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${
+                  isMinimized ? 'opacity-0 pointer-events-none h-0' : 'opacity-100'
                 }`}
                 onMouseMove={handleMouseMovePlayer}
                 onMouseLeave={() => isPlaying && setShowControls(false)}
@@ -1108,111 +1031,96 @@ const VideoPlayerPage = () => {
                   onLoadedMetadata={(e) => setDuration(e.target.duration)}
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={() => setIsPlaying(false)}
-                  onClick={!isMinimized ? togglePlayPause : undefined}
+                  onClick={togglePlayPause}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
 
-                {/* ✅ Overlay cuando está minimizado */}
-                {isMinimized && (
-                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center pointer-events-none">
-                    <div className="text-center text-white">
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Icon name="Pause" className="w-10 h-10" />
+                <div
+                  className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
+                    showControls ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  {!isPlaying && (
+                    <button
+                      onClick={togglePlayPause}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+                        <Icon name="Play" className="w-10 h-10 text-white ml-1" />
                       </div>
-                      <p className="text-sm">Video minimizado</p>
-                      <p className="text-xs text-white/70 mt-2">Reproduciendo en mini-player</p>
-                    </div>
-                  </div>
-                )}
+                    </button>
+                  )}
 
-                {!isMinimized && (
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
-                      showControls ? 'opacity-100' : 'opacity-0'
-                    }`}
-                  >
-                    {!isPlaying && (
-                      <button
-                        onClick={togglePlayPause}
-                        className="absolute inset-0 flex items-center justify-center"
-                      >
-                        <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
-                          <Icon name="Play" className="w-10 h-10 text-white ml-1" />
-                        </div>
-                      </button>
-                    )}
-
-                    <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
+                  <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
+                    <div
+                      className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
+                      onClick={handleSeek}
+                    >
                       <div
-                        className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
-                        onClick={handleSeek}
+                        className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all"
+                        style={{ width: `${progress}%` }}
                       >
-                        <div
-                          className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all"
-                          style={{ width: `${progress}%` }}
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-white">
+                      <div className="flex items-center gap-2 md:gap-4">
+                        <button
+                          onClick={togglePlayPause}
+                          className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                         >
-                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div>
+                          <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} />
+                        </button>
+
+                        <div className="flex items-center gap-2 group/volume">
+                          <button
+                            onClick={toggleMute}
+                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
+                          >
+                            <Icon
+                              name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
+                              size={isMobile ? 18 : 20}
+                            />
+                          </button>
+                          {!isMobile && (
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={volume}
+                              onChange={handleVolumeChange}
+                              className="w-0 group-hover/volume:w-20 transition-all"
+                            />
+                          )}
                         </div>
+
+                        <span className="text-xs md:text-sm font-medium">
+                          {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
+                        </span>
                       </div>
 
-                      <div className="flex items-center justify-between text-white">
-                        <div className="flex items-center gap-2 md:gap-4">
-                          <button
-                            onClick={togglePlayPause}
-                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                          >
-                            <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} />
-                          </button>
+                      <div className="flex items-center gap-1 md:gap-2">
+                        <button
+                          onClick={handleMinimize}
+                          className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
+                          title="Minimizar"
+                        >
+                          <Icon name="Minimize2" size={isMobile ? 18 : 20} />
+                        </button>
 
-                          <div className="flex items-center gap-2 group/volume">
-                            <button
-                              onClick={toggleMute}
-                              className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                            >
-                              <Icon
-                                name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
-                                size={isMobile ? 18 : 20}
-                              />
-                            </button>
-                            {!isMobile && (
-                              <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.01"
-                                value={volume}
-                                onChange={handleVolumeChange}
-                                className="w-0 group-hover/volume:w-20 transition-all"
-                              />
-                            )}
-                          </div>
-
-                          <span className="text-xs md:text-sm font-medium">
-                            {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1 md:gap-2">
-                          <button
-                            onClick={handleMinimize}
-                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                            title="Minimizar"
-                          >
-                            <Icon name="Minimize2" size={isMobile ? 18 : 20} />
-                          </button>
-
-                          <button
-                            onClick={toggleFullscreen}
-                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                          >
-                            <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} />
-                          </button>
-                        </div>
+                        <button
+                          onClick={toggleFullscreen}
+                          className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
+                        >
+                          <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} />
+                        </button>
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Información del video */}
@@ -1514,7 +1422,7 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER FLOTANTE - VERSION CORREGIDA */}
+      {/* ✅ MINI-PLAYER FLOTANTE - FUNCIONAL */}
       {isMinimized && video && (
         <div
           ref={miniPlayerRef}
@@ -1533,17 +1441,9 @@ const VideoPlayerPage = () => {
           {/* Video en mini-player */}
           <div className="relative aspect-video bg-black">
             <video
-              ref={miniVideoRef}
               src={video.video_url}
-              className="w-full h-full object-contain"
-              onTimeUpdate={handleTimeUpdate}
-              onEnded={() => setIsPlaying(false)}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlayPause();
-              }}
+              className="w-full h-full object-contain pointer-events-none"
+              style={{ pointerEvents: 'none' }}
             />
 
             {/* Controles sobre el video */}
@@ -1599,9 +1499,6 @@ const VideoPlayerPage = () => {
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsMinimized(false);
-                    if (miniVideoRef.current) {
-                      miniVideoRef.current.pause();
-                    }
                   }}
                   className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Cerrar"
