@@ -1362,10 +1362,13 @@ const VideoPlayerPage = () => {
             {/* Sidebar - Videos relacionados */}
             {!isMobile && (
               <div className="lg:w-[400px] flex-shrink-0">
+                {console.log('🎨 Renderizando sidebar con videos:', relatedVideos.length)}
                 <RelatedVideosSidebar
                   videos={relatedVideos}
                   currentVideoId={videoId}
+                  loading={loading}
                   onVideoSelect={(selectedVideo) => {
+                    console.log('🎬 Video seleccionado:', selectedVideo.id);
                     navigate(`/video/${selectedVideo.id}`);
                     window.scrollTo(0, 0);
                   }}
