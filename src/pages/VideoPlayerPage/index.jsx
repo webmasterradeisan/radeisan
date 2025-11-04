@@ -21,7 +21,7 @@ import * as missionsService from 'services/missionsService';
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
-import RelatedVideosSidebar from 'components/RelatedVideosSidebar';
+import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
 // ===============================
