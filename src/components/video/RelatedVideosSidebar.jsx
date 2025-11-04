@@ -1,11 +1,265 @@
 // src/components/video/RelatedVideosSidebar.jsx
-// Sidebar con videos relacionados estilo YouTube
+// ============================================================================
+// SIDEBAR DE VIDEOS RELACIONADOS - Estilo YouTube Mejorado
+// ============================================================================
+// ✅ Carrusel de Shorts/Reels integrado
+// ✅ Videos relacionados horizontales
+// ✅ Información completa del creador
+// ✅ Filtros inteligentes
+// ✅ Diseño responsive
+// ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Icon from '../AppIcon';
-import Image from '../AppImage';
+import { supabase } from 'lib/supabase';
+import Icon from 'components/AppIcon';
+import Image from 'components/AppImage';
 
+// ===============================
+// COMPONENTE: CARRUSEL DE SHORTS
+// ===============================
+const ShortsCarousel = ({ shorts = [], onShortClick }) => {
+  const scrollRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const container = scrollRef.current;
+    if (container) {
+      container.addEventListener('scroll', checkScroll);
+      return () => container.removeEventListener('scroll', checkScroll);
+    }
+  }, [shorts]);
+
+  const scroll = (direction) => {
+    if (!scrollRef.current) return;
+    const scrollAmount = direction === 'left' ? -280 : 280;
+    scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+  };
+
+  if (!shorts || shorts.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+          <Icon name="Play" size={16} className="text-white" />
+        </div>
+        <h3 className="text-base font-semibold text-foreground">Shorts</h3>
+      </div>
+
+      {/* Carrusel */}
+      <div className="relative group">
+        {/* Botón izquierdo */}
+        {canScrollLeft && (
+          <button
+            onClick={() => scroll('left')}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
+          >
+            <Icon name="ChevronLeft" size={20} />
+          </button>
+        )}
+
+        {/* Contenedor de shorts */}
+        <div
+          ref={scrollRef}
+          className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {shorts.slice(0, 12).map((short) => (
+            <div
+              key={short.id}
+              onClick={() => onShortClick?.(short)}
+              className="flex-shrink-0 w-[140px] cursor-pointer group/short"
+            >
+              {/* Thumbnail */}
+              <div className="relative aspect-[9/16] rounded-xl overflow-hidden bg-muted mb-2">
+                <Image
+                  src={short.thumbnail}
+                  alt={short.title}
+                  className="w-full h-full object-cover group-hover/short:scale-105 transition-transform duration-300"
+                />
+                
+                {/* Overlay con views */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                  <div className="absolute bottom-2 left-2 right-2">
+                    <div className="flex items-center gap-1 text-white text-xs">
+                      <Icon name="Play" size={12} />
+                      <span className="font-medium">
+                        {formatViews(short.views_count || short.views)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Play icon en hover */}
+                <div className="absolute inset-0 bg-black/0 group-hover/short:bg-black/20 transition-colors flex items-center justify-center">
+                  <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover/short:opacity-100 transition-opacity">
+                    <Icon name="Play" size={16} className="ml-0.5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Título */}
+              <p className="text-xs font-medium text-foreground line-clamp-2 leading-tight">
+                {short.title}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Botón derecho */}
+        {canScrollRight && (
+          <button
+            onClick={() => scroll('right')}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
+          >
+            <Icon name="ChevronRight" size={20} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ===============================
+// COMPONENTE: VIDEO CARD
+// ===============================
+const VideoCard = ({ video, onClick, showIndex, index }) => {
+  return (
+    <div
+      onClick={onClick}
+      className="flex gap-3 cursor-pointer group mb-3"
+    >
+      {/* Thumbnail */}
+      <div className="relative w-40 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-muted">
+        <Image
+          src={video.thumbnail}
+          alt={video.title}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+        />
+        
+        {/* Duration Badge */}
+        {video.duration && (
+          <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-medium">
+            {formatDuration(video.duration)}
+          </div>
+        )}
+
+        {/* Hover Overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+          <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <Icon name="Play" size={16} className="ml-0.5" />
+          </div>
+        </div>
+
+        {/* Index Badge */}
+        {showIndex && index === 0 && (
+          <div className="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
+            Siguiente
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        {/* Title */}
+        <h3 className="text-sm font-medium text-foreground line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+          {video.title}
+        </h3>
+
+        {/* Creator */}
+        <div className="flex items-center gap-1 mb-1">
+          <Link
+            to={`/profile/${video.creator?.username || 'unknown'}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors line-clamp-1"
+          >
+            {video.creator?.name || 'Usuario'}
+          </Link>
+          {video.creator?.is_verified && (
+            <Icon name="BadgeCheck" size={12} className="text-blue-500 flex-shrink-0" />
+          )}
+        </div>
+
+        {/* Stats */}
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>{formatViews(video.views_count || video.views)} vistas</span>
+          {video.created_at && (
+            <>
+              <span>•</span>
+              <span>{formatTimeAgo(video.created_at)}</span>
+            </>
+          )}
+        </div>
+
+        {/* Category Badge */}
+        {video.category && (
+          <div className="mt-1">
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              <Icon name="Tag" size={10} />
+              {video.category}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ===============================
+// FUNCIONES DE FORMATEO
+// ===============================
+const formatDuration = (seconds) => {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const formatViews = (views) => {
+  if (!views) return '0';
+  if (views >= 1000000) {
+    return `${(views / 1000000).toFixed(1)}M`;
+  } else if (views >= 1000) {
+    return `${(views / 1000).toFixed(1)}K`;
+  }
+  return views.toString();
+};
+
+const formatTimeAgo = (timestamp) => {
+  if (!timestamp) return 'Reciente';
+  
+  const now = new Date();
+  const then = new Date(timestamp);
+  const diffMs = now - then;
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffYears > 0) return `hace ${diffYears} año${diffYears > 1 ? 's' : ''}`;
+  if (diffMonths > 0) return `hace ${diffMonths} mes${diffMonths > 1 ? 'es' : ''}`;
+  if (diffDays > 0) return `hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
+  if (diffHours > 0) return `hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+  if (diffMinutes > 0) return `hace ${diffMinutes} minuto${diffMinutes > 1 ? 's' : ''}`;
+  return 'hace un momento';
+};
+
+// ===============================
+// COMPONENTE PRINCIPAL
+// ===============================
 const RelatedVideosSidebar = ({
   videos = [],
   currentVideoId,
@@ -17,6 +271,8 @@ const RelatedVideosSidebar = ({
   const navigate = useNavigate();
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [shorts, setShorts] = useState([]);
+  const [loadingShorts, setLoadingShorts] = useState(false);
 
   // Filtrar videos (excluir el actual)
   useEffect(() => {
@@ -24,63 +280,74 @@ const RelatedVideosSidebar = ({
     setFilteredVideos(filtered);
   }, [videos, currentVideoId]);
 
-  // ===============================
-  // FORMATEO DE DATOS
-  // ===============================
+  // Cargar Shorts
+  useEffect(() => {
+    loadShorts();
+  }, []);
 
-  const formatDuration = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  const loadShorts = async () => {
+    try {
+      setLoadingShorts(true);
+      
+      // Obtener shorts (videos verticales cortos)
+      const { data: shortsData, error } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('status', 'published')
+        .eq('orientation', 'vertical')
+        .order('views_count', { ascending: false })
+        .limit(20);
 
-  const formatViews = (views) => {
-    if (views >= 1000000) {
-      return `${(views / 1000000).toFixed(1)}M`;
-    } else if (views >= 1000) {
-      return `${(views / 1000).toFixed(1)}K`;
+      if (error) throw error;
+
+      // Cargar información de creadores
+      if (shortsData && shortsData.length > 0) {
+        const userIds = [...new Set(shortsData.map(v => v.user_id).filter(Boolean))];
+        
+        if (userIds.length > 0) {
+          const { data: creatorsData } = await supabase
+            .from('user_profiles')
+            .select('id, name, username, profile_image_url, is_verified')
+            .in('id', userIds);
+          
+          if (creatorsData) {
+            const creatorsMap = {};
+            creatorsData.forEach(creator => {
+              creatorsMap[creator.id] = creator;
+            });
+            
+            shortsData.forEach(short => {
+              if (short.user_id && creatorsMap[short.user_id]) {
+                short.creator = creatorsMap[short.user_id];
+              }
+            });
+          }
+        }
+      }
+
+      setShorts(shortsData || []);
+    } catch (err) {
+      console.error('Error al cargar shorts:', err);
+    } finally {
+      setLoadingShorts(false);
     }
-    return views?.toString() || '0';
   };
 
-  const formatTimeAgo = (timestamp) => {
-    if (!timestamp) return 'Reciente';
-    
-    const now = new Date();
-    const then = new Date(timestamp);
-    const diffMs = now - then;
-    const diffSeconds = Math.floor(diffMs / 1000);
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    const diffMonths = Math.floor(diffDays / 30);
-    const diffYears = Math.floor(diffDays / 365);
-
-    if (diffYears > 0) return `hace ${diffYears} año${diffYears > 1 ? 's' : ''}`;
-    if (diffMonths > 0) return `hace ${diffMonths} mes${diffMonths > 1 ? 'es' : ''}`;
-    if (diffDays > 0) return `hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
-    if (diffHours > 0) return `hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
-    if (diffMinutes > 0) return `hace ${diffMinutes} minuto${diffMinutes > 1 ? 's' : ''}`;
-    return 'hace un momento';
-  };
-
-  // ===============================
-  // HANDLERS
-  // ===============================
-
+  // Handlers
   const handleVideoClick = (video) => {
     if (onVideoSelect) {
       onVideoSelect(video);
     } else {
       navigate(`/video/${video.id}`);
+      window.scrollTo(0, 0);
     }
   };
 
-  // ===============================
-  // FILTERS
-  // ===============================
+  const handleShortClick = (short) => {
+    navigate(`/reels?id=${short.id}`);
+  };
 
+  // Filtros
   const filters = [
     { id: 'all', label: 'Todos', icon: 'Grid3x3' },
     { id: 'category', label: 'Categoría', icon: 'Tag' },
@@ -96,31 +363,28 @@ const RelatedVideosSidebar = ({
     switch (filterId) {
       case 'recent':
         filtered = filtered.sort((a, b) => 
-          new Date(b.created_at || b.timeAgo) - new Date(a.created_at || a.timeAgo)
+          new Date(b.created_at) - new Date(a.created_at)
         );
         break;
       case 'popular':
-        filtered = filtered.sort((a, b) => (b.views || 0) - (a.views || 0));
+        filtered = filtered.sort((a, b) => 
+          (b.views_count || b.views || 0) - (a.views_count || a.views || 0)
+        );
         break;
       case 'category':
-        // Filtrar por la misma categoría del video actual
         const currentVideo = videos.find(v => v.id === currentVideoId);
         if (currentVideo?.category) {
           filtered = filtered.filter(v => v.category === currentVideo.category);
         }
         break;
       default:
-        // 'all' - no additional filtering
         break;
     }
     
     setFilteredVideos(filtered);
   };
 
-  // ===============================
-  // LOADING STATE
-  // ===============================
-
+  // Loading state
   if (loading) {
     return (
       <div className={`space-y-3 ${className}`}>
@@ -138,34 +402,20 @@ const RelatedVideosSidebar = ({
     );
   }
 
-  // ===============================
-  // EMPTY STATE
-  // ===============================
-
-  if (filteredVideos.length === 0) {
-    return (
-      <div className={`text-center py-12 ${className}`}>
-        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-          <Icon name="Video" size={24} color="var(--color-muted-foreground)" />
-        </div>
-        <p className="text-muted-foreground text-sm">
-          No hay videos relacionados disponibles
-        </p>
-      </div>
-    );
-  }
-
-  // ===============================
-  // RENDER PRINCIPAL
-  // ===============================
-
   return (
-    <div className={`${className}`}>
-      
-      {/* HEADER CON FILTROS */}
+    <div className={className}>
+      {/* Carrusel de Shorts */}
+      {!loadingShorts && shorts.length > 0 && (
+        <ShortsCarousel 
+          shorts={shorts} 
+          onShortClick={handleShortClick}
+        />
+      )}
+
+      {/* Header con filtros */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-foreground">
+          <h2 className="text-base font-semibold text-foreground">
             Videos relacionados
           </h2>
           {autoplayEnabled && (
@@ -197,97 +447,36 @@ const RelatedVideosSidebar = ({
         </div>
       </div>
 
-      {/* LISTA DE VIDEOS */}
-      <div className="space-y-3">
-        {filteredVideos.map((video, index) => (
-          <div
-            key={video.id}
-            onClick={() => handleVideoClick(video)}
-            className="flex gap-3 cursor-pointer group"
-          >
-            {/* Thumbnail */}
-            <div className="relative w-40 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-muted">
-              <Image
-                src={video.thumbnail}
-                alt={video.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-              
-              {/* Duration Badge */}
-              <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-medium">
-                {formatDuration(video.duration)}
-              </div>
-
-              {/* Hover Overlay */}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Icon name="Play" size={16} className="ml-0.5" />
-                </div>
-              </div>
-
-              {/* Index Badge (para autoplay) */}
-              {autoplayEnabled && index === 0 && (
-                <div className="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
-                  Siguiente
-                </div>
-              )}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              {/* Title */}
-              <h3 className="text-sm font-medium text-foreground line-clamp-2 mb-1 group-hover:text-primary transition-colors">
-                {video.title}
-              </h3>
-
-              {/* Creator */}
-              <Link
-                to={`/profile/${video.creator?.id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors line-clamp-1"
-              >
-                {video.creator?.name || 'Usuario Anónimo'}
-              </Link>
-
-              {/* Stats */}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                <div className="flex items-center gap-1">
-                  <Icon name="Eye" size={12} />
-                  <span>{formatViews(video.views)}</span>
-                </div>
-                <span>•</span>
-                <span>{formatTimeAgo(video.timeAgo || video.created_at)}</span>
-              </div>
-
-              {/* Category Badge (opcional) */}
-              {video.category && (
-                <div className="mt-1">
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    <Icon name="Tag" size={10} />
-                    {video.category}
-                  </span>
-                </div>
-              )}
-            </div>
+      {/* Lista de videos */}
+      {filteredVideos.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="Video" size={24} className="text-muted-foreground" />
           </div>
-        ))}
-      </div>
-
-      {/* LOAD MORE BUTTON */}
-      {filteredVideos.length > 10 && (
-        <div className="mt-6 text-center">
-          <button className="text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-            Ver más videos relacionados
-          </button>
+          <p className="text-muted-foreground text-sm">
+            No hay videos relacionados disponibles
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-0">
+          {filteredVideos.map((video, index) => (
+            <VideoCard
+              key={video.id}
+              video={video}
+              onClick={() => handleVideoClick(video)}
+              showIndex={autoplayEnabled}
+              index={index}
+            />
+          ))}
         </div>
       )}
 
-      {/* AUTOPLAY INDICATOR */}
+      {/* Autoplay notice */}
       {autoplayEnabled && filteredVideos.length > 0 && (
         <div className="mt-6 p-3 bg-muted/50 rounded-lg border border-border">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-              <Icon name="Play" size={20} color="var(--color-primary)" />
+              <Icon name="Play" size={20} className="text-primary" />
             </div>
             <div className="flex-1">
               <h4 className="text-sm font-medium text-foreground mb-1">
