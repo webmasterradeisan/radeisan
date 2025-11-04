@@ -2,8 +2,8 @@
 // ============================================================================
 // SIDEBAR DE VIDEOS RELACIONADOS - Estilo YouTube Mejorado
 // ============================================================================
-// ✅ Carrusel de REELS integrado (antes "Shorts")
-// ✅ Thumbnails arreglados
+// ✅ Carrusel de REELS con título y visualizaciones
+// ✅ Navegación a /dashboard para reproducir reels
 // ✅ Videos relacionados horizontales
 // ✅ Información completa del creador
 // ✅ Filtros inteligentes
@@ -14,10 +14,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import Icon from 'components/AppIcon';
-import Image from 'components/AppImage';
 
 // ===============================
-// COMPONENTE: CARRUSEL DE REELS (antes Shorts)
+// COMPONENTE: CARRUSEL DE REELS
 // ===============================
 const ReelsCarousel = ({ reels = [], onReelClick }) => {
   const scrollRef = useRef(null);
@@ -50,7 +49,7 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
 
   return (
     <div className="mb-6">
-      {/* Header - ✅ Cambiado de "Shorts" a "Reels" */}
+      {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
           <Icon name="Play" size={16} className="text-white" />
@@ -82,48 +81,35 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
               onClick={() => onReelClick?.(reel)}
               className="flex-shrink-0 w-[140px] cursor-pointer group/reel"
             >
-              {/* ✅ Thumbnail arreglado */}
+              {/* Thumbnail */}
               <div className="relative aspect-[9/16] rounded-xl overflow-hidden bg-muted mb-2">
                 {reel.thumbnail || reel.thumbnail_url ? (
                   <img
                     src={reel.thumbnail || reel.thumbnail_url}
                     alt={reel.title}
                     onError={(e) => {
-                      // Fallback si la imagen no carga
                       e.target.src = '/default-thumbnail.jpg';
                     }}
-                    className="w-full h-full object-cover group-hover/reel:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
-                  // Placeholder si no hay thumbnail
                   <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
                     <Icon name="Video" size={32} className="text-muted-foreground" />
                   </div>
                 )}
                 
-                {/* Overlay con views */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
-                  <div className="absolute bottom-2 left-2 right-2">
-                    <div className="flex items-center gap-1 text-white text-xs">
-                      <Icon name="Play" size={12} />
-                      <span className="font-medium">
-                        {formatViews(reel.views_count || reel.views)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Play icon en hover */}
-                <div className="absolute inset-0 bg-black/0 group-hover/reel:bg-black/20 transition-colors flex items-center justify-center">
-                  <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity">
-                    <Icon name="Play" size={16} className="ml-0.5" />
-                  </div>
-                </div>
+                {/* Overlay gradiente sutil (sin el ícono play grande) */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
               </div>
 
-              {/* Título */}
-              <p className="text-xs font-medium text-foreground line-clamp-2 leading-tight">
+              {/* Título (máximo 2 líneas) */}
+              <p className="text-xs font-medium text-foreground line-clamp-2 leading-tight mb-1">
                 {reel.title}
+              </p>
+
+              {/* Visualizaciones */}
+              <p className="text-xs text-muted-foreground">
+                {formatViews(reel.views_count || reel.views)} visualizaciones
               </p>
             </div>
           ))}
@@ -152,20 +138,18 @@ const VideoCard = ({ video, onClick, showIndex, index }) => {
       onClick={onClick}
       className="flex gap-3 cursor-pointer group mb-3"
     >
-      {/* ✅ Thumbnail arreglado */}
+      {/* Thumbnail */}
       <div className="relative w-40 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-muted">
         {video.thumbnail || video.thumbnail_url ? (
           <img
             src={video.thumbnail || video.thumbnail_url}
             alt={video.title}
             onError={(e) => {
-              // Fallback si la imagen no carga
               e.target.src = '/default-thumbnail.jpg';
             }}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
-          // Placeholder si no hay thumbnail
           <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
             <Icon name="Video" size={24} className="text-muted-foreground" />
           </div>
@@ -252,9 +236,9 @@ const formatDuration = (seconds) => {
 const formatViews = (views) => {
   if (!views) return '0';
   if (views >= 1000000) {
-    return `${(views / 1000000).toFixed(1)}M`;
+    return `${(views / 1000000).toFixed(1)}M de`;
   } else if (views >= 1000) {
-    return `${(views / 1000).toFixed(1)}K`;
+    return `${(views / 1000).toFixed(1)}K de`;
   }
   return views.toString();
 };
@@ -301,20 +285,10 @@ const RelatedVideosSidebar = ({
   useEffect(() => {
     console.log('📹 Videos recibidos en sidebar:', videos.length);
     console.log('🎯 Video actual ID:', currentVideoId);
-    console.log('📊 Primeros 3 videos:', videos.slice(0, 3));
     
-    // Filtrar: excluir video actual y solo videos horizontales
     let filtered = videos.filter(video => {
       const isNotCurrent = video.id !== currentVideoId;
       const isHorizontal = !video.orientation || video.orientation === 'horizontal';
-      
-      if (!isNotCurrent) {
-        console.log('❌ Excluido (es el video actual):', video.id);
-      }
-      if (!isHorizontal) {
-        console.log('❌ Excluido (es vertical):', video.id);
-      }
-      
       return isNotCurrent && isHorizontal;
     });
     
@@ -322,16 +296,11 @@ const RelatedVideosSidebar = ({
     
     // Ordenar aleatoriamente por defecto
     filtered = filtered.sort(() => Math.random() - 0.5);
-    console.log('🎲 Videos ordenados aleatoriamente');
     
     setFilteredVideos(filtered);
-    
-    if (filtered.length === 0) {
-      console.warn('⚠️ NO HAY VIDEOS PARA MOSTRAR');
-    }
   }, [videos, currentVideoId]);
 
-  // Cargar Reels (antes Shorts)
+  // Cargar Reels
   useEffect(() => {
     loadReels();
   }, []);
@@ -360,7 +329,6 @@ const RelatedVideosSidebar = ({
       // Cargar información de creadores
       if (reelsData && reelsData.length > 0) {
         const userIds = [...new Set(reelsData.map(v => v.user_id).filter(Boolean))];
-        console.log('👥 User IDs de reels:', userIds.length);
         
         if (userIds.length > 0) {
           const { data: creatorsData, error: creatorsError } = await supabase
@@ -396,7 +364,7 @@ const RelatedVideosSidebar = ({
       console.log('🎬 Reels cargados y listos:', reelsData?.length || 0);
     } catch (err) {
       console.error('❌ Error al cargar reels:', err);
-      setReels([]); // Continuar sin reels si hay error
+      setReels([]);
     } finally {
       setLoadingReels(false);
     }
@@ -412,8 +380,10 @@ const RelatedVideosSidebar = ({
     }
   };
 
+  // ✅ NAVEGACIÓN A DASHBOARD CON REEL ID
   const handleReelClick = (reel) => {
-    navigate(`/reels?id=${reel.id}`);
+    console.log('🎬 Navegando a dashboard con reel:', reel.id);
+    navigate(`/dashboard?videoId=${reel.id}`);
   };
 
   // Filtros
@@ -427,43 +397,34 @@ const RelatedVideosSidebar = ({
     console.log('🔍 Aplicando filtro:', filterId);
     setSelectedFilter(filterId);
     
-    // Filtrar: excluir video actual y solo horizontales
     let filtered = videos.filter(video => {
       const isNotCurrent = video.id !== currentVideoId;
       const isHorizontal = !video.orientation || video.orientation === 'horizontal';
       return isNotCurrent && isHorizontal;
     });
     
-    console.log('📊 Videos disponibles para filtrar:', filtered.length);
-    
     switch (filterId) {
       case 'recent':
         filtered = filtered.sort((a, b) => 
           new Date(b.created_at) - new Date(a.created_at)
         );
-        console.log('📅 Ordenados por recientes');
         break;
       case 'popular':
         filtered = filtered.sort((a, b) => 
           (b.views_count || b.views || 0) - (a.views_count || a.views || 0)
         );
-        console.log('🔥 Ordenados por populares');
         break;
       case 'all':
       default:
-        // Aleatorio
         filtered = filtered.sort(() => Math.random() - 0.5);
-        console.log('🎲 Ordenados aleatoriamente');
         break;
     }
     
-    console.log('✅ Filtro aplicado, videos resultantes:', filtered.length);
     setFilteredVideos(filtered);
   };
 
   // Loading state
   if (loading) {
-    console.log('⏳ Sidebar en loading...');
     return (
       <div className={`space-y-3 ${className}`}>
         {[...Array(5)].map((_, i) => (
@@ -480,17 +441,9 @@ const RelatedVideosSidebar = ({
     );
   }
 
-  console.log('🎨 Renderizando sidebar');
-  console.log('📊 Estado actual:', {
-    videosRecibidos: videos.length,
-    videosFiltrados: filteredVideos.length,
-    reelsDisponibles: reels.length,
-    loadingReels
-  });
-
   return (
     <div className={className}>
-      {/* Carrusel de Reels (antes Shorts) */}
+      {/* Carrusel de Reels */}
       {!loadingReels && reels.length > 0 && (
         <ReelsCarousel 
           reels={reels} 
