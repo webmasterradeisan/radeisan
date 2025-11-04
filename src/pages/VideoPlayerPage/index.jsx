@@ -90,8 +90,9 @@ const VideoPlayerPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Refs - ✅ SOLO UN REF PARA EL VIDEO
+  // Refs - ✅ DOS REFS PARA SINCRONIZACIÓN
   const videoRef = useRef(null);
+  const miniVideoRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
   const miniPlayerRef = useRef(null);
@@ -1020,11 +1021,11 @@ const VideoPlayerPage = () => {
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
-              {/* ✅ Video Player Principal */}
+              {/* ✅ Video Player Principal - SIEMPRE VISIBLE */}
               <div
                 ref={containerRef}
                 className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${
-                  isMinimized ? 'opacity-50 pointer-events-none' : 'opacity-100'
+                  isMinimized ? 'opacity-30 pointer-events-none' : 'opacity-100'
                 }`}
                 onMouseMove={!isMinimized ? handleMouseMovePlayer : undefined}
                 onMouseLeave={() => isPlaying && !isMinimized && setShowControls(false)}
@@ -1050,13 +1051,12 @@ const VideoPlayerPage = () => {
 
                 {/* ✅ Overlay cuando está minimizado */}
                 {isMinimized && (
-                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center pointer-events-none">
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
                     <div className="text-center text-white">
                       <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon name="Minimize2" className="w-10 h-10" />
                       </div>
-                      <p className="text-sm">Video minimizado</p>
-                      <p className="text-xs text-white/70 mt-2">Reproduciendo en mini-player</p>
+                      <p className="text-sm">Reproduciendo en mini-player</p>
                     </div>
                   </div>
                 )}
@@ -1460,7 +1460,7 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER FLOTANTE - FUNCIONAL */}
+      {/* ✅ MINI-PLAYER FLOTANTE - Muestra el video del reproductor principal */}
       {isMinimized && video && (
         <div
           ref={miniPlayerRef}
@@ -1476,11 +1476,29 @@ const VideoPlayerPage = () => {
           onMouseDown={handleMouseDown}
           onTouchStart={handleMouseDown}
         >
-          {/* Video en mini-player */}
+          {/* Video en mini-player - Copia visual del video principal */}
           <div className="relative aspect-video bg-black">
+            {/* Usamos el mismo src y sincronizamos manualmente */}
             <video
               src={video.video_url}
               className="w-full h-full object-contain"
+              autoPlay={isPlaying}
+              muted={isMuted}
+              ref={(miniVideo) => {
+                if (miniVideo && videoRef.current) {
+                  // Sincronizar con el video principal
+                  miniVideo.currentTime = videoRef.current.currentTime;
+                  miniVideo.volume = videoRef.current.volume;
+                  miniVideo.muted = videoRef.current.muted;
+                  
+                  // Sincronizar play/pause
+                  if (isPlaying && miniVideo.paused) {
+                    miniVideo.play().catch(err => console.error('Error play mini:', err));
+                  } else if (!isPlaying && !miniVideo.paused) {
+                    miniVideo.pause();
+                  }
+                }
+              }}
             />
 
             {/* ✅ OverlayClickArea - Click para play/pause */}
@@ -1492,7 +1510,7 @@ const VideoPlayerPage = () => {
               }}
             />
 
-            {/* Controles sobre el video - solo visuales, el click va al overlay */}
+            {/* Controles sobre el video - solo visuales */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
                 <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 20 : 24} className="text-white" />
@@ -1538,11 +1556,7 @@ const VideoPlayerPage = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (videoRef.current) {
-                      videoRef.current.pause();
-                    }
                     setIsMinimized(false);
-                    setIsPlaying(false);
                   }}
                   className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Cerrar"
