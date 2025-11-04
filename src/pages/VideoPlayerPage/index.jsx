@@ -113,17 +113,28 @@ const VideoPlayerPage = () => {
 
       if (videoError) throw videoError;
 
+      console.log('📹 Video cargado:', videoData);
+
       // Obtener información del creador por separado
       if (videoData?.user_id) {
-        const { data: creatorData } = await supabase
+        console.log('👤 Buscando creador con ID:', videoData.user_id);
+        
+        const { data: creatorData, error: creatorError } = await supabase
           .from('user_profiles')
           .select('id, name, username, profile_image_url, is_verified')
           .eq('id', videoData.user_id)
           .single();
         
-        if (creatorData) {
+        if (creatorError) {
+          console.error('❌ Error al cargar creador:', creatorError);
+        } else if (creatorData) {
+          console.log('✅ Creador cargado:', creatorData);
           videoData.creator = creatorData;
+        } else {
+          console.warn('⚠️ No se encontró información del creador');
         }
+      } else {
+        console.warn('⚠️ Video sin user_id');
       }
 
       setVideo(videoData);
@@ -270,6 +281,7 @@ const VideoPlayerPage = () => {
 
     try {
       setLoadingComments(true);
+      console.log('💬 Cargando comentarios para video:', videoId);
 
       // Obtener comentarios principales
       const { data: commentsData, error: commentsError } = await supabase
@@ -281,26 +293,39 @@ const VideoPlayerPage = () => {
 
       if (commentsError) throw commentsError;
 
+      console.log('💬 Comentarios encontrados:', commentsData?.length || 0);
+
       if (commentsData && commentsData.length > 0) {
         // Obtener respuestas para cada comentario
         const commentIds = commentsData.map(c => c.id);
-        const { data: repliesData } = await supabase
+        const { data: repliesData, error: repliesError } = await supabase
           .from('video_comments')
           .select('*')
           .in('parent_comment_id', commentIds);
+
+        if (repliesError) {
+          console.error('❌ Error al cargar respuestas:', repliesError);
+        }
+
+        console.log('↩️ Respuestas encontradas:', repliesData?.length || 0);
 
         // Obtener información de usuarios
         const allComments = [...commentsData, ...(repliesData || [])];
         const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
         
+        console.log('👥 User IDs únicos:', userIds);
+
         let usersMap = {};
         if (userIds.length > 0) {
-          const { data: usersData } = await supabase
+          const { data: usersData, error: usersError } = await supabase
             .from('user_profiles')
             .select('id, name, username, profile_image_url, is_verified')
             .in('id', userIds);
           
-          if (usersData) {
+          if (usersError) {
+            console.error('❌ Error al cargar usuarios:', usersError);
+          } else if (usersData) {
+            console.log('✅ Usuarios cargados:', usersData.length);
             usersData.forEach(user => {
               usersMap[user.id] = user;
             });
@@ -311,6 +336,9 @@ const VideoPlayerPage = () => {
         commentsData.forEach(comment => {
           if (comment.user_id && usersMap[comment.user_id]) {
             comment.user = usersMap[comment.user_id];
+            console.log('✅ Usuario mapeado a comentario:', comment.user.name);
+          } else {
+            console.warn('⚠️ Comentario sin usuario:', comment.id);
           }
           
           // Agregar respuestas al comentario
@@ -327,7 +355,7 @@ const VideoPlayerPage = () => {
 
       setComments(commentsData || []);
     } catch (err) {
-      console.error('Error al cargar comentarios:', err);
+      console.error('❌ Error al cargar comentarios:', err);
     } finally {
       setLoadingComments(false);
     }
