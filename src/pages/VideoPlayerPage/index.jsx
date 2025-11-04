@@ -221,29 +221,35 @@ const VideoPlayerPage = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // ===============================
-  // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - CORREGIDA
+  // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - TOTALMENTE CORREGIDA
   // ===============================
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
-    const miniVideo = miniVideoRef.current;
     if (!mainVideo) return;
 
-    // Guardar estado actual
+    // Guardar estado actual ANTES de hacer cambios
     const currentTime = mainVideo.currentTime;
     const wasPlaying = !mainVideo.paused;
 
-    // Pausar video principal
+    // PAUSAR COMPLETAMENTE el video principal
     mainVideo.pause();
+    setIsPlaying(false);
 
     // Activar mini-player
     setIsMinimized(true);
 
     // Sincronizar mini-player después de que se monte
     setTimeout(() => {
-      if (miniVideoRef.current) {
-        miniVideoRef.current.currentTime = currentTime;
+      const miniVideo = miniVideoRef.current;
+      if (miniVideo) {
+        miniVideo.currentTime = currentTime;
+        miniVideo.volume = volume;
+        miniVideo.muted = isMuted;
+        
         if (wasPlaying) {
-          miniVideoRef.current.play().catch(err => console.error('Error play mini:', err));
+          miniVideo.play()
+            .then(() => setIsPlaying(true))
+            .catch(err => console.error('Error play mini:', err));
         }
       }
     }, 100);
@@ -253,27 +259,36 @@ const VideoPlayerPage = () => {
     const mainVideo = videoRef.current;
     const miniVideo = miniVideoRef.current;
 
-    if (miniVideo && mainVideo) {
-      // Guardar estado del mini-player
+    if (miniVideo) {
+      // Guardar estado del mini-player ANTES de hacer cambios
       const currentTime = miniVideo.currentTime;
       const wasPlaying = !miniVideo.paused;
 
-      // Pausar mini-player
+      // PAUSAR COMPLETAMENTE el mini-player
       miniVideo.pause();
-
-      // Desactivar mini-player
-      setIsMinimized(false);
-
-      // Sincronizar video principal
-      setTimeout(() => {
-        mainVideo.currentTime = currentTime;
-        if (wasPlaying) {
-          mainVideo.play().catch(err => console.error('Error play main:', err));
-        }
-      }, 100);
-    } else {
-      setIsMinimized(false);
+      setIsPlaying(false);
     }
+
+    // Desactivar mini-player
+    setIsMinimized(false);
+
+    // Sincronizar video principal
+    setTimeout(() => {
+      if (mainVideo && miniVideo) {
+        const currentTime = miniVideo.currentTime;
+        const wasPlaying = miniVideo.paused === false;
+        
+        mainVideo.currentTime = currentTime;
+        mainVideo.volume = volume;
+        mainVideo.muted = isMuted;
+        
+        if (wasPlaying) {
+          mainVideo.play()
+            .then(() => setIsPlaying(true))
+            .catch(err => console.error('Error play main:', err));
+        }
+      }
+    }, 100);
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
