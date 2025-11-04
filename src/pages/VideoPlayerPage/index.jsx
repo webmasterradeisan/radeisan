@@ -542,57 +542,54 @@ const VideoPlayerPage = () => {
   };
 
   const handleLike = async () => {
-  if (!user) {
-    navigate('/login');
-    return;
-  }
+    if (!user) {
+      navigate('/login');
+      return;
+    }
 
-  try {
-    if (liked) {
-      setLiked(false);
-      setVideoCounters(prev => ({
-        ...prev,
-        likes: Math.max(0, prev.likes - 1)
-      }));
+    try {
+      if (liked) {
+        setLiked(false);
+        setVideoCounters(prev => ({
+          ...prev,
+          likes: Math.max(0, prev.likes - 1)
+        }));
 
-      await supabase
-        .from('video_likes')
-        .delete()
-        .eq('video_id', videoId)
-        .eq('user_id', user.id);
+        await supabase
+          .from('video_likes')
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
 
-      await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        await supabase.rpc('decrement_video_likes', { video_id: videoId });
 
-    } else {
-      if (disliked) {
-        await handleDislike();
-      }
+      } else {
+        if (disliked) {
+          await handleDislike();
+        }
 
-      setLiked(true);
-      setVideoCounters(prev => ({
-        ...prev,
-        likes: prev.likes + 1
-      }));
+        setLiked(true);
+        setVideoCounters(prev => ({
+          ...prev,
+          likes: prev.likes + 1
+        }));
 
-      await supabase
-        .from('video_likes')
-        .insert({ video_id: videoId, user_id: user.id });
+        await supabase
+          .from('video_likes')
+          .insert({ video_id: videoId, user_id: user.id });
 
-      await supabase.rpc('increment_video_likes', { video_id: videoId });
+        await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-      if (!hasEarnedLikePoints) {
-        const pointsAmount = 5;
-        await addPoints(pointsAmount, 'Like en video', 'free');
-        await trackPointsEarned('like', pointsAmount);
-        setHasEarnedLikePoints(true);
-        showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
-        missionsService.trackAction('like');
+        if (!hasEarnedLikePoints) {
+          const pointsAmount = 5;
+          await addPoints(pointsAmount, 'Like en video', 'free');
+          await trackPointsEarned('like', pointsAmount);
+          setHasEarnedLikePoints(true);
+          showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
+        missionsService.trackAction('watch');
       }
     }
-  } catch (err) {
-    console.error('Error en like:', err);
-  }
-};
+  };
 
   const handleSeek = (e) => {
     if (videoRef.current) {
