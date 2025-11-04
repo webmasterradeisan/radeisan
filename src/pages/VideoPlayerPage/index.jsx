@@ -1,15 +1,12 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - Sistema Completo con Mini-Player y Móvil Optimizado
+// VIDEO PLAYER PAGE - VERSIÓN CORREGIDA CON MINI-PLAYER FUNCIONANDO
 // ============================================================================
-// ✅ Video grande NO se oculta al minimizar (se pausa de fondo)
-// ✅ Click en cualquier parte del video para play/pause
-// ✅ Adaptación perfecta a móviles
-// ✅ Fullscreen en móvil con rotación automática a horizontal
-// ✅ Mini-player arrastrable con video reproduciendo
-// ✅ Controles de teclado completos (espacio, k, flechas, f, m)
-// ✅ Sistema de likes Y dislikes
-// ✅ Avatar del usuario en comentarios
+// ✅ Mini-player visible y funcional
+// ✅ Video principal permanece visible pero pausado
+// ✅ Click en video para play/pause
+// ✅ Drag & drop funcionando
+// ✅ Adaptado para móvil
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -25,9 +22,6 @@ import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
-// ===============================
-// COMPONENTE PRINCIPAL
-// ===============================
 const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
@@ -87,11 +81,11 @@ const VideoPlayerPage = () => {
     message: ''
   });
 
-  // ✅ ESTADOS PARA MINI-PLAYER ARRASTRABLE
+  // ✅ ESTADOS PARA MINI-PLAYER - CORREGIDOS
   const [isMinimized, setIsMinimized] = useState(false);
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
-    x: isMobile ? 10 : 20, 
-    y: isMobile ? 10 : 20 
+    x: 20, 
+    y: 20 
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -101,13 +95,27 @@ const VideoPlayerPage = () => {
   const miniVideoRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
+  const miniPlayerRef = useRef(null);
+
+  // ===============================
+  // ✅ DEBUGGING - Ver estado del mini-player
+  // ===============================
+  useEffect(() => {
+    if (isMinimized) {
+      console.log('🔍 Mini-player activado:', {
+        isMinimized,
+        position: miniPlayerPosition,
+        videoRef: !!miniVideoRef.current,
+        video: !!video
+      });
+    }
+  }, [isMinimized, miniPlayerPosition, video]);
 
   // ===============================
   // ✅ CONTROLES DE TECLADO
   // ===============================
   useEffect(() => {
     const handleKeyPress = (e) => {
-      // No interferir si estás escribiendo en un input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       const currentVideo = isMinimized ? miniVideoRef.current : videoRef.current;
@@ -153,10 +161,14 @@ const VideoPlayerPage = () => {
   }, [isMinimized, volume]);
 
   // ===============================
-  // ✅ FUNCIONES DE DRAG & DROP (Desktop y Móvil)
+  // ✅ FUNCIONES DE DRAG & DROP
   // ===============================
   const handleMouseDown = (e) => {
+    // Evitar drag si se hace click en botones o en el video
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
+    
+    e.preventDefault();
+    e.stopPropagation();
     
     setIsDragging(true);
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -166,10 +178,14 @@ const VideoPlayerPage = () => {
       x: clientX - miniPlayerPosition.x,
       y: clientY - miniPlayerPosition.y
     });
+    
+    console.log('🖱️ Drag iniciado:', { clientX, clientY, offset: dragOffset });
   };
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
+    
+    e.preventDefault();
 
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -177,28 +193,32 @@ const VideoPlayerPage = () => {
     const newX = clientX - dragOffset.x;
     const newY = clientY - dragOffset.y;
 
-    // Límites de la pantalla adaptados a móvil
+    // Límites de la pantalla
     const miniWidth = isMobile ? 250 : 400;
     const miniHeight = isMobile ? 180 : 250;
-    const maxX = window.innerWidth - miniWidth;
-    const maxY = window.innerHeight - miniHeight;
+    const maxX = window.innerWidth - miniWidth - 20;
+    const maxY = window.innerHeight - miniHeight - 20;
 
-    setMiniPlayerPosition({
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY))
-    });
+    const boundedX = Math.max(10, Math.min(newX, maxX));
+    const boundedY = Math.max(10, Math.min(newY, maxY));
+
+    setMiniPlayerPosition({ x: boundedX, y: boundedY });
   }, [isDragging, dragOffset, isMobile]);
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = useCallback(() => {
+    if (isDragging) {
+      console.log('🖱️ Drag finalizado');
+      setIsDragging(false);
+    }
+  }, [isDragging]);
 
   useEffect(() => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
-      document.addEventListener('touchmove', handleMouseMove);
+      document.addEventListener('touchmove', handleMouseMove, { passive: false });
       document.addEventListener('touchend', handleMouseUp);
+      
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -206,20 +226,24 @@ const VideoPlayerPage = () => {
         document.removeEventListener('touchend', handleMouseUp);
       };
     }
-  }, [isDragging, handleMouseMove]);
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // ===============================
-  // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR
+  // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - CORREGIDA
   // ===============================
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
     const miniVideo = miniVideoRef.current;
     
-    if (!mainVideo || !miniVideo) return;
+    console.log('📦 Minimizando...', { mainVideo: !!mainVideo, miniVideo: !!miniVideo });
+    
+    if (!mainVideo || !miniVideo) {
+      console.error('❌ Videos no disponibles');
+      return;
+    }
 
     // Pausar el video principal
     mainVideo.pause();
-    setIsPlaying(false);
 
     // Sincronizar estado en mini-player
     miniVideo.currentTime = mainVideo.currentTime;
@@ -227,23 +251,33 @@ const VideoPlayerPage = () => {
     miniVideo.muted = mainVideo.muted;
     
     setIsMinimized(true);
+    setIsPlaying(false);
     
-    // Reproducir automáticamente en mini-player
-    miniVideo.play().then(() => {
-      setIsPlaying(true);
-    }).catch(err => console.log('Mini-player play error:', err));
+    // Reproducir automáticamente en mini-player después de un momento
+    setTimeout(() => {
+      if (miniVideoRef.current) {
+        miniVideoRef.current.play()
+          .then(() => {
+            console.log('✅ Mini-player reproduciendo');
+            setIsPlaying(true);
+          })
+          .catch(err => console.error('❌ Error al reproducir mini-player:', err));
+      }
+    }, 100);
   };
 
   const handleMaximize = () => {
     const mainVideo = videoRef.current;
     const miniVideo = miniVideoRef.current;
     
+    console.log('📺 Maximizando...');
+    
     if (!mainVideo || !miniVideo) return;
 
     // Pausar mini-player
     miniVideo.pause();
 
-    // Sincronizar estado antes de maximizar
+    // Sincronizar estado
     mainVideo.currentTime = miniVideo.currentTime;
     mainVideo.volume = miniVideo.volume;
     mainVideo.muted = miniVideo.muted;
@@ -252,9 +286,12 @@ const VideoPlayerPage = () => {
     
     // Reproducir en player principal si estaba reproduciendo
     if (!miniVideo.paused) {
-      mainVideo.play().then(() => {
-        setIsPlaying(true);
-      }).catch(err => console.log('Main player play error:', err));
+      mainVideo.play()
+        .then(() => {
+          console.log('✅ Player principal reproduciendo');
+          setIsPlaying(true);
+        })
+        .catch(err => console.error('❌ Error al reproducir player principal:', err));
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -910,7 +947,6 @@ const VideoPlayerPage = () => {
     videoRef.current.currentTime = pos * videoRef.current.duration;
   };
 
-  // ✅ Fullscreen con rotación automática en móvil
   const toggleFullscreen = async () => {
     if (!containerRef.current) return;
 
@@ -919,7 +955,7 @@ const VideoPlayerPage = () => {
         await containerRef.current.requestFullscreen();
         setIsFullscreen(true);
         
-        // ✅ Forzar orientación landscape en móvil
+        // Forzar orientación landscape en móvil
         if (isMobile && screen.orientation && screen.orientation.lock) {
           try {
             await screen.orientation.lock('landscape');
@@ -931,7 +967,6 @@ const VideoPlayerPage = () => {
         await document.exitFullscreen();
         setIsFullscreen(false);
         
-        // Desbloquear orientación
         if (isMobile && screen.orientation && screen.orientation.unlock) {
           screen.orientation.unlock();
         }
@@ -975,6 +1010,10 @@ const VideoPlayerPage = () => {
       }
     };
   }, []);
+
+  // ===============================
+  // UTILIDADES
+  // ===============================
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -1056,8 +1095,8 @@ const VideoPlayerPage = () => {
               {/* ✅ Video Player Principal - SIEMPRE VISIBLE */}
               <div
                 ref={containerRef}
-                className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group ${
-                  isMinimized ? 'pointer-events-none opacity-50' : ''
+                className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-opacity duration-300 ${
+                  isMinimized ? 'opacity-30' : 'opacity-100'
                 }`}
                 onMouseMove={handleMouseMovePlayer}
                 onMouseLeave={() => isPlaying && setShowControls(false)}
@@ -1076,12 +1115,13 @@ const VideoPlayerPage = () => {
 
                 {/* ✅ Overlay cuando está minimizado */}
                 {isMinimized && (
-                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center pointer-events-none">
                     <div className="text-center text-white">
                       <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon name="Pause" className="w-10 h-10" />
                       </div>
                       <p className="text-sm">Video minimizado</p>
+                      <p className="text-xs text-white/70 mt-2">Reproduciendo en mini-player</p>
                     </div>
                   </div>
                 )}
@@ -1474,14 +1514,16 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER ARRASTRABLE CON VIDEO REPRODUCIENDO */}
+      {/* ✅ MINI-PLAYER FLOTANTE - VERSION CORREGIDA */}
       {isMinimized && video && (
         <div
-          className="fixed z-[60] bg-black rounded-lg shadow-2xl border-2 border-primary"
+          ref={miniPlayerRef}
+          className="fixed bg-black rounded-lg shadow-2xl border-2 border-primary overflow-hidden"
           style={{
             left: `${miniPlayerPosition.x}px`,
             top: `${miniPlayerPosition.y}px`,
             width: isMobile ? '250px' : '400px',
+            zIndex: 9999,
             cursor: isDragging ? 'grabbing' : 'grab',
             touchAction: 'none'
           }}
@@ -1493,7 +1535,7 @@ const VideoPlayerPage = () => {
             <video
               ref={miniVideoRef}
               src={video.video_url}
-              className="w-full h-full object-contain cursor-pointer"
+              className="w-full h-full object-contain"
               onTimeUpdate={handleTimeUpdate}
               onEnded={() => setIsPlaying(false)}
               onPlay={() => setIsPlaying(true)}
@@ -1516,6 +1558,9 @@ const VideoPlayerPage = () => {
                 <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 20 : 24} className="text-white" />
               </button>
             </div>
+
+            {/* Indicador de drag */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full"></div>
           </div>
 
           {/* Información y controles */}
@@ -1554,6 +1599,9 @@ const VideoPlayerPage = () => {
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsMinimized(false);
+                    if (miniVideoRef.current) {
+                      miniVideoRef.current.pause();
+                    }
                   }}
                   className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Cerrar"
