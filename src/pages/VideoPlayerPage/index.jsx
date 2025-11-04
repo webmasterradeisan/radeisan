@@ -2,13 +2,14 @@
 // ============================================================================
 // VIDEO PLAYER PAGE - Estilo YouTube con Sistema de Puntos Completo
 // ============================================================================
+// ✅ Estructura correcta de BD (full_name, avatar_url, is_published)
 // ✅ Sistema de comentarios completo
-// ✅ Likes y Dislikes
+// ✅ Likes (sin dislikes - tabla no existe)
 // ✅ Favoritos/Guardados
 // ✅ Compartir
 // ✅ Control de volumen
 // ✅ Sincronización con puntos gratis y premium
-// ✅ Diseño similar a YouTube
+// ✅ Videos relacionados aleatorios
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -31,7 +32,7 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addPoints, points } = usePoints();
+  const { addPoints } = usePoints();
   const isMobile = useIsMobile();
 
   // Estados del video
@@ -42,12 +43,10 @@ const VideoPlayerPage = () => {
 
   // Estados de interacción
   const [liked, setLiked] = useState(false);
-  const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [following, setFollowing] = useState(false);
   const [videoCounters, setVideoCounters] = useState({
     likes: 0,
-    dislikes: 0,
     views: 0,
     comments: 0
   });
@@ -90,7 +89,6 @@ const VideoPlayerPage = () => {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
-  const viewTrackingRef = useRef(null);
 
   // ===============================
   // FUNCIONES DE CARGA DE DATOS
@@ -104,16 +102,19 @@ const VideoPlayerPage = () => {
       setLoading(true);
       setError(null);
 
+      console.log('📹 Cargando video:', videoId);
+
       // Obtener datos del video
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
         .select('*')
         .eq('id', videoId)
+        .eq('is_published', true)
         .single();
 
       if (videoError) throw videoError;
 
-      console.log('📹 Video cargado:', videoData);
+      console.log('✅ Video cargado:', videoData);
 
       // Obtener información del creador por separado
       if (videoData?.user_id) {
@@ -121,7 +122,7 @@ const VideoPlayerPage = () => {
         
         const { data: creatorData, error: creatorError } = await supabase
           .from('user_profiles')
-          .select('id, name, username, profile_image_url, is_verified')
+          .select('id, full_name, username, avatar_url, is_verified')
           .eq('id', videoData.user_id)
           .single();
         
@@ -129,12 +130,14 @@ const VideoPlayerPage = () => {
           console.error('❌ Error al cargar creador:', creatorError);
         } else if (creatorData) {
           console.log('✅ Creador cargado:', creatorData);
-          videoData.creator = creatorData;
-        } else {
-          console.warn('⚠️ No se encontró información del creador');
+          videoData.creator = {
+            id: creatorData.id,
+            name: creatorData.full_name,
+            username: creatorData.username,
+            profile_image_url: creatorData.avatar_url,
+            is_verified: creatorData.is_verified
+          };
         }
-      } else {
-        console.warn('⚠️ Video sin user_id');
       }
 
       setVideo(videoData);
@@ -145,14 +148,13 @@ const VideoPlayerPage = () => {
       // Obtener contadores actualizados
       const { data: countersData } = await supabase
         .from('videos')
-        .select('likes_count, dislikes_count, views_count, comments_count')
+        .select('likes_count, views_count, comments_count')
         .eq('id', videoId)
         .single();
 
       if (countersData) {
         setVideoCounters({
           likes: countersData.likes_count || 0,
-          dislikes: countersData.dislikes_count || 0,
           views: countersData.views_count || 0,
           comments: countersData.comments_count || 0
         });
@@ -169,16 +171,6 @@ const VideoPlayerPage = () => {
           .maybeSingle();
 
         setLiked(!!likeData);
-
-        // Verificar dislike
-        const { data: dislikeData } = await supabase
-          .from('video_dislikes')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        setDisliked(!!dislikeData);
 
         // Verificar guardado
         const { data: savedData } = await supabase
@@ -222,7 +214,7 @@ const VideoPlayerPage = () => {
       loadRelatedVideos();
 
     } catch (err) {
-      console.error('Error al cargar video:', err);
+      console.error('❌ Error al cargar video:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -234,13 +226,13 @@ const VideoPlayerPage = () => {
     try {
       console.log('📹 Cargando videos relacionados...');
       
-      // Obtener TODOS los videos publicados (no solo de la misma categoría)
+      // Obtener TODOS los videos publicados horizontales (no solo de la misma categoría)
       const { data, error } = await supabase
         .from('videos')
-        .select('*')
+        .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id, orientation')
         .neq('id', videoId)
-        .eq('status', 'published')
-        .limit(50); // Cargar hasta 50 videos
+        .eq('is_published', true)
+        .limit(50);
 
       if (error) {
         console.error('❌ Error al cargar videos relacionados:', error);
@@ -249,15 +241,19 @@ const VideoPlayerPage = () => {
 
       console.log('✅ Videos relacionados encontrados:', data?.length || 0);
       
+      // Filtrar solo horizontales
+      const horizontalVideos = data.filter(v => !v.orientation || v.orientation === 'horizontal');
+      console.log('✅ Videos horizontales:', horizontalVideos.length);
+
       // Obtener información de creadores por separado
-      if (data && data.length > 0) {
-        const userIds = [...new Set(data.map(v => v.user_id).filter(Boolean))];
+      if (horizontalVideos && horizontalVideos.length > 0) {
+        const userIds = [...new Set(horizontalVideos.map(v => v.user_id).filter(Boolean))];
         console.log('👥 User IDs únicos:', userIds.length);
         
         if (userIds.length > 0) {
           const { data: creatorsData, error: creatorsError } = await supabase
             .from('user_profiles')
-            .select('id, name, username, profile_image_url, is_verified')
+            .select('id, full_name, username, avatar_url, is_verified')
             .in('id', userIds);
           
           if (creatorsError) {
@@ -271,18 +267,39 @@ const VideoPlayerPage = () => {
               creatorsMap[creator.id] = creator;
             });
             
-            data.forEach(video => {
-              if (video.user_id && creatorsMap[video.user_id]) {
-                video.creator = creatorsMap[video.user_id];
+            // Transformar videos al formato esperado por RelatedVideosSidebar
+            const transformed = horizontalVideos.map(video => ({
+              id: video.id,
+              title: video.title,
+              thumbnail: video.thumbnail_url,
+              duration: video.duration_seconds,
+              views: video.views_count,
+              views_count: video.views_count,
+              likes: video.likes_count,
+              category: video.category,
+              created_at: video.created_at,
+              orientation: video.orientation,
+              creator: creatorsMap[video.user_id] ? {
+                id: creatorsMap[video.user_id].id,
+                name: creatorsMap[video.user_id].full_name,
+                username: creatorsMap[video.user_id].username,
+                profile_image_url: creatorsMap[video.user_id].avatar_url,
+                is_verified: creatorsMap[video.user_id].is_verified
+              } : {
+                id: video.user_id,
+                name: 'Usuario',
+                username: 'usuario',
+                profile_image_url: null,
+                is_verified: false
               }
-            });
+            }));
+
+            // Ordenar aleatoriamente
+            const shuffled = transformed.sort(() => Math.random() - 0.5);
+            setRelatedVideos(shuffled);
+            console.log('🎲 Videos relacionados ordenados aleatoriamente:', shuffled.length);
           }
         }
-        
-        // Ordenar aleatoriamente
-        const shuffled = data.sort(() => Math.random() - 0.5);
-        setRelatedVideos(shuffled);
-        console.log('🎲 Videos relacionados ordenados aleatoriamente');
       } else {
         setRelatedVideos([]);
       }
@@ -313,16 +330,12 @@ const VideoPlayerPage = () => {
       console.log('💬 Comentarios encontrados:', commentsData?.length || 0);
 
       if (commentsData && commentsData.length > 0) {
-        // Obtener respuestas para cada comentario
+        // Obtener respuestas
         const commentIds = commentsData.map(c => c.id);
-        const { data: repliesData, error: repliesError } = await supabase
+        const { data: repliesData } = await supabase
           .from('video_comments')
           .select('*')
           .in('parent_comment_id', commentIds);
-
-        if (repliesError) {
-          console.error('❌ Error al cargar respuestas:', repliesError);
-        }
 
         console.log('↩️ Respuestas encontradas:', repliesData?.length || 0);
 
@@ -330,21 +343,25 @@ const VideoPlayerPage = () => {
         const allComments = [...commentsData, ...(repliesData || [])];
         const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
         
-        console.log('👥 User IDs únicos:', userIds);
+        console.log('👥 User IDs únicos:', userIds.length);
 
         let usersMap = {};
         if (userIds.length > 0) {
-          const { data: usersData, error: usersError } = await supabase
+          const { data: usersData } = await supabase
             .from('user_profiles')
-            .select('id, name, username, profile_image_url, is_verified')
+            .select('id, full_name, username, avatar_url, is_verified')
             .in('id', userIds);
           
-          if (usersError) {
-            console.error('❌ Error al cargar usuarios:', usersError);
-          } else if (usersData) {
+          if (usersData) {
             console.log('✅ Usuarios cargados:', usersData.length);
-            usersData.forEach(user => {
-              usersMap[user.id] = user;
+            usersData.forEach(userProfile => {
+              usersMap[userProfile.id] = {
+                id: userProfile.id,
+                name: userProfile.full_name,
+                username: userProfile.username,
+                profile_image_url: userProfile.avatar_url,
+                is_verified: userProfile.is_verified
+              };
             });
           }
         }
@@ -353,9 +370,6 @@ const VideoPlayerPage = () => {
         commentsData.forEach(comment => {
           if (comment.user_id && usersMap[comment.user_id]) {
             comment.user = usersMap[comment.user_id];
-            console.log('✅ Usuario mapeado a comentario:', comment.user.name);
-          } else {
-            console.warn('⚠️ Comentario sin usuario:', comment.id);
           }
           
           // Agregar respuestas al comentario
@@ -440,23 +454,6 @@ const VideoPlayerPage = () => {
           likes: prev.likes + 1
         }));
 
-        // Si tiene dislike, quitarlo
-        if (disliked) {
-          setDisliked(false);
-          setVideoCounters(prev => ({
-            ...prev,
-            dislikes: Math.max(0, prev.dislikes - 1)
-          }));
-
-          await supabase
-            .from('video_dislikes')
-            .delete()
-            .eq('video_id', videoId)
-            .eq('user_id', user.id);
-
-          await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
-        }
-
         await supabase
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
@@ -480,66 +477,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Handle Dislike
-  const handleDislike = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    try {
-      if (disliked) {
-        // Quitar dislike
-        setDisliked(false);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: Math.max(0, prev.dislikes - 1)
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
-        await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
-
-      } else {
-        // Dar dislike
-        setDisliked(true);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: prev.dislikes + 1
-        }));
-
-        // Si tiene like, quitarlo
-        if (liked) {
-          setLiked(false);
-          setVideoCounters(prev => ({
-            ...prev,
-            likes: Math.max(0, prev.likes - 1)
-          }));
-
-          await supabase
-            .from('video_likes')
-            .delete()
-            .eq('video_id', videoId)
-            .eq('user_id', user.id);
-
-          await supabase.rpc('decrement_video_likes', { video_id: videoId });
-        }
-
-        await supabase
-          .from('video_dislikes')
-          .insert({ video_id: videoId, user_id: user.id });
-
-        await supabase.rpc('increment_video_dislikes', { video_id: videoId });
-      }
-    } catch (err) {
-      console.error('Error en dislike:', err);
-    }
-  };
-
   // Handle Guardar/Favorito
   const handleSave = async () => {
     if (!user) {
@@ -549,26 +486,19 @@ const VideoPlayerPage = () => {
 
     try {
       if (saved) {
-        // Quitar de guardados
         setSaved(false);
-
         await supabase
           .from('saved_videos')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-
       } else {
-        // Guardar
         setSaved(true);
-
         await supabase
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // Tracking de misión
         missionsService.trackAction('save');
-
         showPointsNotification('Video guardado en favoritos');
       }
     } catch (err) {
@@ -582,15 +512,12 @@ const VideoPlayerPage = () => {
     setShareLink(url);
     setShowShareModal(true);
 
-    // Otorgar puntos si es la primera vez
     if (user && !hasEarnedSharePoints) {
       const pointsAmount = 3;
       await addPoints(pointsAmount, 'Compartir video', 'free');
       await trackPointsEarned('share', pointsAmount);
       setHasEarnedSharePoints(true);
       showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
-
-      // Tracking de misión
       missionsService.trackAction('share');
     }
   };
@@ -609,26 +536,18 @@ const VideoPlayerPage = () => {
       return;
     }
 
-    if (!video?.user_id) {
-      console.error('No se puede seguir: usuario no disponible');
-      return;
-    }
+    if (!video?.user_id) return;
 
     try {
       if (following) {
-        // Dejar de seguir
         setFollowing(false);
-
         await supabase
           .from('user_follows')
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', video.user_id);
-
       } else {
-        // Seguir
         setFollowing(true);
-
         await supabase
           .from('user_follows')
           .insert({
@@ -636,9 +555,7 @@ const VideoPlayerPage = () => {
             following_id: video.user_id
           });
 
-        // Tracking de misión
         missionsService.trackAction('follow');
-
         showPointsNotification('Ahora sigues a este creador');
       }
     } catch (err) {
@@ -679,17 +596,22 @@ const VideoPlayerPage = () => {
       // Obtener información del usuario del comentario
       const { data: userData } = await supabase
         .from('user_profiles')
-        .select('id, name, username, profile_image_url, is_verified')
+        .select('id, full_name, username, avatar_url, is_verified')
         .eq('id', user.id)
         .single();
 
       if (userData) {
-        data.user = userData;
+        data.user = {
+          id: userData.id,
+          name: userData.full_name,
+          username: userData.username,
+          profile_image_url: userData.avatar_url,
+          is_verified: userData.is_verified
+        };
       }
 
-      // Actualizar contador de comentarios
+      // Actualizar contador
       await supabase.rpc('increment_video_comments', { video_id: videoId });
-
       setVideoCounters(prev => ({
         ...prev,
         comments: prev.comments + 1
@@ -702,14 +624,11 @@ const VideoPlayerPage = () => {
         await trackPointsEarned('comment', pointsAmount);
         setHasEarnedCommentPoints(true);
         showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
-
-        // Tracking de misión
         missionsService.trackAction('comment');
       }
 
       // Actualizar lista de comentarios
       if (replyingTo) {
-        // Es una respuesta
         setComments(prev => prev.map(comment => {
           if (comment.id === replyingTo) {
             return {
@@ -720,7 +639,6 @@ const VideoPlayerPage = () => {
           return comment;
         }));
       } else {
-        // Es un comentario nuevo
         setComments(prev => [data, ...prev]);
       }
 
@@ -743,7 +661,6 @@ const VideoPlayerPage = () => {
         .eq('id', commentId)
         .eq('user_id', user.id);
 
-      // Actualizar contador
       await supabase.rpc('decrement_video_comments', { video_id: videoId });
 
       setVideoCounters(prev => ({
@@ -751,7 +668,6 @@ const VideoPlayerPage = () => {
         comments: Math.max(0, prev.comments - 1)
       }));
 
-      // Actualizar lista
       setComments(prev => prev.filter(c => c.id !== commentId));
 
     } catch (err) {
@@ -763,7 +679,6 @@ const VideoPlayerPage = () => {
   // FUNCIONES DEL VIDEO PLAYER
   // ===============================
 
-  // Play/Pause
   const togglePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -775,7 +690,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Control de volumen
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
@@ -785,7 +699,6 @@ const VideoPlayerPage = () => {
     setIsMuted(newVolume === 0);
   };
 
-  // Toggle Mute
   const toggleMute = () => {
     if (videoRef.current) {
       const newMuted = !isMuted;
@@ -799,12 +712,10 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Actualizar progreso
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
       
-      // Tracking de tiempo de visualización para puntos
       const currentTime = videoRef.current.currentTime;
       setViewWatchTime(currentTime);
 
@@ -815,14 +726,11 @@ const VideoPlayerPage = () => {
         trackPointsEarned('view', pointsAmount);
         setHasEarnedViewPoints(true);
         showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
-
-        // Tracking de misión
         missionsService.trackAction('watch');
       }
     }
   };
 
-  // Saltar a posición
   const handleSeek = (e) => {
     if (videoRef.current) {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -831,7 +739,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Toggle Fullscreen
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
 
@@ -844,7 +751,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Mostrar/ocultar controles
   const handleMouseMove = () => {
     setShowControls(true);
     if (controlsTimeoutRef.current) {
@@ -861,19 +767,16 @@ const VideoPlayerPage = () => {
   // EFECTOS
   // ===============================
 
-  // Cargar datos iniciales
   useEffect(() => {
     fetchVideoData();
   }, [fetchVideoData]);
 
-  // Cargar comentarios
   useEffect(() => {
     if (videoId) {
       loadComments();
     }
   }, [videoId, loadComments]);
 
-  // Limpiar timeout de controles
   useEffect(() => {
     return () => {
       if (controlsTimeoutRef.current) {
@@ -1016,7 +919,6 @@ const VideoPlayerPage = () => {
                     {/* Controles */}
                     <div className="flex items-center justify-between text-white">
                       <div className="flex items-center gap-4">
-                        {/* Play/Pause */}
                         <button
                           onClick={togglePlayPause}
                           className="hover:bg-white/20 p-2 rounded-full transition-colors"
@@ -1024,7 +926,6 @@ const VideoPlayerPage = () => {
                           <Icon name={isPlaying ? 'Pause' : 'Play'} size={20} />
                         </button>
 
-                        {/* Volumen */}
                         <div className="flex items-center gap-2 group/volume">
                           <button
                             onClick={toggleMute}
@@ -1046,14 +947,12 @@ const VideoPlayerPage = () => {
                           />
                         </div>
 
-                        {/* Tiempo */}
                         <span className="text-sm font-medium">
                           {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Fullscreen */}
                         <button
                           onClick={toggleFullscreen}
                           className="hover:bg-white/20 p-2 rounded-full transition-colors"
@@ -1114,27 +1013,16 @@ const VideoPlayerPage = () => {
 
                   {/* Botones de acción */}
                   <div className="flex items-center gap-2">
-                    {/* Like/Dislike */}
-                    <div className="flex items-center bg-muted rounded-full overflow-hidden">
-                      <button
-                        onClick={handleLike}
-                        className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
-                          liked ? 'text-primary' : ''
-                        }`}
-                      >
-                        <Icon name="ThumbsUp" size={20} className={liked ? 'fill-current' : ''} />
-                        <span className="font-medium">{formatNumber(videoCounters.likes)}</span>
-                      </button>
-                      <div className="w-px h-6 bg-border"></div>
-                      <button
-                        onClick={handleDislike}
-                        className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
-                          disliked ? 'text-destructive' : ''
-                        }`}
-                      >
-                        <Icon name="ThumbsDown" size={20} className={disliked ? 'fill-current' : ''} />
-                      </button>
-                    </div>
+                    {/* Like */}
+                    <button
+                      onClick={handleLike}
+                      className={`flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors ${
+                        liked ? 'text-primary' : ''
+                      }`}
+                    >
+                      <Icon name="ThumbsUp" size={20} className={liked ? 'fill-current' : ''} />
+                      <span className="font-medium">{formatNumber(videoCounters.likes)}</span>
+                    </button>
 
                     {/* Compartir */}
                     <button
