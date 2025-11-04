@@ -104,23 +104,27 @@ const VideoPlayerPage = () => {
       setLoading(true);
       setError(null);
 
-      // Obtener datos del video con información del creador
+      // Obtener datos del video
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
-        .select(`
-          *,
-          creator:user_profiles!videos_user_id_fkey (
-            id,
-            name,
-            username,
-            profile_image_url,
-            is_verified
-          )
-        `)
+        .select('*')
         .eq('id', videoId)
         .single();
 
       if (videoError) throw videoError;
+
+      // Obtener información del creador por separado
+      if (videoData?.user_id) {
+        const { data: creatorData } = await supabase
+          .from('user_profiles')
+          .select('id, name, username, profile_image_url, is_verified')
+          .eq('id', videoData.user_id)
+          .single();
+        
+        if (creatorData) {
+          videoData.creator = creatorData;
+        }
+      }
 
       setVideo(videoData);
 
@@ -176,14 +180,16 @@ const VideoPlayerPage = () => {
         setSaved(!!savedData);
 
         // Verificar si sigue al creador
-        const { data: followData } = await supabase
-          .from('user_follows')
-          .select('*')
-          .eq('follower_id', user.id)
-          .eq('following_id', videoData.creator.id)
-          .maybeSingle();
+        if (videoData.user_id) {
+          const { data: followData } = await supabase
+            .from('user_follows')
+            .select('*')
+            .eq('follower_id', user.id)
+            .eq('following_id', videoData.user_id)
+            .maybeSingle();
 
-        setFollowing(!!followData);
+          setFollowing(!!followData);
+        }
 
         // Verificar puntos ya ganados
         const { data: pointsData } = await supabase
@@ -217,16 +223,7 @@ const VideoPlayerPage = () => {
     try {
       const { data, error } = await supabase
         .from('videos')
-        .select(`
-          *,
-          creator:user_profiles!videos_user_id_fkey (
-            id,
-            name,
-            username,
-            profile_image_url,
-            is_verified
-          )
-        `)
+        .select('*')
         .eq('category_id', categoryId)
         .neq('id', videoId)
         .eq('status', 'published')
@@ -234,6 +231,33 @@ const VideoPlayerPage = () => {
         .limit(20);
 
       if (error) throw error;
+      
+      // Obtener información de creadores por separado
+      if (data && data.length > 0) {
+        const userIds = [...new Set(data.map(v => v.user_id).filter(Boolean))];
+        
+        if (userIds.length > 0) {
+          const { data: creatorsData } = await supabase
+            .from('user_profiles')
+            .select('id, name, username, profile_image_url, is_verified')
+            .in('id', userIds);
+          
+          if (creatorsData) {
+            // Mapear creadores a videos
+            const creatorsMap = {};
+            creatorsData.forEach(creator => {
+              creatorsMap[creator.id] = creator;
+            });
+            
+            data.forEach(video => {
+              if (video.user_id && creatorsMap[video.user_id]) {
+                video.creator = creatorsMap[video.user_id];
+              }
+            });
+          }
+        }
+      }
+      
       setRelatedVideos(data || []);
     } catch (err) {
       console.error('Error al cargar videos relacionados:', err);
@@ -247,34 +271,61 @@ const VideoPlayerPage = () => {
     try {
       setLoadingComments(true);
 
-      const { data, error } = await supabase
+      // Obtener comentarios principales
+      const { data: commentsData, error: commentsError } = await supabase
         .from('video_comments')
-        .select(`
-          *,
-          user:user_profiles!video_comments_user_id_fkey (
-            id,
-            name,
-            username,
-            profile_image_url,
-            is_verified
-          ),
-          replies:video_comments!parent_comment_id (
-            *,
-            user:user_profiles!video_comments_user_id_fkey (
-              id,
-              name,
-              username,
-              profile_image_url,
-              is_verified
-            )
-          )
-        `)
+        .select('*')
         .eq('video_id', videoId)
         .is('parent_comment_id', null)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setComments(data || []);
+      if (commentsError) throw commentsError;
+
+      if (commentsData && commentsData.length > 0) {
+        // Obtener respuestas para cada comentario
+        const commentIds = commentsData.map(c => c.id);
+        const { data: repliesData } = await supabase
+          .from('video_comments')
+          .select('*')
+          .in('parent_comment_id', commentIds);
+
+        // Obtener información de usuarios
+        const allComments = [...commentsData, ...(repliesData || [])];
+        const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
+        
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: usersData } = await supabase
+            .from('user_profiles')
+            .select('id, name, username, profile_image_url, is_verified')
+            .in('id', userIds);
+          
+          if (usersData) {
+            usersData.forEach(user => {
+              usersMap[user.id] = user;
+            });
+          }
+        }
+
+        // Mapear usuarios a comentarios
+        commentsData.forEach(comment => {
+          if (comment.user_id && usersMap[comment.user_id]) {
+            comment.user = usersMap[comment.user_id];
+          }
+          
+          // Agregar respuestas al comentario
+          comment.replies = (repliesData || [])
+            .filter(reply => reply.parent_comment_id === comment.id)
+            .map(reply => {
+              if (reply.user_id && usersMap[reply.user_id]) {
+                reply.user = usersMap[reply.user_id];
+              }
+              return reply;
+            });
+        });
+      }
+
+      setComments(commentsData || []);
     } catch (err) {
       console.error('Error al cargar comentarios:', err);
     } finally {
@@ -513,6 +564,11 @@ const VideoPlayerPage = () => {
       return;
     }
 
+    if (!video?.user_id) {
+      console.error('No se puede seguir: usuario no disponible');
+      return;
+    }
+
     try {
       if (following) {
         // Dejar de seguir
@@ -522,7 +578,7 @@ const VideoPlayerPage = () => {
           .from('user_follows')
           .delete()
           .eq('follower_id', user.id)
-          .eq('following_id', video.creator.id);
+          .eq('following_id', video.user_id);
 
       } else {
         // Seguir
@@ -532,7 +588,7 @@ const VideoPlayerPage = () => {
           .from('user_follows')
           .insert({
             follower_id: user.id,
-            following_id: video.creator.id
+            following_id: video.user_id
           });
 
         // Tracking de misión
@@ -570,19 +626,21 @@ const VideoPlayerPage = () => {
       const { data, error } = await supabase
         .from('video_comments')
         .insert(commentData)
-        .select(`
-          *,
-          user:user_profiles!video_comments_user_id_fkey (
-            id,
-            name,
-            username,
-            profile_image_url,
-            is_verified
-          )
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
+
+      // Obtener información del usuario del comentario
+      const { data: userData } = await supabase
+        .from('user_profiles')
+        .select('id, name, username, profile_image_url, is_verified')
+        .eq('id', user.id)
+        .single();
+
+      if (userData) {
+        data.user = userData;
+      }
 
       // Actualizar contador de comentarios
       await supabase.rpc('increment_video_comments', { video_id: videoId });
@@ -974,22 +1032,22 @@ const VideoPlayerPage = () => {
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   {/* Info del creador */}
                   <div className="flex items-center gap-3">
-                    <Link to={`/profile/${video.creator.username}`}>
+                    <Link to={`/profile/${video.creator?.username || 'unknown'}`}>
                       <img
-                        src={video.creator.profile_image_url || '/default-avatar.png'}
-                        alt={video.creator.name}
+                        src={video.creator?.profile_image_url || '/default-avatar.png'}
+                        alt={video.creator?.name || 'Usuario'}
                         className="w-10 h-10 rounded-full object-cover"
                       />
                     </Link>
                     <div>
                       <div className="flex items-center gap-2">
                         <Link
-                          to={`/profile/${video.creator.username}`}
+                          to={`/profile/${video.creator?.username || 'unknown'}`}
                           className="font-semibold text-foreground hover:text-primary"
                         >
-                          {video.creator.name}
+                          {video.creator?.name || 'Usuario'}
                         </Link>
-                        {video.creator.is_verified && (
+                        {video.creator?.is_verified && (
                           <Icon name="BadgeCheck" size={16} className="text-blue-500" />
                         )}
                       </div>
@@ -997,7 +1055,7 @@ const VideoPlayerPage = () => {
                         {formatNumber(videoCounters.views)} visualizaciones
                       </p>
                     </div>
-                    {user?.id !== video.creator.id && (
+                    {user?.id !== video.user_id && (
                       <Button
                         onClick={handleFollow}
                         variant={following ? 'outline' : 'default'}
@@ -1142,22 +1200,22 @@ const VideoPlayerPage = () => {
                         <div key={comment.id} className="space-y-3">
                           {/* Comentario principal */}
                           <div className="flex gap-3">
-                            <Link to={`/profile/${comment.user.username}`}>
+                            <Link to={`/profile/${comment.user?.username || 'unknown'}`}>
                               <img
-                                src={comment.user.profile_image_url || '/default-avatar.png'}
-                                alt={comment.user.name}
+                                src={comment.user?.profile_image_url || '/default-avatar.png'}
+                                alt={comment.user?.name || 'Usuario'}
                                 className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                               />
                             </Link>
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <Link
-                                  to={`/profile/${comment.user.username}`}
+                                  to={`/profile/${comment.user?.username || 'unknown'}`}
                                   className="font-semibold text-sm hover:text-primary"
                                 >
-                                  {comment.user.name}
+                                  {comment.user?.name || 'Usuario'}
                                 </Link>
-                                {comment.user.is_verified && (
+                                {comment.user?.is_verified && (
                                   <Icon name="BadgeCheck" size={14} className="text-blue-500" />
                                 )}
                                 <span className="text-xs text-muted-foreground">
@@ -1206,22 +1264,22 @@ const VideoPlayerPage = () => {
                                       </button>
                                       {comment.replies.map((reply) => (
                                         <div key={reply.id} className="flex gap-3 ml-6">
-                                          <Link to={`/profile/${reply.user.username}`}>
+                                          <Link to={`/profile/${reply.user?.username || 'unknown'}`}>
                                             <img
-                                              src={reply.user.profile_image_url || '/default-avatar.png'}
-                                              alt={reply.user.name}
+                                              src={reply.user?.profile_image_url || '/default-avatar.png'}
+                                              alt={reply.user?.name || 'Usuario'}
                                               className="w-8 h-8 rounded-full object-cover flex-shrink-0"
                                             />
                                           </Link>
                                           <div className="flex-1">
                                             <div className="flex items-center gap-2">
                                               <Link
-                                                to={`/profile/${reply.user.username}`}
+                                                to={`/profile/${reply.user?.username || 'unknown'}`}
                                                 className="font-semibold text-sm hover:text-primary"
                                               >
-                                                {reply.user.name}
+                                                {reply.user?.name || 'Usuario'}
                                               </Link>
-                                              {reply.user.is_verified && (
+                                              {reply.user?.is_verified && (
                                                 <Icon name="BadgeCheck" size={14} className="text-blue-500" />
                                               )}
                                               <span className="text-xs text-muted-foreground">
