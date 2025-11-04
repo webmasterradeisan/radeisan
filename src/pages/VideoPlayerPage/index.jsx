@@ -219,7 +219,7 @@ const VideoPlayerPage = () => {
       }
 
       // Cargar videos relacionados
-      loadRelatedVideos(videoData.category_id);
+      loadRelatedVideos();
 
     } catch (err) {
       console.error('Error al cargar video:', err);
@@ -229,31 +229,42 @@ const VideoPlayerPage = () => {
     }
   }, [videoId, user]);
 
-  // Cargar videos relacionados
-  const loadRelatedVideos = async (categoryId) => {
+  // Cargar videos relacionados (todos los videos aleatoriamente)
+  const loadRelatedVideos = async () => {
     try {
+      console.log('📹 Cargando videos relacionados...');
+      
+      // Obtener TODOS los videos publicados (no solo de la misma categoría)
       const { data, error } = await supabase
         .from('videos')
         .select('*')
-        .eq('category_id', categoryId)
         .neq('id', videoId)
         .eq('status', 'published')
-        .order('views_count', { ascending: false })
-        .limit(20);
+        .limit(50); // Cargar hasta 50 videos
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error al cargar videos relacionados:', error);
+        throw error;
+      }
+
+      console.log('✅ Videos relacionados encontrados:', data?.length || 0);
       
       // Obtener información de creadores por separado
       if (data && data.length > 0) {
         const userIds = [...new Set(data.map(v => v.user_id).filter(Boolean))];
+        console.log('👥 User IDs únicos:', userIds.length);
         
         if (userIds.length > 0) {
-          const { data: creatorsData } = await supabase
+          const { data: creatorsData, error: creatorsError } = await supabase
             .from('user_profiles')
             .select('id, name, username, profile_image_url, is_verified')
             .in('id', userIds);
           
-          if (creatorsData) {
+          if (creatorsError) {
+            console.error('❌ Error al cargar creadores:', creatorsError);
+          } else if (creatorsData) {
+            console.log('✅ Creadores cargados:', creatorsData.length);
+            
             // Mapear creadores a videos
             const creatorsMap = {};
             creatorsData.forEach(creator => {
@@ -267,11 +278,17 @@ const VideoPlayerPage = () => {
             });
           }
         }
+        
+        // Ordenar aleatoriamente
+        const shuffled = data.sort(() => Math.random() - 0.5);
+        setRelatedVideos(shuffled);
+        console.log('🎲 Videos relacionados ordenados aleatoriamente');
+      } else {
+        setRelatedVideos([]);
       }
-      
-      setRelatedVideos(data || []);
     } catch (err) {
-      console.error('Error al cargar videos relacionados:', err);
+      console.error('❌ Error al cargar videos relacionados:', err);
+      setRelatedVideos([]);
     }
   };
 
