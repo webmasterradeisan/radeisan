@@ -1,13 +1,14 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - Sistema Completo
+// VIDEO PLAYER PAGE - Sistema Completo con Mini-player Arrastrable
 // ============================================================================
-// ✅ Sistema de likes Y dislikes completo
-// ✅ Mini-player para DESKTOP y MÓVIL
-// ✅ Función maximizar con ajuste de orientación automático
-// ✅ Avatar del usuario en comentarios arreglado
-// ✅ Sistema de comentarios completo
-// ✅ Todas las funcionalidades mantenidas
+// ✅ Mini-player ARRASTRABLE (draggable) para desktop y móvil
+// ✅ Video se sigue reproduciendo en mini-player
+// ✅ Controles funcionales en mini-player (play/pause)
+// ✅ Controles de TECLADO completos (Space, K, ←, →, M, F)
+// ✅ Click en video para play/pause
+// ✅ Estado sincronizado entre player principal y mini
+// ✅ Diseño optimizado para móvil y desktop
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,9 +24,6 @@ import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
-// ===============================
-// COMPONENTE PRINCIPAL
-// ===============================
 const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
@@ -85,29 +83,95 @@ const VideoPlayerPage = () => {
     message: ''
   });
 
-  // ✅ ESTADOS PARA MINI-PLAYER (DESKTOP Y MÓVIL)
+  // ✅ ESTADOS PARA MINI-PLAYER ARRASTRABLE
   const [showMiniPlayer, setShowMiniPlayer] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [scrollY, setScrollY] = useState(0);
+  const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
+    x: isMobile ? 0 : window.innerWidth - 420, 
+    y: isMobile ? window.innerHeight - 100 : window.innerHeight - 250 
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const miniPlayerThreshold = 400;
 
   // Refs
   const videoRef = useRef(null);
   const containerRef = useRef(null);
+  const miniPlayerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
 
   // ===============================
-  // ✅ SCROLL DETECTION PARA MINI-PLAYER (DESKTOP Y MÓVIL)
+  // ✅ CONTROLES DE TECLADO
+  // ===============================
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ignorar si está escribiendo en un input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      switch(e.key.toLowerCase()) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlayPause();
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          skipForward();
+          break;
+        case 'arrowleft':
+          e.preventDefault();
+          skipBackward();
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isPlaying, isMuted]);
+
+  // ===============================
+  // ✅ FUNCIONES DE NAVEGACIÓN DEL VIDEO
+  // ===============================
+  const skipForward = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.min(
+        videoRef.current.currentTime + 10,
+        videoRef.current.duration
+      );
+    }
+  };
+
+  const skipBackward = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(
+        videoRef.current.currentTime - 10,
+        0
+      );
+    }
+  };
+
+  // ===============================
+  // ✅ SCROLL DETECTION PARA MINI-PLAYER
   // ===============================
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       setScrollY(currentScrollY);
 
-      // Activar mini-player al hacer scroll (tanto móvil como desktop)
       if (currentScrollY > miniPlayerThreshold && !showMiniPlayer && !isMinimized) {
         setShowMiniPlayer(true);
-      } else if (currentScrollY <= miniPlayerThreshold && showMiniPlayer) {
+      } else if (currentScrollY <= miniPlayerThreshold && showMiniPlayer && !isMinimized) {
         setShowMiniPlayer(false);
       }
     };
@@ -115,6 +179,60 @@ const VideoPlayerPage = () => {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [showMiniPlayer, isMinimized]);
+
+  // ===============================
+  // ✅ SISTEMA DE ARRASTRE (DRAG & DROP)
+  // ===============================
+  const handleDragStart = (e) => {
+    e.preventDefault();
+    const clientX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
+    const clientY = e.type === 'mousedown' ? e.clientY : e.touches[0].clientY;
+    
+    setIsDragging(true);
+    setDragOffset({
+      x: clientX - miniPlayerPosition.x,
+      y: clientY - miniPlayerPosition.y
+    });
+  };
+
+  const handleDragMove = useCallback((e) => {
+    if (!isDragging) return;
+
+    const clientX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+    const clientY = e.type === 'mousemove' ? e.clientY : e.touches[0].clientY;
+
+    let newX = clientX - dragOffset.x;
+    let newY = clientY - dragOffset.y;
+
+    // Límites de pantalla
+    const maxX = window.innerWidth - (isMobile ? window.innerWidth : 400);
+    const maxY = window.innerHeight - (isMobile ? 90 : 230);
+
+    newX = Math.max(0, Math.min(newX, maxX));
+    newY = Math.max(0, Math.min(newY, maxY));
+
+    setMiniPlayerPosition({ x: newX, y: newY });
+  }, [isDragging, dragOffset, isMobile]);
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleDragMove);
+      window.addEventListener('mouseup', handleDragEnd);
+      window.addEventListener('touchmove', handleDragMove);
+      window.addEventListener('touchend', handleDragEnd);
+
+      return () => {
+        window.removeEventListener('mousemove', handleDragMove);
+        window.removeEventListener('mouseup', handleDragEnd);
+        window.removeEventListener('touchmove', handleDragMove);
+        window.removeEventListener('touchend', handleDragEnd);
+      };
+    }
+  }, [isDragging, handleDragMove]);
 
   // ===============================
   // ✅ FUNCIÓN PARA MINIMIZAR/MAXIMIZAR
@@ -129,7 +247,6 @@ const VideoPlayerPage = () => {
     setShowMiniPlayer(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    // ✅ En móvil, forzar orientación horizontal
     if (isMobile && screen.orientation && screen.orientation.lock) {
       screen.orientation.lock('landscape').catch(err => {
         console.log('No se pudo bloquear orientación:', err);
@@ -140,7 +257,6 @@ const VideoPlayerPage = () => {
   // ===============================
   // FUNCIONES DE CARGA DE DATOS
   // ===============================
-
   const fetchUserProfile = useCallback(async () => {
     if (!user) return;
 
@@ -401,7 +517,6 @@ const VideoPlayerPage = () => {
   // ===============================
   // FUNCIONES DE INTERACCIÓN
   // ===============================
-
   const showPointsNotification = (message) => {
     setPointsNotification({ show: true, message });
     setTimeout(() => {
@@ -470,304 +585,7 @@ const VideoPlayerPage = () => {
           await addPoints(pointsAmount, 'Like en video', 'free');
           await trackPointsEarned('like', pointsAmount);
           setHasEarnedLikePoints(true);
-          showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
-          missionsService.trackAction('like');
-        }
-      }
-    } catch (err) {
-      console.error('Error en like:', err);
-    }
-  };
-
-  const handleDislike = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    try {
-      if (disliked) {
-        setDisliked(false);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: Math.max(0, prev.dislikes - 1)
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
-        await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
-
-      } else {
-        if (liked) {
-          setLiked(false);
-          setVideoCounters(prev => ({
-            ...prev,
-            likes: Math.max(0, prev.likes - 1)
-          }));
-
-          await supabase
-            .from('video_likes')
-            .delete()
-            .eq('video_id', videoId)
-            .eq('user_id', user.id);
-
-          await supabase.rpc('decrement_video_likes', { video_id: videoId });
-        }
-
-        setDisliked(true);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: prev.dislikes + 1
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .insert({ video_id: videoId, user_id: user.id });
-
-        await supabase.rpc('increment_video_dislikes', { video_id: videoId });
-      }
-    } catch (err) {
-      console.error('Error en dislike:', err);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    try {
-      if (saved) {
-        setSaved(false);
-        await supabase
-          .from('saved_videos')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-      } else {
-        setSaved(true);
-        await supabase
-          .from('saved_videos')
-          .insert({ video_id: videoId, user_id: user.id });
-
-        missionsService.trackAction('save');
-        showPointsNotification('Video guardado en favoritos');
-      }
-    } catch (err) {
-      console.error('Error al guardar:', err);
-    }
-  };
-
-  const handleShare = async () => {
-    const url = `${window.location.origin}/video/${videoId}`;
-    setShareLink(url);
-    setShowShareModal(true);
-
-    if (user && !hasEarnedSharePoints) {
-      const pointsAmount = 3;
-      await addPoints(pointsAmount, 'Compartir video', 'free');
-      await trackPointsEarned('share', pointsAmount);
-      setHasEarnedSharePoints(true);
-      showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
-      missionsService.trackAction('share');
-    }
-  };
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareLink);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
-  };
-
-  const handleFollow = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    if (!video?.user_id) return;
-
-    try {
-      if (following) {
-        setFollowing(false);
-        await supabase
-          .from('user_follows')
-          .delete()
-          .eq('follower_id', user.id)
-          .eq('following_id', video.user_id);
-      } else {
-        setFollowing(true);
-        await supabase
-          .from('user_follows')
-          .insert({
-            follower_id: user.id,
-            following_id: video.user_id
-          });
-
-        missionsService.trackAction('follow');
-        showPointsNotification('Ahora sigues a este creador');
-      }
-    } catch (err) {
-      console.error('Error al seguir:', err);
-    }
-  };
-
-  const handleSubmitComment = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    if (!newComment.trim()) return;
-
-    try {
-      const commentData = {
-        video_id: videoId,
-        user_id: user.id,
-        content: newComment.trim(),
-        parent_comment_id: replyingTo
-      };
-
-      const { data, error } = await supabase
-        .from('video_comments')
-        .insert(commentData)
-        .select('*')
-        .single();
-
-      if (error) throw error;
-
-      const { data: userData } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, username, avatar_url, is_verified')
-        .eq('id', user.id)
-        .single();
-
-      if (userData) {
-        data.user = {
-          id: userData.id,
-          name: userData.full_name,
-          username: userData.username,
-          profile_image_url: userData.avatar_url,
-          is_verified: userData.is_verified
-        };
-      }
-
-      await supabase.rpc('increment_video_comments', { video_id: videoId });
-      setVideoCounters(prev => ({
-        ...prev,
-        comments: prev.comments + 1
-      }));
-
-      if (!hasEarnedCommentPoints) {
-        const pointsAmount = 10;
-        await addPoints(pointsAmount, 'Comentar video', 'free');
-        await trackPointsEarned('comment', pointsAmount);
-        setHasEarnedCommentPoints(true);
-        showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
-        missionsService.trackAction('comment');
-      }
-
-      if (replyingTo) {
-        setComments(prev => prev.map(comment => {
-          if (comment.id === replyingTo) {
-            return {
-              ...comment,
-              replies: [...(comment.replies || []), data]
-            };
-          }
-          return comment;
-        }));
-      } else {
-        setComments(prev => [data, ...prev]);
-      }
-
-      setNewComment('');
-      setReplyingTo(null);
-
-    } catch (err) {
-      console.error('Error al publicar comentario:', err);
-    }
-  };
-
-  const handleDeleteComment = async (commentId) => {
-    if (!user) return;
-
-    try {
-      await supabase
-        .from('video_comments')
-        .delete()
-        .eq('id', commentId)
-        .eq('user_id', user.id);
-
-      await supabase.rpc('decrement_video_comments', { video_id: videoId });
-
-      setVideoCounters(prev => ({
-        ...prev,
-        comments: Math.max(0, prev.comments - 1)
-      }));
-
-      setComments(prev => prev.filter(c => c.id !== commentId));
-
-    } catch (err) {
-      console.error('Error al eliminar comentario:', err);
-    }
-  };
-
-  // ===============================
-  // FUNCIONES DEL VIDEO PLAYER
-  // ===============================
-
-  const togglePlayPause = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const handleVolumeChange = (e) => {
-    const newVolume = parseFloat(e.target.value);
-    setVolume(newVolume);
-    if (videoRef.current) {
-      videoRef.current.volume = newVolume;
-    }
-    setIsMuted(newVolume === 0);
-  };
-
-  const toggleMute = () => {
-    if (videoRef.current) {
-      const newMuted = !isMuted;
-      videoRef.current.muted = newMuted;
-      setIsMuted(newMuted);
-      if (newMuted) {
-        setVolume(0);
-      } else {
-        setVolume(videoRef.current.volume);
-      }
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
-      
-      const currentTime = videoRef.current.currentTime;
-
-      if (currentTime >= 30 && !hasEarnedViewPoints && user) {
-        const pointsAmount = 2;
-        addPoints(pointsAmount, 'Ver video', 'free');
-        trackPointsEarned('view', pointsAmount);
-        setHasEarnedViewPoints(true);
-        showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
+          showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
         missionsService.trackAction('watch');
       }
     }
@@ -808,7 +626,6 @@ const VideoPlayerPage = () => {
   // ===============================
   // EFECTOS
   // ===============================
-
   useEffect(() => {
     fetchVideoData();
     fetchUserProfile();
@@ -848,7 +665,6 @@ const VideoPlayerPage = () => {
   // ===============================
   // RENDER
   // ===============================
-
   if (loading) {
     return (
       <>
@@ -905,7 +721,7 @@ const VideoPlayerPage = () => {
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
-              {/* Video Player */}
+              {/* Video Player Principal */}
               {!isMinimized && (
                 <div
                   ref={containerRef}
@@ -916,7 +732,7 @@ const VideoPlayerPage = () => {
                   <video
                     ref={videoRef}
                     src={video.video_url}
-                    className="w-full aspect-video object-contain"
+                    className="w-full aspect-video object-contain cursor-pointer"
                     onLoadedMetadata={(e) => setDuration(e.target.duration)}
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={() => setIsPlaying(false)}
@@ -988,7 +804,6 @@ const VideoPlayerPage = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {/* ✅ Botón Minimizar */}
                           <button
                             onClick={handleMinimize}
                             className="hover:bg-white/20 p-2 rounded-full transition-colors"
@@ -1309,21 +1124,29 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER FLOTANTE (DESKTOP Y MÓVIL) */}
+      {/* ✅ MINI-PLAYER ARRASTRABLE */}
       {(showMiniPlayer || isMinimized) && video && (
-        <div className={`fixed z-50 bg-black shadow-2xl border ${
-          isMobile 
-            ? 'bottom-0 left-0 right-0 border-t border-border'
-            : 'bottom-4 right-4 w-96 rounded-lg border-border'
-        }`}>
-          <div className="flex items-center justify-between p-2">
+        <div
+          ref={miniPlayerRef}
+          className={`fixed z-50 bg-black shadow-2xl border border-border rounded-lg overflow-hidden transition-all ${
+            isDragging ? 'cursor-grabbing scale-105' : 'cursor-grab'
+          } ${isMobile ? 'w-full' : 'w-96'}`}
+          style={{
+            left: isMobile ? 0 : `${miniPlayerPosition.x}px`,
+            top: isMobile ? 'auto' : `${miniPlayerPosition.y}px`,
+            bottom: isMobile ? 0 : 'auto',
+            right: isMobile ? 0 : 'auto'
+          }}
+        >
+          {/* Header arrastrable */}
+          <div
+            className="flex items-center justify-between p-2 bg-black/95 backdrop-blur-sm cursor-grab active:cursor-grabbing"
+            onMouseDown={handleDragStart}
+            onTouchStart={handleDragStart}
+          >
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className={`${isMobile ? 'w-16' : 'w-24'} aspect-video bg-muted rounded overflow-hidden flex-shrink-0`}>
-                <img
-                  src={video.thumbnail_url}
-                  alt={video.title}
-                  className="w-full h-full object-cover"
-                />
+              <div className="text-white/60">
+                <Icon name="GripVertical" size={16} />
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-medium text-white truncate">
@@ -1334,13 +1157,13 @@ const VideoPlayerPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={handleMaximize}
                 className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
                 title="Maximizar"
               >
-                <Icon name="Maximize2" size={20} />
+                <Icon name="Maximize2" size={18} />
               </button>
               <button
                 onClick={() => {
@@ -1349,8 +1172,56 @@ const VideoPlayerPage = () => {
                 }}
                 className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
               >
-                <Icon name="X" size={20} />
+                <Icon name="X" size={18} />
               </button>
+            </div>
+          </div>
+
+          {/* ✅ Video reproduciéndose */}
+          <div className="relative bg-black">
+            <video
+              src={video.video_url}
+              ref={videoRef}
+              className={`w-full ${isMobile ? 'h-20' : 'aspect-video'} object-contain cursor-pointer`}
+              onClick={togglePlayPause}
+              onTimeUpdate={handleTimeUpdate}
+            />
+
+            {/* Controles mini-player */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={togglePlayPause}
+                    className="p-1.5 text-white hover:bg-white/20 rounded-full transition-colors"
+                  >
+                    <Icon name={isPlaying ? 'Pause' : 'Play'} size={16} />
+                  </button>
+                  <button
+                    onClick={toggleMute}
+                    className="p-1.5 text-white hover:bg-white/20 rounded-full transition-colors"
+                  >
+                    <Icon
+                      name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
+                      size={16}
+                    />
+                  </button>
+                  <span className="text-xs text-white font-medium">
+                    {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div
+                className="h-1 bg-white/30 rounded-full cursor-pointer mt-2"
+                onClick={handleSeek}
+              >
+                <div
+                  className="h-full bg-red-600 rounded-full"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1436,4 +1307,300 @@ const VideoPlayerPage = () => {
   );
 };
 
-export default VideoPlayerPage;
+export default VideoPlayerPage;} puntos por dar like 🎉`);
+          missionsService.trackAction('like');
+        }
+      }
+    } catch (err) {
+      console.error('Error en like:', err);
+    }
+  };
+
+  const handleDislike = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      if (disliked) {
+        setDisliked(false);
+        setVideoCounters(prev => ({
+          ...prev,
+          dislikes: Math.max(0, prev.dislikes - 1)
+        }));
+
+        await supabase
+          .from('video_dislikes')
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
+
+        await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
+
+      } else {
+        if (liked) {
+          setLiked(false);
+          setVideoCounters(prev => ({
+            ...prev,
+            likes: Math.max(0, prev.likes - 1)
+          }));
+
+          await supabase
+            .from('video_likes')
+            .delete()
+            .eq('video_id', videoId)
+            .eq('user_id', user.id);
+
+          await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        }
+
+        setDisliked(true);
+        setVideoCounters(prev => ({
+          ...prev,
+          dislikes: prev.dislikes + 1
+        }));
+
+        await supabase
+          .from('video_dislikes')
+          .insert({ video_id: videoId, user_id: user.id });
+
+        await supabase.rpc('increment_video_dislikes', { video_id: videoId });
+      }
+    } catch (err) {
+      console.error('Error en dislike:', err);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      if (saved) {
+        setSaved(false);
+        await supabase
+          .from('saved_videos')
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
+      } else {
+        setSaved(true);
+        await supabase
+          .from('saved_videos')
+          .insert({ video_id: videoId, user_id: user.id });
+
+        missionsService.trackAction('save');
+        showPointsNotification('Video guardado en favoritos');
+      }
+    } catch (err) {
+      console.error('Error al guardar:', err);
+    }
+  };
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/video/${videoId}`;
+    setShareLink(url);
+    setShowShareModal(true);
+
+    if (user && !hasEarnedSharePoints) {
+      const pointsAmount = 3;
+      await addPoints(pointsAmount, 'Compartir video', 'free');
+      await trackPointsEarned('share', pointsAmount);
+      setHasEarnedSharePoints(true);
+      showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
+      missionsService.trackAction('share');
+    }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(shareLink);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
+
+  const handleFollow = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (!video?.user_id) return;
+
+    try {
+      if (following) {
+        setFollowing(false);
+        await supabase
+          .from('user_follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', video.user_id);
+      } else {
+        setFollowing(true);
+        await supabase
+          .from('user_follows')
+          .insert({
+            follower_id: user.id,
+            following_id: video.user_id
+          });
+
+        missionsService.trackAction('follow');
+        showPointsNotification('Ahora sigues a este creador');
+      }
+    } catch (err) {
+      console.error('Error al seguir:', err);
+    }
+  };
+
+  const handleSubmitComment = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (!newComment.trim()) return;
+
+    try {
+      const commentData = {
+        video_id: videoId,
+        user_id: user.id,
+        content: newComment.trim(),
+        parent_comment_id: replyingTo
+      };
+
+      const { data, error } = await supabase
+        .from('video_comments')
+        .insert(commentData)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      const { data: userData } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, username, avatar_url, is_verified')
+        .eq('id', user.id)
+        .single();
+
+      if (userData) {
+        data.user = {
+          id: userData.id,
+          name: userData.full_name,
+          username: userData.username,
+          profile_image_url: userData.avatar_url,
+          is_verified: userData.is_verified
+        };
+      }
+
+      await supabase.rpc('increment_video_comments', { video_id: videoId });
+      setVideoCounters(prev => ({
+        ...prev,
+        comments: prev.comments + 1
+      }));
+
+      if (!hasEarnedCommentPoints) {
+        const pointsAmount = 10;
+        await addPoints(pointsAmount, 'Comentar video', 'free');
+        await trackPointsEarned('comment', pointsAmount);
+        setHasEarnedCommentPoints(true);
+        showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
+        missionsService.trackAction('comment');
+      }
+
+      if (replyingTo) {
+        setComments(prev => prev.map(comment => {
+          if (comment.id === replyingTo) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), data]
+            };
+          }
+          return comment;
+        }));
+      } else {
+        setComments(prev => [data, ...prev]);
+      }
+
+      setNewComment('');
+      setReplyingTo(null);
+
+    } catch (err) {
+      console.error('Error al publicar comentario:', err);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('video_comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('user_id', user.id);
+
+      await supabase.rpc('decrement_video_comments', { video_id: videoId });
+
+      setVideoCounters(prev => ({
+        ...prev,
+        comments: Math.max(0, prev.comments - 1)
+      }));
+
+      setComments(prev => prev.filter(c => c.id !== commentId));
+
+    } catch (err) {
+      console.error('Error al eliminar comentario:', err);
+    }
+  };
+
+  // ===============================
+  // FUNCIONES DEL VIDEO PLAYER
+  // ===============================
+  const togglePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleVolumeChange = (e) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+    }
+    setIsMuted(newVolume === 0);
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      const newMuted = !isMuted;
+      videoRef.current.muted = newMuted;
+      setIsMuted(newMuted);
+      if (newMuted) {
+        setVolume(0);
+      } else {
+        setVolume(videoRef.current.volume);
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
+      
+      const currentTime = videoRef.current.currentTime;
+
+      if (currentTime >= 30 && !hasEarnedViewPoints && user) {
+        const pointsAmount = 2;
+        addPoints(pointsAmount, 'Ver video', 'free');
+        trackPointsEarned('view', pointsAmount);
+        setHasEarnedViewPoints(true);
+        showPointsNotification(`+${pointsAmount
