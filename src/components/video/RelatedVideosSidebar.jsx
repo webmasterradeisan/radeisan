@@ -274,9 +274,17 @@ const RelatedVideosSidebar = ({
   const [shorts, setShorts] = useState([]);
   const [loadingShorts, setLoadingShorts] = useState(false);
 
-  // Filtrar videos (excluir el actual)
+  // Filtrar videos (excluir el actual y ordenar aleatoriamente por defecto)
   useEffect(() => {
-    const filtered = videos.filter(video => video.id !== currentVideoId);
+    console.log('📹 Videos recibidos:', videos.length);
+    console.log('🎯 Video actual ID:', currentVideoId);
+    
+    let filtered = videos.filter(video => video.id !== currentVideoId);
+    console.log('✅ Videos filtrados (sin actual):', filtered.length);
+    
+    // Ordenar aleatoriamente por defecto
+    filtered = filtered.sort(() => Math.random() - 0.5);
+    
     setFilteredVideos(filtered);
   }, [videos, currentVideoId]);
 
@@ -288,6 +296,7 @@ const RelatedVideosSidebar = ({
   const loadShorts = async () => {
     try {
       setLoadingShorts(true);
+      console.log('🎬 Cargando Shorts...');
       
       // Obtener shorts (videos verticales cortos)
       const { data: shortsData, error } = await supabase
@@ -298,19 +307,28 @@ const RelatedVideosSidebar = ({
         .order('views_count', { ascending: false })
         .limit(20);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error al cargar shorts:', error);
+        throw error;
+      }
+
+      console.log('✅ Shorts encontrados:', shortsData?.length || 0);
 
       // Cargar información de creadores
       if (shortsData && shortsData.length > 0) {
         const userIds = [...new Set(shortsData.map(v => v.user_id).filter(Boolean))];
+        console.log('👥 User IDs de shorts:', userIds.length);
         
         if (userIds.length > 0) {
-          const { data: creatorsData } = await supabase
+          const { data: creatorsData, error: creatorsError } = await supabase
             .from('user_profiles')
             .select('id, name, username, profile_image_url, is_verified')
             .in('id', userIds);
           
-          if (creatorsData) {
+          if (creatorsError) {
+            console.error('❌ Error al cargar creadores de shorts:', creatorsError);
+          } else if (creatorsData) {
+            console.log('✅ Creadores de shorts cargados:', creatorsData.length);
             const creatorsMap = {};
             creatorsData.forEach(creator => {
               creatorsMap[creator.id] = creator;
@@ -326,8 +344,10 @@ const RelatedVideosSidebar = ({
       }
 
       setShorts(shortsData || []);
+      console.log('🎬 Shorts cargados y listos:', shortsData?.length || 0);
     } catch (err) {
-      console.error('Error al cargar shorts:', err);
+      console.error('❌ Error al cargar shorts:', err);
+      setShorts([]); // Continuar sin shorts si hay error
     } finally {
       setLoadingShorts(false);
     }
@@ -349,38 +369,40 @@ const RelatedVideosSidebar = ({
 
   // Filtros
   const filters = [
-    { id: 'all', label: 'Todos', icon: 'Grid3x3' },
-    { id: 'category', label: 'Categoría', icon: 'Tag' },
+    { id: 'all', label: 'Aleatorio', icon: 'Shuffle' },
     { id: 'recent', label: 'Recientes', icon: 'Clock' },
     { id: 'popular', label: 'Populares', icon: 'TrendingUp' }
   ];
 
   const applyFilter = (filterId) => {
+    console.log('🔍 Aplicando filtro:', filterId);
     setSelectedFilter(filterId);
     
     let filtered = videos.filter(video => video.id !== currentVideoId);
+    console.log('📊 Videos disponibles para filtrar:', filtered.length);
     
     switch (filterId) {
       case 'recent':
         filtered = filtered.sort((a, b) => 
           new Date(b.created_at) - new Date(a.created_at)
         );
+        console.log('📅 Ordenados por recientes');
         break;
       case 'popular':
         filtered = filtered.sort((a, b) => 
           (b.views_count || b.views || 0) - (a.views_count || a.views || 0)
         );
+        console.log('🔥 Ordenados por populares');
         break;
-      case 'category':
-        const currentVideo = videos.find(v => v.id === currentVideoId);
-        if (currentVideo?.category) {
-          filtered = filtered.filter(v => v.category === currentVideo.category);
-        }
-        break;
+      case 'all':
       default:
+        // Aleatorio
+        filtered = filtered.sort(() => Math.random() - 0.5);
+        console.log('🎲 Ordenados aleatoriamente');
         break;
     }
     
+    console.log('✅ Filtro aplicado, videos resultantes:', filtered.length);
     setFilteredVideos(filtered);
   };
 
