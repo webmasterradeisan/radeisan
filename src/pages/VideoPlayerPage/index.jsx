@@ -1,16 +1,13 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - Sistema Completo con Dislikes y Mini-Player
+// VIDEO PLAYER PAGE - Sistema Completo
 // ============================================================================
 // ✅ Sistema de likes Y dislikes completo
-// ✅ Mini-player al hacer scroll (copiado del original)
+// ✅ Mini-player para DESKTOP y MÓVIL
+// ✅ Función maximizar con ajuste de orientación automático
 // ✅ Avatar del usuario en comentarios arreglado
 // ✅ Sistema de comentarios completo
-// ✅ Favoritos/Guardados
-// ✅ Compartir
-// ✅ Control de volumen
-// ✅ Sincronización con puntos gratis y premium
-// ✅ Videos relacionados aleatorios
+// ✅ Todas las funcionalidades mantenidas
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -45,12 +42,12 @@ const VideoPlayerPage = () => {
 
   // Estados de interacción
   const [liked, setLiked] = useState(false);
-  const [disliked, setDisliked] = useState(false); // ✅ NUEVO
+  const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [following, setFollowing] = useState(false);
   const [videoCounters, setVideoCounters] = useState({
     likes: 0,
-    dislikes: 0, // ✅ NUEVO
+    dislikes: 0,
     views: 0,
     comments: 0
   });
@@ -76,7 +73,6 @@ const VideoPlayerPage = () => {
   const [hasEarnedLikePoints, setHasEarnedLikePoints] = useState(false);
   const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
   const [hasEarnedSharePoints, setHasEarnedSharePoints] = useState(false);
-  const [viewWatchTime, setViewWatchTime] = useState(0);
 
   // Estados de modal compartir
   const [showShareModal, setShowShareModal] = useState(false);
@@ -89,10 +85,11 @@ const VideoPlayerPage = () => {
     message: ''
   });
 
-  // ✅ NUEVOS ESTADOS PARA MINI-PLAYER
+  // ✅ ESTADOS PARA MINI-PLAYER (DESKTOP Y MÓVIL)
   const [showMiniPlayer, setShowMiniPlayer] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [scrollY, setScrollY] = useState(0);
-  const miniPlayerThreshold = 400; // Píxeles de scroll para activar mini-player
+  const miniPlayerThreshold = 400;
 
   // Refs
   const videoRef = useRef(null);
@@ -100,17 +97,15 @@ const VideoPlayerPage = () => {
   const controlsTimeoutRef = useRef(null);
 
   // ===============================
-  // ✅ SCROLL DETECTION PARA MINI-PLAYER (COPIADO DEL ORIGINAL)
+  // ✅ SCROLL DETECTION PARA MINI-PLAYER (DESKTOP Y MÓVIL)
   // ===============================
   useEffect(() => {
-    if (!isMobile) return;
-
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       setScrollY(currentScrollY);
 
-      // Activar mini-player cuando scrolleas más allá del player
-      if (currentScrollY > miniPlayerThreshold && !showMiniPlayer) {
+      // Activar mini-player al hacer scroll (tanto móvil como desktop)
+      if (currentScrollY > miniPlayerThreshold && !showMiniPlayer && !isMinimized) {
         setShowMiniPlayer(true);
       } else if (currentScrollY <= miniPlayerThreshold && showMiniPlayer) {
         setShowMiniPlayer(false);
@@ -119,13 +114,33 @@ const VideoPlayerPage = () => {
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [isMobile, showMiniPlayer]);
+  }, [showMiniPlayer, isMinimized]);
+
+  // ===============================
+  // ✅ FUNCIÓN PARA MINIMIZAR/MAXIMIZAR
+  // ===============================
+  const handleMinimize = () => {
+    setIsMinimized(true);
+    setShowMiniPlayer(true);
+  };
+
+  const handleMaximize = () => {
+    setIsMinimized(false);
+    setShowMiniPlayer(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // ✅ En móvil, forzar orientación horizontal
+    if (isMobile && screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(err => {
+        console.log('No se pudo bloquear orientación:', err);
+      });
+    }
+  };
 
   // ===============================
   // FUNCIONES DE CARGA DE DATOS
   // ===============================
 
-  // ✅ Cargar perfil del usuario logueado (para avatar en comentarios)
   const fetchUserProfile = useCallback(async () => {
     if (!user) return;
 
@@ -138,13 +153,11 @@ const VideoPlayerPage = () => {
 
       if (error) throw error;
       setUserProfile(data);
-      console.log('✅ Perfil de usuario cargado:', data);
     } catch (err) {
       console.error('❌ Error al cargar perfil de usuario:', err);
     }
   }, [user]);
 
-  // Cargar datos del video
   const fetchVideoData = useCallback(async () => {
     if (!videoId) return;
 
@@ -152,9 +165,6 @@ const VideoPlayerPage = () => {
       setLoading(true);
       setError(null);
 
-      console.log('📹 Cargando video:', videoId);
-
-      // Obtener datos del video
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
         .select('*')
@@ -164,22 +174,14 @@ const VideoPlayerPage = () => {
 
       if (videoError) throw videoError;
 
-      console.log('✅ Video cargado:', videoData);
-
-      // Obtener información del creador por separado
       if (videoData?.user_id) {
-        console.log('👤 Buscando creador con ID:', videoData.user_id);
-        
         const { data: creatorData, error: creatorError } = await supabase
           .from('user_profiles')
           .select('id, full_name, username, avatar_url, is_verified')
           .eq('id', videoData.user_id)
           .single();
         
-        if (creatorError) {
-          console.error('❌ Error al cargar creador:', creatorError);
-        } else if (creatorData) {
-          console.log('✅ Creador cargado:', creatorData);
+        if (!creatorError && creatorData) {
           videoData.creator = {
             id: creatorData.id,
             name: creatorData.full_name,
@@ -192,10 +194,8 @@ const VideoPlayerPage = () => {
 
       setVideo(videoData);
 
-      // Incrementar contador de vistas
       await supabase.rpc('increment_video_views', { video_id: videoId });
 
-      // Obtener contadores actualizados
       const { data: countersData } = await supabase
         .from('videos')
         .select('likes_count, dislikes_count, views_count, comments_count')
@@ -211,39 +211,31 @@ const VideoPlayerPage = () => {
         });
       }
 
-      // Si hay usuario logueado, verificar estados de interacción
       if (user) {
-        // Verificar like
         const { data: likeData } = await supabase
           .from('video_likes')
           .select('*')
           .eq('video_id', videoId)
           .eq('user_id', user.id)
           .maybeSingle();
-
         setLiked(!!likeData);
 
-        // ✅ Verificar dislike
         const { data: dislikeData } = await supabase
           .from('video_dislikes')
           .select('*')
           .eq('video_id', videoId)
           .eq('user_id', user.id)
           .maybeSingle();
-
         setDisliked(!!dislikeData);
 
-        // Verificar guardado
         const { data: savedData } = await supabase
           .from('saved_videos')
           .select('*')
           .eq('video_id', videoId)
           .eq('user_id', user.id)
           .maybeSingle();
-
         setSaved(!!savedData);
 
-        // Verificar si sigue al creador
         if (videoData.user_id) {
           const { data: followData } = await supabase
             .from('user_follows')
@@ -251,11 +243,9 @@ const VideoPlayerPage = () => {
             .eq('follower_id', user.id)
             .eq('following_id', videoData.user_id)
             .maybeSingle();
-
           setFollowing(!!followData);
         }
 
-        // Verificar puntos ya ganados
         const { data: pointsData } = await supabase
           .from('user_video_points')
           .select('action_type')
@@ -271,7 +261,6 @@ const VideoPlayerPage = () => {
         }
       }
 
-      // Cargar videos relacionados
       loadRelatedVideos();
 
     } catch (err) {
@@ -282,11 +271,8 @@ const VideoPlayerPage = () => {
     }
   }, [videoId, user]);
 
-  // Cargar videos relacionados (todos los videos aleatoriamente)
   const loadRelatedVideos = async () => {
     try {
-      console.log('📹 Cargando videos relacionados...');
-      
       const { data, error } = await supabase
         .from('videos')
         .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id, orientation')
@@ -294,31 +280,20 @@ const VideoPlayerPage = () => {
         .eq('is_published', true)
         .limit(50);
 
-      if (error) {
-        console.error('❌ Error al cargar videos relacionados:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log('✅ Videos relacionados encontrados:', data?.length || 0);
-      
       const horizontalVideos = data.filter(v => !v.orientation || v.orientation === 'horizontal');
-      console.log('✅ Videos horizontales:', horizontalVideos.length);
 
       if (horizontalVideos && horizontalVideos.length > 0) {
         const userIds = [...new Set(horizontalVideos.map(v => v.user_id).filter(Boolean))];
-        console.log('👥 User IDs únicos:', userIds.length);
         
         if (userIds.length > 0) {
-          const { data: creatorsData, error: creatorsError } = await supabase
+          const { data: creatorsData } = await supabase
             .from('user_profiles')
             .select('id, full_name, username, avatar_url, is_verified')
             .in('id', userIds);
           
-          if (creatorsError) {
-            console.error('❌ Error al cargar creadores:', creatorsError);
-          } else if (creatorsData) {
-            console.log('✅ Creadores cargados:', creatorsData.length);
-            
+          if (creatorsData) {
             const creatorsMap = {};
             creatorsData.forEach(creator => {
               creatorsMap[creator.id] = creator;
@@ -341,47 +316,33 @@ const VideoPlayerPage = () => {
                 username: creatorsMap[video.user_id].username,
                 profile_image_url: creatorsMap[video.user_id].avatar_url,
                 is_verified: creatorsMap[video.user_id].is_verified
-              } : {
-                id: video.user_id,
-                name: 'Usuario',
-                username: 'usuario',
-                profile_image_url: null,
-                is_verified: false
-              }
+              } : null
             }));
 
             const shuffled = transformed.sort(() => Math.random() - 0.5);
             setRelatedVideos(shuffled);
-            console.log('🎲 Videos relacionados ordenados aleatoriamente:', shuffled.length);
           }
         }
-      } else {
-        setRelatedVideos([]);
       }
     } catch (err) {
       console.error('❌ Error al cargar videos relacionados:', err);
-      setRelatedVideos([]);
     }
   };
 
-  // Cargar comentarios
   const loadComments = useCallback(async () => {
     if (!videoId) return;
 
     try {
       setLoadingComments(true);
-      console.log('💬 Cargando comentarios para video:', videoId);
 
-      const { data: commentsData, error: commentsError } = await supabase
+      const { data: commentsData, error } = await supabase
         .from('video_comments')
         .select('*')
         .eq('video_id', videoId)
         .is('parent_comment_id', null)
         .order('created_at', { ascending: false });
 
-      if (commentsError) throw commentsError;
-
-      console.log('💬 Comentarios encontrados:', commentsData?.length || 0);
+      if (error) throw error;
 
       if (commentsData && commentsData.length > 0) {
         const commentIds = commentsData.map(c => c.id);
@@ -390,13 +351,9 @@ const VideoPlayerPage = () => {
           .select('*')
           .in('parent_comment_id', commentIds);
 
-        console.log('↩️ Respuestas encontradas:', repliesData?.length || 0);
-
         const allComments = [...commentsData, ...(repliesData || [])];
         const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
         
-        console.log('👥 User IDs únicos:', userIds.length);
-
         let usersMap = {};
         if (userIds.length > 0) {
           const { data: usersData } = await supabase
@@ -405,7 +362,6 @@ const VideoPlayerPage = () => {
             .in('id', userIds);
           
           if (usersData) {
-            console.log('✅ Usuarios cargados:', usersData.length);
             usersData.forEach(userProfile => {
               usersMap[userProfile.id] = {
                 id: userProfile.id,
@@ -446,7 +402,6 @@ const VideoPlayerPage = () => {
   // FUNCIONES DE INTERACCIÓN
   // ===============================
 
-  // Mostrar notificación de puntos
   const showPointsNotification = (message) => {
     setPointsNotification({ show: true, message });
     setTimeout(() => {
@@ -454,7 +409,6 @@ const VideoPlayerPage = () => {
     }, 3000);
   };
 
-  // Registrar puntos ganados
   const trackPointsEarned = async (actionType, pointsAmount) => {
     if (!user) return;
 
@@ -472,7 +426,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Handle Like
   const handleLike = async () => {
     if (!user) {
       navigate('/login');
@@ -481,7 +434,6 @@ const VideoPlayerPage = () => {
 
     try {
       if (liked) {
-        // Quitar like
         setLiked(false);
         setVideoCounters(prev => ({
           ...prev,
@@ -497,12 +449,10 @@ const VideoPlayerPage = () => {
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
 
       } else {
-        // Si tenía dislike, quitarlo primero
         if (disliked) {
-          await handleDislike(); // Esto quitará el dislike
+          await handleDislike();
         }
 
-        // Dar like
         setLiked(true);
         setVideoCounters(prev => ({
           ...prev,
@@ -515,7 +465,6 @@ const VideoPlayerPage = () => {
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // Otorgar puntos si es la primera vez
         if (!hasEarnedLikePoints) {
           const pointsAmount = 5;
           await addPoints(pointsAmount, 'Like en video', 'free');
@@ -530,7 +479,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // ✅ Handle Dislike (NUEVO)
   const handleDislike = async () => {
     if (!user) {
       navigate('/login');
@@ -539,7 +487,6 @@ const VideoPlayerPage = () => {
 
     try {
       if (disliked) {
-        // Quitar dislike
         setDisliked(false);
         setVideoCounters(prev => ({
           ...prev,
@@ -555,9 +502,7 @@ const VideoPlayerPage = () => {
         await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
 
       } else {
-        // Si tenía like, quitarlo primero
         if (liked) {
-          // Quitar like sin otorgar puntos
           setLiked(false);
           setVideoCounters(prev => ({
             ...prev,
@@ -573,7 +518,6 @@ const VideoPlayerPage = () => {
           await supabase.rpc('decrement_video_likes', { video_id: videoId });
         }
 
-        // Dar dislike
         setDisliked(true);
         setVideoCounters(prev => ({
           ...prev,
@@ -591,7 +535,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Handle Guardar/Favorito
   const handleSave = async () => {
     if (!user) {
       navigate('/login');
@@ -620,7 +563,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Handle Compartir
   const handleShare = async () => {
     const url = `${window.location.origin}/video/${videoId}`;
     setShareLink(url);
@@ -636,14 +578,12 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Copiar link
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareLink);
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
-  // Handle Seguir
   const handleFollow = async () => {
     if (!user) {
       navigate('/login');
@@ -677,11 +617,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // ===============================
-  // FUNCIONES DE COMENTARIOS
-  // ===============================
-
-  // Publicar comentario
   const handleSubmitComment = async (e) => {
     e.preventDefault();
     if (!user) {
@@ -707,7 +642,6 @@ const VideoPlayerPage = () => {
 
       if (error) throw error;
 
-      // Obtener información del usuario del comentario
       const { data: userData } = await supabase
         .from('user_profiles')
         .select('id, full_name, username, avatar_url, is_verified')
@@ -724,14 +658,12 @@ const VideoPlayerPage = () => {
         };
       }
 
-      // Actualizar contador
       await supabase.rpc('increment_video_comments', { video_id: videoId });
       setVideoCounters(prev => ({
         ...prev,
         comments: prev.comments + 1
       }));
 
-      // Otorgar puntos si es la primera vez
       if (!hasEarnedCommentPoints) {
         const pointsAmount = 10;
         await addPoints(pointsAmount, 'Comentar video', 'free');
@@ -741,7 +673,6 @@ const VideoPlayerPage = () => {
         missionsService.trackAction('comment');
       }
 
-      // Actualizar lista de comentarios
       if (replyingTo) {
         setComments(prev => prev.map(comment => {
           if (comment.id === replyingTo) {
@@ -764,7 +695,6 @@ const VideoPlayerPage = () => {
     }
   };
 
-  // Eliminar comentario
   const handleDeleteComment = async (commentId) => {
     if (!user) return;
 
@@ -831,9 +761,7 @@ const VideoPlayerPage = () => {
       setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
       
       const currentTime = videoRef.current.currentTime;
-      setViewWatchTime(currentTime);
 
-      // Otorgar puntos por ver (mínimo 30 segundos)
       if (currentTime >= 30 && !hasEarnedViewPoints && user) {
         const pointsAmount = 2;
         addPoints(pointsAmount, 'Ver video', 'free');
@@ -883,7 +811,7 @@ const VideoPlayerPage = () => {
 
   useEffect(() => {
     fetchVideoData();
-    fetchUserProfile(); // ✅ Cargar perfil del usuario
+    fetchUserProfile();
   }, [fetchVideoData, fetchUserProfile]);
 
   useEffect(() => {
@@ -900,7 +828,6 @@ const VideoPlayerPage = () => {
     };
   }, []);
 
-  // Formatear duración
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -908,7 +835,6 @@ const VideoPlayerPage = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Formatear número
   const formatNumber = (num) => {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
@@ -969,7 +895,6 @@ const VideoPlayerPage = () => {
 
       <Header />
 
-      {/* Notificación de puntos */}
       {pointsNotification.show && (
         <div className="fixed top-20 right-4 z-50 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg animate-in slide-in-from-top">
           {pointsNotification.message}
@@ -979,117 +904,119 @@ const VideoPlayerPage = () => {
       <div className="min-h-screen bg-background pt-16">
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
-            {/* Columna principal - Video y detalles */}
             <div className="flex-1">
               {/* Video Player */}
-              <div
-                ref={containerRef}
-                className="relative bg-black rounded-lg overflow-hidden shadow-2xl group"
-                onMouseMove={handleMouseMove}
-                onMouseLeave={() => isPlaying && setShowControls(false)}
-              >
-                <video
-                  ref={videoRef}
-                  src={video.video_url}
-                  className="w-full aspect-video object-contain"
-                  onLoadedMetadata={(e) => setDuration(e.target.duration)}
-                  onTimeUpdate={handleTimeUpdate}
-                  onEnded={() => setIsPlaying(false)}
-                  onClick={togglePlayPause}
-                />
-
-                {/* Overlay de controles */}
+              {!isMinimized && (
                 <div
-                  className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
-                    showControls ? 'opacity-100' : 'opacity-0'
-                  }`}
+                  ref={containerRef}
+                  className="relative bg-black rounded-lg overflow-hidden shadow-2xl group"
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={() => isPlaying && setShowControls(false)}
                 >
-                  {/* Botón play central */}
-                  {!isPlaying && (
-                    <button
-                      onClick={togglePlayPause}
-                      className="absolute inset-0 flex items-center justify-center"
-                    >
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
-                        <Icon name="Play" className="w-10 h-10 text-white ml-1" />
-                      </div>
-                    </button>
-                  )}
+                  <video
+                    ref={videoRef}
+                    src={video.video_url}
+                    className="w-full aspect-video object-contain"
+                    onLoadedMetadata={(e) => setDuration(e.target.duration)}
+                    onTimeUpdate={handleTimeUpdate}
+                    onEnded={() => setIsPlaying(false)}
+                    onClick={togglePlayPause}
+                  />
 
-                  {/* Controles inferiores */}
-                  <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
-                    {/* Barra de progreso */}
-                    <div
-                      className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
-                      onClick={handleSeek}
-                    >
-                      <div
-                        className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all"
-                        style={{ width: `${progress}%` }}
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
+                      showControls ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  >
+                    {!isPlaying && (
+                      <button
+                        onClick={togglePlayPause}
+                        className="absolute inset-0 flex items-center justify-center"
                       >
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div>
-                      </div>
-                    </div>
+                        <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+                          <Icon name="Play" className="w-10 h-10 text-white ml-1" />
+                        </div>
+                      </button>
+                    )}
 
-                    {/* Controles */}
-                    <div className="flex items-center justify-between text-white">
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={togglePlayPause}
-                          className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                    <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
+                      <div
+                        className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
+                        onClick={handleSeek}
+                      >
+                        <div
+                          className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all"
+                          style={{ width: `${progress}%` }}
                         >
-                          <Icon name={isPlaying ? 'Pause' : 'Play'} size={20} />
-                        </button>
+                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div>
+                        </div>
+                      </div>
 
-                        <div className="flex items-center gap-2 group/volume">
+                      <div className="flex items-center justify-between text-white">
+                        <div className="flex items-center gap-4">
                           <button
-                            onClick={toggleMute}
+                            onClick={togglePlayPause}
                             className="hover:bg-white/20 p-2 rounded-full transition-colors"
                           >
-                            <Icon
-                              name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
-                              size={20}
-                            />
+                            <Icon name={isPlaying ? 'Pause' : 'Play'} size={20} />
                           </button>
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            value={volume}
-                            onChange={handleVolumeChange}
-                            className="w-0 group-hover/volume:w-20 transition-all"
-                          />
+
+                          <div className="flex items-center gap-2 group/volume">
+                            <button
+                              onClick={toggleMute}
+                              className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                            >
+                              <Icon
+                                name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
+                                size={20}
+                              />
+                            </button>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={volume}
+                              onChange={handleVolumeChange}
+                              className="w-0 group-hover/volume:w-20 transition-all"
+                            />
+                          </div>
+
+                          <span className="text-sm font-medium">
+                            {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
+                          </span>
                         </div>
 
-                        <span className="text-sm font-medium">
-                          {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
-                        </span>
-                      </div>
+                        <div className="flex items-center gap-2">
+                          {/* ✅ Botón Minimizar */}
+                          <button
+                            onClick={handleMinimize}
+                            className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                            title="Minimizar"
+                          >
+                            <Icon name="Minimize2" size={20} />
+                          </button>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={toggleFullscreen}
-                          className="hover:bg-white/20 p-2 rounded-full transition-colors"
-                        >
-                          <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={20} />
-                        </button>
+                          <button
+                            onClick={toggleFullscreen}
+                            className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                          >
+                            <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={20} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Información del video */}
               <div className="mt-4 space-y-4">
-                {/* Título */}
                 <h1 className="text-xl font-bold text-foreground">
                   {video.title}
                 </h1>
 
-                {/* Botones de interacción */}
                 <div className="flex items-center justify-between flex-wrap gap-4">
-                  {/* Info del creador */}
                   <div className="flex items-center gap-3">
                     <Link to={`/profile/${video.creator?.username || 'unknown'}`}>
                       <img
@@ -1126,11 +1053,8 @@ const VideoPlayerPage = () => {
                     )}
                   </div>
 
-                  {/* Botones de acción */}
                   <div className="flex items-center gap-2">
-                    {/* Like y Dislike juntos */}
                     <div className="flex items-center bg-muted rounded-full overflow-hidden">
-                      {/* Like */}
                       <button
                         onClick={handleLike}
                         className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${
@@ -1141,7 +1065,6 @@ const VideoPlayerPage = () => {
                         <span className="font-medium">{formatNumber(videoCounters.likes)}</span>
                       </button>
 
-                      {/* Dislike */}
                       <button
                         onClick={handleDislike}
                         className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
@@ -1153,7 +1076,6 @@ const VideoPlayerPage = () => {
                       </button>
                     </div>
 
-                    {/* Compartir */}
                     <button
                       onClick={handleShare}
                       className="flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors"
@@ -1162,7 +1084,6 @@ const VideoPlayerPage = () => {
                       <span className="font-medium">Compartir</span>
                     </button>
 
-                    {/* Guardar */}
                     <button
                       onClick={handleSave}
                       className={`flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors ${
@@ -1175,7 +1096,6 @@ const VideoPlayerPage = () => {
                   </div>
                 </div>
 
-                {/* Descripción */}
                 <div className="bg-muted rounded-lg p-4">
                   <p className="text-sm text-foreground whitespace-pre-wrap">
                     {video.description}
@@ -1197,11 +1117,9 @@ const VideoPlayerPage = () => {
                     {formatNumber(videoCounters.comments)} comentarios
                   </h3>
 
-                  {/* Formulario de comentario */}
                   {user ? (
                     <form onSubmit={handleSubmitComment} className="mb-6">
                       <div className="flex gap-3">
-                        {/* ✅ AVATAR ARREGLADO - Usando userProfile en lugar de user.user_metadata */}
                         <img
                           src={userProfile?.avatar_url || '/default-avatar.png'}
                           alt="Tu avatar"
@@ -1248,7 +1166,6 @@ const VideoPlayerPage = () => {
                     </div>
                   )}
 
-                  {/* Lista de comentarios */}
                   <div className="space-y-4">
                     {loadingComments ? (
                       <div className="text-center py-8">
@@ -1261,7 +1178,6 @@ const VideoPlayerPage = () => {
                     ) : (
                       comments.map((comment) => (
                         <div key={comment.id} className="space-y-3">
-                          {/* Comentario principal */}
                           <div className="flex gap-3">
                             <Link to={`/profile/${comment.user?.username || 'unknown'}`}>
                               <img
@@ -1305,7 +1221,6 @@ const VideoPlayerPage = () => {
                                 )}
                               </div>
 
-                              {/* Respuestas */}
                               {comment.replies && comment.replies.length > 0 && (
                                 <div className="mt-4 space-y-3">
                                   {!showReplies[comment.id] ? (
@@ -1377,7 +1292,6 @@ const VideoPlayerPage = () => {
               </div>
             </div>
 
-            {/* Sidebar - Videos relacionados */}
             {!isMobile && (
               <div className="lg:w-[400px] flex-shrink-0">
                 <RelatedVideosSidebar
@@ -1395,12 +1309,16 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER FLOTANTE (COPIADO DEL ORIGINAL) */}
-      {isMobile && showMiniPlayer && video && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black shadow-2xl border-t border-border">
+      {/* ✅ MINI-PLAYER FLOTANTE (DESKTOP Y MÓVIL) */}
+      {(showMiniPlayer || isMinimized) && video && (
+        <div className={`fixed z-50 bg-black shadow-2xl border ${
+          isMobile 
+            ? 'bottom-0 left-0 right-0 border-t border-border'
+            : 'bottom-4 right-4 w-96 rounded-lg border-border'
+        }`}>
           <div className="flex items-center justify-between p-2">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="w-16 aspect-video bg-muted rounded overflow-hidden flex-shrink-0">
+              <div className={`${isMobile ? 'w-16' : 'w-24'} aspect-video bg-muted rounded overflow-hidden flex-shrink-0`}>
                 <img
                   src={video.thumbnail_url}
                   alt={video.title}
@@ -1418,13 +1336,17 @@ const VideoPlayerPage = () => {
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                onClick={handleMaximize}
                 className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                title="Maximizar"
               >
                 <Icon name="Maximize2" size={20} />
               </button>
               <button
-                onClick={() => setShowMiniPlayer(false)}
+                onClick={() => {
+                  setShowMiniPlayer(false);
+                  setIsMinimized(false);
+                }}
                 className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
               >
                 <Icon name="X" size={20} />
@@ -1448,7 +1370,6 @@ const VideoPlayerPage = () => {
               </button>
             </div>
 
-            {/* Opciones de compartir */}
             <div className="space-y-3 mb-4">
               <a
                 href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`}
@@ -1487,7 +1408,6 @@ const VideoPlayerPage = () => {
               </a>
             </div>
 
-            {/* Copiar link */}
             <div className="flex items-center gap-2">
               <input
                 type="text"
