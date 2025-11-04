@@ -214,11 +214,16 @@ const VideoPlayerPage = () => {
   // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - CORREGIDA
   // ===============================
   const handleMinimize = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // NO pausar, el video sigue reproduciéndose
+    // Solo activamos el estado minimizado
     setIsMinimized(true);
-    // El video continúa reproduciéndose automáticamente
   };
 
   const handleMaximize = () => {
+    // Desactivar mini-player
     setIsMinimized(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1019,32 +1024,52 @@ const VideoPlayerPage = () => {
               <div
                 ref={containerRef}
                 className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${
-                  isMinimized ? 'opacity-0 pointer-events-none h-0' : 'opacity-100'
+                  isMinimized ? 'opacity-50 pointer-events-none' : 'opacity-100'
                 }`}
-                onMouseMove={handleMouseMovePlayer}
-                onMouseLeave={() => isPlaying && setShowControls(false)}
+                onMouseMove={!isMinimized ? handleMouseMovePlayer : undefined}
+                onMouseLeave={() => isPlaying && !isMinimized && setShowControls(false)}
               >
                 <video
                   ref={videoRef}
                   src={video.video_url}
-                  className="w-full aspect-video object-contain cursor-pointer"
+                  className="w-full aspect-video object-contain"
                   onLoadedMetadata={(e) => setDuration(e.target.duration)}
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={() => setIsPlaying(false)}
-                  onClick={togglePlayPause}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
 
+                {/* ✅ OverlayClickArea - SIEMPRE clickeable excepto cuando minimizado */}
+                {!isMinimized && (
+                  <div 
+                    className="absolute inset-0 cursor-pointer"
+                    onClick={togglePlayPause}
+                  />
+                )}
+
+                {/* ✅ Overlay cuando está minimizado */}
+                {isMinimized && (
+                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center pointer-events-none">
+                    <div className="text-center text-white">
+                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Icon name="Minimize2" className="w-10 h-10" />
+                      </div>
+                      <p className="text-sm">Video minimizado</p>
+                      <p className="text-xs text-white/70 mt-2">Reproduciendo en mini-player</p>
+                    </div>
+                  </div>
+                )}
+
                 <div
-                  className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
-                    showControls ? 'opacity-100' : 'opacity-0'
+                  className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 pointer-events-none ${
+                    showControls && !isMinimized ? 'opacity-100' : 'opacity-0'
                   }`}
                 >
-                  {!isPlaying && (
+                  {!isPlaying && !isMinimized && (
                     <button
                       onClick={togglePlayPause}
-                      className="absolute inset-0 flex items-center justify-center"
+                      className="absolute inset-0 flex items-center justify-center pointer-events-auto"
                     >
                       <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
                         <Icon name="Play" className="w-10 h-10 text-white ml-1" />
@@ -1052,7 +1077,7 @@ const VideoPlayerPage = () => {
                     </button>
                   )}
 
-                  <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
+                  <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
                     <div
                       className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
                       onClick={handleSeek}
@@ -1068,7 +1093,10 @@ const VideoPlayerPage = () => {
                     <div className="flex items-center justify-between text-white">
                       <div className="flex items-center gap-2 md:gap-4">
                         <button
-                          onClick={togglePlayPause}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePlayPause();
+                          }}
                           className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                         >
                           <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} />
@@ -1076,7 +1104,10 @@ const VideoPlayerPage = () => {
 
                         <div className="flex items-center gap-2 group/volume">
                           <button
-                            onClick={toggleMute}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleMute();
+                            }}
                             className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                           >
                             <Icon
@@ -1092,6 +1123,7 @@ const VideoPlayerPage = () => {
                               step="0.01"
                               value={volume}
                               onChange={handleVolumeChange}
+                              onClick={(e) => e.stopPropagation()}
                               className="w-0 group-hover/volume:w-20 transition-all"
                             />
                           )}
@@ -1104,7 +1136,10 @@ const VideoPlayerPage = () => {
 
                       <div className="flex items-center gap-1 md:gap-2">
                         <button
-                          onClick={handleMinimize}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMinimize();
+                          }}
                           className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                           title="Minimizar"
                         >
@@ -1112,7 +1147,10 @@ const VideoPlayerPage = () => {
                         </button>
 
                         <button
-                          onClick={toggleFullscreen}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFullscreen();
+                          }}
                           className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                         >
                           <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} />
@@ -1442,25 +1480,27 @@ const VideoPlayerPage = () => {
           <div className="relative aspect-video bg-black">
             <video
               src={video.video_url}
-              className="w-full h-full object-contain pointer-events-none"
-              style={{ pointerEvents: 'none' }}
+              className="w-full h-full object-contain"
             />
 
-            {/* Controles sobre el video */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePlayPause();
-                }}
-                className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
-              >
+            {/* ✅ OverlayClickArea - Click para play/pause */}
+            <div 
+              className="absolute inset-0 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayPause();
+              }}
+            />
+
+            {/* Controles sobre el video - solo visuales, el click va al overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
                 <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 20 : 24} className="text-white" />
-              </button>
+              </div>
             </div>
 
             {/* Indicador de drag */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full"></div>
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full pointer-events-none"></div>
           </div>
 
           {/* Información y controles */}
@@ -1498,7 +1538,11 @@ const VideoPlayerPage = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (videoRef.current) {
+                      videoRef.current.pause();
+                    }
                     setIsMinimized(false);
+                    setIsPlaying(false);
                   }}
                   className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Cerrar"
