@@ -1,13 +1,15 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - Sistema Completo con Mini-Player Arrastrable
+// VIDEO PLAYER PAGE - Sistema Completo con Mini-Player y Móvil Optimizado
 // ============================================================================
-// ✅ Mini-player ARRASTRABLE con video reproduciendo
-// ✅ Controles de play/pause funcionales en mini-player
+// ✅ Video grande NO se oculta al minimizar (se pausa de fondo)
+// ✅ Click en cualquier parte del video para play/pause
+// ✅ Adaptación perfecta a móviles
+// ✅ Fullscreen en móvil con rotación automática a horizontal
+// ✅ Mini-player arrastrable con video reproduciendo
 // ✅ Controles de teclado completos (espacio, k, flechas, f, m)
 // ✅ Sistema de likes Y dislikes
 // ✅ Avatar del usuario en comentarios
-// ✅ Todas las funcionalidades mantenidas
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -88,8 +90,8 @@ const VideoPlayerPage = () => {
   // ✅ ESTADOS PARA MINI-PLAYER ARRASTRABLE
   const [isMinimized, setIsMinimized] = useState(false);
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
-    x: window.innerWidth - 420, // 20px desde el borde derecho
-    y: window.innerHeight - 280  // 20px desde el borde inferior
+    x: isMobile ? 10 : 20, 
+    y: isMobile ? 10 : 20 
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -119,7 +121,7 @@ const VideoPlayerPage = () => {
           break;
         case 'f':
           e.preventDefault();
-          if (!isMinimized) toggleFullscreen();
+          toggleFullscreen();
           break;
         case 'm':
           e.preventDefault();
@@ -151,33 +153,41 @@ const VideoPlayerPage = () => {
   }, [isMinimized, volume]);
 
   // ===============================
-  // ✅ FUNCIONES DE DRAG & DROP
+  // ✅ FUNCIONES DE DRAG & DROP (Desktop y Móvil)
   // ===============================
   const handleMouseDown = (e) => {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
     
     setIsDragging(true);
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
     setDragOffset({
-      x: e.clientX - miniPlayerPosition.x,
-      y: e.clientY - miniPlayerPosition.y
+      x: clientX - miniPlayerPosition.x,
+      y: clientY - miniPlayerPosition.y
     });
   };
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
 
-    const newX = e.clientX - dragOffset.x;
-    const newY = e.clientY - dragOffset.y;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-    // Límites de la pantalla
-    const maxX = window.innerWidth - 400; // 400px es el ancho del mini-player
-    const maxY = window.innerHeight - 250; // 250px es la altura aproximada
+    const newX = clientX - dragOffset.x;
+    const newY = clientY - dragOffset.y;
+
+    // Límites de la pantalla adaptados a móvil
+    const miniWidth = isMobile ? 250 : 400;
+    const miniHeight = isMobile ? 180 : 250;
+    const maxX = window.innerWidth - miniWidth;
+    const maxY = window.innerHeight - miniHeight;
 
     setMiniPlayerPosition({
       x: Math.max(0, Math.min(newX, maxX)),
       y: Math.max(0, Math.min(newY, maxY))
     });
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, isMobile]);
 
   const handleMouseUp = () => {
     setIsDragging(false);
@@ -187,9 +197,13 @@ const VideoPlayerPage = () => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleMouseMove);
+      document.addEventListener('touchend', handleMouseUp);
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleMouseMove);
+        document.removeEventListener('touchend', handleMouseUp);
       };
     }
   }, [isDragging, handleMouseMove]);
@@ -199,82 +213,49 @@ const VideoPlayerPage = () => {
   // ===============================
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
+    const miniVideo = miniVideoRef.current;
     
-    if (!mainVideo) {
-      console.error('No se encontró el video principal');
-      return;
-    }
+    if (!mainVideo || !miniVideo) return;
 
-    console.log('Minimizando video...');
+    // Pausar el video principal
+    mainVideo.pause();
+    setIsPlaying(false);
+
+    // Sincronizar estado en mini-player
+    miniVideo.currentTime = mainVideo.currentTime;
+    miniVideo.volume = mainVideo.volume;
+    miniVideo.muted = mainVideo.muted;
     
-    // Guardar el estado actual
-    const wasPlaying = !mainVideo.paused;
-    
-    // Primero establecer el estado de minimizado
     setIsMinimized(true);
     
-    // Esperar un frame para que el mini-player se renderice
-    requestAnimationFrame(() => {
-      const miniVideo = miniVideoRef.current;
-      
-      if (miniVideo) {
-        // Sincronizar estado
-        miniVideo.currentTime = mainVideo.currentTime;
-        miniVideo.volume = mainVideo.volume;
-        miniVideo.muted = mainVideo.muted;
-        
-        console.log('Mini-player sincronizado:', {
-          currentTime: miniVideo.currentTime,
-          wasPlaying
-        });
-        
-        // Reproducir si estaba reproduciendo
-        if (wasPlaying) {
-          miniVideo.play().catch(err => console.log('Mini-player play error:', err));
-        }
-      } else {
-        console.error('No se encontró el mini-player video ref');
-      }
-    });
+    // Reproducir automáticamente en mini-player
+    miniVideo.play().then(() => {
+      setIsPlaying(true);
+    }).catch(err => console.log('Mini-player play error:', err));
   };
 
   const handleMaximize = () => {
-    const miniVideo = miniVideoRef.current;
     const mainVideo = videoRef.current;
+    const miniVideo = miniVideoRef.current;
     
-    if (!miniVideo || !mainVideo) {
-      console.error('No se encontraron los videos');
-      return;
-    }
+    if (!mainVideo || !miniVideo) return;
 
-    console.log('Maximizando video...');
+    // Pausar mini-player
+    miniVideo.pause();
+
+    // Sincronizar estado antes de maximizar
+    mainVideo.currentTime = miniVideo.currentTime;
+    mainVideo.volume = miniVideo.volume;
+    mainVideo.muted = miniVideo.muted;
     
-    // Guardar el estado actual del mini-player
-    const wasPlaying = !miniVideo.paused;
-    const currentTime = miniVideo.currentTime;
-    const currentVolume = miniVideo.volume;
-    const isMutedNow = miniVideo.muted;
-
-    // Primero quitar el mini-player
     setIsMinimized(false);
     
-    // Esperar un frame para que el player principal se renderice
-    requestAnimationFrame(() => {
-      // Sincronizar estado
-      mainVideo.currentTime = currentTime;
-      mainVideo.volume = currentVolume;
-      mainVideo.muted = isMutedNow;
-      
-      console.log('Player principal sincronizado:', {
-        currentTime: mainVideo.currentTime,
-        wasPlaying
-      });
-      
-      // Reproducir si estaba reproduciendo
-      if (wasPlaying) {
-        mainVideo.play().catch(err => console.log('Main player play error:', err));
-      }
-    });
+    // Reproducir en player principal si estaba reproduciendo
+    if (!miniVideo.paused) {
+      mainVideo.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => console.log('Main player play error:', err));
+    }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -929,15 +910,34 @@ const VideoPlayerPage = () => {
     videoRef.current.currentTime = pos * videoRef.current.duration;
   };
 
-  const toggleFullscreen = () => {
+  // ✅ Fullscreen con rotación automática en móvil
+  const toggleFullscreen = async () => {
     if (!containerRef.current) return;
 
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+        
+        // ✅ Forzar orientación landscape en móvil
+        if (isMobile && screen.orientation && screen.orientation.lock) {
+          try {
+            await screen.orientation.lock('landscape');
+          } catch (err) {
+            console.log('No se pudo bloquear orientación:', err);
+          }
+        }
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+        
+        // Desbloquear orientación
+        if (isMobile && screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
     }
   };
 
@@ -1053,26 +1053,40 @@ const VideoPlayerPage = () => {
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
-              {/* Video Player Principal */}
-              {!isMinimized && (
-                <div
-                  ref={containerRef}
-                  className="relative bg-black rounded-lg overflow-hidden shadow-2xl group"
-                  onMouseMove={handleMouseMovePlayer}
-                  onMouseLeave={() => isPlaying && setShowControls(false)}
-                >
-                  <video
-                    ref={videoRef}
-                    src={video.video_url}
-                    className="w-full aspect-video object-contain"
-                    onLoadedMetadata={(e) => setDuration(e.target.duration)}
-                    onTimeUpdate={handleTimeUpdate}
-                    onEnded={() => setIsPlaying(false)}
-                    onClick={togglePlayPause}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                  />
+              {/* ✅ Video Player Principal - SIEMPRE VISIBLE */}
+              <div
+                ref={containerRef}
+                className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group ${
+                  isMinimized ? 'pointer-events-none opacity-50' : ''
+                }`}
+                onMouseMove={handleMouseMovePlayer}
+                onMouseLeave={() => isPlaying && setShowControls(false)}
+              >
+                <video
+                  ref={videoRef}
+                  src={video.video_url}
+                  className="w-full aspect-video object-contain cursor-pointer"
+                  onLoadedMetadata={(e) => setDuration(e.target.duration)}
+                  onTimeUpdate={handleTimeUpdate}
+                  onEnded={() => setIsPlaying(false)}
+                  onClick={!isMinimized ? togglePlayPause : undefined}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                />
 
+                {/* ✅ Overlay cuando está minimizado */}
+                {isMinimized && (
+                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                    <div className="text-center text-white">
+                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Icon name="Pause" className="w-10 h-10" />
+                      </div>
+                      <p className="text-sm">Video minimizado</p>
+                    </div>
+                  </div>
+                )}
+
+                {!isMinimized && (
                   <div
                     className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
                       showControls ? 'opacity-100' : 'opacity-0'
@@ -1103,72 +1117,71 @@ const VideoPlayerPage = () => {
                       </div>
 
                       <div className="flex items-center justify-between text-white">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 md:gap-4">
                           <button
                             onClick={togglePlayPause}
-                            className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                           >
-                            <Icon name={isPlaying ? 'Pause' : 'Play'} size={20} />
+                            <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} />
                           </button>
 
                           <div className="flex items-center gap-2 group/volume">
                             <button
                               onClick={toggleMute}
-                              className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                              className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                             >
                               <Icon
                                 name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
-                                size={20}
+                                size={isMobile ? 18 : 20}
                               />
                             </button>
-                            <input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={volume}
-                              onChange={handleVolumeChange}
-                              className="w-0 group-hover/volume:w-20 transition-all"
-                            />
+                            {!isMobile && (
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={volume}
+                                onChange={handleVolumeChange}
+                                className="w-0 group-hover/volume:w-20 transition-all"
+                              />
+                            )}
                           </div>
 
-                          <span className="text-sm font-medium">
+                          <span className="text-xs md:text-sm font-medium">
                             {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 md:gap-2">
                           <button
-                            onClick={() => {
-                              console.log('🔽 Click en botón minimizar');
-                              handleMinimize();
-                            }}
-                            className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                            onClick={handleMinimize}
+                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                             title="Minimizar"
                           >
-                            <Icon name="Minimize2" size={20} />
+                            <Icon name="Minimize2" size={isMobile ? 18 : 20} />
                           </button>
 
                           <button
                             onClick={toggleFullscreen}
-                            className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                           >
-                            <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={20} />
+                            <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} />
                           </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Información del video */}
               <div className="mt-4 space-y-4">
-                <h1 className="text-xl font-bold text-foreground">
+                <h1 className="text-lg md:text-xl font-bold text-foreground">
                   {video.title}
                 </h1>
 
-                <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <Link to={`/profile/${video.creator?.username || 'unknown'}`}>
                       <img
@@ -1181,7 +1194,7 @@ const VideoPlayerPage = () => {
                       <div className="flex items-center gap-2">
                         <Link
                           to={`/profile/${video.creator?.username || 'unknown'}`}
-                          className="font-semibold text-foreground hover:text-primary"
+                          className="font-semibold text-foreground hover:text-primary text-sm md:text-base"
                         >
                           {video.creator?.name || 'Usuario'}
                         </Link>
@@ -1189,7 +1202,7 @@ const VideoPlayerPage = () => {
                           <Icon name="BadgeCheck" size={16} className="text-blue-500" />
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs md:text-sm text-muted-foreground">
                         {formatNumber(videoCounters.views)} visualizaciones
                       </p>
                     </div>
@@ -1198,52 +1211,52 @@ const VideoPlayerPage = () => {
                         onClick={handleFollow}
                         variant={following ? 'outline' : 'default'}
                         size="sm"
-                        className="ml-4"
+                        className="ml-auto md:ml-4"
                       >
                         {following ? 'Siguiendo' : 'Seguir'}
                       </Button>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2">
                     <div className="flex items-center bg-muted rounded-full overflow-hidden">
                       <button
                         onClick={handleLike}
-                        className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${
+                        className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${
                           liked ? 'text-primary' : ''
                         }`}
                       >
-                        <Icon name="ThumbsUp" size={20} className={liked ? 'fill-current' : ''} />
-                        <span className="font-medium">{formatNumber(videoCounters.likes)}</span>
+                        <Icon name="ThumbsUp" size={18} className={liked ? 'fill-current' : ''} />
+                        <span className="font-medium text-sm">{formatNumber(videoCounters.likes)}</span>
                       </button>
 
                       <button
                         onClick={handleDislike}
-                        className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
+                        className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
                           disliked ? 'text-primary' : ''
                         }`}
                       >
-                        <Icon name="ThumbsDown" size={20} className={disliked ? 'fill-current' : ''} />
-                        <span className="font-medium">{formatNumber(videoCounters.dislikes)}</span>
+                        <Icon name="ThumbsDown" size={18} className={disliked ? 'fill-current' : ''} />
+                        <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span>
                       </button>
                     </div>
 
                     <button
                       onClick={handleShare}
-                      className="flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors"
+                      className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"
                     >
-                      <Icon name="Share2" size={20} />
-                      <span className="font-medium">Compartir</span>
+                      <Icon name="Share2" size={18} />
+                      <span className="font-medium text-sm">Compartir</span>
                     </button>
 
                     <button
                       onClick={handleSave}
-                      className={`flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors ${
+                      className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap ${
                         saved ? 'text-primary' : ''
                       }`}
                     >
-                      <Icon name="Bookmark" size={20} className={saved ? 'fill-current' : ''} />
-                      <span className="font-medium">{saved ? 'Guardado' : 'Guardar'}</span>
+                      <Icon name="Bookmark" size={18} className={saved ? 'fill-current' : ''} />
+                      <span className="font-medium text-sm">{saved ? 'Guardado' : 'Guardar'}</span>
                     </button>
                   </div>
                 </div>
@@ -1265,7 +1278,7 @@ const VideoPlayerPage = () => {
 
                 {/* Sección de comentarios */}
                 <div className="border-t pt-6">
-                  <h3 className="text-lg font-bold mb-4">
+                  <h3 className="text-base md:text-lg font-bold mb-4">
                     {formatNumber(videoCounters.comments)} comentarios
                   </h3>
 
@@ -1275,7 +1288,7 @@ const VideoPlayerPage = () => {
                         <img
                           src={userProfile?.avatar_url || '/default-avatar.png'}
                           alt="Tu avatar"
-                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                          className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
                         />
                         <div className="flex-1">
                           <input
@@ -1283,7 +1296,7 @@ const VideoPlayerPage = () => {
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
                             placeholder={replyingTo ? 'Escribe una respuesta...' : 'Añade un comentario...'}
-                            className="w-full px-0 py-2 bg-transparent border-b border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground"
+                            className="w-full px-0 py-2 bg-transparent border-b border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground text-sm md:text-base"
                           />
                           <div className="flex items-center justify-end gap-2 mt-2">
                             {replyingTo && (
@@ -1309,7 +1322,7 @@ const VideoPlayerPage = () => {
                     </form>
                   ) : (
                     <div className="bg-muted rounded-lg p-4 text-center mb-6">
-                      <p className="text-muted-foreground mb-2">
+                      <p className="text-muted-foreground mb-2 text-sm">
                         Inicia sesión para comentar
                       </p>
                       <Button onClick={() => navigate('/login')} size="sm">
@@ -1324,25 +1337,25 @@ const VideoPlayerPage = () => {
                         <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
                       </div>
                     ) : comments.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
+                      <div className="text-center py-8 text-muted-foreground text-sm">
                         No hay comentarios aún. ¡Sé el primero en comentar!
                       </div>
                     ) : (
                       comments.map((comment) => (
                         <div key={comment.id} className="space-y-3">
-                          <div className="flex gap-3">
+                          <div className="flex gap-2 md:gap-3">
                             <Link to={`/profile/${comment.user?.username || 'unknown'}`}>
                               <img
                                 src={comment.user?.profile_image_url || '/default-avatar.png'}
                                 alt={comment.user?.name || 'Usuario'}
-                                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                                className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
                               />
                             </Link>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <Link
                                   to={`/profile/${comment.user?.username || 'unknown'}`}
-                                  className="font-semibold text-sm hover:text-primary"
+                                  className="font-semibold text-xs md:text-sm hover:text-primary"
                                 >
                                   {comment.user?.name || 'Usuario'}
                                 </Link>
@@ -1353,7 +1366,7 @@ const VideoPlayerPage = () => {
                                   {new Date(comment.created_at).toLocaleDateString('es-ES')}
                                 </span>
                               </div>
-                              <p className="text-sm text-foreground mt-1">
+                              <p className="text-xs md:text-sm text-foreground mt-1">
                                 {comment.content}
                               </p>
                               <div className="flex items-center gap-4 mt-2">
@@ -1378,45 +1391,45 @@ const VideoPlayerPage = () => {
                                   {!showReplies[comment.id] ? (
                                     <button
                                       onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: true }))}
-                                      className="text-sm font-medium text-primary hover:underline flex items-center gap-2"
+                                      className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"
                                     >
-                                      <Icon name="CornerDownRight" size={16} />
+                                      <Icon name="CornerDownRight" size={14} />
                                       Ver {comment.replies.length} respuesta{comment.replies.length !== 1 ? 's' : ''}
                                     </button>
                                   ) : (
                                     <>
                                       <button
                                         onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: false }))}
-                                        className="text-sm font-medium text-primary hover:underline flex items-center gap-2"
+                                        className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"
                                       >
-                                        <Icon name="CornerDownRight" size={16} />
+                                        <Icon name="CornerDownRight" size={14} />
                                         Ocultar respuestas
                                       </button>
                                       {comment.replies.map((reply) => (
-                                        <div key={reply.id} className="flex gap-3 ml-6">
+                                        <div key={reply.id} className="flex gap-2 md:gap-3 ml-4 md:ml-6">
                                           <Link to={`/profile/${reply.user?.username || 'unknown'}`}>
                                             <img
                                               src={reply.user?.profile_image_url || '/default-avatar.png'}
                                               alt={reply.user?.name || 'Usuario'}
-                                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                                              className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover flex-shrink-0"
                                             />
                                           </Link>
-                                          <div className="flex-1">
-                                            <div className="flex items-center gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                               <Link
                                                 to={`/profile/${reply.user?.username || 'unknown'}`}
-                                                className="font-semibold text-sm hover:text-primary"
+                                                className="font-semibold text-xs md:text-sm hover:text-primary"
                                               >
                                                 {reply.user?.name || 'Usuario'}
                                               </Link>
                                               {reply.user?.is_verified && (
-                                                <Icon name="BadgeCheck" size={14} className="text-blue-500" />
+                                                <Icon name="BadgeCheck" size={12} className="text-blue-500" />
                                               )}
                                               <span className="text-xs text-muted-foreground">
                                                 {new Date(reply.created_at).toLocaleDateString('es-ES')}
                                               </span>
                                             </div>
-                                            <p className="text-sm text-foreground mt-1">
+                                            <p className="text-xs md:text-sm text-foreground mt-1">
                                               {reply.content}
                                             </p>
                                             {user?.id === reply.user_id && (
@@ -1464,26 +1477,31 @@ const VideoPlayerPage = () => {
       {/* ✅ MINI-PLAYER ARRASTRABLE CON VIDEO REPRODUCIENDO */}
       {isMinimized && video && (
         <div
-          className="fixed bg-black rounded-lg shadow-2xl border-2 border-primary"
+          className="fixed z-[60] bg-black rounded-lg shadow-2xl border-2 border-primary"
           style={{
             left: `${miniPlayerPosition.x}px`,
             top: `${miniPlayerPosition.y}px`,
-            width: '400px',
+            width: isMobile ? '250px' : '400px',
             cursor: isDragging ? 'grabbing' : 'grab',
-            zIndex: 9999
+            touchAction: 'none'
           }}
           onMouseDown={handleMouseDown}
+          onTouchStart={handleMouseDown}
         >
           {/* Video en mini-player */}
           <div className="relative aspect-video bg-black">
             <video
               ref={miniVideoRef}
               src={video.video_url}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain cursor-pointer"
               onTimeUpdate={handleTimeUpdate}
               onEnded={() => setIsPlaying(false)}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayPause();
+              }}
             />
 
             {/* Controles sobre el video */}
@@ -1493,16 +1511,16 @@ const VideoPlayerPage = () => {
                   e.stopPropagation();
                   togglePlayPause();
                 }}
-                className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
               >
-                <Icon name={isPlaying ? 'Pause' : 'Play'} size={24} className="text-white" />
+                <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 20 : 24} className="text-white" />
               </button>
             </div>
           </div>
 
           {/* Información y controles */}
-          <div className="p-3 bg-black/95 border-t border-primary/30">
-            <div className="flex items-center justify-between gap-3">
+          <div className="p-2 md:p-3 bg-black/95 border-t border-primary/30">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-medium text-white truncate">
                   {video.title}
@@ -1511,36 +1529,36 @@ const VideoPlayerPage = () => {
                   {video.creator?.name || 'Usuario'}
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     togglePlayPause();
                   }}
-                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                  className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title={isPlaying ? 'Pausar' : 'Reproducir'}
                 >
-                  <Icon name={isPlaying ? 'Pause' : 'Play'} size={16} />
+                  <Icon name={isPlaying ? 'Pause' : 'Play'} size={14} />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleMaximize();
                   }}
-                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                  className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Maximizar"
                 >
-                  <Icon name="Maximize2" size={16} />
+                  <Icon name="Maximize2" size={14} />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsMinimized(false);
                   }}
-                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                  className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Cerrar"
                 >
-                  <Icon name="X" size={16} />
+                  <Icon name="X" size={14} />
                 </button>
               </div>
             </div>
@@ -1551,9 +1569,9 @@ const VideoPlayerPage = () => {
       {/* Modal de compartir */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-lg max-w-md w-full p-6">
+          <div className="bg-background rounded-lg max-w-md w-full p-4 md:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">Compartir video</h3>
+              <h3 className="text-base md:text-lg font-bold">Compartir video</h3>
               <button
                 onClick={() => setShowShareModal(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1569,10 +1587,10 @@ const VideoPlayerPage = () => {
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
               >
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
                   <Icon name="Facebook" size={20} className="text-white" />
                 </div>
-                <span className="font-medium">Compartir en Facebook</span>
+                <span className="font-medium text-sm">Compartir en Facebook</span>
               </a>
 
               <a
@@ -1581,10 +1599,10 @@ const VideoPlayerPage = () => {
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
               >
-                <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center">
+                <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center flex-shrink-0">
                   <Icon name="Twitter" size={20} className="text-white" />
                 </div>
-                <span className="font-medium">Compartir en Twitter</span>
+                <span className="font-medium text-sm">Compartir en Twitter</span>
               </a>
 
               <a
@@ -1593,10 +1611,10 @@ const VideoPlayerPage = () => {
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
               >
-                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
+                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
                   <Icon name="MessageCircle" size={20} className="text-white" />
                 </div>
-                <span className="font-medium">Compartir en WhatsApp</span>
+                <span className="font-medium text-sm">Compartir en WhatsApp</span>
               </a>
             </div>
 
@@ -1605,7 +1623,7 @@ const VideoPlayerPage = () => {
                 type="text"
                 value={shareLink}
                 readOnly
-                className="flex-1 px-3 py-2 bg-muted rounded-lg text-sm"
+                className="flex-1 px-3 py-2 bg-muted rounded-lg text-xs md:text-sm"
               />
               <Button onClick={handleCopyLink} size="sm">
                 {copySuccess ? (
