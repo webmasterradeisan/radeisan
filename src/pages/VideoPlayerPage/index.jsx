@@ -84,8 +84,8 @@ const VideoPlayerPage = () => {
   // ✅ ESTADOS PARA MINI-PLAYER - CORREGIDOS
   const [isMinimized, setIsMinimized] = useState(false);
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
-    x: 20, 
-    y: 20 
+    x: window.innerWidth - 420, // Abajo derecha
+    y: window.innerHeight - 300
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
