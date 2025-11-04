@@ -322,7 +322,7 @@ const RelatedVideosSidebar = ({
       const { data: shortsData, error } = await supabase
         .from('videos')
         .select('*')
-        .eq('status', 'published')
+        .eq('is_published', true)
         .eq('orientation', 'vertical')
         .order('views_count', { ascending: false })
         .limit(20);
@@ -342,7 +342,7 @@ const RelatedVideosSidebar = ({
         if (userIds.length > 0) {
           const { data: creatorsData, error: creatorsError } = await supabase
             .from('user_profiles')
-            .select('id, name, username, profile_image_url, is_verified')
+            .select('id, full_name, username, avatar_url, is_verified')
             .in('id', userIds);
           
           if (creatorsError) {
@@ -351,7 +351,13 @@ const RelatedVideosSidebar = ({
             console.log('✅ Creadores de shorts cargados:', creatorsData.length);
             const creatorsMap = {};
             creatorsData.forEach(creator => {
-              creatorsMap[creator.id] = creator;
+              creatorsMap[creator.id] = {
+                id: creator.id,
+                name: creator.full_name,
+                username: creator.username,
+                profile_image_url: creator.avatar_url,
+                is_verified: creator.is_verified
+              };
             });
             
             shortsData.forEach(short => {
