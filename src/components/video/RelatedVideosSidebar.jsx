@@ -2,8 +2,9 @@
 // ============================================================================
 // SIDEBAR DE VIDEOS RELACIONADOS - Estilo YouTube Mejorado
 // ============================================================================
-// ✅ Carrusel de REELS con título y visualizaciones
-// ✅ Navegación a /dashboard para reproducir reels
+// ✅ Carrusel de REELS con scroll de rueda del mouse
+// ✅ Flechas SIEMPRE VISIBLES con diseño moderno
+// ✅ Navegación correcta a /dashboard?videoId=X
 // ✅ Videos relacionados horizontales
 // ✅ Información completa del creador
 // ✅ Filtros inteligentes
@@ -39,6 +40,25 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
     }
   }, [reels]);
 
+  // ✅ SCROLL CON RUEDA DEL MOUSE
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleWheel = (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        container.scrollBy({
+          left: e.deltaY > 0 ? 100 : -100,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, []);
+
   const scroll = (direction) => {
     if (!scrollRef.current) return;
     const scrollAmount = direction === 'left' ? -280 : 280;
@@ -59,13 +79,14 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
 
       {/* Carrusel */}
       <div className="relative group">
-        {/* Botón izquierdo */}
+        {/* ✅ Botón izquierdo - SIEMPRE VISIBLE */}
         {canScrollLeft && (
           <button
             onClick={() => scroll('left')}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-background/95 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center transition-all hover:bg-background hover:scale-110 border border-border"
+            aria-label="Scroll a la izquierda"
           >
-            <Icon name="ChevronLeft" size={20} />
+            <Icon name="ChevronLeft" size={20} className="text-foreground" />
           </button>
         )}
 
@@ -75,10 +96,10 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
           className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {reels.slice(0, 12).map((reel) => (
+          {reels.slice(0, 12).map((reel, index) => (
             <div
               key={reel.id}
-              onClick={() => onReelClick?.(reel)}
+              onClick={() => onReelClick?.(index, reel.id)}
               className="flex-shrink-0 w-[140px] cursor-pointer group/reel"
             >
               {/* Thumbnail */}
@@ -90,7 +111,7 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
                     onError={(e) => {
                       e.target.src = '/default-thumbnail.jpg';
                     }}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover/reel:scale-110"
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -98,8 +119,18 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
                   </div>
                 )}
                 
-                {/* Overlay gradiente sutil (sin el ícono play grande) */}
+                {/* Overlay gradiente */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+
+                {/* Play button en hover */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/reel:opacity-100 transition-opacity duration-200 bg-black/30">
+                  <div className="w-12 h-12 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center border-2 border-white/50">
+                    <Icon name="Play" size={20} color="white" />
+                  </div>
+                </div>
+
+                {/* Borde en hover */}
+                <div className="absolute inset-0 border-2 border-transparent group-hover/reel:border-primary rounded-xl transition-colors duration-200" />
               </div>
 
               {/* Título (máximo 2 líneas) */}
@@ -115,13 +146,14 @@ const ReelsCarousel = ({ reels = [], onReelClick }) => {
           ))}
         </div>
 
-        {/* Botón derecho */}
+        {/* ✅ Botón derecho - SIEMPRE VISIBLE */}
         {canScrollRight && (
           <button
             onClick={() => scroll('right')}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-background/95 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center transition-all hover:bg-background hover:scale-110 border border-border"
+            aria-label="Scroll a la derecha"
           >
-            <Icon name="ChevronRight" size={20} />
+            <Icon name="ChevronRight" size={20} className="text-foreground" />
           </button>
         )}
       </div>
@@ -380,10 +412,15 @@ const RelatedVideosSidebar = ({
     }
   };
 
-  // ✅ NAVEGACIÓN A DASHBOARD CON REEL ID
-  const handleReelClick = (reel) => {
-    console.log('🎬 Navegando a dashboard con reel:', reel.id);
-    navigate(`/dashboard?videoId=${reel.id}`);
+  // ✅ NAVEGACIÓN CORRECTA A DASHBOARD CON REEL ID
+  const handleReelClick = (reelIndex, reelId) => {
+    console.log('🎬 Click en reel del sidebar:');
+    console.log('   📍 Índice:', reelIndex);
+    console.log('   🆔 ID:', reelId);
+    console.log('   🎯 Navegando a: /dashboard?videoId=' + reelId);
+    
+    // Navegar a dashboard con el ID del video
+    navigate(`/dashboard?videoId=${reelId}`);
   };
 
   // Filtros
