@@ -274,18 +274,38 @@ const RelatedVideosSidebar = ({
   const [shorts, setShorts] = useState([]);
   const [loadingShorts, setLoadingShorts] = useState(false);
 
-  // Filtrar videos (excluir el actual y ordenar aleatoriamente por defecto)
+  // Filtrar videos (excluir el actual, solo horizontales y ordenar aleatoriamente)
   useEffect(() => {
-    console.log('📹 Videos recibidos:', videos.length);
+    console.log('📹 Videos recibidos en sidebar:', videos.length);
     console.log('🎯 Video actual ID:', currentVideoId);
+    console.log('📊 Primeros 3 videos:', videos.slice(0, 3));
     
-    let filtered = videos.filter(video => video.id !== currentVideoId);
-    console.log('✅ Videos filtrados (sin actual):', filtered.length);
+    // Filtrar: excluir video actual y solo videos horizontales
+    let filtered = videos.filter(video => {
+      const isNotCurrent = video.id !== currentVideoId;
+      const isHorizontal = !video.orientation || video.orientation === 'horizontal';
+      
+      if (!isNotCurrent) {
+        console.log('❌ Excluido (es el video actual):', video.id);
+      }
+      if (!isHorizontal) {
+        console.log('❌ Excluido (es vertical):', video.id);
+      }
+      
+      return isNotCurrent && isHorizontal;
+    });
+    
+    console.log('✅ Videos después de filtrar:', filtered.length);
     
     // Ordenar aleatoriamente por defecto
     filtered = filtered.sort(() => Math.random() - 0.5);
+    console.log('🎲 Videos ordenados aleatoriamente');
     
     setFilteredVideos(filtered);
+    
+    if (filtered.length === 0) {
+      console.warn('⚠️ NO HAY VIDEOS PARA MOSTRAR');
+    }
   }, [videos, currentVideoId]);
 
   // Cargar Shorts
@@ -378,7 +398,13 @@ const RelatedVideosSidebar = ({
     console.log('🔍 Aplicando filtro:', filterId);
     setSelectedFilter(filterId);
     
-    let filtered = videos.filter(video => video.id !== currentVideoId);
+    // Filtrar: excluir video actual y solo horizontales
+    let filtered = videos.filter(video => {
+      const isNotCurrent = video.id !== currentVideoId;
+      const isHorizontal = !video.orientation || video.orientation === 'horizontal';
+      return isNotCurrent && isHorizontal;
+    });
+    
     console.log('📊 Videos disponibles para filtrar:', filtered.length);
     
     switch (filterId) {
@@ -408,6 +434,7 @@ const RelatedVideosSidebar = ({
 
   // Loading state
   if (loading) {
+    console.log('⏳ Sidebar en loading...');
     return (
       <div className={`space-y-3 ${className}`}>
         {[...Array(5)].map((_, i) => (
@@ -423,6 +450,14 @@ const RelatedVideosSidebar = ({
       </div>
     );
   }
+
+  console.log('🎨 Renderizando sidebar');
+  console.log('📊 Estado actual:', {
+    videosRecibidos: videos.length,
+    videosFiltrados: filteredVideos.length,
+    shortsDisponibles: shorts.length,
+    loadingShorts
+  });
 
   return (
     <div className={className}>
