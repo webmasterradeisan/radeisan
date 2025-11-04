@@ -1,263 +1,318 @@
 // src/pages/VideoPlayerPage/index.jsx
-// ✅ ACTUALIZADO: UX móvil según PDF de YouTube
-// - Player sticky arriba
-// - Videos relacionados en scroll infinito debajo
-// - Mini-player opcional al hacer scroll
+// ============================================================================
+// VIDEO PLAYER PAGE - Estilo YouTube con Sistema de Puntos Completo
+// ============================================================================
+// ✅ Sistema de comentarios completo
+// ✅ Likes y Dislikes
+// ✅ Favoritos/Guardados
+// ✅ Compartir
+// ✅ Control de volumen
+// ✅ Sincronización con puntos gratis y premium
+// ✅ Diseño similar a YouTube
+// ============================================================================
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import Header from '../../components/ui/Header';
-import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
-import VideoPlayer from '../../components/video/VideoPlayer';
-import RelatedVideosSidebar from '../../components/video/RelatedVideosSidebar';
-import Icon from '../../components/AppIcon';
-import Button from '../../components/ui/Button';
+import { supabase } from 'lib/supabase';
+import { useAuth } from 'contexts/AuthContext';
+import { usePoints } from 'contexts/PointsContext';
+import * as missionsService from 'services/missionsService';
+import Header from 'components/ui/Header';
+import Icon from 'components/AppIcon';
+import Button from 'components/ui/Button';
+import RelatedVideosSidebar from 'components/RelatedVideosSidebar';
+import useIsMobile from 'hooks/useIsMobile';
 
+// ===============================
+// COMPONENTE PRINCIPAL
+// ===============================
 const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
-  // Estados principales
+  const { addPoints, points } = usePoints();
+  const isMobile = useIsMobile();
+
+  // Estados del video
   const [video, setVideo] = useState(null);
-  const [relatedVideos, setRelatedVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+  const [relatedVideos, setRelatedVideos] = useState([]);
+
   // Estados de interacción
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [showFullDescription, setShowFullDescription] = useState(false);
-  
-  // Estados de stats locales
-  const [localLikes, setLocalLikes] = useState(0);
-  const [localViews, setLocalViews] = useState(0);
-  
-  // Tracking de visualización para puntos
-  const [watchTime, setWatchTime] = useState(0);
-  const [pointsEarned, setPointsEarned] = useState(0);
+  const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [following, setFollowing] = useState(false);
+  const [videoCounters, setVideoCounters] = useState({
+    likes: 0,
+    dislikes: 0,
+    views: 0,
+    comments: 0
+  });
 
-  // ✅ NUEVOS ESTADOS PARA UX MÓVIL
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
-  const [showMiniPlayer, setShowMiniPlayer] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
-  const playerRef = useRef(null);
-  const miniPlayerThreshold = 400; // Píxeles de scroll para activar mini-player
+  // Estados de video player
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
 
-  // ===============================
-  // RESPONSIVE DETECTION
-  // ===============================
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
+  // Estados de comentarios
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [showReplies, setShowReplies] = useState({});
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  // Estados de tracking de puntos
+  const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
+  const [hasEarnedLikePoints, setHasEarnedLikePoints] = useState(false);
+  const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
+  const [hasEarnedSharePoints, setHasEarnedSharePoints] = useState(false);
+  const [viewWatchTime, setViewWatchTime] = useState(0);
 
-  // ===============================
-  // SCROLL DETECTION PARA MINI-PLAYER (OPCIONAL)
-  // ===============================
-  useEffect(() => {
-    if (!isMobile) return;
+  // Estados de modal compartir
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareLink, setShareLink] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
 
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      setScrollY(currentScrollY);
+  // Estados de notificaciones
+  const [pointsNotification, setPointsNotification] = useState({
+    show: false,
+    message: ''
+  });
 
-      // Activar mini-player cuando scrolleas más allá del player
-      if (currentScrollY > miniPlayerThreshold && !showMiniPlayer) {
-        setShowMiniPlayer(true);
-      } else if (currentScrollY <= miniPlayerThreshold && showMiniPlayer) {
-        setShowMiniPlayer(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [isMobile, showMiniPlayer]);
+  // Refs
+  const videoRef = useRef(null);
+  const containerRef = useRef(null);
+  const controlsTimeoutRef = useRef(null);
+  const viewTrackingRef = useRef(null);
 
   // ===============================
-  // FETCH VIDEO DATA - SIN JOIN
+  // FUNCIONES DE CARGA DE DATOS
   // ===============================
 
-  const fetchVideo = useCallback(async () => {
+  // Cargar datos del video
+  const fetchVideoData = useCallback(async () => {
     if (!videoId) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      console.log('🎬 Cargando video:', videoId);
-
-      // PASO 1: Obtener datos del video sin JOIN
+      // Obtener datos del video con información del creador
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
-        .select('*')
+        .select(`
+          *,
+          creator:user_profiles!videos_user_id_fkey (
+            id,
+            name,
+            username,
+            profile_image_url,
+            is_verified
+          )
+        `)
         .eq('id', videoId)
-        .eq('is_published', true)
         .single();
 
       if (videoError) throw videoError;
 
-      if (!videoData) {
-        setError('Video no encontrado');
-        return;
+      setVideo(videoData);
+
+      // Incrementar contador de vistas
+      await supabase.rpc('increment_video_views', { video_id: videoId });
+
+      // Obtener contadores actualizados
+      const { data: countersData } = await supabase
+        .from('videos')
+        .select('likes_count, dislikes_count, views_count, comments_count')
+        .eq('id', videoId)
+        .single();
+
+      if (countersData) {
+        setVideoCounters({
+          likes: countersData.likes_count || 0,
+          dislikes: countersData.dislikes_count || 0,
+          views: countersData.views_count || 0,
+          comments: countersData.comments_count || 0
+        });
       }
 
-      console.log('✅ Video obtenido:', videoData);
+      // Si hay usuario logueado, verificar estados de interacción
+      if (user) {
+        // Verificar like
+        const { data: likeData } = await supabase
+          .from('video_likes')
+          .select('*')
+          .eq('video_id', videoId)
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-      // PASO 2: Obtener perfil del creador
-      let creatorProfile = null;
-      if (videoData.user_id) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, username, avatar_url, is_verified')
-          .eq('id', videoData.user_id)
-          .single();
+        setLiked(!!likeData);
 
-        if (profileError) {
-          console.error('⚠️ Error obteniendo perfil:', profileError);
-        } else {
-          creatorProfile = profileData;
-          console.log('✅ Perfil del creador obtenido:', creatorProfile);
+        // Verificar dislike
+        const { data: dislikeData } = await supabase
+          .from('video_dislikes')
+          .select('*')
+          .eq('video_id', videoId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        setDisliked(!!dislikeData);
+
+        // Verificar guardado
+        const { data: savedData } = await supabase
+          .from('saved_videos')
+          .select('*')
+          .eq('video_id', videoId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        setSaved(!!savedData);
+
+        // Verificar si sigue al creador
+        const { data: followData } = await supabase
+          .from('user_follows')
+          .select('*')
+          .eq('follower_id', user.id)
+          .eq('following_id', videoData.creator.id)
+          .maybeSingle();
+
+        setFollowing(!!followData);
+
+        // Verificar puntos ya ganados
+        const { data: pointsData } = await supabase
+          .from('user_video_points')
+          .select('action_type')
+          .eq('user_id', user.id)
+          .eq('video_id', videoId);
+
+        if (pointsData) {
+          const actions = pointsData.map(p => p.action_type);
+          setHasEarnedLikePoints(actions.includes('like'));
+          setHasEarnedCommentPoints(actions.includes('comment'));
+          setHasEarnedSharePoints(actions.includes('share'));
+          setHasEarnedViewPoints(actions.includes('view'));
         }
       }
 
-      // PASO 3: Transformar datos
-      const transformedVideo = {
-        id: videoData.id,
-        title: videoData.title || 'Video sin título',
-        description: videoData.description || 'Sin descripción',
-        videoUrl: videoData.video_url,
-        thumbnail: videoData.thumbnail_url,
-        duration: videoData.duration_seconds || 0,
-        views: videoData.views_count || 0,
-        likes: videoData.likes_count || 0,
-        comments: videoData.comments_count || 0,
-        category: videoData.category || 'general',
-        tags: videoData.tags || [],
-        createdAt: videoData.created_at,
-        creator: {
-          id: creatorProfile?.id || videoData.user_id,
-          name: creatorProfile?.full_name || 'Usuario Anónimo',
-          username: creatorProfile?.username || 'usuario',
-          avatar: creatorProfile?.avatar_url || null,
-          isVerified: creatorProfile?.is_verified || false
-        }
-      };
-
-      console.log('✅ Video transformado:', transformedVideo);
-
-      setVideo(transformedVideo);
-      setLocalLikes(transformedVideo.likes);
-      setLocalViews(transformedVideo.views);
-
-      // Incrementar view count
-      await incrementViewCount(videoId);
-
-      // Fetch videos relacionados
-      fetchRelatedVideos(transformedVideo.category, videoId);
+      // Cargar videos relacionados
+      loadRelatedVideos(videoData.category_id);
 
     } catch (err) {
-      console.error('❌ Error fetching video:', err);
-      setError(err.message || 'Error al cargar el video');
+      console.error('Error al cargar video:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }, [videoId, user]);
+
+  // Cargar videos relacionados
+  const loadRelatedVideos = async (categoryId) => {
+    try {
+      const { data, error } = await supabase
+        .from('videos')
+        .select(`
+          *,
+          creator:user_profiles!videos_user_id_fkey (
+            id,
+            name,
+            username,
+            profile_image_url,
+            is_verified
+          )
+        `)
+        .eq('category_id', categoryId)
+        .neq('id', videoId)
+        .eq('status', 'published')
+        .order('views_count', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setRelatedVideos(data || []);
+    } catch (err) {
+      console.error('Error al cargar videos relacionados:', err);
+    }
+  };
+
+  // Cargar comentarios
+  const loadComments = useCallback(async () => {
+    if (!videoId) return;
+
+    try {
+      setLoadingComments(true);
+
+      const { data, error } = await supabase
+        .from('video_comments')
+        .select(`
+          *,
+          user:user_profiles!video_comments_user_id_fkey (
+            id,
+            name,
+            username,
+            profile_image_url,
+            is_verified
+          ),
+          replies:video_comments!parent_comment_id (
+            *,
+            user:user_profiles!video_comments_user_id_fkey (
+              id,
+              name,
+              username,
+              profile_image_url,
+              is_verified
+            )
+          )
+        `)
+        .eq('video_id', videoId)
+        .is('parent_comment_id', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setComments(data || []);
+    } catch (err) {
+      console.error('Error al cargar comentarios:', err);
+    } finally {
+      setLoadingComments(false);
     }
   }, [videoId]);
 
   // ===============================
-  // FETCH RELATED VIDEOS - SIN JOIN
+  // FUNCIONES DE INTERACCIÓN
   // ===============================
 
-  const fetchRelatedVideos = async (category, currentVideoId) => {
+  // Mostrar notificación de puntos
+  const showPointsNotification = (message) => {
+    setPointsNotification({ show: true, message });
+    setTimeout(() => {
+      setPointsNotification({ show: false, message: '' });
+    }, 3000);
+  };
+
+  // Registrar puntos ganados
+  const trackPointsEarned = async (actionType, pointsAmount) => {
+    if (!user) return;
+
     try {
-      console.log('🔗 Cargando videos relacionados...');
-
-      // PASO 1: Obtener videos relacionados
-      const { data: videosData, error: videosError } = await supabase
-        .from('videos')
-        .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id')
-        .eq('is_published', true)
-        .neq('id', currentVideoId)
-        .eq('category', category)
-        .order('views_count', { ascending: false })
-        .limit(20); // Más videos para scroll infinito
-
-      if (videosError) throw videosError;
-
-      console.log('✅ Videos relacionados obtenidos:', videosData?.length || 0);
-
-      // PASO 2: Obtener perfiles de los creadores
-      const userIds = [...new Set(videosData?.map(v => v.user_id).filter(Boolean))];
-      
-      let userProfilesMap = {};
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, username, avatar_url')
-          .in('id', userIds);
-
-        if (profilesError) {
-          console.error('⚠️ Error obteniendo perfiles relacionados:', profilesError);
-        } else {
-          console.log('✅ Perfiles relacionados obtenidos:', profiles?.length || 0);
-          userProfilesMap = (profiles || []).reduce((acc, profile) => {
-            acc[profile.id] = profile;
-            return acc;
-          }, {});
-        }
-      }
-
-      // PASO 3: Transformar datos
-      const transformed = (videosData || []).map(v => ({
-        id: v.id,
-        title: v.title,
-        thumbnail: v.thumbnail_url,
-        duration: v.duration_seconds,
-        views: v.views_count,
-        likes: v.likes_count,
-        category: v.category,
-        timeAgo: v.created_at,
-        creator: {
-          id: userProfilesMap[v.user_id]?.id || v.user_id,
-          name: userProfilesMap[v.user_id]?.full_name || 'Usuario',
-          username: userProfilesMap[v.user_id]?.username || 'usuario',
-          avatar: userProfilesMap[v.user_id]?.avatar_url
-        }
-      }));
-
-      console.log('✅ Videos relacionados transformados:', transformed.length);
-      setRelatedVideos(transformed);
-
+      await supabase
+        .from('user_video_points')
+        .insert({
+          user_id: user.id,
+          video_id: videoId,
+          action_type: actionType,
+          points_earned: pointsAmount
+        });
     } catch (err) {
-      console.error('❌ Error fetching related videos:', err);
+      console.error('Error al registrar puntos:', err);
     }
   };
 
-  // ===============================
-  // INCREMENT VIEW COUNT
-  // ===============================
-
-  const incrementViewCount = async (id) => {
-    try {
-      await supabase.rpc('increment_video_views', { video_id: id });
-      setLocalViews(prev => prev + 1);
-    } catch (err) {
-      console.error('Error incrementing views:', err);
-    }
-  };
-
-  // ===============================
-  // INTERACCIONES - LIKE
-  // ===============================
-
+  // Handle Like
   const handleLike = async () => {
     if (!user) {
       navigate('/login');
@@ -265,36 +320,131 @@ const VideoPlayerPage = () => {
     }
 
     try {
-      if (isLiked) {
+      if (liked) {
+        // Quitar like
+        setLiked(false);
+        setVideoCounters(prev => ({
+          ...prev,
+          likes: Math.max(0, prev.likes - 1)
+        }));
+
         await supabase
           .from('video_likes')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-        
-        setLocalLikes(prev => prev - 1);
-        setIsLiked(false);
+
+        await supabase.rpc('decrement_video_likes', { video_id: videoId });
+
       } else {
+        // Dar like
+        setLiked(true);
+        setVideoCounters(prev => ({
+          ...prev,
+          likes: prev.likes + 1
+        }));
+
+        // Si tiene dislike, quitarlo
+        if (disliked) {
+          setDisliked(false);
+          setVideoCounters(prev => ({
+            ...prev,
+            dislikes: Math.max(0, prev.dislikes - 1)
+          }));
+
+          await supabase
+            .from('video_dislikes')
+            .delete()
+            .eq('video_id', videoId)
+            .eq('user_id', user.id);
+
+          await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
+        }
+
         await supabase
           .from('video_likes')
-          .insert({
-            video_id: videoId,
-            user_id: user.id
-          });
-        
-        setLocalLikes(prev => prev + 1);
-        setIsLiked(true);
-        addPoints(2, 'like_video');
+          .insert({ video_id: videoId, user_id: user.id });
+
+        await supabase.rpc('increment_video_likes', { video_id: videoId });
+
+        // Otorgar puntos si es la primera vez
+        if (!hasEarnedLikePoints) {
+          const pointsAmount = 5;
+          await addPoints(pointsAmount, 'Like en video', 'free');
+          await trackPointsEarned('like', pointsAmount);
+          setHasEarnedLikePoints(true);
+          showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
+
+          // Tracking de misión
+          missionsService.trackAction('like');
+        }
       }
     } catch (err) {
-      console.error('Error handling like:', err);
+      console.error('Error en like:', err);
     }
   };
 
-  // ===============================
-  // INTERACCIONES - SAVE
-  // ===============================
+  // Handle Dislike
+  const handleDislike = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
 
+    try {
+      if (disliked) {
+        // Quitar dislike
+        setDisliked(false);
+        setVideoCounters(prev => ({
+          ...prev,
+          dislikes: Math.max(0, prev.dislikes - 1)
+        }));
+
+        await supabase
+          .from('video_dislikes')
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
+
+        await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
+
+      } else {
+        // Dar dislike
+        setDisliked(true);
+        setVideoCounters(prev => ({
+          ...prev,
+          dislikes: prev.dislikes + 1
+        }));
+
+        // Si tiene like, quitarlo
+        if (liked) {
+          setLiked(false);
+          setVideoCounters(prev => ({
+            ...prev,
+            likes: Math.max(0, prev.likes - 1)
+          }));
+
+          await supabase
+            .from('video_likes')
+            .delete()
+            .eq('video_id', videoId)
+            .eq('user_id', user.id);
+
+          await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        }
+
+        await supabase
+          .from('video_dislikes')
+          .insert({ video_id: videoId, user_id: user.id });
+
+        await supabase.rpc('increment_video_dislikes', { video_id: videoId });
+      }
+    } catch (err) {
+      console.error('Error en dislike:', err);
+    }
+  };
+
+  // Handle Guardar/Favorito
   const handleSave = async () => {
     if (!user) {
       navigate('/login');
@@ -302,710 +452,905 @@ const VideoPlayerPage = () => {
     }
 
     try {
-      if (isSaved) {
+      if (saved) {
+        // Quitar de guardados
+        setSaved(false);
+
         await supabase
           .from('saved_videos')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-        
-        setIsSaved(false);
+
       } else {
+        // Guardar
+        setSaved(true);
+
         await supabase
           .from('saved_videos')
-          .insert({
-            video_id: videoId,
-            user_id: user.id
-          });
-        
-        setIsSaved(true);
-        addPoints(1, 'save_video');
+          .insert({ video_id: videoId, user_id: user.id });
+
+        // Tracking de misión
+        missionsService.trackAction('save');
+
+        showPointsNotification('Video guardado en favoritos');
       }
     } catch (err) {
-      console.error('Error handling save:', err);
+      console.error('Error al guardar:', err);
     }
   };
 
-  // ===============================
-  // INTERACCIONES - SHARE
-  // ===============================
-
+  // Handle Compartir
   const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/video/${videoId}`;
-    
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: video.title,
-          text: `Mira este video: ${video.title}`,
-          url: shareUrl
-        });
-        addPoints(3, 'share_video');
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error('Error sharing:', err);
-        }
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        alert('Link copiado al portapapeles');
-        addPoints(3, 'share_video');
-      } catch (err) {
-        console.error('Error copying to clipboard:', err);
-      }
+    const url = `${window.location.origin}/video/${videoId}`;
+    setShareLink(url);
+    setShowShareModal(true);
+
+    // Otorgar puntos si es la primera vez
+    if (user && !hasEarnedSharePoints) {
+      const pointsAmount = 3;
+      await addPoints(pointsAmount, 'Compartir video', 'free');
+      await trackPointsEarned('share', pointsAmount);
+      setHasEarnedSharePoints(true);
+      showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
+
+      // Tracking de misión
+      missionsService.trackAction('share');
     }
   };
 
-  // ===============================
-  // INTERACCIONES - FOLLOW
-  // ===============================
+  // Copiar link
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(shareLink);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
 
+  // Handle Seguir
   const handleFollow = async () => {
     if (!user) {
       navigate('/login');
       return;
     }
 
-    if (video.creator.id === user.id) {
-      return;
-    }
-
     try {
-      if (isFollowing) {
+      if (following) {
+        // Dejar de seguir
+        setFollowing(false);
+
         await supabase
           .from('user_follows')
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', video.creator.id);
-        
-        setIsFollowing(false);
+
       } else {
+        // Seguir
+        setFollowing(true);
+
         await supabase
           .from('user_follows')
           .insert({
             follower_id: user.id,
             following_id: video.creator.id
           });
-        
-        setIsFollowing(true);
-        addPoints(10, 'follow_user');
+
+        // Tracking de misión
+        missionsService.trackAction('follow');
+
+        showPointsNotification('Ahora sigues a este creador');
       }
     } catch (err) {
-      console.error('Error handling follow:', err);
+      console.error('Error al seguir:', err);
     }
   };
 
   // ===============================
-  // SISTEMA DE PUNTOS
+  // FUNCIONES DE COMENTARIOS
   // ===============================
 
-  const addPoints = async (points, action) => {
+  // Publicar comentario
+  const handleSubmitComment = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (!newComment.trim()) return;
+
+    try {
+      const commentData = {
+        video_id: videoId,
+        user_id: user.id,
+        content: newComment.trim(),
+        parent_comment_id: replyingTo
+      };
+
+      const { data, error } = await supabase
+        .from('video_comments')
+        .insert(commentData)
+        .select(`
+          *,
+          user:user_profiles!video_comments_user_id_fkey (
+            id,
+            name,
+            username,
+            profile_image_url,
+            is_verified
+          )
+        `)
+        .single();
+
+      if (error) throw error;
+
+      // Actualizar contador de comentarios
+      await supabase.rpc('increment_video_comments', { video_id: videoId });
+
+      setVideoCounters(prev => ({
+        ...prev,
+        comments: prev.comments + 1
+      }));
+
+      // Otorgar puntos si es la primera vez
+      if (!hasEarnedCommentPoints) {
+        const pointsAmount = 10;
+        await addPoints(pointsAmount, 'Comentar video', 'free');
+        await trackPointsEarned('comment', pointsAmount);
+        setHasEarnedCommentPoints(true);
+        showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
+
+        // Tracking de misión
+        missionsService.trackAction('comment');
+      }
+
+      // Actualizar lista de comentarios
+      if (replyingTo) {
+        // Es una respuesta
+        setComments(prev => prev.map(comment => {
+          if (comment.id === replyingTo) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), data]
+            };
+          }
+          return comment;
+        }));
+      } else {
+        // Es un comentario nuevo
+        setComments(prev => [data, ...prev]);
+      }
+
+      setNewComment('');
+      setReplyingTo(null);
+
+    } catch (err) {
+      console.error('Error al publicar comentario:', err);
+    }
+  };
+
+  // Eliminar comentario
+  const handleDeleteComment = async (commentId) => {
     if (!user) return;
 
     try {
-      setPointsEarned(prev => prev + points);
-      console.log(`+${points} puntos por ${action}`);
+      await supabase
+        .from('video_comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('user_id', user.id);
+
+      // Actualizar contador
+      await supabase.rpc('decrement_video_comments', { video_id: videoId });
+
+      setVideoCounters(prev => ({
+        ...prev,
+        comments: Math.max(0, prev.comments - 1)
+      }));
+
+      // Actualizar lista
+      setComments(prev => prev.filter(c => c.id !== commentId));
+
     } catch (err) {
-      console.error('Error adding points:', err);
+      console.error('Error al eliminar comentario:', err);
     }
   };
 
-  const handleTimeUpdate = useCallback((currentTime) => {
-    setWatchTime(currentTime);
-    
-    if (currentTime >= video?.duration * 0.25 && watchTime < video?.duration * 0.25) {
-      addPoints(5, 'watch_25_percent');
-    }
-    if (currentTime >= video?.duration * 0.50 && watchTime < video?.duration * 0.50) {
-      addPoints(10, 'watch_50_percent');
-    }
-    if (currentTime >= video?.duration * 0.75 && watchTime < video?.duration * 0.75) {
-      addPoints(15, 'watch_75_percent');
-    }
-  }, [video?.duration, watchTime]);
-
-  const handleVideoEnded = useCallback(() => {
-    addPoints(20, 'watch_complete');
-  }, []);
-
   // ===============================
-  // EFFECTS
+  // FUNCIONES DEL VIDEO PLAYER
   // ===============================
 
+  // Play/Pause
+  const togglePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  // Control de volumen
+  const handleVolumeChange = (e) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+    }
+    setIsMuted(newVolume === 0);
+  };
+
+  // Toggle Mute
+  const toggleMute = () => {
+    if (videoRef.current) {
+      const newMuted = !isMuted;
+      videoRef.current.muted = newMuted;
+      setIsMuted(newMuted);
+      if (newMuted) {
+        setVolume(0);
+      } else {
+        setVolume(videoRef.current.volume);
+      }
+    }
+  };
+
+  // Actualizar progreso
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
+      
+      // Tracking de tiempo de visualización para puntos
+      const currentTime = videoRef.current.currentTime;
+      setViewWatchTime(currentTime);
+
+      // Otorgar puntos por ver (mínimo 30 segundos)
+      if (currentTime >= 30 && !hasEarnedViewPoints && user) {
+        const pointsAmount = 2;
+        addPoints(pointsAmount, 'Ver video', 'free');
+        trackPointsEarned('view', pointsAmount);
+        setHasEarnedViewPoints(true);
+        showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
+
+        // Tracking de misión
+        missionsService.trackAction('watch');
+      }
+    }
+  };
+
+  // Saltar a posición
+  const handleSeek = (e) => {
+    if (videoRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      videoRef.current.currentTime = pos * videoRef.current.duration;
+    }
+  };
+
+  // Toggle Fullscreen
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  // Mostrar/ocultar controles
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
+      }
+    }, 3000);
+  };
+
+  // ===============================
+  // EFECTOS
+  // ===============================
+
+  // Cargar datos iniciales
   useEffect(() => {
-    fetchVideo();
-  }, [fetchVideo]);
+    fetchVideoData();
+  }, [fetchVideoData]);
 
+  // Cargar comentarios
   useEffect(() => {
-    if (!user || !videoId) return;
+    if (videoId) {
+      loadComments();
+    }
+  }, [videoId, loadComments]);
 
-    const checkInteractions = async () => {
-      try {
-        const { data: likeData } = await supabase
-          .from('video_likes')
-          .select('id')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        setIsLiked(!!likeData);
-
-        const { data: savedData } = await supabase
-          .from('saved_videos')
-          .select('id')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        setIsSaved(!!savedData);
-
-        if (video?.creator?.id) {
-          const { data: followData } = await supabase
-            .from('user_follows')
-            .select('id')
-            .eq('follower_id', user.id)
-            .eq('following_id', video.creator.id)
-            .maybeSingle();
-          
-          setIsFollowing(!!followData);
-        }
-      } catch (err) {
-        console.error('Error checking interactions:', err);
+  // Limpiar timeout de controles
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
       }
     };
+  }, []);
 
-    checkInteractions();
-  }, [user, videoId, video?.creator?.id]);
+  // Formatear duración
+  const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-  // ===============================
-  // FORMATEO DE DATOS
-  // ===============================
-
+  // Formatear número
   const formatNumber = (num) => {
     if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    } else if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
+      return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
     }
     return num?.toString() || '0';
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('es-ES', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
   // ===============================
-  // LOADING STATE
+  // RENDER
   // ===============================
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <>
         <Header />
-        <PrimaryNavigation />
-        <main className="pt-32 pb-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-muted-foreground">Cargando video...</p>
-              </div>
+        <div className="min-h-screen bg-background pt-16">
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="animate-pulse space-y-4">
+              <div className="aspect-video bg-muted rounded-lg"></div>
+              <div className="h-8 bg-muted rounded w-3/4"></div>
+              <div className="h-4 bg-muted rounded w-1/2"></div>
             </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </>
     );
   }
-
-  // ===============================
-  // ERROR STATE
-  // ===============================
 
   if (error || !video) {
     return (
-      <div className="min-h-screen bg-background">
+      <>
         <Header />
-        <PrimaryNavigation />
-        <main className="pt-32 pb-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mb-6">
-                <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-3">
-                {error || 'Video no encontrado'}
-              </h2>
-              <p className="text-muted-foreground mb-6 text-center max-w-md">
-                El video que buscas no existe o ha sido eliminado.
-              </p>
-              <Button onClick={() => navigate('/dashboard')}>
-                <Icon name="Home" size={16} className="mr-2" />
-                Volver al inicio
-              </Button>
-            </div>
+        <div className="min-h-screen bg-background pt-16">
+          <div className="max-w-7xl mx-auto px-4 py-8 text-center">
+            <Icon name="AlertCircle" className="w-16 h-16 text-destructive mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Video no encontrado</h2>
+            <p className="text-muted-foreground mb-4">
+              El video que buscas no existe o fue eliminado.
+            </p>
+            <Button onClick={() => navigate('/')}>
+              Volver al inicio
+            </Button>
           </div>
-        </main>
-      </div>
+        </div>
+      </>
     );
   }
-
-  // ===============================
-  // ✅ RENDER PRINCIPAL - MOBILE vs DESKTOP
-  // ===============================
 
   return (
     <>
       <Helmet>
-        <title>{video.title} | RADEISAN</title>
+        <title>{video.title} - Radeisan</title>
         <meta name="description" content={video.description} />
-        <meta property="og:title" content={video.title} />
-        <meta property="og:description" content={video.description} />
-        <meta property="og:image" content={video.thumbnail} />
-        <meta property="og:type" content="video.other" />
       </Helmet>
 
-      <div className="min-h-screen bg-background">
-        <Header />
-        <PrimaryNavigation />
-        
-        <main className={isMobile ? 'pt-16' : 'pt-32 pb-16'}>
-          {/* ===============================
-              LAYOUT MÓVIL (YouTube Style)
-              =============================== */}
-          {isMobile ? (
-            <div className="flex flex-col">
-              
-              {/* VIDEO PLAYER - Sticky en móvil */}
-              <div 
-                ref={playerRef}
-                className="sticky top-16 z-30 bg-black"
-              >
-                <VideoPlayer
-                  videoUrl={video.videoUrl}
-                  thumbnailUrl={video.thumbnail}
-                  autoPlay={true}
-                  onTimeUpdate={handleTimeUpdate}
-                  onEnded={handleVideoEnded}
-                  className="w-full aspect-video"
-                />
-              </div>
+      <Header />
 
-              {/* CONTENIDO SCROLLABLE */}
-              <div className="bg-background">
-                
-                {/* Título y Stats */}
-                <div className="px-4 pt-4 pb-3 border-b border-border">
-                  <h1 className="text-lg font-bold text-foreground mb-2">
-                    {video.title}
-                  </h1>
-                  
-                  <div className="flex items-center text-sm text-muted-foreground space-x-2">
-                    <div className="flex items-center gap-1">
-                      <Icon name="Eye" size={14} />
-                      <span>{formatNumber(localViews)} vistas</span>
+      {/* Notificación de puntos */}
+      {pointsNotification.show && (
+        <div className="fixed top-20 right-4 z-50 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg animate-in slide-in-from-top">
+          {pointsNotification.message}
+        </div>
+      )}
+
+      <div className="min-h-screen bg-background pt-16">
+        <div className="max-w-[1800px] mx-auto px-4 py-4">
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Columna principal - Video y detalles */}
+            <div className="flex-1">
+              {/* Video Player */}
+              <div
+                ref={containerRef}
+                className="relative bg-black rounded-lg overflow-hidden shadow-2xl group"
+                onMouseMove={handleMouseMove}
+                onMouseLeave={() => isPlaying && setShowControls(false)}
+              >
+                <video
+                  ref={videoRef}
+                  src={video.video_url}
+                  className="w-full aspect-video object-contain"
+                  onLoadedMetadata={(e) => setDuration(e.target.duration)}
+                  onTimeUpdate={handleTimeUpdate}
+                  onEnded={() => setIsPlaying(false)}
+                  onClick={togglePlayPause}
+                />
+
+                {/* Overlay de controles */}
+                <div
+                  className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 ${
+                    showControls ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  {/* Botón play central */}
+                  {!isPlaying && (
+                    <button
+                      onClick={togglePlayPause}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+                        <Icon name="Play" className="w-10 h-10 text-white ml-1" />
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Controles inferiores */}
+                  <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
+                    {/* Barra de progreso */}
+                    <div
+                      className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
+                      onClick={handleSeek}
+                    >
+                      <div
+                        className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all"
+                        style={{ width: `${progress}%` }}
+                      >
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div>
+                      </div>
                     </div>
-                    <span>•</span>
-                    <span>{formatDate(video.createdAt)}</span>
+
+                    {/* Controles */}
+                    <div className="flex items-center justify-between text-white">
+                      <div className="flex items-center gap-4">
+                        {/* Play/Pause */}
+                        <button
+                          onClick={togglePlayPause}
+                          className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                        >
+                          <Icon name={isPlaying ? 'Pause' : 'Play'} size={20} />
+                        </button>
+
+                        {/* Volumen */}
+                        <div className="flex items-center gap-2 group/volume">
+                          <button
+                            onClick={toggleMute}
+                            className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                          >
+                            <Icon
+                              name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
+                              size={20}
+                            />
+                          </button>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={volume}
+                            onChange={handleVolumeChange}
+                            className="w-0 group-hover/volume:w-20 transition-all"
+                          />
+                        </div>
+
+                        {/* Tiempo */}
+                        <span className="text-sm font-medium">
+                          {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Fullscreen */}
+                        <button
+                          onClick={toggleFullscreen}
+                          className="hover:bg-white/20 p-2 rounded-full transition-colors"
+                        >
+                          <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={20} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Creator Info + Botones de Acción */}
-                <div className="px-4 py-3 border-b border-border">
-                  <div className="flex items-center justify-between mb-3">
-                    <Link 
-                      to={`/profile/${video.creator.id}`}
-                      className="flex items-center gap-3 flex-1 min-w-0"
-                    >
-                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-muted">
-                        {video.creator.avatar ? (
-                          <img 
-                            src={video.creator.avatar} 
-                            alt={video.creator.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold text-lg">
-                            {video.creator.name.charAt(0).toUpperCase()}
-                          </div>
+              {/* Información del video */}
+              <div className="mt-4 space-y-4">
+                {/* Título */}
+                <h1 className="text-xl font-bold text-foreground">
+                  {video.title}
+                </h1>
+
+                {/* Botones de interacción */}
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  {/* Info del creador */}
+                  <div className="flex items-center gap-3">
+                    <Link to={`/profile/${video.creator.username}`}>
+                      <img
+                        src={video.creator.profile_image_url || '/default-avatar.png'}
+                        alt={video.creator.name}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    </Link>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/profile/${video.creator.username}`}
+                          className="font-semibold text-foreground hover:text-primary"
+                        >
+                          {video.creator.name}
+                        </Link>
+                        {video.creator.is_verified && (
+                          <Icon name="BadgeCheck" size={16} className="text-blue-500" />
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1">
-                          <h3 className="font-semibold text-foreground truncate text-sm">
-                            {video.creator.name}
-                          </h3>
-                          {video.creator.isVerified && (
-                            <Icon name="BadgeCheck" size={14} color="var(--color-primary)" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          @{video.creator.username}
-                        </p>
-                      </div>
-                    </Link>
-
+                      <p className="text-sm text-muted-foreground">
+                        {formatNumber(videoCounters.views)} visualizaciones
+                      </p>
+                    </div>
                     {user?.id !== video.creator.id && (
                       <Button
-                        variant={isFollowing ? 'outline' : 'default'}
-                        size="sm"
                         onClick={handleFollow}
-                        className="flex-shrink-0 ml-2"
+                        variant={following ? 'outline' : 'default'}
+                        size="sm"
+                        className="ml-4"
                       >
-                        {isFollowing ? 'Siguiendo' : 'Seguir'}
+                        {following ? 'Siguiendo' : 'Seguir'}
                       </Button>
                     )}
                   </div>
 
-                  {/* Botones de Acción - Horizontales */}
+                  {/* Botones de acción */}
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant={isLiked ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={handleLike}
-                      className="flex-1 gap-2"
-                    >
-                      <Icon name="Heart" size={16} className={isLiked ? 'fill-current' : ''} />
-                      <span>{formatNumber(localLikes)}</span>
-                    </Button>
+                    {/* Like/Dislike */}
+                    <div className="flex items-center bg-muted rounded-full overflow-hidden">
+                      <button
+                        onClick={handleLike}
+                        className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
+                          liked ? 'text-primary' : ''
+                        }`}
+                      >
+                        <Icon name="ThumbsUp" size={20} className={liked ? 'fill-current' : ''} />
+                        <span className="font-medium">{formatNumber(videoCounters.likes)}</span>
+                      </button>
+                      <div className="w-px h-6 bg-border"></div>
+                      <button
+                        onClick={handleDislike}
+                        className={`flex items-center gap-2 px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
+                          disliked ? 'text-destructive' : ''
+                        }`}
+                      >
+                        <Icon name="ThumbsDown" size={20} className={disliked ? 'fill-current' : ''} />
+                      </button>
+                    </div>
 
-                    <Button
-                      variant={isSaved ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={handleSave}
-                      className="flex-1 gap-2"
-                    >
-                      <Icon name="Bookmark" size={16} className={isSaved ? 'fill-current' : ''} />
-                      <span>{isSaved ? 'Guardado' : 'Guardar'}</span>
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    {/* Compartir */}
+                    <button
                       onClick={handleShare}
-                      className="flex-1 gap-2"
+                      className="flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors"
                     >
-                      <Icon name="Share2" size={16} />
-                      <span>Compartir</span>
-                    </Button>
+                      <Icon name="Share2" size={20} />
+                      <span className="font-medium">Compartir</span>
+                    </button>
+
+                    {/* Guardar */}
+                    <button
+                      onClick={handleSave}
+                      className={`flex items-center gap-2 px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors ${
+                        saved ? 'text-primary' : ''
+                      }`}
+                    >
+                      <Icon name="Bookmark" size={20} className={saved ? 'fill-current' : ''} />
+                      <span className="font-medium">{saved ? 'Guardado' : 'Guardar'}</span>
+                    </button>
                   </div>
                 </div>
 
                 {/* Descripción */}
-                <div className="px-4 py-3 border-b border-border">
-                  <p className={`text-sm text-foreground whitespace-pre-wrap ${!showFullDescription ? 'line-clamp-3' : ''}`}>
+                <div className="bg-muted rounded-lg p-4">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
                     {video.description}
                   </p>
-                  {video.description.length > 150 && (
-                    <button
-                      onClick={() => setShowFullDescription(!showFullDescription)}
-                      className="text-sm text-primary hover:text-primary/80 font-medium mt-2"
-                    >
-                      {showFullDescription ? 'Mostrar menos' : 'Mostrar más'}
-                    </button>
-                  )}
-
-                  {video.tags && video.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {video.tags.map((tag, index) => (
-                        <Link
-                          key={index}
-                          to={`/search?tag=${tag}`}
-                          className="text-xs text-primary hover:text-primary/80 font-medium"
-                        >
-                          #{tag}
-                        </Link>
-                      ))}
-                    </div>
+                  {video.created_at && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Publicado el {new Date(video.created_at).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
                   )}
                 </div>
 
-                {/* Videos Relacionados - Lista Vertical Infinita */}
-                <div className="py-3">
-                  <h3 className="px-4 text-lg font-semibold text-foreground mb-3">
-                    Videos relacionados
+                {/* Sección de comentarios */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-bold mb-4">
+                    {formatNumber(videoCounters.comments)} comentarios
                   </h3>
-                  <div className="space-y-2">
-                    {relatedVideos.map((relatedVideo) => (
-                      <Link
-                        key={relatedVideo.id}
-                        to={`/video/${relatedVideo.id}`}
-                        className="flex gap-3 px-4 py-2 hover:bg-muted transition-colors"
-                        onClick={() => window.scrollTo(0, 0)}
-                      >
-                        {/* Thumbnail */}
-                        <div className="relative w-40 flex-shrink-0 aspect-video bg-muted rounded-lg overflow-hidden">
-                          <img
-                            src={relatedVideo.thumbnail}
-                            alt={relatedVideo.title}
-                            className="w-full h-full object-cover"
+
+                  {/* Formulario de comentario */}
+                  {user ? (
+                    <form onSubmit={handleSubmitComment} className="mb-6">
+                      <div className="flex gap-3">
+                        <img
+                          src={user.user_metadata?.avatar_url || '/default-avatar.png'}
+                          alt="Tu avatar"
+                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        />
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            placeholder={replyingTo ? 'Escribe una respuesta...' : 'Añade un comentario...'}
+                            className="w-full px-0 py-2 bg-transparent border-b border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground"
                           />
-                          <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 rounded">
-                            {Math.floor(relatedVideo.duration / 60)}:{(relatedVideo.duration % 60).toString().padStart(2, '0')}
+                          <div className="flex items-center justify-end gap-2 mt-2">
+                            {replyingTo && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setReplyingTo(null)}
+                              >
+                                Cancelar
+                              </Button>
+                            )}
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={!newComment.trim()}
+                            >
+                              Comentar
+                            </Button>
                           </div>
                         </div>
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-medium text-foreground line-clamp-2 mb-1">
-                            {relatedVideo.title}
-                          </h4>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            {relatedVideo.creator.name}
-                          </p>
-                          <div className="flex items-center text-xs text-muted-foreground space-x-1">
-                            <span>{formatNumber(relatedVideo.views)} vistas</span>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-
-                  {/* Mensaje de fin */}
-                  {relatedVideos.length > 0 && (
-                    <div className="px-4 py-6 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        Has visto todos los videos relacionados
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="bg-muted rounded-lg p-4 text-center mb-6">
+                      <p className="text-muted-foreground mb-2">
+                        Inicia sesión para comentar
                       </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate('/dashboard')}
-                        className="mt-3"
-                      >
-                        Explorar más videos
+                      <Button onClick={() => navigate('/login')} size="sm">
+                        Iniciar sesión
                       </Button>
                     </div>
                   )}
-                </div>
 
-              </div>
-            </div>
-          ) : (
-            /* ===============================
-               LAYOUT DESKTOP (Original)
-               =============================== */
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex flex-col lg:flex-row gap-6">
-                
-                {/* COLUMNA PRINCIPAL - VIDEO Y DETALLES */}
-                <div className="flex-1 min-w-0">
-                  
-                  <div className="mb-4">
-                    <VideoPlayer
-                      videoUrl={video.videoUrl}
-                      thumbnailUrl={video.thumbnail}
-                      autoPlay={true}
-                      onTimeUpdate={handleTimeUpdate}
-                      onEnded={handleVideoEnded}
-                      className="w-full aspect-video"
-                    />
-                  </div>
-
+                  {/* Lista de comentarios */}
                   <div className="space-y-4">
-                    <div>
-                      <h1 className="text-2xl font-bold text-foreground mb-2">
-                        {video.title}
-                      </h1>
-                      
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Icon name="Eye" size={16} />
-                            <span>{formatNumber(localViews)} visualizaciones</span>
-                          </div>
-                          <span>•</span>
-                          <span>{formatDate(video.createdAt)}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant={isLiked ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={handleLike}
-                            className="gap-2"
-                          >
-                            <Icon name={isLiked ? 'Heart' : 'Heart'} size={16} className={isLiked ? 'fill-current' : ''} />
-                            <span>{formatNumber(localLikes)}</span>
-                          </Button>
-
-                          <Button
-                            variant={isSaved ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={handleSave}
-                          >
-                            <Icon name={isSaved ? 'Bookmark' : 'Bookmark'} size={16} className={isSaved ? 'fill-current' : ''} />
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleShare}
-                          >
-                            <Icon name="Share2" size={16} />
-                          </Button>
-                        </div>
+                    {loadingComments ? (
+                      <div className="text-center py-8">
+                        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
                       </div>
-                    </div>
-
-                    <div className="p-4 bg-card border border-border rounded-lg">
-                      <div className="flex items-start justify-between gap-4">
-                        <Link 
-                          to={`/profile/${video.creator.id}`}
-                          className="flex items-center gap-3 flex-1 min-w-0"
-                        >
-                          <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-muted">
-                            {video.creator.avatar ? (
-                              <img 
-                                src={video.creator.avatar} 
-                                alt={video.creator.name}
-                                className="w-full h-full object-cover"
+                    ) : comments.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No hay comentarios aún. ¡Sé el primero en comentar!
+                      </div>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className="space-y-3">
+                          {/* Comentario principal */}
+                          <div className="flex gap-3">
+                            <Link to={`/profile/${comment.user.username}`}>
+                              <img
+                                src={comment.user.profile_image_url || '/default-avatar.png'}
+                                alt={comment.user.name}
+                                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                               />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold">
-                                {video.creator.name.charAt(0).toUpperCase()}
+                            </Link>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  to={`/profile/${comment.user.username}`}
+                                  className="font-semibold text-sm hover:text-primary"
+                                >
+                                  {comment.user.name}
+                                </Link>
+                                {comment.user.is_verified && (
+                                  <Icon name="BadgeCheck" size={14} className="text-blue-500" />
+                                )}
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(comment.created_at).toLocaleDateString('es-ES')}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-foreground truncate">
-                                {video.creator.name}
-                              </h3>
-                              {video.creator.isVerified && (
-                                <Icon name="BadgeCheck" size={16} color="var(--color-primary)" />
+                              <p className="text-sm text-foreground mt-1">
+                                {comment.content}
+                              </p>
+                              <div className="flex items-center gap-4 mt-2">
+                                <button
+                                  onClick={() => setReplyingTo(comment.id)}
+                                  className="text-xs font-medium text-muted-foreground hover:text-primary"
+                                >
+                                  Responder
+                                </button>
+                                {user?.id === comment.user_id && (
+                                  <button
+                                    onClick={() => handleDeleteComment(comment.id)}
+                                    className="text-xs font-medium text-destructive hover:text-destructive/80"
+                                  >
+                                    Eliminar
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Respuestas */}
+                              {comment.replies && comment.replies.length > 0 && (
+                                <div className="mt-4 space-y-3">
+                                  {!showReplies[comment.id] ? (
+                                    <button
+                                      onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: true }))}
+                                      className="text-sm font-medium text-primary hover:underline flex items-center gap-2"
+                                    >
+                                      <Icon name="CornerDownRight" size={16} />
+                                      Ver {comment.replies.length} respuesta{comment.replies.length !== 1 ? 's' : ''}
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: false }))}
+                                        className="text-sm font-medium text-primary hover:underline flex items-center gap-2"
+                                      >
+                                        <Icon name="CornerDownRight" size={16} />
+                                        Ocultar respuestas
+                                      </button>
+                                      {comment.replies.map((reply) => (
+                                        <div key={reply.id} className="flex gap-3 ml-6">
+                                          <Link to={`/profile/${reply.user.username}`}>
+                                            <img
+                                              src={reply.user.profile_image_url || '/default-avatar.png'}
+                                              alt={reply.user.name}
+                                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                                            />
+                                          </Link>
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <Link
+                                                to={`/profile/${reply.user.username}`}
+                                                className="font-semibold text-sm hover:text-primary"
+                                              >
+                                                {reply.user.name}
+                                              </Link>
+                                              {reply.user.is_verified && (
+                                                <Icon name="BadgeCheck" size={14} className="text-blue-500" />
+                                              )}
+                                              <span className="text-xs text-muted-foreground">
+                                                {new Date(reply.created_at).toLocaleDateString('es-ES')}
+                                              </span>
+                                            </div>
+                                            <p className="text-sm text-foreground mt-1">
+                                              {reply.content}
+                                            </p>
+                                            {user?.id === reply.user_id && (
+                                              <button
+                                                onClick={() => handleDeleteComment(reply.id)}
+                                                className="text-xs font-medium text-destructive hover:text-destructive/80 mt-2"
+                                              >
+                                                Eliminar
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </>
+                                  )}
+                                </div>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              @{video.creator.username}
-                            </p>
                           </div>
-                        </Link>
-
-                        {user?.id !== video.creator.id && (
-                          <Button
-                            variant={isFollowing ? 'outline' : 'default'}
-                            size="sm"
-                            onClick={handleFollow}
-                            className="flex-shrink-0"
-                          >
-                            <Icon name={isFollowing ? 'UserCheck' : 'UserPlus'} size={16} className="mr-2" />
-                            {isFollowing ? 'Siguiendo' : 'Seguir'}
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="mt-4 pt-4 border-t border-border">
-                        <p className={`text-sm text-foreground whitespace-pre-wrap ${!showFullDescription ? 'line-clamp-3' : ''}`}>
-                          {video.description}
-                        </p>
-                        {video.description.length > 150 && (
-                          <button
-                            onClick={() => setShowFullDescription(!showFullDescription)}
-                            className="text-sm text-primary hover:text-primary/80 font-medium mt-2"
-                          >
-                            {showFullDescription ? 'Mostrar menos' : 'Mostrar más'}
-                          </button>
-                        )}
-
-                        {video.tags && video.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-4">
-                            {video.tags.map((tag, index) => (
-                              <Link
-                                key={index}
-                                to={`/search?tag=${tag}`}
-                                className="text-xs text-primary hover:text-primary/80 font-medium"
-                              >
-                                #{tag}
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="border border-border rounded-lg p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-foreground">
-                          Comentarios ({formatNumber(video.comments)})
-                        </h3>
-                      </div>
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Icon name="MessageSquare" size={32} className="mx-auto mb-3 opacity-50" />
-                        <p className="text-sm">Los comentarios estarán disponibles próximamente</p>
-                      </div>
-                    </div>
-
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
-
-                {/* SIDEBAR - VIDEOS RELACIONADOS */}
-                <div className="lg:w-96 flex-shrink-0">
-                  <div className="lg:sticky lg:top-32">
-                    <RelatedVideosSidebar
-                      videos={relatedVideos}
-                      currentVideoId={videoId}
-                      autoplayEnabled={true}
-                      onVideoSelect={(selectedVideo) => {
-                        navigate(`/video/${selectedVideo.id}`);
-                        window.scrollTo(0, 0);
-                      }}
-                    />
-                  </div>
-                </div>
-
               </div>
             </div>
-          )}
-        </main>
 
-        {/* ===============================
-            MINI-PLAYER FLOTANTE (OPCIONAL - MÓVIL)
-            =============================== */}
-        {isMobile && showMiniPlayer && (
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-black shadow-2xl border-t border-border">
-            <div className="flex items-center justify-between p-2">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className="w-16 aspect-video bg-muted rounded overflow-hidden flex-shrink-0">
-                  <img
-                    src={video.thumbnail}
-                    alt={video.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-medium text-white truncate">
-                    {video.title}
-                  </h4>
-                  <p className="text-xs text-gray-400 truncate">
-                    {video.creator.name}
-                  </p>
-                </div>
+            {/* Sidebar - Videos relacionados */}
+            {!isMobile && (
+              <div className="lg:w-[400px] flex-shrink-0">
+                <RelatedVideosSidebar
+                  videos={relatedVideos}
+                  currentVideoId={videoId}
+                  onVideoSelect={(selectedVideo) => {
+                    navigate(`/video/${selectedVideo.id}`);
+                    window.scrollTo(0, 0);
+                  }}
+                />
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
-                >
-                  <Icon name="Maximize2" size={20} />
-                </button>
-                <button
-                  onClick={() => setShowMiniPlayer(false)}
-                  className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
-                >
-                  <Icon name="X" size={20} />
-                </button>
-              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de compartir */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Compartir video</h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            {/* Opciones de compartir */}
+            <div className="space-y-3 mb-4">
+              <a
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
+              >
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                  <Icon name="Facebook" size={20} className="text-white" />
+                </div>
+                <span className="font-medium">Compartir en Facebook</span>
+              </a>
+
+              <a
+                href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(video.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
+              >
+                <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center">
+                  <Icon name="Twitter" size={20} className="text-white" />
+                </div>
+                <span className="font-medium">Compartir en Twitter</span>
+              </a>
+
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
+              >
+                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
+                  <Icon name="MessageCircle" size={20} className="text-white" />
+                </div>
+                <span className="font-medium">Compartir en WhatsApp</span>
+              </a>
+            </div>
+
+            {/* Copiar link */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={shareLink}
+                readOnly
+                className="flex-1 px-3 py-2 bg-muted rounded-lg text-sm"
+              />
+              <Button onClick={handleCopyLink} size="sm">
+                {copySuccess ? (
+                  <>
+                    <Icon name="Check" size={16} className="mr-2" />
+                    Copiado
+                  </>
+                ) : (
+                  <>
+                    <Icon name="Copy" size={16} className="mr-2" />
+                    Copiar
+                  </>
+                )}
+              </Button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 };
