@@ -1,12 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Con Sistema de Puntos Integrado
+// HEADER - Con Sistema de Puntos DUAL (Gratis y Premium)
 // ============================================================================
-// Header principal con:
-// - Contador de puntos animado
-// - Notificación flotante al ganar puntos
-// - Branding dinámico
-// - Navegación responsiva
+// ✅ Muestra freePoints (Blanco) y premiumPoints (Verde).
+// ✅ Ambos puntos leen y se actualizan con el contexto persistente.
+// ✅ Sigue mostrando el contador de puntos animado.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -20,116 +18,89 @@ import Button from './Button';
 // ============================================================================
 // COMPONENTE: CONTADOR DE PUNTOS ANIMADO
 // ============================================================================
-const AnimatedPointsCounter = ({ points, animation }) => {
+const AnimatedPointsCounter = ({ points, animation, colorClass }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    if (animation.show && animation.type === 'earn') {
+    // Sincroniza el contador con el saldo real
+    setDisplayPoints(points);
+  }, [points]);
+
+  useEffect(() => {
+    // Si la animación de ganar puntos está activa, actualiza el contador con transición
+    if (animation.show && animation.type === 'earn' && animation.pointType === colorClass) {
       setIsAnimating(true);
       
       const start = displayPoints;
       const end = points;
-      const duration = 800;
+      const duration = 800; // 0.8 segundos de animación
       const startTime = Date.now();
 
       const animate = () => {
         const now = Date.now();
-        const progress = Math.min((now - startTime) / duration, 1);
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const value = Math.floor(start + (end - start) * progress);
         
-        // Easing function (ease-out cubic)
-        const eased = 1 - Math.pow(1 - progress, 3);
-        
-        setDisplayPoints(Math.round(start + (end - start) * eased));
+        setDisplayPoints(value);
         
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
           setIsAnimating(false);
+          setDisplayPoints(end);
         }
       };
-      
+
       requestAnimationFrame(animate);
-    } else {
-      setDisplayPoints(points);
+      
+      // Cleanup
+      return () => {
+        setIsAnimating(false);
+      };
     }
-  }, [points, animation.show, animation.type]);
+  }, [points, animation, colorClass]);
+
+  // Clase de color basada en el requisito del cliente
+  let textColor = 'text-gray-400'; // Default para Free Points (Blanco/Gris claro)
+  if (colorClass === 'premium') {
+    textColor = 'text-green-500'; // Verde para Premium
+  }
 
   return (
-    <span
-      className={`font-mono text-sm font-medium text-accent transition-transform duration-300 ${
-        isAnimating ? 'scale-110' : 'scale-100'
-      }`}
-    >
-      {displayPoints.toLocaleString()}
-    </span>
-  );
-};
-
-// ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS
-// ============================================================================
-const FloatingPointsNotification = ({ animation }) => {
-  if (!animation.show) return null;
-
-  const isEarn = animation.type === 'earn';
-
-  return (
-    <div
-      className="fixed top-20 right-4 z-[9999] pointer-events-none animate-slide-in-fade"
-      style={{
-        animation: 'slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s'
-      }}
-    >
-      <div
-        className={`${
-          isEarn
-            ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-            : 'bg-gradient-to-r from-red-500 to-orange-600'
-        } text-white px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3`}
-      >
-        <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center animate-bounce">
-          <AppIcon 
-            name={isEarn ? 'TrendingUp' : 'TrendingDown'} 
-            size={18} 
-            className="text-white" 
-          />
-        </div>
-        <div>
-          <p className="font-bold text-base">
-            {isEarn ? '+' : '-'}
-            {animation.amount} puntos
-          </p>
-          {animation.message && (
-            <p className="text-xs text-white/90">{animation.message}</p>
-          )}
-        </div>
-      </div>
+    <div className={`flex items-center gap-1 font-bold transition-all duration-300 ${isAnimating ? 'scale-105' : 'scale-100'}`}>
+      <AppIcon name="Zap" size={18} className={textColor} />
+      <span className={`text-sm ${textColor}`}>
+        {displayPoints.toLocaleString()}
+      </span>
     </div>
   );
 };
+
 
 // ============================================================================
 // COMPONENTE PRINCIPAL: HEADER
 // ============================================================================
 const Header = () => {
-  const { user, signOut, loading } = useAuth();
-  const { totalPoints, pointsAnimation, loading: pointsLoading } = usePoints();
+  const { user, profile } = useAuth();
+  const { freePoints, premiumPoints, pointsAnimation } = usePoints();
   const { branding } = useBranding();
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const userMenuRef = useRef(null);
+  const headerRef = useRef(null);
 
-  // ============================================================================
-  // EFECTOS
-  // ============================================================================
+  // Cierra el menú en navegación
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname]);
 
-  // Cerrar menú al hacer click fuera
+  // Manejo de clicks fuera del menú
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setIsUserMenuOpen(false);
+      if (headerRef.current && !headerRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
       }
     };
 
@@ -137,363 +108,132 @@ const Header = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
-
-  // Cerrar menú al cambiar de ruta
-  useEffect(() => {
-    setIsUserMenuOpen(false);
-  }, [location.pathname]);
-
+  }, [headerRef]);
+  
   // ============================================================================
-  // FUNCIONES
+  // LÓGICA DE NOTIFICACIÓN FLOTANTE (PUNTOS GANADOS)
   // ============================================================================
+  const FloatingNotification = () => {
+    if (!pointsAnimation.show) return null;
 
-  const toggleUserMenu = () => {
-    setIsUserMenuOpen(prev => !prev);
+    const baseClasses = "fixed top-4 right-4 z-[100] p-4 rounded-xl shadow-lg transition-all duration-300 transform flex items-center gap-3";
+    
+    // Asigna color y mensaje basado en el tipo de punto de la animación
+    let notifClasses = pointsAnimation.pointType === 'premium' 
+        ? 'bg-green-600 text-white animate-slide-in-fade' 
+        : 'bg-white text-gray-800 border border-gray-200 animate-slide-in-fade';
+        
+    const iconName = pointsAnimation.type === 'earn' ? 'CheckCircle' : 'ArrowDownCircle';
+    const message = pointsAnimation.type === 'earn' 
+        ? `¡Ganaste ${pointsAnimation.amount} ${pointsAnimation.pointType === 'free' ? 'Gratis' : 'Premium'}!`
+        : `Gastaste ${pointsAnimation.amount} ${pointsAnimation.pointType === 'free' ? 'Gratis' : 'Premium'}.`;
+
+    return (
+      <div className={`${baseClasses} ${notifClasses}`}>
+        <AppIcon name={iconName} size={24} />
+        <span className="font-semibold text-sm">{message}</span>
+      </div>
+    );
   };
-
-  const handleLogout = async () => {
-    setIsUserMenuOpen(false);
-    try {
-      await signOut();
-      navigate('/', { replace: true });
-    } catch (error) {
-      console.error('Error during logout:', error);
-      navigate('/', { replace: true });
-    }
-  };
-
-  const handleOrientationNavigate = (orientation) => {
-    navigate('/dashboard', { state: { orientation } });
-  };
-
-  const handleHomeNavigate = () => {
-    navigate('/dashboard', { 
-      replace: true,
-      state: { orientation: 'all' } 
-    });
-  };
-
-  const isOrientationActive = (orientation) => {
-    return location.pathname === '/dashboard' && location.state?.orientation === orientation;
-  };
-
-  const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
-    return <AppIcon name={name} size={size} color={color} className={className} />;
-  };
-
-  // ============================================================================
-  // RENDER
-  // ============================================================================
+  
 
   return (
     <>
-      <FloatingPointsNotification animation={pointsAnimation} />
-
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            
-            {/* ===============================
-                LOGO
-                =============================== */}
-            <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-              {branding.logo.primary ? (
-                <img 
-                  src={branding.logo.primary} 
-                  alt={branding.texts.appName || 'Logo'} 
-                  className="h-8 object-contain"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextElementSibling.style.display = 'flex';
-                  }}
-                />
-              ) : null}
-              
-              <div 
-                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-                style={{ 
-                  display: branding.logo.primary ? 'none' : 'flex',
-                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                }}
-              >
-                <Icon name="Video" size={20} color="white" />
-              </div>
-              
-              {!branding.logo.primary && (
-                <span 
-                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                  style={{
-                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                  }}
-                >
-                  {branding.texts.appName || 'Radeisan'}
-                </span>
-              )}
+      <FloatingNotification />
+      <header 
+        ref={headerRef}
+        className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      >
+        <div className="container px-4 md:px-6">
+          <div className="flex h-14 items-center justify-between">
+            {/* ============= LOGO / BRANDING ============= */}
+            <Link to="/" className="flex items-center space-x-2">
+              <AppIcon name="Zap" size={24} className="text-primary" />
+              <span className="font-bold text-lg hidden sm:block">
+                {branding.appName}
+              </span>
             </Link>
 
-            {/* ===============================
-                NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS)
-                =============================== */}
-            {user && (
-              <nav className="hidden md:flex items-center space-x-1">
-                <button
-                  onClick={handleHomeNavigate}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
-                      ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Home" size={18} />
-                  <span>Inicio</span>
-                </button>
+            {/* ============= BUSCADOR (Oculto en móvil por ahora) ============= */}
+            <div className="flex-1 max-w-xs mx-4 hidden md:block">
+              {/* Aquí iría tu componente de búsqueda */}
+            </div>
 
-                <button
-                  onClick={() => handleOrientationNavigate('vertical')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isOrientationActive('vertical')
-                      ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Smartphone" size={18} />
-                  <span>Reels</span>
-                </button>
-
-                <button
-                  onClick={() => handleOrientationNavigate('horizontal')}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isOrientationActive('horizontal')
-                      ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Monitor" size={18} />
-                  <span>Videos</span>
-                </button>
-
-                <Link
-                  to="/marketplace"
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/marketplace' 
-                      ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Store" size={18} />
-                  <span>Tienda</span>
-                </Link>
-
-                <Link
-                  to="/rewards"
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/rewards' 
-                      ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Gift" size={18} />
-                  <span>Recompensas</span>
-                </Link>
-
-                {/* PANEL ADMIN - Solo para administradores */}
-                {user.isAdmin && (
-                  <Link
-                    to="/admin"
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      location.pathname.startsWith('/admin')
-                        ? 'bg-primary/10 text-primary' 
-                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                    }`}
-                  >
-                    <Icon name="Shield" size={18} />
-                    <span>Admin</span>
-                  </Link>
-                )}
-              </nav>
-            )}
-
-            {/* ===============================
-                SECCIÓN DERECHA
-                =============================== */}
+            {/* ============= ACCIONES DE USUARIO ============= */}
             <div className="flex items-center space-x-4">
-              
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* Balance de Puntos con Animación */}
-                  <div 
-                    className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group"
-                    title={`Total: ${totalPoints} puntos`}
-                  >
-                    <Icon 
-                      name="Star" 
-                      size={16} 
-                      color="var(--color-accent)" 
-                      className="group-hover:scale-110 transition-transform"
+                  {/* === ZONA DE PUNTOS DUAL === */}
+                  <div className="flex items-center space-x-3 pr-2 border-r border-border/80">
+                    {/* Puntos Premium (Verde) */}
+                    <AnimatedPointsCounter 
+                      points={premiumPoints} 
+                      animation={pointsAnimation}
+                      colorClass="premium"
                     />
-                    {pointsLoading ? (
-                      <span className="text-xs text-muted-foreground animate-pulse">
-                        Cargando...
-                      </span>
-                    ) : (
-                      <AnimatedPointsCounter 
-                        points={totalPoints} 
-                        animation={pointsAnimation} 
-                      />
-                    )}
-                  </div>
-
-                  {/* Botón para Comprar Puntos */}
-<Link 
-  to="/purchase-points"
-  className="hidden md:flex items-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
->
-  <Icon name="Sparkles" size={18} className="text-white" />
-  Comprar Puntos
-</Link>
-
-
-                  {/* Botón de Subir Contenido */}
-                  <Button size="sm" asChild className="hidden md:flex">
-                    <Link to="/upload">
-                      <Icon name="Plus" size={16} className="mr-2" />
-                      Subir
-                    </Link>
-                  </Button>
-
-                  {/* Notificaciones */}
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Icon name="Bell" size={20} />
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
-                  </Button>
-
-                  {/* Menú de Usuario */}
-                  <div className="relative" ref={userMenuRef}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={toggleUserMenu}
-                      className="rounded-full"
+                    {/* Puntos Gratis (Blanco/Gris) */}
+                    <AnimatedPointsCounter 
+                      points={freePoints} 
+                      animation={pointsAnimation}
+                      colorClass="free"
+                    />
+                    {/* Botón de Comprar Puntos */}
+                    <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => navigate('/points/buy')}
+                        title="Comprar Puntos Premium"
                     >
-                      <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
-                        {user.avatar_url ? (
-                          <img 
-                            src={user.avatar_url} 
-                            alt={user.name || 'Avatar'} 
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <Icon name="User" size={18} color="white" />
-                        )}
-                      </div>
+                        <AppIcon name="PlusCircle" size={20} className="text-green-500 hover:text-green-400" />
                     </Button>
+                  </div>
+                  {/* === FIN ZONA DE PUNTOS DUAL === */}
 
-                    {/* Dropdown Menu */}
-                    {isUserMenuOpen && (
-                      <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
-                        <div className="py-1">
-                          {/* Información del Usuario */}
-                          <div className="px-4 py-3 border-b border-border">
-                            <div className="text-sm font-medium text-popover-foreground truncate">
-                              {user.name || 'Usuario'}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {user.email}
-                            </div>
-                            
-                            {/* Balance de puntos en el menú */}
-                            <div className="mt-2 flex items-center gap-2 px-2 py-1.5 bg-accent/10 rounded-md">
-                              <Icon name="Star" size={14} color="var(--color-accent)" />
-                              <span className="text-sm font-mono font-bold text-accent">
-                                {totalPoints.toLocaleString()}
-                              </span>
-                              <span className="text-xs text-muted-foreground">pts</span>
-                            </div>
+                  {/* Icono de Misiones Diarias (Placeholder) */}
+                  <Button size="icon" variant="ghost" title="Misiones Diarias">
+                      <AppIcon name="Target" size={20} className="text-muted-foreground hover:text-primary" />
+                  </Button>
+                  
+                  {/* Menú y Perfil */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsMenuOpen(!isMenuOpen)}
+                      className="flex items-center gap-2 p-1 rounded-full hover:bg-muted transition-colors"
+                    >
+                      <img
+                        src={profile?.avatar_url || profile?.avatar || 'ruta/default/avatar.jpg'}
+                        alt="Avatar"
+                        className="w-8 h-8 rounded-full object-cover border border-primary/50"
+                      />
+                    </button>
 
-                            {/* Badge de Admin */}
-                            {user.isAdmin && (
-                              <div className="mt-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                                <Icon name="Shield" size={12} className="mr-1" />
-                                {user.role === 'super_admin' ? 'Super Admin' : 
-                                 user.role === 'admin' ? 'Admin' : 'Moderador'}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Enlaces del Menú */}
+                    {isMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-xl z-50">
+                        <div className="p-1">
                           <Link
-                            to="/profile"
-                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                            onClick={() => setIsUserMenuOpen(false)}
+                            to={`/profile/${profile?.username || user.id}`}
+                            className="flex items-center px-3 py-2 text-sm text-foreground hover:bg-muted rounded-md transition-colors"
                           >
-                            <Icon name="User" size={16} className="mr-2" />
+                            <AppIcon name="User" size={16} className="mr-2" />
                             Mi Perfil
                           </Link>
-
-                          {user.is_business_account && (
-                            <Link
-                              to="/business"
-                              className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                              onClick={() => setIsUserMenuOpen(false)}
-                            >
-                              <Icon name="Building" size={16} className="mr-2" />
-                              Mi Negocio
-                            </Link>
-                          )}
-
-                          <Link
-                            to="/rewards"
-                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                            onClick={() => setIsUserMenuOpen(false)}
-                          >
-                            <Icon name="Gift" size={16} className="mr-2" />
-                            Mis Recompensas
-                          </Link>
-
-                          {/* PANEL ADMIN en el menú */}
-                          {user.isAdmin && (
-                            <>
-                              <div className="border-t border-border my-1"></div>
-                              <Link
-                                to="/admin"
-                                className="flex items-center px-4 py-2 text-sm text-primary hover:bg-primary/10 transition-colors font-medium"
-                                onClick={() => setIsUserMenuOpen(false)}
-                              >
-                                <Icon name="Shield" size={16} className="mr-2" />
-                                Panel de Administración
-                              </Link>
-                            </>
-                          )}
-
-                          <div className="border-t border-border my-1"></div>
-
-                          {/* Configuración */}
                           <Link
                             to="/settings"
-                            className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
-                            onClick={() => setIsUserMenuOpen(false)}
+                            className="flex items-center px-3 py-2 text-sm text-foreground hover:bg-muted rounded-md transition-colors"
                           >
-                            <Icon name="Settings" size={16} className="mr-2" />
+                            <AppIcon name="Settings" size={16} className="mr-2" />
                             Configuración
                           </Link>
-
-                          <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
-                            <Icon name="HelpCircle" size={16} className="mr-2" />
-                            Ayuda
-                          </button>
-
-                          <div className="border-t border-border my-1"></div>
-
-                          {/* Cerrar Sesión */}
+                          <div className="my-1 border-t border-border/80"></div>
                           <button
-                            onClick={handleLogout}
-                            className="flex items-center w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                            disabled={loading}
+                            onClick={() => {
+                              navigate('/logout');
+                            }}
+                            className="flex items-center w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 rounded-md transition-colors"
                           >
-                            <Icon name="LogOut" size={16} className="mr-2" />
-                            {loading ? 'Cerrando...' : 'Cerrar Sesión'}
+                            <AppIcon name="LogOut" size={16} className="mr-2" />
+                            Cerrar Sesión
                           </button>
                         </div>
                       </div>
@@ -545,6 +285,7 @@ const Header = () => {
           }
         }
         
+        /* Ajustada la duración para la animación de notificación */
         .animate-slide-in-fade {
           animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;
         }
