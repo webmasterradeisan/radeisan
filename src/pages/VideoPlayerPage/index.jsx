@@ -1,7 +1,7 @@
 // src/pages/VideoPlayerPage/index.jsx
 // 
 // ============================================================================
-// 🎬 VIDEO PLAYER PAGE - VERSIÓN FINAL CON MEJORAS
+// 🎬 VIDEO PLAYER PAGE - VERSIÓN FINAL CON MEJORAS Y CORRECCIÓN DE BUILD
 // ============================================================================
 //
 // Componente principal para la reproducción de videos que incluye la 
@@ -913,7 +913,7 @@ const VideoPlayerPage = () => {
                   className="w-full aspect-video object-contain"
                   onLoadedMetadata={(e) => setDuration(e.target.duration)}
                   onTimeUpdate={handleTimeUpdate}
-                  onEnded={handleVideoEnd} {/* ✅ LLAMADA A LA FUNCIÓN DE AUTOPLAY SIGUIENTE */}
+                  onEnded={handleVideoEnd} // ✅ Función de Autoplay Siguiente
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   // Evita que el video se pueda pausar/reproducir si está minimizado
@@ -1375,7 +1375,7 @@ const VideoPlayerPage = () => {
               }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
-              onEnded={handleVideoEnd} {/* ✅ LLAMADA A LA FUNCIÓN DE AUTOPLAY SIGUIENTE */}
+              onEnded={handleVideoEnd} // ✅ Función de Autoplay Siguiente
             />
 
             <div 
