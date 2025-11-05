@@ -1,11 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Basado en la última captura de pantalla móvil + Nuevo Botón "Menú"
+// HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL)
 // ============================================================================
-// ✅ Header móvil restaurado al diseño de la última imagen.
-// ✅ Nuevo botón "Menú" en móvil que abre un modal de navegación principal.
-// ✅ Header de escritorio (con puntos separados) intacto.
-// ✅ Menú de perfil intacto.
+// ✅ El código es la copia exacta del Header (1).jsx, solo inyectando el modal.
+// ✅ Botón "Menú" en móvil (texto).
+// ✅ El menú se muestra como un modal superpuesto (z-index alto) para evitar mezcla con el contenido.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -17,10 +16,9 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Ajustado para el color y la etiqueta)
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Tomado de Header (1).jsx)
 // ============================================================================
-// Recibe un nuevo prop 'colorType' ('free' o 'premium') y 'showLabel' para las dos filas.
-const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false }) => {
+const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
   
@@ -34,11 +32,14 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
     textColor = 'text-accent'; 
   }
 
+
   useEffect(() => {
+    // Sincroniza el contador con el saldo real
     setDisplayPoints(points);
   }, [points]);
 
   useEffect(() => {
+    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -50,6 +51,8 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
       const animate = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
+        
+        // Easing function (ease-out cubic)
         const eased = 1 - Math.pow(1 - progress, 3);
         
         setDisplayPoints(Math.round(start + (end - start) * eased));
@@ -67,28 +70,9 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
     }
   }, [points, animation.show, animation.type, animation.pointType, colorType]);
 
-  // Renderizado en dos filas si se pide la etiqueta (para el menú de perfil)
-  if (showLabel) {
-      return (
-          <div className="flex flex-col items-center">
-              <span
-                  className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
-                      isAnimating ? 'scale-110' : 'scale-100'
-                  }`}
-              >
-                  {displayPoints.toLocaleString()}
-              </span>
-              <span className={`text-xs font-medium mt-[-2px] whitespace-nowrap ${colorType === 'premium' ? 'text-green-600' : 'text-muted-foreground'}`}>
-                  Puntos {colorType === 'free' ? 'Gratis' : 'Premium'}
-              </span>
-          </div>
-      );
-  }
-  
-  // Renderizado en una sola fila (para el header principal de escritorio)
   return (
     <span
-      className={`font-mono text-sm font-medium ${textColor} transition-transform duration-300 ${
+      className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
         isAnimating ? 'scale-110' : 'scale-100'
       }`}
     >
@@ -98,7 +82,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
 };
 
 // ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS
+// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Tomado de Header (1).jsx)
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -106,6 +90,7 @@ const FloatingPointsNotification = ({ animation }) => {
   const isEarn = animation.type === 'earn';
   const isPremium = animation.pointType === 'premium';
 
+  // Clases de color para el fondo de la notificación
   const bgClasses = isPremium 
     ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600')
     : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600');
@@ -148,6 +133,7 @@ const FloatingPointsNotification = ({ animation }) => {
 // ============================================================================
 const Header = () => {
   const { user, signOut, loading } = useAuth();
+  // ✅ Puntos necesarios: freePoints y premiumPoints
   const { freePoints, premiumPoints, pointsAnimation, loading: pointsLoading } = usePoints(); 
   const { branding } = useBranding();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -157,6 +143,7 @@ const Header = () => {
   const location = useLocation();
   const userMenuRef = useRef(null);
   const mainMenuModalRef = useRef(null); // Ref para el modal del menú principal
+
 
   // ============================================================================
   // EFECTOS
@@ -168,7 +155,7 @@ const Header = () => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
       }
-      // ✅ Cerrar modal de menú principal al hacer click fuera (excluyendo el botón de "Menú")
+      // ✅ Cerrar modal de menú principal al hacer click fuera
       if (mainMenuModalRef.current && !mainMenuModalRef.current.contains(event.target)) {
         if (!event.target.closest('#mobile-main-menu-toggle')) {
             setIsMainMenuModalOpen(false);
@@ -195,16 +182,17 @@ const Header = () => {
 
   const toggleUserMenu = () => {
     setIsUserMenuOpen(prev => !prev);
-    // ✅ Asegurarse de que el modal del menú principal esté cerrado si se abre el de usuario
-    if (isMainMenuModalOpen) setIsMainMenuModalOpen(false); 
+    // Cierra el menú principal si está abierto
+    if (isMainMenuModalOpen) setIsMainMenuModalOpen(false);
   };
   
   // ✅ Nueva función para abrir/cerrar el modal del menú principal
   const toggleMainMenuModal = () => {
     setIsMainMenuModalOpen(prev => !prev);
-    // Asegurarse de que el menú de usuario esté cerrado si se abre el principal
-    if (isUserMenuOpen) setIsUserMenuOpen(false); 
+    // Cierra el menú de usuario si está abierto
+    if (isUserMenuOpen) setIsUserMenuOpen(false);
   };
+
 
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
@@ -252,53 +240,55 @@ const Header = () => {
                 LOGO Y BOTÓN MENÚ MÓVIL (Izquierda)
                 =============================== */}
             <div className="flex items-center space-x-2">
-                {/* ✅ Botón "Menú" principal - Visible solo en móvil, justo al lado del logo */}
+                {/* ✅ Botón "Menú" principal - Visible solo en móvil */}
                 {user && (
                     <Button 
-                        id="mobile-main-menu-toggle" // ID para excluirlo de handleClickOutside
+                        id="mobile-main-menu-toggle" 
                         variant="ghost" 
-                        size="sm" // Tamaño sm para que el texto "Menú" encaje bien
+                        size="sm" 
                         onClick={toggleMainMenuModal}
                         className="md:hidden text-muted-foreground hover:text-primary"
                     >
-                        {isMainMenuModalOpen ? <Icon name="X" size={18} /> : null} {/* Icono X si está abierto */}
-                        <span className="ml-1 text-sm font-medium">Menú</span>
+                        <span className="text-sm font-medium">Menú</span>
                     </Button>
                 )}
                 
+                {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                    {branding.logo.primary ? (
-                      <img 
-                        src={branding.logo.primary} 
-                        alt={branding.texts.appName || 'Logo'} 
-                        className="h-8 object-contain"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextElementSibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    
-                    <div 
-                      className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-                      style={{ 
-                        display: branding.logo.primary ? 'none' : 'flex',
+                  {/* ... Lógica del Logo Original ... */}
+                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
+                  {branding.logo.primary ? (
+                    <img 
+                      src={branding.logo.primary} 
+                      alt={branding.texts.appName || 'Logo'} 
+                      className="h-8 object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  
+                  <div 
+                    className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                    style={{ 
+                      display: branding.logo.primary ? 'none' : 'flex',
+                      backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                    }}
+                  >
+                    <Icon name="Video" size={20} color="white" />
+                  </div>
+                  
+                  {!branding.logo.primary && (
+                    <span 
+                      className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                      style={{
                         backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
                       }}
                     >
-                      <Icon name="Video" size={20} color="white" />
-                    </div>
-                    
-                    {!branding.logo.primary && (
-                      <span 
-                        className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                        style={{
-                          backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                        }}
-                      >
-                        {branding.texts.appName || 'Radeisan'}
-                      </span>
-                    )}
+                      {branding.texts.appName || 'Radeisan'}
+                    </span>
+                  )}
                 </Link>
             </div>
 
@@ -386,48 +376,56 @@ const Header = () => {
             )}
 
             {/* ===============================
-                SECCIÓN DERECHA (PUNTOS Y BOTONES DE ACCIÓN) - Escritorio y Móvil
+                SECCIÓN DERECHA
                 =============================== */}
             <div className="flex items-center space-x-4">
               
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) - Restaurado al diseño original sin flex-col en LG */}
+                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) */}
                   <div 
-                    className="hidden lg:flex items-center space-x-1"
+                    className="hidden lg:flex flex-col items-center cursor-pointer group"
                     title={`Puntos Gratis: ${freePoints.toLocaleString()}`} 
                   >
-                    <Icon 
-                      name="Star" 
-                      size={18} 
-                      className="text-orange-400" 
-                    />
-                    {pointsLoading ? (
-                      <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
-                    ) : (
-                      <AnimatedPointsCounter 
-                        points={freePoints} 
-                        animation={pointsAnimation}
-                        colorType="free"
+                    {/* Fila 1: Icono y Saldo */}
+                    <div className="flex items-center space-x-1">
+                      <Icon 
+                        name="Star" 
+                        size={18} 
+                        className="text-orange-400" 
                       />
-                    )}
+                      {pointsLoading ? (
+                        <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
+                      ) : (
+                        <AnimatedPointsCounter 
+                          points={freePoints} 
+                          animation={pointsAnimation}
+                          colorType="free"
+                        />
+                      )}
+                    </div>
+                    {/* Fila 2: Etiqueta */}
+                    <span className="text-xs text-muted-foreground font-medium mt-[-2px] whitespace-nowrap">
+                      Puntos Gratis
+                    </span>
                   </div>
-                  
-                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) - Restaurado al diseño original sin flex-col en LG */}
+
+                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) */}
                   <div
-                    className="hidden lg:flex items-center space-x-1"
+                    className="hidden lg:flex flex-col items-center"
                     title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
                   >
-                    {pointsLoading ? (
-                      <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
-                    ) : (
-                      <AnimatedPointsCounter 
-                        points={premiumPoints}
-                        animation={pointsAnimation}
-                        colorType="premium" 
-                      />
-                    )}
+                    {/* Fila 1: Saldo */}
+                    <AnimatedPointsCounter 
+                      points={premiumPoints}
+                      animation={pointsAnimation}
+                      colorType="premium" // Pasa el tipo para el color Verde
+                    />
+                    {/* Fila 2: Etiqueta */}
+                    <span className="text-xs font-medium mt-[-2px] whitespace-nowrap text-green-600">
+                      Puntos Premium
+                    </span>
                   </div>
                   
                   {/* Botón Comprar Puntos (Verde, diseño de la imagen) */}
@@ -447,13 +445,13 @@ const Header = () => {
                     </Link>
                   </Button>
 
-                  {/* Notificaciones (SIEMPRE VISIBLE EN MÓVIL Y ESCRITORIO) */}
+                  {/* Notificaciones */}
                   <Button variant="ghost" size="icon" className="relative">
                     <Icon name="Bell" size={20} />
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
                   </Button>
 
-                  {/* Menú de Usuario (SIEMPRE VISIBLE EN MÓVIL Y ESCRITORIO) */}
+                  {/* Menú de Usuario */}
                   <div className="relative" ref={userMenuRef}>
                     <Button
                       variant="ghost"
@@ -474,7 +472,7 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu de Usuario */}
+                    {/* Dropdown Menu */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
@@ -496,8 +494,8 @@ const Header = () => {
                                         points={freePoints} 
                                         animation={pointsAnimation}
                                         colorType="free"
-                                        showLabel={true} 
                                     />
+                                    <span className="text-xs text-muted-foreground">Gratis</span>
                                 </div>
                                 {/* Puntos Premium */}
                                 <div className="flex items-center gap-2">
@@ -506,8 +504,8 @@ const Header = () => {
                                         points={premiumPoints} 
                                         animation={pointsAnimation}
                                         colorType="premium"
-                                        showLabel={true} 
                                     />
+                                    <span className="text-xs text-muted-foreground">Premium</span>
                                 </div>
                             </div>
                             
@@ -620,20 +618,26 @@ const Header = () => {
         </div>
         
         {/* ===============================
-            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (Slide desde la izquierda)
+            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (Superpuesto - z-index alto)
             =============================== */}
         {isMainMenuModalOpen && user && (
             <div 
-                className="fixed inset-0 bg-black/50 z-40 md:hidden" 
-                onClick={toggleMainMenuModal} // Cierra el modal al hacer clic fuera
+                className="fixed inset-0 z-[100] md:hidden" // Z-index alto para superponer
             >
+                {/* Overlay oscuro que se cierra al clickar */}
+                <div 
+                    className="absolute inset-0 bg-black/50" 
+                    onClick={toggleMainMenuModal}
+                ></div>
+
+                {/* Contenido del Modal (Panel Lateral) */}
                 <div 
                     ref={mainMenuModalRef}
-                    className="fixed left-0 top-0 h-full w-64 bg-background shadow-lg p-4 transition-transform duration-300 ease-out z-50"
-                    onClick={(e) => e.stopPropagation()} // Evita que el clic dentro del modal lo cierre
+                    className="absolute left-0 top-0 h-full w-64 bg-background shadow-2xl p-4 transition-transform duration-300 ease-out"
+                    onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold">Navegación</h2>
+                        <h2 className="text-xl font-bold">Menú Principal</h2>
                         <Button variant="ghost" size="icon" onClick={toggleMainMenuModal}>
                             <Icon name="X" size={24} />
                         </Button>
@@ -657,7 +661,7 @@ const Header = () => {
                                 } else {
                                     navigate(item.path);
                                 }
-                                setIsMainMenuModalOpen(false); // Cierra el modal al navegar
+                                setIsMainMenuModalOpen(false);
                             };
 
                             return (
