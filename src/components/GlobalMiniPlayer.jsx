@@ -12,8 +12,6 @@ import { useVideoPlayer } from '../contexts/VideoPlayerContext';
 import Icon from './AppIcon';
 
 const GlobalMiniPlayer = () => {
-  const navigate = useNavigate();
-  
   // Detección inline de móvil con verificación de window
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -22,13 +20,7 @@ const GlobalMiniPlayer = () => {
     return false; // Valor por defecto si window no existe
   });
   
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const navigate = useNavigate();
   
   const {
     isMiniPlayerOpen,
@@ -46,6 +38,14 @@ const GlobalMiniPlayer = () => {
     handleLoadedMetadata,
     setIsPlaying,
   } = useVideoPlayer();
+  
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Estados locales para drag & drop
   const [isDragging, setIsDragging] = useState(false);
