@@ -2,9 +2,9 @@
 // ============================================================================
 // HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
-// ✅ BASE: Header (3).jsx (Puntos duales con etiquetas).
-// ✅ Solución UX FINAL: Modal con fondo BLANCO y Overlay OSCURO (bg-black/70) con Z-INDEX ALTO.
-// ✅ Solución Logo: El título del modal ha sido reemplazado por el Logo de Radeisan.
+// ✅ Base: Copia del Header (1).jsx (Puntos duales con etiquetas).
+// ✅ Solución UX FINAL: Modal a PANTALLA COMPLETA con Overlay OSCURO para TAPAR TODO el contenido.
+// ✅ Logo en el encabezado del modal.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -49,8 +49,6 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
       const animate = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
-        
-        // Easing function (ease-out cubic)
         const eased = 1 - Math.pow(1 - progress, 3);
         
         setDisplayPoints(Math.round(start + (end - start) * eased));
@@ -166,7 +164,7 @@ const Header = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isMainMenuModalOpen]);
+  }, [isMainMenuModalOpen]); // Dependencia agregada para re-evaluar el cierre del modal
 
   // Cerrar menús/modals al cambiar de ruta
   useEffect(() => {
@@ -615,22 +613,22 @@ const Header = () => {
         </div>
         
         {/* ===============================
-            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (Superpuesto - z-index alto)
+            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (PANTALLA COMPLETA - SOLUCIÓN UX)
             =============================== */}
         {isMainMenuModalOpen && user && (
             <div 
                 className="fixed inset-0 z-[100] md:hidden" // Z-index alto para superponer
             >
-                {/* ✅ Overlay oscuro (opacidad) que se cierra al clickar */}
+                {/* Overlay oscuro que se cierra al clickar */}
                 <div 
                     className="absolute inset-0 bg-black/70" // Fondo oscuro para opacar contenido
                     onClick={toggleMainMenuModal}
                 ></div>
 
-                {/* ✅ Contenido del Modal (Panel Lateral) con fondo blanco */}
+                {/* ✅ Contenido del Modal (Panel Lateral) con fondo blanco y H-FULL (cubre toda la pantalla) */}
                 <div 
                     ref={mainMenuModalRef}
-                    className="absolute left-0 top-0 h-full w-64 bg-white shadow-2xl p-4 transition-transform duration-300 ease-out" // Fondo BLANCO
+                    className="absolute left-0 top-0 w-64 h-full bg-white shadow-2xl p-4 transition-transform duration-300 ease-out" // W-64 para el panel, H-FULL para cubrir
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-center mb-6">
