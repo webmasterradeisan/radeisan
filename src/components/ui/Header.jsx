@@ -1,10 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL)
+// HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
-// ✅ Base: Copia del Header (1).jsx (Puntos duales con etiquetas).
-// ✅ Solución Móvil: Modal de menú principal con fondo BLANCO.
-// ✅ Solución UX: Overlay OSCURO para superponer el menú sobre el contenido.
+// ✅ BASE: Header (3).jsx (Puntos duales con etiquetas).
+// ✅ Solución UX FINAL: Modal con fondo BLANCO y Overlay OSCURO (bg-black/70) con Z-INDEX ALTO.
+// ✅ Solución Logo: El título del modal ha sido reemplazado por el Logo de Radeisan.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -49,6 +49,8 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
       const animate = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
+        
+        // Easing function (ease-out cubic)
         const eased = 1 - Math.pow(1 - progress, 3);
         
         setDisplayPoints(Math.round(start + (end - start) * eased));
@@ -164,7 +166,7 @@ const Header = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isMainMenuModalOpen]); // Dependencia agregada para re-evaluar el cierre del modal
+  }, [isMainMenuModalOpen]);
 
   // Cerrar menús/modals al cambiar de ruta
   useEffect(() => {
@@ -632,7 +634,42 @@ const Header = () => {
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold">Menú Principal</h2>
+                        {/* ✅ TÍTULO REEMPLAZADO POR EL LOGO */}
+                        <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+                          {branding.logo.primary ? (
+                            <img 
+                              src={branding.logo.primary} 
+                              alt={branding.texts.appName || 'Logo'} 
+                              className="h-8 object-contain"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextElementSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          
+                          <div 
+                            className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                            style={{ 
+                              display: branding.logo.primary ? 'none' : 'flex',
+                              backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                            }}
+                          >
+                            <Icon name="Video" size={20} color="white" />
+                          </div>
+                          
+                          {!branding.logo.primary && (
+                            <span 
+                              className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                              style={{
+                                backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                              }}
+                            >
+                              {branding.texts.appName || 'Radeisan'}
+                            </span>
+                          )}
+                        </Link>
+                        {/* FIN LOGO */}
                         <Button variant="ghost" size="icon" onClick={toggleMainMenuModal}>
                             <Icon name="X" size={24} />
                         </Button>
