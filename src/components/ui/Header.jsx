@@ -1,10 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL)
+// HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL)
 // ============================================================================
-// ✅ El código es la copia exacta del Header (1).jsx, solo inyectando el modal.
-// ✅ Botón "Menú" en móvil (texto).
-// ✅ El menú se muestra como un modal superpuesto (z-index alto) para evitar mezcla con el contenido.
+// ✅ Base: Copia del Header (1).jsx (Puntos duales con etiquetas).
+// ✅ Solución Móvil: Modal de menú principal con fondo BLANCO.
+// ✅ Solución UX: Overlay OSCURO para superponer el menú sobre el contenido.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,7 +16,7 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Tomado de Header (1).jsx)
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Tomado de la base)
 // ============================================================================
 const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
@@ -34,12 +34,10 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
 
 
   useEffect(() => {
-    // Sincroniza el contador con el saldo real
     setDisplayPoints(points);
   }, [points]);
 
   useEffect(() => {
-    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -51,8 +49,6 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
       const animate = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
-        
-        // Easing function (ease-out cubic)
         const eased = 1 - Math.pow(1 - progress, 3);
         
         setDisplayPoints(Math.round(start + (end - start) * eased));
@@ -82,7 +78,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
 };
 
 // ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Tomado de Header (1).jsx)
+// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Tomado de la base)
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -156,7 +152,8 @@ const Header = () => {
         setIsUserMenuOpen(false);
       }
       // ✅ Cerrar modal de menú principal al hacer click fuera
-      if (mainMenuModalRef.current && !mainMenuModalRef.current.contains(event.target)) {
+      if (isMainMenuModalOpen && mainMenuModalRef.current && !mainMenuModalRef.current.contains(event.target)) {
+        // Excluir el botón de toggle del menú principal
         if (!event.target.closest('#mobile-main-menu-toggle')) {
             setIsMainMenuModalOpen(false);
         }
@@ -167,7 +164,7 @@ const Header = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isMainMenuModalOpen]); // Dependencia agregada para re-evaluar el cierre del modal
 
   // Cerrar menús/modals al cambiar de ruta
   useEffect(() => {
@@ -240,7 +237,7 @@ const Header = () => {
                 LOGO Y BOTÓN MENÚ MÓVIL (Izquierda)
                 =============================== */}
             <div className="flex items-center space-x-2">
-                {/* ✅ Botón "Menú" principal - Visible solo en móvil */}
+                {/* ✅ Botón "Menú" principal - Visible solo en móvil (Texto) */}
                 {user && (
                     <Button 
                         id="mobile-main-menu-toggle" 
@@ -255,8 +252,6 @@ const Header = () => {
                 
                 {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                  {/* ... Lógica del Logo Original ... */}
-                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -624,16 +619,16 @@ const Header = () => {
             <div 
                 className="fixed inset-0 z-[100] md:hidden" // Z-index alto para superponer
             >
-                {/* Overlay oscuro que se cierra al clickar */}
+                {/* ✅ Overlay oscuro (opacidad) que se cierra al clickar */}
                 <div 
-                    className="absolute inset-0 bg-black/50" 
+                    className="absolute inset-0 bg-black/70" // Fondo oscuro para opacar contenido
                     onClick={toggleMainMenuModal}
                 ></div>
 
-                {/* Contenido del Modal (Panel Lateral) */}
+                {/* ✅ Contenido del Modal (Panel Lateral) con fondo blanco */}
                 <div 
                     ref={mainMenuModalRef}
-                    className="absolute left-0 top-0 h-full w-64 bg-background shadow-2xl p-4 transition-transform duration-300 ease-out"
+                    className="absolute left-0 top-0 h-full w-64 bg-white shadow-2xl p-4 transition-transform duration-300 ease-out" // Fondo BLANCO
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-center mb-6">
