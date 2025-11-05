@@ -1,10 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño Restaurado (Basado en la imagen) con Puntos DUALES
+// HEADER - Diseño ORIGINAL RESTAURADO con Puntos DUALES Sincronizados
 // ============================================================================
-// ✅ Diseño visual de la imagen RESTAURADO.
-// ✅ Funcionalidad: Muestra freePoints (Amarillo) y premiumPoints (Verde) sincronizados.
-// ✅ Notificación flotante ajustada al diseño.
+// ✅ Diseño y Layout originales RESTAURADOS.
+// ✅ Funcionalidad: Muestra freePoints (Estrella) y premiumPoints (Compra)
+// ✅ Notificación flotante adaptada al sistema dual.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,15 +16,23 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Acepta 'free' o 'premium' para el color)
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Actualizado para el color y tipo)
 // ============================================================================
-const AnimatedPointsCounter = ({ points, animation, colorType, sizeClass = 'text-base' }) => {
+// Recibe un nuevo prop 'colorType' ('free' o 'premium')
+const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
   
-  // Establecer el color basado en el tipo: Amarillo/Naranja para Gratis, Verde para Premium
-  const textColor = colorType === 'free' ? 'text-orange-400' : 'text-green-600';
-  const iconName = colorType === 'free' ? 'Star' : 'Zap'; // Estrella para Gratis, Zap/Rayo para Premium
+  // Establecer el color basado en el tipo
+  let textColor = '';
+  if (colorType === 'premium') {
+    textColor = 'text-green-600'; // Verde
+  } else if (colorType === 'free') {
+    textColor = 'text-orange-400'; // Amarillo/Naranja para la estrella
+  } else {
+    textColor = 'text-accent'; // El color original que usaba el diseño
+  }
+
 
   useEffect(() => {
     // Sincroniza el contador con el saldo real
@@ -32,6 +40,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType, sizeClass = 'text
   }, [points]);
 
   useEffect(() => {
+    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -63,12 +72,13 @@ const AnimatedPointsCounter = ({ points, animation, colorType, sizeClass = 'text
   }, [points, animation.show, animation.type, animation.pointType, colorType]);
 
   return (
-    <div className={`flex items-center space-x-1 font-bold transition-transform duration-300 ${isAnimating ? 'scale-110' : 'scale-100'}`}>
-      <AppIcon name={iconName} size={16} className={textColor} />
-      <span className={`${sizeClass} ${textColor}`}>
-        {displayPoints.toLocaleString()}
-      </span>
-    </div>
+    <span
+      className={`font-mono text-sm font-medium ${textColor} transition-transform duration-300 ${
+        isAnimating ? 'scale-110' : 'scale-100'
+      }`}
+    >
+      {displayPoints.toLocaleString()}
+    </span>
   );
 };
 
@@ -80,11 +90,11 @@ const FloatingPointsNotification = ({ animation }) => {
 
   const isEarn = animation.type === 'earn';
   const isPremium = animation.pointType === 'premium';
-  
-  // Clases de color basadas en el tipo de punto
+
+  // Clases de color para el fondo de la notificación
   const bgClasses = isPremium 
-    ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600')
-    : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600');
+    ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600') // Verde para Premium
+    : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600'); // Naranja/Amarillo para Gratis
     
   const messageText = isPremium ? 'Puntos Premium' : 'Puntos Gratis';
 
@@ -189,7 +199,6 @@ const Header = () => {
     return location.pathname === '/dashboard' && location.state?.orientation === orientation;
   };
 
-  // Componente Icono simplificado
   const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
     return <AppIcon name={name} size={size} color={color} className={className} />;
   };
@@ -207,89 +216,116 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             
             {/* ===============================
-                LOGO (El logo de la imagen es más simple)
+                LOGO
                 =============================== */}
             <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                {/* Usando el logo simple visto en la imagen */}
+              {branding.logo.primary ? (
+                <img 
+                  src={branding.logo.primary} 
+                  alt={branding.texts.appName || 'Logo'} 
+                  className="h-8 object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              
+              <div 
+                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                style={{ 
+                  display: branding.logo.primary ? 'none' : 'flex',
+                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                }}
+              >
+                <Icon name="Video" size={20} color="white" />
+              </div>
+              
+              {!branding.logo.primary && (
                 <span 
-                    className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                    style={{
-                        backgroundImage: `linear-gradient(to right, #FFD700, #FFA500)` // Colores aproximados al logo de la imagen
-                    }}
+                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                  }}
                 >
-                    {branding.texts.appName || 'Radeisan'}
+                  {branding.texts.appName || 'Radeisan'}
                 </span>
+              )}
             </Link>
 
             {/* ===============================
-                NAVEGACIÓN CENTRAL (Adaptada al estilo de la imagen)
+                NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS)
                 =============================== */}
             {user && (
-              <nav className="hidden md:flex items-center space-x-4">
-                {/* Elementos de Navegación de la imagen: Inicio, Reels, Videos, Tienda, Recompensas */}
-                
-                {/* Inicio */}
-                <button 
+              <nav className="hidden md:flex items-center space-x-1">
+                <button
                   onClick={handleHomeNavigate}
-                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all')
-                      ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
-                    <Icon name="Home" size={18} />
-                    <span>Inicio</span>
+                  <Icon name="Home" size={18} />
+                  <span>Inicio</span>
                 </button>
-                
-                {/* Reels */}
+
                 <button
                   onClick={() => handleOrientationNavigate('vertical')}
-                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${
-                    isOrientationActive('vertical') ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isOrientationActive('vertical')
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
                   <Icon name="Smartphone" size={18} />
                   <span>Reels</span>
                 </button>
 
-                {/* Videos */}
                 <button
                   onClick={() => handleOrientationNavigate('horizontal')}
-                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${
-                    isOrientationActive('horizontal') ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isOrientationActive('horizontal')
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
                   <Icon name="Monitor" size={18} />
                   <span>Videos</span>
                 </button>
 
-                {/* Tienda */}
                 <Link
                   to="/marketplace"
-                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${
-                    location.pathname === '/marketplace' ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/marketplace' 
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
                   <Icon name="Store" size={18} />
                   <span>Tienda</span>
                 </Link>
 
-                {/* Recompensas */}
                 <Link
                   to="/rewards"
-                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${
-                    location.pathname === '/rewards' ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/rewards' 
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                   }`}
                 >
                   <Icon name="Gift" size={18} />
                   <span>Recompensas</span>
                 </Link>
-                
-                {/* PANEL ADMIN - Oculto si no es admin */}
+
+                {/* PANEL ADMIN - Solo para administradores */}
                 {user.isAdmin && (
                   <Link
                     to="/admin"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${
-                      location.pathname.startsWith('/admin') ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      location.pathname.startsWith('/admin')
+                        ? 'bg-primary/10 text-primary' 
+                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                     }`}
                   >
                     <Icon name="Shield" size={18} />
@@ -300,73 +336,65 @@ const Header = () => {
             )}
 
             {/* ===============================
-                SECCIÓN DERECHA (PUNTOS Y BOTONES DE ACCIÓN)
+                SECCIÓN DERECHA
                 =============================== */}
-            <div className="flex items-center space-x-3 md:space-x-4">
+            <div className="flex items-center space-x-4">
               
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo) */}
+                  {/* Balance de Puntos Gratis con Animación (Mantiene la estructura original) */}
                   <div 
-                    className="flex items-center space-x-1"
-                    title={`Puntos Gratis: ${freePoints.toLocaleString()}`}
+                    className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group"
+                    title={`Puntos Gratis: ${freePoints.toLocaleString()}`} // Muestra Free Points
                   >
+                    <Icon 
+                      name="Star" 
+                      size={16} 
+                      // Aplica color amarillo/naranja
+                      className="text-orange-400 group-hover:scale-110 transition-transform" 
+                    />
                     {pointsLoading ? (
                       <span className="text-xs text-muted-foreground animate-pulse">
                         Cargando...
                       </span>
                     ) : (
                       <AnimatedPointsCounter 
-                        points={freePoints} 
+                        points={freePoints} // Muestra Free Points
                         animation={pointsAnimation}
-                        colorType="free" // Amarillo/Naranja para Gratis
-                        sizeClass="text-base"
+                        colorType="free" // Pasa el tipo para el color
                       />
                     )}
                   </div>
 
-                  {/* Botón Comprar Puntos (Verde, con puntos Premium incluidos) */}
+                  {/* Botón para Comprar Puntos (Verde, diseño de la imagen) */}
                   <Link 
                     to="/purchase-points"
-                    // El saldo de premium se muestra *dentro* del botón de compra o justo al lado
-                    className="flex items-center gap-1.5 text-white bg-green-600 px-3 md:px-4 py-2 rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
-                    title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
+                    className="hidden md:flex items-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                    title={`Puntos Premium: ${premiumPoints.toLocaleString()}`} // Muestra Premium Points en el title
                   >
-                    {/* El color de los puntos premium es Verde, igual al fondo del botón */}
-                    {pointsLoading ? (
-                      <span className="text-xs text-white/80 animate-pulse">
-                        Cargando...
-                      </span>
-                    ) : (
-                      <span className="text-base font-bold">
-                        {premiumPoints.toLocaleString()}
-                      </span>
-                    )}
                     <Icon name="Sparkles" size={18} className="text-white" />
-                    <span className='hidden md:inline'>Comprar Puntos</span>
+                    {/* Se puede optar por mostrar solo el saldo Premium aquí si es necesario */}
+                    <span className='font-bold'>{premiumPoints.toLocaleString()}</span>
+                    <span>Comprar Puntos</span>
                   </Link>
 
 
-                  {/* Botón de Subir (Rojo, como en la imagen) */}
-                  <Button 
-                    size="sm" 
-                    asChild 
-                    className="bg-red-500 hover:bg-red-600 transition-colors"
-                  >
+                  {/* Botón de Subir Contenido (Rojo, diseño de la imagen) */}
+                  <Button size="sm" asChild className="hidden md:flex bg-red-500 hover:bg-red-600 transition-colors">
                     <Link to="/upload">
-                      <Icon name="Plus" size={16} className="mr-1" />
+                      <Icon name="Plus" size={16} className="mr-2" />
                       Subir
                     </Link>
                   </Button>
 
                   {/* Notificaciones */}
-                  <Button variant="ghost" size="icon" className="relative hidden sm:flex">
+                  <Button variant="ghost" size="icon" className="relative">
                     <Icon name="Bell" size={20} />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
                   </Button>
 
-                  {/* Avatar de Usuario */}
+                  {/* Menú de Usuario */}
                   <div className="relative" ref={userMenuRef}>
                     <Button
                       variant="ghost"
@@ -387,7 +415,7 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu (Mantenemos la estructura simplificada) */}
+                    {/* Dropdown Menu */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
@@ -396,28 +424,42 @@ const Header = () => {
                             <div className="text-sm font-medium text-popover-foreground truncate">
                               {user.name || 'Usuario'}
                             </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {user.email}
+                            </div>
                             
-                            {/* Balance de puntos en el menú (Ambos saldos) */}
+                            {/* Balance de puntos en el menú (Dual) */}
                             <div className="mt-2 flex flex-col gap-1">
+                                {/* Puntos Gratis */}
                                 <div className="flex items-center gap-2">
+                                    <Icon name="Star" size={14} className="text-orange-400" />
                                     <AnimatedPointsCounter 
                                         points={freePoints} 
                                         animation={pointsAnimation}
                                         colorType="free"
-                                        sizeClass="text-sm"
                                     />
                                     <span className="text-xs text-muted-foreground">Gratis</span>
                                 </div>
+                                {/* Puntos Premium */}
                                 <div className="flex items-center gap-2">
+                                    <Icon name="Sparkles" size={14} className="text-green-600" />
                                     <AnimatedPointsCounter 
                                         points={premiumPoints} 
                                         animation={pointsAnimation}
                                         colorType="premium"
-                                        sizeClass="text-sm"
                                     />
                                     <span className="text-xs text-muted-foreground">Premium</span>
                                 </div>
                             </div>
+                            
+                            {/* Badge de Admin */}
+                            {user.isAdmin && (
+                              <div className="mt-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                <Icon name="Shield" size={12} className="mr-1" />
+                                {user.role === 'super_admin' ? 'Super Admin' : 
+                                 user.role === 'admin' ? 'Admin' : 'Moderador'}
+                              </div>
+                            )}
                           </div>
 
                           {/* Enlaces del Menú */}
@@ -430,17 +472,44 @@ const Header = () => {
                             Mi Perfil
                           </Link>
 
+                          {user.is_business_account && (
+                            <Link
+                              to="/business"
+                              className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
+                              onClick={() => setIsUserMenuOpen(false)}
+                            >
+                              <Icon name="Building" size={16} className="mr-2" />
+                              Mi Negocio
+                            </Link>
+                          )}
+
                           <Link
                             to="/rewards"
                             className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                             onClick={() => setIsUserMenuOpen(false)}
                           >
                             <Icon name="Gift" size={16} className="mr-2" />
-                            Recompensas
+                            Mis Recompensas
                           </Link>
+
+                          {/* PANEL ADMIN en el menú */}
+                          {user.isAdmin && (
+                            <>
+                              <div className="border-t border-border my-1"></div>
+                              <Link
+                                to="/admin"
+                                className="flex items-center px-4 py-2 text-sm text-primary hover:bg-primary/10 transition-colors font-medium"
+                                onClick={() => setIsUserMenuOpen(false)}
+                              >
+                                <Icon name="Shield" size={16} className="mr-2" />
+                                Panel de Administración
+                              </Link>
+                            </>
+                          )}
 
                           <div className="border-t border-border my-1"></div>
 
+                          {/* Configuración */}
                           <Link
                             to="/settings"
                             className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
@@ -449,6 +518,11 @@ const Header = () => {
                             <Icon name="Settings" size={16} className="mr-2" />
                             Configuración
                           </Link>
+
+                          <button className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors">
+                            <Icon name="HelpCircle" size={16} className="mr-2" />
+                            Ayuda
+                          </button>
 
                           <div className="border-t border-border my-1"></div>
 
