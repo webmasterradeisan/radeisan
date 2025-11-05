@@ -1,16 +1,16 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - Gestión Global del Sistema de Puntos (ACTUALIZADO)
+// POINTS CONTEXT - Gestión Global del Sistema de Puntos (SOLUCIÓN PERSISTENCIA)
 // ============================================================================
-// CAMBIOS:
-// - Reemplaza Realtime por Polling (consultas cada 30 segundos)
-// - Usa el servicio actualizado con RPC
-// - Evita problemas de recursión infinita en políticas RLS
+// ✅ CORRECCIÓN: Implementada la lógica de comunicación con Supabase (RPC) 
+//    dentro de addPoints y deductPoints para asegurar la persistencia de los puntos.
+// ✅ La aplicación ahora lee y escribe los puntos 'free' y 'premium' correctamente.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { getUserPoints } from '../services/pointsService';
+import { supabase } from 'lib/supabase'; // ⚠️ NECESARIO para la persistencia
 
 const PointsContext = createContext();
 
@@ -21,6 +21,13 @@ export const usePoints = () => {
   }
   return context;
 };
+
+// ============================================================================
+// CONSTANTES DE CONFIGURACIÓN
+// ============================================================================
+// Nombre de la función RPC en Supabase (debe existir en el backend)
+const POINTS_RPC_NAME = 'update_user_points'; 
+const POLLING_INTERVAL = 30000; // 30 segundos
 
 export const PointsProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
@@ -48,72 +55,172 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
-  const pollingIntervalRef = useRef(null); // ✅ NUEVO: Polling en lugar de Realtime
+  const pollingIntervalRef = useRef(null);
 
   // ============================================================================
-  // CARGAR PUNTOS INICIALES
+  // CARGAR PUNTOS INICIALES (Funciona como el Polling)
   // ============================================================================
   const loadPoints = useCallback(async () => {
     if (!user || !isAuthenticated) {
-      console.log('⏭️ No hay usuario, reseteando puntos');
+      // Limpiar puntos si no hay usuario
       setPoints({ total: 0, free: 0, premium: 0, loading: false });
       return;
     }
 
     try {
-      console.log('💰 Cargando puntos para usuario:', user.id);
-      
-      // ✅ Usa el servicio actualizado que llama a la función RPC
+      // ✅ Se asume que getUserPoints llama a Supabase y trae { free: N, premium: M }
       const pointsData = await getUserPoints(user.id);
 
-      console.log('✅ Puntos cargados:', pointsData);
-      
       if (mountedRef.current) {
         setPoints({
           ...pointsData,
+          total: (pointsData.free || 0) + (pointsData.premium || 0),
           loading: false
         });
       }
     } catch (error) {
       console.error('❌ Error al cargar puntos:', error);
       if (mountedRef.current) {
-        setPoints({ total: 0, free: 0, premium: 0, loading: false });
+        setPoints(prev => ({ ...prev, loading: false }));
       }
     }
   }, [user, isAuthenticated]);
 
   // ============================================================================
-  // CARGAR PUNTOS AL MONTAR O CUANDO CAMBIE EL USUARIO
+  // FUNCIÓN PARA AÑADIR PUNTOS CON PERSISTENCIA
   // ============================================================================
+  const addPoints = useCallback(async (amount, message = '', type = 'free') => {
+    if (!user || amount <= 0 || !['free', 'premium'].includes(type)) return;
+
+    console.log(`🎉 addPoints llamado: +${amount} ${type} por ${message}`);
+
+    try {
+      // ⚠️ PASO CRÍTICO: Llamada a la función RPC de Supabase para SUMAR
+      const { data, error } = await supabase.rpc(POINTS_RPC_NAME, {
+        p_user_id: user.id,
+        p_amount: amount, // Cantidad positiva para sumar
+        p_type: type
+      });
+      
+      if (error) throw error;
+      
+      // OPTIMIZACIÓN: Si la RPC devuelve los nuevos totales, actualizamos el estado
+      if (data && typeof data === 'object') {
+        setPoints(prev => ({
+            ...prev,
+            free: data.new_free_points,
+            premium: data.new_premium_points,
+            total: data.new_free_points + data.new_premium_points
+        }));
+      } else {
+        // Sino, forzamos una recarga de todos los puntos para sincronizar
+        loadPoints();
+      }
+
+      // Mostrar animación (siempre después de la operación exitosa)
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+
+      setPointsAnimation({
+        show: true,
+        amount: amount,
+        type: 'earn',
+        message: message || `+${amount} puntos`
+      });
+
+      animationTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          setPointsAnimation(prev => ({ ...prev, show: false }));
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('❌ Error al añadir puntos:', error);
+      // Si la operación falla en el servidor, cargamos los puntos reales
+      loadPoints(); 
+    }
+  }, [user, loadPoints]);
+
+  // ============================================================================
+  // FUNCIÓN PARA DEDUCIR PUNTOS CON PERSISTENCIA
+  // ============================================================================
+  // 💡 Modificada para requerir el tipo de punto a descontar
+  const deductPoints = useCallback(async (amount, message = '', type) => {
+    if (!user || amount <= 0 || !['free', 'premium'].includes(type)) {
+      throw new Error('Tipo de punto o cantidad inválida para la deducción.');
+    }
+
+    console.log(`💸 deductPoints llamado: -${amount} ${type} por ${message}`);
+    
+    try {
+      // ⚠️ PASO CRÍTICO: Llamada a la función RPC de Supabase para RESTAR
+      const { data, error } = await supabase.rpc(POINTS_RPC_NAME, {
+        p_user_id: user.id,
+        p_amount: -amount, // Cantidad negativa para restar
+        p_type: type 
+      });
+
+      if (error) throw error;
+
+      // Actualizar el estado con los valores de retorno de la RPC
+      if (data && typeof data === 'object') {
+        setPoints(prev => ({
+            ...prev,
+            free: data.new_free_points,
+            premium: data.new_premium_points,
+            total: data.new_free_points + data.new_premium_points
+        }));
+      } else {
+        loadPoints();
+      }
+      
+      // Lógica de animación
+      setPointsAnimation({
+        show: true,
+        amount: amount,
+        type: 'spend',
+        message: message || `-${amount} puntos`
+      });
+      animationTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          setPointsAnimation(prev => ({ ...prev, show: false }));
+        }
+      }, 3000); 
+
+      return true; // Éxito
+
+    } catch (error) {
+      console.error('❌ Error al deducir puntos:', error);
+      // Re-lanza el error (útil para manejar "Puntos insuficientes" en la compra)
+      throw new Error(error.message || 'Error desconocido al deducir puntos.');
+    }
+  }, [user, loadPoints]);
+
+  // ============================================================================
+  // EFECTOS DE SINCRONIZACIÓN
+  // ============================================================================
+  
+  // 1. Cargar puntos al iniciar sesión
   useEffect(() => {
     loadPoints();
   }, [loadPoints]);
 
-  // ============================================================================
-  // POLLING - Consultar puntos cada 30 segundos (REEMPLAZA REALTIME)
-  // ============================================================================
+  // 2. Polling para sincronización (cada 30 segundos)
   useEffect(() => {
     if (!user || !isAuthenticated) {
-      // Limpiar polling si no hay usuario
       if (pollingIntervalRef.current) {
-        console.log('⏹️ Deteniendo polling - no hay usuario');
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
       return;
     }
 
-    console.log('🔄 Iniciando polling de puntos (cada 30 segundos)');
-
-    // Configurar intervalo de polling
     pollingIntervalRef.current = setInterval(() => {
-      console.log('🔄 Polling: Actualizando puntos...');
       loadPoints();
-    }, 30000); // 30 segundos
+    }, POLLING_INTERVAL);
 
-    // Cleanup
     return () => {
-      console.log('🧹 Limpiando polling');
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
@@ -122,127 +229,9 @@ export const PointsProvider = ({ children }) => {
   }, [user, isAuthenticated, loadPoints]);
 
   // ============================================================================
-  // FUNCIÓN PARA AÑADIR PUNTOS CON ANIMACIÓN
-  // ============================================================================
-  const addPoints = useCallback((amount, message = '', type = 'free') => {
-    console.log('🎉 addPoints llamado:', { amount, message, type });
-
-    if (!amount || amount <= 0) {
-      console.warn('⚠️ Cantidad de puntos inválida:', amount);
-      return;
-    }
-
-    // Actualizar puntos optimísticamente (sin esperar al servidor)
-    setPoints(prev => {
-      const newPoints = { ...prev };
-      
-      if (type === 'free') {
-        newPoints.free += amount;
-      } else if (type === 'premium') {
-        newPoints.premium += amount;
-      }
-      
-      newPoints.total = newPoints.free + newPoints.premium;
-
-      console.log('💫 Puntos actualizados optimísticamente:', newPoints);
-      return newPoints;
-    });
-
-    // Mostrar animación
-    setPointsAnimation({
-      show: true,
-      amount,
-      type: 'earn',
-      message: message || `+${amount} puntos`
-    });
-
-    // Ocultar animación después de 3 segundos
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
-    }
-
-    animationTimeoutRef.current = setTimeout(() => {
-      if (mountedRef.current) {
-        setPointsAnimation({
-          show: false,
-          amount: 0,
-          type: 'earn',
-          message: ''
-        });
-      }
-    }, 3000);
-
-    // Recargar puntos desde el servidor para confirmar
-    setTimeout(() => {
-      loadPoints();
-    }, 500);
-  }, [loadPoints]);
-
-  // ============================================================================
-  // FUNCIÓN PARA DEDUCIR PUNTOS
-  // ============================================================================
-  const deductPoints = useCallback((amount, message = '') => {
-    console.log('💸 deductPoints llamado:', { amount, message });
-
-    if (!amount || amount <= 0) {
-      console.warn('⚠️ Cantidad de puntos inválida:', amount);
-      return;
-    }
-
-    // Actualizar puntos optimísticamente
-    setPoints(prev => {
-      const newPoints = { ...prev };
-      
-      // Deducir primero de premium, luego de free
-      if (newPoints.premium >= amount) {
-        newPoints.premium -= amount;
-      } else {
-        const remaining = amount - newPoints.premium;
-        newPoints.premium = 0;
-        newPoints.free = Math.max(0, newPoints.free - remaining);
-      }
-      
-      newPoints.total = newPoints.free + newPoints.premium;
-
-      console.log('💫 Puntos deducidos optimísticamente:', newPoints);
-      return newPoints;
-    });
-
-    // Mostrar animación
-    setPointsAnimation({
-      show: true,
-      amount,
-      type: 'spend',
-      message: message || `-${amount} puntos`
-    });
-
-    // Ocultar animación
-    if (animationTimeoutRef.current) {
-      clearTimeout(animationTimeoutRef.current);
-    }
-
-    animationTimeoutRef.current = setTimeout(() => {
-      if (mountedRef.current) {
-        setPointsAnimation({
-          show: false,
-          amount: 0,
-          type: 'spend',
-          message: ''
-        });
-      }
-    }, 3000);
-
-    // Recargar puntos desde el servidor
-    setTimeout(() => {
-      loadPoints();
-    }, 500);
-  }, [loadPoints]);
-
-  // ============================================================================
   // FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE
   // ============================================================================
   const refreshPoints = useCallback(() => {
-    console.log('🔄 Refrescando puntos manualmente');
     return loadPoints();
   }, [loadPoints]);
 
@@ -251,13 +240,10 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   useEffect(() => {
     return () => {
-      console.log('🧹 Limpiando PointsProvider');
       mountedRef.current = false;
-      
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
       }
-      
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
