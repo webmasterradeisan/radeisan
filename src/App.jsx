@@ -8,8 +8,8 @@
 
 import React from "react";
 import Routes from "./Routes";
-import GlobalMiniPlayer from "./components/GlobalMiniPlayer";
-import { VideoPlayerProvider } from "./contexts/VideoPlayerContext";
+import GlobalMiniPlayer from "components/GlobalMiniPlayer";
+import { VideoPlayerProvider } from "contexts/VideoPlayerContext";
 
 function App() {
   return (
