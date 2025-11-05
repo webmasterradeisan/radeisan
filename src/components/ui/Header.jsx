@@ -1,9 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño FINAL RESTAURADO y Puntos DUALES Separados con ETIQUETAS
+// HEADER - Diseño FINAL Restaurado y Puntos DUALES Separados con ETIQUETAS
 // ============================================================================
-// ✅ Estructura visual intacta.
-// ✅ NUEVO: Implementado un menú de navegación principal para móvil (Hamburger Menu).
+// ✅ Estructura visual de escritorio restaurada para mostrar:
+//    [⭐️ Gratis] | [💚 Premium] | [🟢 Comprar]
+// ✅ Implementación de menú móvil (Burger) intacta.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -15,10 +16,10 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Actualizado para el color y tipo)
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Ajustado para el color y la etiqueta)
 // ============================================================================
-// Recibe un nuevo prop 'colorType' ('free' o 'premium')
-const AnimatedPointsCounter = ({ points, animation, colorType }) => {
+// Recibe un nuevo prop 'colorType' ('free' o 'premium') y 'showLabel' para las dos filas.
+const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
   
@@ -32,14 +33,11 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
     textColor = 'text-accent'; 
   }
 
-
   useEffect(() => {
-    // Sincroniza el contador con el saldo real
     setDisplayPoints(points);
   }, [points]);
 
   useEffect(() => {
-    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -51,8 +49,6 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
       const animate = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
-        
-        // Easing function (ease-out cubic)
         const eased = 1 - Math.pow(1 - progress, 3);
         
         setDisplayPoints(Math.round(start + (end - start) * eased));
@@ -70,9 +66,28 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
     }
   }, [points, animation.show, animation.type, animation.pointType, colorType]);
 
+  // Renderizado en dos filas si se pide la etiqueta
+  if (showLabel) {
+      return (
+          <div className="flex flex-col items-center">
+              <span
+                  className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
+                      isAnimating ? 'scale-110' : 'scale-100'
+                  }`}
+              >
+                  {displayPoints.toLocaleString()}
+              </span>
+              <span className={`text-xs font-medium mt-[-2px] whitespace-nowrap ${colorType === 'premium' ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  Puntos {colorType === 'free' ? 'Gratis' : 'Premium'}
+              </span>
+          </div>
+      );
+  }
+  
+  // Renderizado en una sola fila (como en el header principal)
   return (
     <span
-      className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
+      className={`font-mono text-sm font-medium ${textColor} transition-transform duration-300 ${
         isAnimating ? 'scale-110' : 'scale-100'
       }`}
     >
@@ -82,7 +97,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
 };
 
 // ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Adaptada al sistema dual)
+// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -90,7 +105,6 @@ const FloatingPointsNotification = ({ animation }) => {
   const isEarn = animation.type === 'earn';
   const isPremium = animation.pointType === 'premium';
 
-  // Clases de color para el fondo de la notificación
   const bgClasses = isPremium 
     ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600')
     : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600');
@@ -136,26 +150,23 @@ const Header = () => {
   const { freePoints, premiumPoints, pointsAnimation, loading: pointsLoading } = usePoints(); 
   const { branding } = useBranding();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  // ✅ NUEVO ESTADO para el menú de navegación móvil
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false); 
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
-  const mobileNavRef = useRef(null); // Ref para el menú móvil
+  const mobileNavRef = useRef(null); 
 
   // ============================================================================
   // EFECTOS
   // ============================================================================
 
-  // Cerrar menú de perfil al hacer click fuera
+  // Cerrar menús al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
       }
-      // ✅ Cerrar menú móvil al hacer click fuera
       if (mobileNavRef.current && !mobileNavRef.current.contains(event.target)) {
-        // Asegúrate de que no es el botón de hamburguesa
         if (!event.target.closest('#mobile-nav-toggle')) {
             setIsMobileNavOpen(false);
         }
@@ -171,7 +182,6 @@ const Header = () => {
   // Cerrar menús al cambiar de ruta
   useEffect(() => {
     setIsUserMenuOpen(false);
-    // ✅ Cerrar menú móvil al cambiar de ruta
     setIsMobileNavOpen(false);
   }, [location.pathname]);
 
@@ -181,14 +191,11 @@ const Header = () => {
 
   const toggleUserMenu = () => {
     setIsUserMenuOpen(prev => !prev);
-    // Cierra el menú de navegación principal si está abierto
     if (isMobileNavOpen) setIsMobileNavOpen(false);
   };
   
-  // ✅ NUEVA FUNCIÓN para el menú de navegación móvil
   const toggleMobileNav = () => {
     setIsMobileNavOpen(prev => !prev);
-    // Cierra el menú de perfil si está abierto
     if (isUserMenuOpen) setIsUserMenuOpen(false);
   };
 
@@ -235,10 +242,10 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             
             {/* ===============================
-                LOGO
+                LOGO (Izquierda)
                 =============================== */}
             <div className="flex items-center space-x-2">
-                {/* ✅ Botón de menú móvil (Hamburguesa) - Visible solo en móvil */}
+                {/* Botón de menú móvil (Hamburguesa) - Visible solo en móvil */}
                 {user && (
                     <Button 
                         id="mobile-nav-toggle"
@@ -371,56 +378,50 @@ const Header = () => {
             )}
 
             {/* ===============================
-                SECCIÓN DERECHA
+                SECCIÓN DERECHA (PUNTOS Y BOTONES DE ACCIÓN)
                 =============================== */}
             <div className="flex items-center space-x-4">
               
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) */}
+                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) - Restaurado al diseño original sin flex-col en LG */}
                   <div 
-                    className="hidden lg:flex flex-col items-center cursor-pointer group"
+                    className="hidden lg:flex items-center space-x-1"
                     title={`Puntos Gratis: ${freePoints.toLocaleString()}`} 
                   >
-                    {/* Fila 1: Icono y Saldo */}
-                    <div className="flex items-center space-x-1">
-                      <Icon 
-                        name="Star" 
-                        size={18} 
-                        className="text-orange-400" 
+                    <Icon 
+                      name="Star" 
+                      size={18} 
+                      className="text-orange-400" 
+                    />
+                    {pointsLoading ? (
+                      <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
+                    ) : (
+                      // Display de puntos gratis
+                      <AnimatedPointsCounter 
+                        points={freePoints} 
+                        animation={pointsAnimation}
+                        colorType="free"
                       />
-                      {pointsLoading ? (
-                        <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
-                      ) : (
-                        <AnimatedPointsCounter 
-                          points={freePoints} // Muestra Free Points
-                          animation={pointsAnimation}
-                          colorType="free"
-                        />
-                      )}
-                    </div>
-                    {/* Fila 2: Etiqueta */}
-                    <span className="text-xs text-muted-foreground font-medium mt-[-2px] whitespace-nowrap">
-                      Puntos Gratis
-                    </span>
+                    )}
                   </div>
-
-                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) */}
+                  
+                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) - Restaurado al diseño original sin flex-col en LG */}
                   <div
-                    className="hidden lg:flex flex-col items-center"
+                    className="hidden lg:flex items-center space-x-1"
                     title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
                   >
-                    {/* Fila 1: Saldo */}
-                    <AnimatedPointsCounter 
-                      points={premiumPoints}
-                      animation={pointsAnimation}
-                      colorType="premium" // Pasa el tipo para el color Verde
-                    />
-                    {/* Fila 2: Etiqueta */}
-                    <span className="text-xs font-medium mt-[-2px] whitespace-nowrap text-green-600">
-                      Puntos Premium
-                    </span>
+                    {pointsLoading ? (
+                      <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
+                    ) : (
+                      // Display de puntos premium
+                      <AnimatedPointsCounter 
+                        points={premiumPoints}
+                        animation={pointsAnimation}
+                        colorType="premium" 
+                      />
+                    )}
                   </div>
                   
                   {/* Botón Comprar Puntos (Verde, diseño de la imagen) */}
@@ -489,8 +490,9 @@ const Header = () => {
                                         points={freePoints} 
                                         animation={pointsAnimation}
                                         colorType="free"
+                                        // Usamos showLabel para el menú desplegable
+                                        showLabel={true} 
                                     />
-                                    <span className="text-xs text-muted-foreground">Gratis</span>
                                 </div>
                                 {/* Puntos Premium */}
                                 <div className="flex items-center gap-2">
@@ -499,8 +501,9 @@ const Header = () => {
                                         points={premiumPoints} 
                                         animation={pointsAnimation}
                                         colorType="premium"
+                                        // Usamos showLabel para el menú desplegable
+                                        showLabel={true} 
                                     />
-                                    <span className="text-xs text-muted-foreground">Premium</span>
                                 </div>
                             </div>
                             
@@ -613,7 +616,7 @@ const Header = () => {
         </div>
         
         {/* ===============================
-            ✅ MENÚ DE NAVEGACIÓN MÓVIL (Dropdown Completo)
+            MENÚ DE NAVEGACIÓN MÓVIL (Dropdown Completo)
             =============================== */}
         {user && (
             <div 
