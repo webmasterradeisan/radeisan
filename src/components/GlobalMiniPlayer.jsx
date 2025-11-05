@@ -8,11 +8,12 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useVideoPlayer } from 'contexts/VideoPlayerContext';
-import Icon from 'components/AppIcon';
+import { useVideoPlayer } from '../contexts/VideoPlayerContext';
+import Icon from './AppIcon';
 
 const GlobalMiniPlayer = () => {
   const navigate = useNavigate();
+  
   // Detección inline de móvil
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
@@ -112,7 +113,6 @@ const GlobalMiniPlayer = () => {
   const handleGoToVideo = () => {
     if (currentVideo?.id) {
       navigate(`/video/${currentVideo.id}`);
-      // NO cerramos el mini-player, se manejará en la página del video
     }
   };
 
