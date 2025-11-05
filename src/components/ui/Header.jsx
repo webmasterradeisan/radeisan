@@ -2,8 +2,8 @@
 // ============================================================================
 // HEADER - Diseño FINAL RESTAURADO y Puntos DUALES Separados con ETIQUETAS
 // ============================================================================
-// ✅ Estructura visual de la última imagen respetada.
-// ✅ Separación: [⭐️ Free Points] [💚 Premium Points] con etiquetas debajo.
+// ✅ Estructura visual intacta.
+// ✅ NUEVO: Implementado un menú de navegación principal para móvil (Hamburger Menu).
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -133,23 +133,32 @@ const FloatingPointsNotification = ({ animation }) => {
 // ============================================================================
 const Header = () => {
   const { user, signOut, loading } = useAuth();
-  // ✅ Puntos necesarios: freePoints y premiumPoints
   const { freePoints, premiumPoints, pointsAnimation, loading: pointsLoading } = usePoints(); 
   const { branding } = useBranding();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  // ✅ NUEVO ESTADO para el menú de navegación móvil
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false); 
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
+  const mobileNavRef = useRef(null); // Ref para el menú móvil
 
   // ============================================================================
   // EFECTOS
   // ============================================================================
 
-  // Cerrar menú al hacer click fuera
+  // Cerrar menú de perfil al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
+      }
+      // ✅ Cerrar menú móvil al hacer click fuera
+      if (mobileNavRef.current && !mobileNavRef.current.contains(event.target)) {
+        // Asegúrate de que no es el botón de hamburguesa
+        if (!event.target.closest('#mobile-nav-toggle')) {
+            setIsMobileNavOpen(false);
+        }
       }
     };
 
@@ -159,9 +168,11 @@ const Header = () => {
     };
   }, []);
 
-  // Cerrar menú al cambiar de ruta
+  // Cerrar menús al cambiar de ruta
   useEffect(() => {
     setIsUserMenuOpen(false);
+    // ✅ Cerrar menú móvil al cambiar de ruta
+    setIsMobileNavOpen(false);
   }, [location.pathname]);
 
   // ============================================================================
@@ -170,6 +181,15 @@ const Header = () => {
 
   const toggleUserMenu = () => {
     setIsUserMenuOpen(prev => !prev);
+    // Cierra el menú de navegación principal si está abierto
+    if (isMobileNavOpen) setIsMobileNavOpen(false);
+  };
+  
+  // ✅ NUEVA FUNCIÓN para el menú de navegación móvil
+  const toggleMobileNav = () => {
+    setIsMobileNavOpen(prev => !prev);
+    // Cierra el menú de perfil si está abierto
+    if (isUserMenuOpen) setIsUserMenuOpen(false);
   };
 
   const handleLogout = async () => {
@@ -217,43 +237,59 @@ const Header = () => {
             {/* ===============================
                 LOGO
                 =============================== */}
-            <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-              {branding.logo.primary ? (
-                <img 
-                  src={branding.logo.primary} 
-                  alt={branding.texts.appName || 'Logo'} 
-                  className="h-8 object-contain"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextElementSibling.style.display = 'flex';
-                  }}
-                />
-              ) : null}
-              
-              <div 
-                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-                style={{ 
-                  display: branding.logo.primary ? 'none' : 'flex',
-                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                }}
-              >
-                <Icon name="Video" size={20} color="white" />
-              </div>
-              
-              {!branding.logo.primary && (
-                <span 
-                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                  style={{
-                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                  }}
-                >
-                  {branding.texts.appName || 'Radeisan'}
-                </span>
-              )}
-            </Link>
+            <div className="flex items-center space-x-2">
+                {/* ✅ Botón de menú móvil (Hamburguesa) - Visible solo en móvil */}
+                {user && (
+                    <Button 
+                        id="mobile-nav-toggle"
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={toggleMobileNav}
+                        className="md:hidden"
+                    >
+                        <Icon name={isMobileNavOpen ? 'X' : 'Menu'} size={24} />
+                    </Button>
+                )}
+                
+                <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+                    {branding.logo.primary ? (
+                      <img 
+                        src={branding.logo.primary} 
+                        alt={branding.texts.appName || 'Logo'} 
+                        className="h-8 object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    
+                    <div 
+                      className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                      style={{ 
+                        display: branding.logo.primary ? 'none' : 'flex',
+                        backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                      }}
+                    >
+                      <Icon name="Video" size={20} color="white" />
+                    </div>
+                    
+                    {!branding.logo.primary && (
+                      <span 
+                        className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                        style={{
+                          backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                        }}
+                      >
+                        {branding.texts.appName || 'Radeisan'}
+                      </span>
+                    )}
+                </Link>
+            </div>
+
 
             {/* ===============================
-                NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS)
+                NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS - Escritorio)
                 =============================== */}
             {user && (
               <nav className="hidden md:flex items-center space-x-1">
@@ -358,7 +394,7 @@ const Header = () => {
                         <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
                       ) : (
                         <AnimatedPointsCounter 
-                          points={freePoints} 
+                          points={freePoints} // Muestra Free Points
                           animation={pointsAnimation}
                           colorType="free"
                         />
@@ -575,6 +611,82 @@ const Header = () => {
             </div>
           </div>
         </div>
+        
+        {/* ===============================
+            ✅ MENÚ DE NAVEGACIÓN MÓVIL (Dropdown Completo)
+            =============================== */}
+        {user && (
+            <div 
+                ref={mobileNavRef}
+                className={`fixed top-16 left-0 w-full h-auto bg-background border-b border-border shadow-md transition-transform duration-300 ease-out ${
+                    isMobileNavOpen ? 'translate-y-0' : '-translate-y-full'
+                } md:hidden z-40`}
+            >
+                <nav className="flex flex-col space-y-1 p-4">
+                    {/* Botones de navegación principales */}
+                    {[
+                        { name: 'Inicio', path: '/dashboard', icon: 'Home', orientation: 'all' },
+                        { name: 'Reels', path: '/dashboard', icon: 'Smartphone', orientation: 'vertical' },
+                        { name: 'Videos', path: '/dashboard', icon: 'Monitor', orientation: 'horizontal' },
+                        { name: 'Tienda', path: '/marketplace', icon: 'Store' },
+                        { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
+                    ].map((item) => {
+                        const isActive = item.orientation 
+                            ? isOrientationActive(item.orientation)
+                            : location.pathname === item.path;
+                        
+                        const handleClick = () => {
+                            if (item.orientation) {
+                                handleOrientationNavigate(item.orientation);
+                            } else {
+                                navigate(item.path);
+                            }
+                            setIsMobileNavOpen(false);
+                        };
+
+                        return (
+                            <button
+                                key={item.name}
+                                onClick={handleClick}
+                                className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors w-full text-left ${
+                                    isActive
+                                        ? 'bg-primary/10 text-primary' 
+                                        : 'text-foreground hover:bg-muted'
+                                }`}
+                            >
+                                <Icon name={item.icon} size={20} />
+                                <span>{item.name}</span>
+                            </button>
+                        );
+                    })}
+
+                    {/* Botón de Admin (si es aplicable) */}
+                    {user.isAdmin && (
+                        <Link
+                            to="/admin"
+                            onClick={() => setIsMobileNavOpen(false)}
+                            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors text-primary hover:bg-primary/10"
+                        >
+                            <Icon name="Shield" size={20} />
+                            <span>Panel Admin</span>
+                        </Link>
+                    )}
+                    
+                    <div className="border-t border-border mt-2 pt-2">
+                        {/* Botón Comprar Puntos Móvil */}
+                        <Link 
+                            to="/purchase-points"
+                            onClick={() => setIsMobileNavOpen(false)}
+                            className="flex items-center justify-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium mt-2"
+                        >
+                            <Icon name="Sparkles" size={18} className="text-white" />
+                            Comprar Puntos
+                        </Link>
+                    </div>
+
+                </nav>
+            </div>
+        )}
       </header>
 
       {/* ===============================
