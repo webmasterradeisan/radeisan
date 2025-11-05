@@ -1,9 +1,9 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño FINAL RESTAURADO y Puntos DUALES Separados
+// HEADER - Diseño FINAL RESTAURADO y Puntos DUALES Separados con ETIQUETAS
 // ============================================================================
 // ✅ Estructura visual de la última imagen respetada.
-// ✅ Separación: [⭐️ Free Points] [💚 Premium Points] [🟢 Botón Comprar]
+// ✅ Separación: [⭐️ Free Points] [💚 Premium Points] con etiquetas debajo.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -72,7 +72,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
 
   return (
     <span
-      className={`font-mono text-sm font-medium ${textColor} transition-transform duration-300 ${
+      className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
         isAnimating ? 'scale-110' : 'scale-100'
       }`}
     >
@@ -342,46 +342,49 @@ const Header = () => {
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo) */}
+                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) */}
                   <div 
-                    className="hidden lg:flex items-center space-x-2 cursor-pointer group"
+                    className="hidden lg:flex flex-col items-center cursor-pointer group"
                     title={`Puntos Gratis: ${freePoints.toLocaleString()}`} 
                   >
-                    <Icon 
-                      name="Star" 
-                      size={18} // Tamaño ajustado para coincidir con la imagen
-                      // Aplica color amarillo/naranja
-                      className="text-orange-400" 
-                    />
-                    {pointsLoading ? (
-                      <span className="text-sm text-muted-foreground animate-pulse">
-                        Cargando...
-                      </span>
-                    ) : (
-                      <AnimatedPointsCounter 
-                        points={freePoints} // Muestra Free Points
-                        animation={pointsAnimation}
-                        colorType="free" // Pasa el tipo para el color
+                    {/* Fila 1: Icono y Saldo */}
+                    <div className="flex items-center space-x-1">
+                      <Icon 
+                        name="Star" 
+                        size={18} 
+                        className="text-orange-400" 
                       />
-                    )}
+                      {pointsLoading ? (
+                        <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
+                      ) : (
+                        <AnimatedPointsCounter 
+                          points={freePoints} 
+                          animation={pointsAnimation}
+                          colorType="free"
+                        />
+                      )}
+                    </div>
+                    {/* Fila 2: Etiqueta */}
+                    <span className="text-xs text-muted-foreground font-medium mt-[-2px] whitespace-nowrap">
+                      Puntos Gratis
+                    </span>
                   </div>
 
-                  {/* ZONA DE PUNTOS PREMIUM (Saldo solo) */}
+                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) */}
                   <div
-                    className="hidden lg:flex items-center space-x-1"
+                    className="hidden lg:flex flex-col items-center"
                     title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
                   >
-                    {pointsLoading ? (
-                      <span className="text-sm text-muted-foreground animate-pulse">
-                        Cargando...
-                      </span>
-                    ) : (
-                      <AnimatedPointsCounter 
-                        points={premiumPoints} // Muestra Premium Points
-                        animation={pointsAnimation}
-                        colorType="premium" // Pasa el tipo para el color Verde
-                      />
-                    )}
+                    {/* Fila 1: Saldo */}
+                    <AnimatedPointsCounter 
+                      points={premiumPoints}
+                      animation={pointsAnimation}
+                      colorType="premium" // Pasa el tipo para el color Verde
+                    />
+                    {/* Fila 2: Etiqueta */}
+                    <span className="text-xs font-medium mt-[-2px] whitespace-nowrap text-green-600">
+                      Puntos Premium
+                    </span>
                   </div>
                   
                   {/* Botón Comprar Puntos (Verde, diseño de la imagen) */}
