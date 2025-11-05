@@ -1,10 +1,9 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño FINAL Restaurado y Puntos DUALES Separados con ETIQUETAS
+// HEADER - Diseño FINAL RESTAURADO y Puntos DUALES Separados con ETIQUETAS
 // ============================================================================
-// ✅ Estructura visual de escritorio restaurada para mostrar:
-//    [⭐️ Gratis] | [💚 Premium] | [🟢 Comprar]
-// ✅ Implementación de menú móvil (Burger) intacta.
+// ✅ Estructura visual de la última imagen respetada.
+// ✅ Separación: [⭐️ Free Points] [💚 Premium Points] con etiquetas debajo.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,10 +15,10 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Ajustado para el color y la etiqueta)
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Actualizado para el color y tipo)
 // ============================================================================
-// Recibe un nuevo prop 'colorType' ('free' o 'premium') y 'showLabel' para las dos filas.
-const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false }) => {
+// Recibe un nuevo prop 'colorType' ('free' o 'premium')
+const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
   
@@ -33,11 +32,14 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
     textColor = 'text-accent'; 
   }
 
+
   useEffect(() => {
+    // Sincroniza el contador con el saldo real
     setDisplayPoints(points);
   }, [points]);
 
   useEffect(() => {
+    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -49,6 +51,8 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
       const animate = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
+        
+        // Easing function (ease-out cubic)
         const eased = 1 - Math.pow(1 - progress, 3);
         
         setDisplayPoints(Math.round(start + (end - start) * eased));
@@ -66,28 +70,9 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
     }
   }, [points, animation.show, animation.type, animation.pointType, colorType]);
 
-  // Renderizado en dos filas si se pide la etiqueta
-  if (showLabel) {
-      return (
-          <div className="flex flex-col items-center">
-              <span
-                  className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
-                      isAnimating ? 'scale-110' : 'scale-100'
-                  }`}
-              >
-                  {displayPoints.toLocaleString()}
-              </span>
-              <span className={`text-xs font-medium mt-[-2px] whitespace-nowrap ${colorType === 'premium' ? 'text-green-600' : 'text-muted-foreground'}`}>
-                  Puntos {colorType === 'free' ? 'Gratis' : 'Premium'}
-              </span>
-          </div>
-      );
-  }
-  
-  // Renderizado en una sola fila (como en el header principal)
   return (
     <span
-      className={`font-mono text-sm font-medium ${textColor} transition-transform duration-300 ${
+      className={`font-mono text-base font-bold ${textColor} transition-transform duration-300 ${
         isAnimating ? 'scale-110' : 'scale-100'
       }`}
     >
@@ -97,7 +82,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType, showLabel = false
 };
 
 // ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS
+// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Adaptada al sistema dual)
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -105,6 +90,7 @@ const FloatingPointsNotification = ({ animation }) => {
   const isEarn = animation.type === 'earn';
   const isPremium = animation.pointType === 'premium';
 
+  // Clases de color para el fondo de la notificación
   const bgClasses = isPremium 
     ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600')
     : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600');
@@ -147,29 +133,23 @@ const FloatingPointsNotification = ({ animation }) => {
 // ============================================================================
 const Header = () => {
   const { user, signOut, loading } = useAuth();
+  // ✅ Puntos necesarios: freePoints y premiumPoints
   const { freePoints, premiumPoints, pointsAnimation, loading: pointsLoading } = usePoints(); 
   const { branding } = useBranding();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false); 
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
-  const mobileNavRef = useRef(null); 
 
   // ============================================================================
   // EFECTOS
   // ============================================================================
 
-  // Cerrar menús al hacer click fuera
+  // Cerrar menú al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
-      }
-      if (mobileNavRef.current && !mobileNavRef.current.contains(event.target)) {
-        if (!event.target.closest('#mobile-nav-toggle')) {
-            setIsMobileNavOpen(false);
-        }
       }
     };
 
@@ -179,10 +159,9 @@ const Header = () => {
     };
   }, []);
 
-  // Cerrar menús al cambiar de ruta
+  // Cerrar menú al cambiar de ruta
   useEffect(() => {
     setIsUserMenuOpen(false);
-    setIsMobileNavOpen(false);
   }, [location.pathname]);
 
   // ============================================================================
@@ -191,12 +170,6 @@ const Header = () => {
 
   const toggleUserMenu = () => {
     setIsUserMenuOpen(prev => !prev);
-    if (isMobileNavOpen) setIsMobileNavOpen(false);
-  };
-  
-  const toggleMobileNav = () => {
-    setIsMobileNavOpen(prev => !prev);
-    if (isUserMenuOpen) setIsUserMenuOpen(false);
   };
 
   const handleLogout = async () => {
@@ -242,61 +215,45 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             
             {/* ===============================
-                LOGO (Izquierda)
+                LOGO
                 =============================== */}
-            <div className="flex items-center space-x-2">
-                {/* Botón de menú móvil (Hamburguesa) - Visible solo en móvil */}
-                {user && (
-                    <Button 
-                        id="mobile-nav-toggle"
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={toggleMobileNav}
-                        className="md:hidden"
-                    >
-                        <Icon name={isMobileNavOpen ? 'X' : 'Menu'} size={24} />
-                    </Button>
-                )}
-                
-                <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                    {branding.logo.primary ? (
-                      <img 
-                        src={branding.logo.primary} 
-                        alt={branding.texts.appName || 'Logo'} 
-                        className="h-8 object-contain"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextElementSibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    
-                    <div 
-                      className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-                      style={{ 
-                        display: branding.logo.primary ? 'none' : 'flex',
-                        backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                      }}
-                    >
-                      <Icon name="Video" size={20} color="white" />
-                    </div>
-                    
-                    {!branding.logo.primary && (
-                      <span 
-                        className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                        style={{
-                          backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                        }}
-                      >
-                        {branding.texts.appName || 'Radeisan'}
-                      </span>
-                    )}
-                </Link>
-            </div>
-
+            <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+              {branding.logo.primary ? (
+                <img 
+                  src={branding.logo.primary} 
+                  alt={branding.texts.appName || 'Logo'} 
+                  className="h-8 object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              
+              <div 
+                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                style={{ 
+                  display: branding.logo.primary ? 'none' : 'flex',
+                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                }}
+              >
+                <Icon name="Video" size={20} color="white" />
+              </div>
+              
+              {!branding.logo.primary && (
+                <span 
+                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                  }}
+                >
+                  {branding.texts.appName || 'Radeisan'}
+                </span>
+              )}
+            </Link>
 
             {/* ===============================
-                NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS - Escritorio)
+                NAVEGACIÓN CENTRAL (SOLO USUARIOS AUTENTICADOS)
                 =============================== */}
             {user && (
               <nav className="hidden md:flex items-center space-x-1">
@@ -378,50 +335,56 @@ const Header = () => {
             )}
 
             {/* ===============================
-                SECCIÓN DERECHA (PUNTOS Y BOTONES DE ACCIÓN)
+                SECCIÓN DERECHA
                 =============================== */}
             <div className="flex items-center space-x-4">
               
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) - Restaurado al diseño original sin flex-col en LG */}
+                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) */}
                   <div 
-                    className="hidden lg:flex items-center space-x-1"
+                    className="hidden lg:flex flex-col items-center cursor-pointer group"
                     title={`Puntos Gratis: ${freePoints.toLocaleString()}`} 
                   >
-                    <Icon 
-                      name="Star" 
-                      size={18} 
-                      className="text-orange-400" 
-                    />
-                    {pointsLoading ? (
-                      <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
-                    ) : (
-                      // Display de puntos gratis
-                      <AnimatedPointsCounter 
-                        points={freePoints} 
-                        animation={pointsAnimation}
-                        colorType="free"
+                    {/* Fila 1: Icono y Saldo */}
+                    <div className="flex items-center space-x-1">
+                      <Icon 
+                        name="Star" 
+                        size={18} 
+                        className="text-orange-400" 
                       />
-                    )}
+                      {pointsLoading ? (
+                        <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
+                      ) : (
+                        <AnimatedPointsCounter 
+                          points={freePoints} 
+                          animation={pointsAnimation}
+                          colorType="free"
+                        />
+                      )}
+                    </div>
+                    {/* Fila 2: Etiqueta */}
+                    <span className="text-xs text-muted-foreground font-medium mt-[-2px] whitespace-nowrap">
+                      Puntos Gratis
+                    </span>
                   </div>
-                  
-                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) - Restaurado al diseño original sin flex-col en LG */}
+
+                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) */}
                   <div
-                    className="hidden lg:flex items-center space-x-1"
+                    className="hidden lg:flex flex-col items-center"
                     title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
                   >
-                    {pointsLoading ? (
-                      <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
-                    ) : (
-                      // Display de puntos premium
-                      <AnimatedPointsCounter 
-                        points={premiumPoints}
-                        animation={pointsAnimation}
-                        colorType="premium" 
-                      />
-                    )}
+                    {/* Fila 1: Saldo */}
+                    <AnimatedPointsCounter 
+                      points={premiumPoints}
+                      animation={pointsAnimation}
+                      colorType="premium" // Pasa el tipo para el color Verde
+                    />
+                    {/* Fila 2: Etiqueta */}
+                    <span className="text-xs font-medium mt-[-2px] whitespace-nowrap text-green-600">
+                      Puntos Premium
+                    </span>
                   </div>
                   
                   {/* Botón Comprar Puntos (Verde, diseño de la imagen) */}
@@ -490,9 +453,8 @@ const Header = () => {
                                         points={freePoints} 
                                         animation={pointsAnimation}
                                         colorType="free"
-                                        // Usamos showLabel para el menú desplegable
-                                        showLabel={true} 
                                     />
+                                    <span className="text-xs text-muted-foreground">Gratis</span>
                                 </div>
                                 {/* Puntos Premium */}
                                 <div className="flex items-center gap-2">
@@ -501,9 +463,8 @@ const Header = () => {
                                         points={premiumPoints} 
                                         animation={pointsAnimation}
                                         colorType="premium"
-                                        // Usamos showLabel para el menú desplegable
-                                        showLabel={true} 
                                     />
+                                    <span className="text-xs text-muted-foreground">Premium</span>
                                 </div>
                             </div>
                             
@@ -614,82 +575,6 @@ const Header = () => {
             </div>
           </div>
         </div>
-        
-        {/* ===============================
-            MENÚ DE NAVEGACIÓN MÓVIL (Dropdown Completo)
-            =============================== */}
-        {user && (
-            <div 
-                ref={mobileNavRef}
-                className={`fixed top-16 left-0 w-full h-auto bg-background border-b border-border shadow-md transition-transform duration-300 ease-out ${
-                    isMobileNavOpen ? 'translate-y-0' : '-translate-y-full'
-                } md:hidden z-40`}
-            >
-                <nav className="flex flex-col space-y-1 p-4">
-                    {/* Botones de navegación principales */}
-                    {[
-                        { name: 'Inicio', path: '/dashboard', icon: 'Home', orientation: 'all' },
-                        { name: 'Reels', path: '/dashboard', icon: 'Smartphone', orientation: 'vertical' },
-                        { name: 'Videos', path: '/dashboard', icon: 'Monitor', orientation: 'horizontal' },
-                        { name: 'Tienda', path: '/marketplace', icon: 'Store' },
-                        { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
-                    ].map((item) => {
-                        const isActive = item.orientation 
-                            ? isOrientationActive(item.orientation)
-                            : location.pathname === item.path;
-                        
-                        const handleClick = () => {
-                            if (item.orientation) {
-                                handleOrientationNavigate(item.orientation);
-                            } else {
-                                navigate(item.path);
-                            }
-                            setIsMobileNavOpen(false);
-                        };
-
-                        return (
-                            <button
-                                key={item.name}
-                                onClick={handleClick}
-                                className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors w-full text-left ${
-                                    isActive
-                                        ? 'bg-primary/10 text-primary' 
-                                        : 'text-foreground hover:bg-muted'
-                                }`}
-                            >
-                                <Icon name={item.icon} size={20} />
-                                <span>{item.name}</span>
-                            </button>
-                        );
-                    })}
-
-                    {/* Botón de Admin (si es aplicable) */}
-                    {user.isAdmin && (
-                        <Link
-                            to="/admin"
-                            onClick={() => setIsMobileNavOpen(false)}
-                            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors text-primary hover:bg-primary/10"
-                        >
-                            <Icon name="Shield" size={20} />
-                            <span>Panel Admin</span>
-                        </Link>
-                    )}
-                    
-                    <div className="border-t border-border mt-2 pt-2">
-                        {/* Botón Comprar Puntos Móvil */}
-                        <Link 
-                            to="/purchase-points"
-                            onClick={() => setIsMobileNavOpen(false)}
-                            className="flex items-center justify-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium mt-2"
-                        >
-                            <Icon name="Sparkles" size={18} className="text-white" />
-                            Comprar Puntos
-                        </Link>
-                    </div>
-
-                </nav>
-            </div>
-        )}
       </header>
 
       {/* ===============================
