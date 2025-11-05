@@ -10,11 +10,17 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVideoPlayer } from 'contexts/VideoPlayerContext';
 import Icon from 'components/AppIcon';
-import useIsMobile from 'hooks/useIsMobile';
 
 const GlobalMiniPlayer = () => {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
+  // Detección inline de móvil
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const {
     isMiniPlayerOpen,
