@@ -1,10 +1,10 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Con Sistema de Puntos DUAL (Gratis y Premium)
+// HEADER - Diseño Restaurado con Puntos DUALES Sincronizados
 // ============================================================================
-// ✅ Muestra freePoints (Blanco) y premiumPoints (Verde).
-// ✅ Ambos puntos leen y se actualizan con el contexto persistente.
-// ✅ Sigue mostrando el contador de puntos animado.
+// ✅ Diseño y Layout originales RESTAURADOS.
+// ✅ Funcionalidad: Muestra freePoints (Blanco) y premiumPoints (Verde).
+// ✅ Funcionalidad: El contador animado ahora maneja ambos tipos de puntos.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,9 +16,9 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Actualizado para el color)
 // ============================================================================
-const AnimatedPointsCounter = ({ points, animation, colorClass }) => {
+const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
   const [isAnimating, setIsAnimating] = useState(false);
 
@@ -28,13 +28,13 @@ const AnimatedPointsCounter = ({ points, animation, colorClass }) => {
   }, [points]);
 
   useEffect(() => {
-    // Si la animación de ganar puntos está activa, actualiza el contador con transición
-    if (animation.show && animation.type === 'earn' && animation.pointType === colorClass) {
+    // Activa la animación solo si el tipo de punto de la animación coincide
+    if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
       const start = displayPoints;
       const end = points;
-      const duration = 800; // 0.8 segundos de animación
+      const duration = 800;
       const startTime = Date.now();
 
       const animate = () => {
@@ -55,18 +55,14 @@ const AnimatedPointsCounter = ({ points, animation, colorClass }) => {
 
       requestAnimationFrame(animate);
       
-      // Cleanup
       return () => {
         setIsAnimating(false);
       };
     }
-  }, [points, animation, colorClass]);
+  }, [points, animation, colorType]);
 
-  // Clase de color basada en el requisito del cliente
-  let textColor = 'text-gray-400'; // Default para Free Points (Blanco/Gris claro)
-  if (colorClass === 'premium') {
-    textColor = 'text-green-500'; // Verde para Premium
-  }
+  // Clase de color según el requisito del cliente
+  const textColor = colorType === 'premium' ? 'text-green-500' : 'text-gray-400';
 
   return (
     <div className={`flex items-center gap-1 font-bold transition-all duration-300 ${isAnimating ? 'scale-105' : 'scale-100'}`}>
@@ -84,7 +80,8 @@ const AnimatedPointsCounter = ({ points, animation, colorClass }) => {
 // ============================================================================
 const Header = () => {
   const { user, profile } = useAuth();
-  const { freePoints, premiumPoints, pointsAnimation } = usePoints();
+  // ✅ Extraer los dos tipos de puntos y la animación del contexto
+  const { freePoints, premiumPoints, pointsAnimation } = usePoints(); 
   const { branding } = useBranding();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -124,9 +121,10 @@ const Header = () => {
         : 'bg-white text-gray-800 border border-gray-200 animate-slide-in-fade';
         
     const iconName = pointsAnimation.type === 'earn' ? 'CheckCircle' : 'ArrowDownCircle';
+    const pointLabel = pointsAnimation.pointType === 'free' ? 'Gratis' : 'Premium';
     const message = pointsAnimation.type === 'earn' 
-        ? `¡Ganaste ${pointsAnimation.amount} ${pointsAnimation.pointType === 'free' ? 'Gratis' : 'Premium'}!`
-        : `Gastaste ${pointsAnimation.amount} ${pointsAnimation.pointType === 'free' ? 'Gratis' : 'Premium'}.`;
+        ? `¡Ganaste ${pointsAnimation.amount} ${pointLabel}!`
+        : `Gastaste ${pointsAnimation.amount} ${pointLabel}.`;
 
     return (
       <div className={`${baseClasses} ${notifClasses}`}>
@@ -164,20 +162,23 @@ const Header = () => {
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* === ZONA DE PUNTOS DUAL === */}
-                  <div className="flex items-center space-x-3 pr-2 border-r border-border/80">
+                  {/* === ZONA DE PUNTOS DUAL - Integrado en el espacio original === */}
+                  <div className="flex items-center space-x-2 md:space-x-3 pr-2 border-r border-border/80">
+                    
                     {/* Puntos Premium (Verde) */}
                     <AnimatedPointsCounter 
                       points={premiumPoints} 
                       animation={pointsAnimation}
-                      colorClass="premium"
+                      colorType="premium" // Nuevo prop para el color
                     />
+                    
                     {/* Puntos Gratis (Blanco/Gris) */}
                     <AnimatedPointsCounter 
                       points={freePoints} 
                       animation={pointsAnimation}
-                      colorClass="free"
+                      colorType="free" // Nuevo prop para el color
                     />
+                    
                     {/* Botón de Comprar Puntos */}
                     <Button 
                         size="icon" 
