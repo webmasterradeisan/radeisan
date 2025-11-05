@@ -1,10 +1,9 @@
 // src/components/ui/Header.jsx
 // ============================================================================
-// HEADER - Diseño ORIGINAL RESTAURADO con Puntos DUALES Sincronizados
+// HEADER - Diseño FINAL RESTAURADO y Puntos DUALES Separados
 // ============================================================================
-// ✅ Diseño y Layout originales RESTAURADOS.
-// ✅ Funcionalidad: Muestra freePoints (Estrella) y premiumPoints (Compra)
-// ✅ Notificación flotante adaptada al sistema dual.
+// ✅ Estructura visual de la última imagen respetada.
+// ✅ Separación: [⭐️ Free Points] [💚 Premium Points] [🟢 Botón Comprar]
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -30,7 +29,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   } else if (colorType === 'free') {
     textColor = 'text-orange-400'; // Amarillo/Naranja para la estrella
   } else {
-    textColor = 'text-accent'; // El color original que usaba el diseño
+    textColor = 'text-accent'; 
   }
 
 
@@ -93,8 +92,8 @@ const FloatingPointsNotification = ({ animation }) => {
 
   // Clases de color para el fondo de la notificación
   const bgClasses = isPremium 
-    ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600') // Verde para Premium
-    : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600'); // Naranja/Amarillo para Gratis
+    ? (isEarn ? 'from-green-500 to-emerald-600' : 'from-red-500 to-red-600')
+    : (isEarn ? 'from-orange-400 to-yellow-500' : 'from-red-500 to-orange-600');
     
   const messageText = isPremium ? 'Puntos Premium' : 'Puntos Gratis';
 
@@ -343,19 +342,19 @@ const Header = () => {
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* Balance de Puntos Gratis con Animación (Mantiene la estructura original) */}
+                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo) */}
                   <div 
-                    className="hidden lg:flex items-center space-x-2 bg-accent/10 px-3 py-1.5 rounded-full hover:bg-accent/20 transition-colors cursor-pointer group"
-                    title={`Puntos Gratis: ${freePoints.toLocaleString()}`} // Muestra Free Points
+                    className="hidden lg:flex items-center space-x-2 cursor-pointer group"
+                    title={`Puntos Gratis: ${freePoints.toLocaleString()}`} 
                   >
                     <Icon 
                       name="Star" 
-                      size={16} 
+                      size={18} // Tamaño ajustado para coincidir con la imagen
                       // Aplica color amarillo/naranja
-                      className="text-orange-400 group-hover:scale-110 transition-transform" 
+                      className="text-orange-400" 
                     />
                     {pointsLoading ? (
-                      <span className="text-xs text-muted-foreground animate-pulse">
+                      <span className="text-sm text-muted-foreground animate-pulse">
                         Cargando...
                       </span>
                     ) : (
@@ -367,16 +366,30 @@ const Header = () => {
                     )}
                   </div>
 
-                  {/* Botón para Comprar Puntos (Verde, diseño de la imagen) */}
+                  {/* ZONA DE PUNTOS PREMIUM (Saldo solo) */}
+                  <div
+                    className="hidden lg:flex items-center space-x-1"
+                    title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
+                  >
+                    {pointsLoading ? (
+                      <span className="text-sm text-muted-foreground animate-pulse">
+                        Cargando...
+                      </span>
+                    ) : (
+                      <AnimatedPointsCounter 
+                        points={premiumPoints} // Muestra Premium Points
+                        animation={pointsAnimation}
+                        colorType="premium" // Pasa el tipo para el color Verde
+                      />
+                    )}
+                  </div>
+                  
+                  {/* Botón Comprar Puntos (Verde, diseño de la imagen) */}
                   <Link 
                     to="/purchase-points"
-                    className="hidden md:flex items-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                    title={`Puntos Premium: ${premiumPoints.toLocaleString()}`} // Muestra Premium Points en el title
+                    className="hidden md:flex items-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium"
                   >
-                    <Icon name="Sparkles" size={18} className="text-white" />
-                    {/* Se puede optar por mostrar solo el saldo Premium aquí si es necesario */}
-                    <span className='font-bold'>{premiumPoints.toLocaleString()}</span>
-                    <span>Comprar Puntos</span>
+                    <span className='whitespace-nowrap'>Comprar Puntos</span>
                   </Link>
 
 
