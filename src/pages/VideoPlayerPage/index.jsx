@@ -9,6 +9,7 @@
 // ✅ Drag & drop funcionando
 // ✅ Adaptado para móvil
 // ✅ CORRECCIÓN: Eliminada la sincronización constante que causaba lag en el player principal
+// ✅ NUEVA FUNCIÓN: Agregado "Ver más/Ver menos" a la descripción.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -83,6 +84,9 @@ const VideoPlayerPage = () => {
     message: ''
   });
 
+  // ✅ NUEVO ESTADO PARA LA DESCRIPCIÓN
+  const [showFullDescription, setShowFullDescription] = useState(false);
+
   // ✅ ESTADOS PARA MINI-PLAYER
   const [isMinimized, setIsMinimized] = useState(false);
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
@@ -98,6 +102,11 @@ const VideoPlayerPage = () => {
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
   const miniPlayerRef = useRef(null);
+
+  // ===============================
+  // ✅ CONSTANTE PARA LA DESCRIPCIÓN
+  // ===============================
+  const DESCRIPTION_MAX_LENGTH = 150;
 
   // ===============================
   // ✅ CONTROLES DE TECLADO
@@ -1025,6 +1034,16 @@ const VideoPlayerPage = () => {
     return num?.toString() || '0';
   };
 
+  const getDisplayedDescription = () => {
+    if (!video.description) return '';
+    if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
+      return video.description;
+    }
+    return video.description.substring(0, DESCRIPTION_MAX_LENGTH) + '...';
+  };
+
+  const shouldShowToggleButton = video?.description && video.description.length > DESCRIPTION_MAX_LENGTH;
+
   // ===============================
   // RENDER
   // ===============================
@@ -1310,11 +1329,23 @@ const VideoPlayerPage = () => {
                 </div>
 
                 <div className="bg-muted rounded-lg p-4">
+                  {/* ✅ Lógica de Ver Más/Ver Menos */}
                   <p className="text-sm text-foreground whitespace-pre-wrap">
-                    {video.description}
+                    {getDisplayedDescription()}
                   </p>
+                  
+                  {shouldShowToggleButton && (
+                    <button
+                      onClick={() => setShowFullDescription(prev => !prev)}
+                      className="text-sm font-medium text-primary hover:text-primary/80 mt-1"
+                    >
+                      {showFullDescription ? 'Ver menos' : 'Ver más'}
+                    </button>
+                  )}
+                  {/* Fin de Lógica Ver Más/Ver Menos */}
+
                   {video.created_at && (
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className={`text-xs text-muted-foreground ${shouldShowToggleButton ? 'mt-1' : 'mt-2'}`}>
                       Publicado el {new Date(video.created_at).toLocaleDateString('es-ES', {
                         year: 'numeric',
                         month: 'long',
