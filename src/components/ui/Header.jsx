@@ -2,8 +2,8 @@
 // ============================================================================
 // HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
-// ✅ Base: Copia del Header (1).jsx (Puntos duales con etiquetas).
-// ✅ Solución UX FINAL: Modal a PANTALLA COMPLETA con Overlay OSCURO para TAPAR TODO el contenido.
+// ✅ BASE: Header (1).jsx (Puntos duales con etiquetas).
+// ✅ Solución UX FINAL: Panel lateral FIXED y H-SCREEN para tapar TODO el contenido.
 // ✅ Logo en el encabezado del modal.
 // ============================================================================
 
@@ -467,7 +467,7 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu */}
+                    {/* Dropdown Menu (Menú de Perfil) */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
@@ -613,7 +613,7 @@ const Header = () => {
         </div>
         
         {/* ===============================
-            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (PANTALLA COMPLETA - SOLUCIÓN UX)
+            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (PANTALLA COMPLETA - SOLUCIÓN UX FINAL)
             =============================== */}
         {isMainMenuModalOpen && user && (
             <div 
@@ -625,116 +625,118 @@ const Header = () => {
                     onClick={toggleMainMenuModal}
                 ></div>
 
-                {/* ✅ Contenido del Modal (Panel Lateral) con fondo blanco y H-FULL (cubre toda la pantalla) */}
+                {/* ✅ Contenido del Modal (Panel Lateral) - FIXED y H-SCREEN */}
                 <div 
                     ref={mainMenuModalRef}
-                    className="absolute left-0 top-0 w-64 h-full bg-white shadow-2xl p-4 transition-transform duration-300 ease-out" // W-64 para el panel, H-FULL para cubrir
+                    className="fixed left-0 top-0 w-64 h-screen bg-white shadow-2xl transition-transform duration-300 ease-out" // Cambiado a FIXED y H-SCREEN
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="flex justify-between items-center mb-6">
-                        {/* ✅ TÍTULO REEMPLAZADO POR EL LOGO */}
-                        <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                          {branding.logo.primary ? (
-                            <img 
-                              src={branding.logo.primary} 
-                              alt={branding.texts.appName || 'Logo'} 
-                              className="h-8 object-contain"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextElementSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          
-                          <div 
-                            className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
-                            style={{ 
-                              display: branding.logo.primary ? 'none' : 'flex',
-                              backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                            }}
-                          >
-                            <Icon name="Video" size={20} color="white" />
-                          </div>
-                          
-                          {!branding.logo.primary && (
-                            <span 
-                              className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                              style={{
-                                backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
-                              }}
-                            >
-                              {branding.texts.appName || 'Radeisan'}
-                            </span>
-                          )}
-                        </Link>
-                        {/* FIN LOGO */}
-                        <Button variant="ghost" size="icon" onClick={toggleMainMenuModal}>
-                            <Icon name="X" size={24} />
-                        </Button>
-                    </div>
-
-                    <nav className="flex flex-col space-y-2">
-                        {[
-                            { name: 'Inicio', path: '/dashboard', icon: 'Home', orientation: 'all' },
-                            { name: 'Reels', path: '/dashboard', icon: 'Smartphone', orientation: 'vertical' },
-                            { name: 'Videos', path: '/dashboard', icon: 'Monitor', orientation: 'horizontal' },
-                            { name: 'Tienda', path: '/marketplace', icon: 'Store' },
-                            { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
-                        ].map((item) => {
-                            const isActive = item.orientation 
-                                ? isOrientationActive(item.orientation)
-                                : location.pathname === item.path;
-                            
-                            const handleClick = () => {
-                                if (item.orientation) {
-                                    handleOrientationNavigate(item.orientation);
-                                } else {
-                                    navigate(item.path);
-                                }
-                                setIsMainMenuModalOpen(false);
-                            };
-
-                            return (
-                                <button
-                                    key={item.name}
-                                    onClick={handleClick}
-                                    className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors w-full text-left ${
-                                        isActive
-                                            ? 'bg-primary/10 text-primary' 
-                                            : 'text-foreground hover:bg-muted'
-                                    }`}
+                    <div className="flex flex-col h-full overflow-y-auto p-4">
+                        <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                            {/* ✅ TÍTULO REEMPLAZADO POR EL LOGO */}
+                            <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+                              {branding.logo.primary ? (
+                                <img 
+                                  src={branding.logo.primary} 
+                                  alt={branding.texts.appName || 'Logo'} 
+                                  className="h-8 object-contain"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextElementSibling.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              
+                              <div 
+                                className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center"
+                                style={{ 
+                                  display: branding.logo.primary ? 'none' : 'flex',
+                                  backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                                }}
+                              >
+                                <Icon name="Video" size={20} color="white" />
+                              </div>
+                              
+                              {!branding.logo.primary && (
+                                <span 
+                                  className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
+                                  style={{
+                                    backgroundImage: `linear-gradient(to right, ${branding.colors.primary}, ${branding.colors.secondary})`
+                                  }}
                                 >
-                                    <Icon name={item.icon} size={20} />
-                                    <span>{item.name}</span>
-                                </button>
-                            );
-                        })}
-
-                        {/* Botón de Admin (si es aplicable) */}
-                        {user.isAdmin && (
-                            <Link
-                                to="/admin"
-                                onClick={() => setIsMainMenuModalOpen(false)}
-                                className="flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors text-primary hover:bg-primary/10"
-                            >
-                                <Icon name="Shield" size={20} />
-                                <span>Panel Admin</span>
+                                  {branding.texts.appName || 'Radeisan'}
+                                </span>
+                              )}
                             </Link>
-                        )}
-                        
-                        <div className="border-t border-border mt-4 pt-4">
-                            {/* Botón Comprar Puntos Móvil en el modal */}
-                            <Link 
-                                to="/purchase-points"
-                                onClick={() => setIsMainMenuModalOpen(false)}
-                                className="flex items-center justify-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium mt-2"
-                            >
-                                <Icon name="Sparkles" size={18} className="text-white" />
-                                Comprar Puntos
-                            </Link>
+                            {/* FIN LOGO */}
+                            <Button variant="ghost" size="icon" onClick={toggleMainMenuModal}>
+                                <Icon name="X" size={24} />
+                            </Button>
                         </div>
 
-                    </nav>
+                        <nav className="flex flex-col space-y-2 flex-grow">
+                            {[
+                                { name: 'Inicio', path: '/dashboard', icon: 'Home', orientation: 'all' },
+                                { name: 'Reels', path: '/dashboard', icon: 'Smartphone', orientation: 'vertical' },
+                                { name: 'Videos', path: '/dashboard', icon: 'Monitor', orientation: 'horizontal' },
+                                { name: 'Tienda', path: '/marketplace', icon: 'Store' },
+                                { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
+                            ].map((item) => {
+                                const isActive = item.orientation 
+                                    ? isOrientationActive(item.orientation)
+                                    : location.pathname === item.path;
+                                
+                                const handleClick = () => {
+                                    if (item.orientation) {
+                                        handleOrientationNavigate(item.orientation);
+                                    } else {
+                                        navigate(item.path);
+                                    }
+                                    setIsMainMenuModalOpen(false);
+                                };
+
+                                return (
+                                    <button
+                                        key={item.name}
+                                        onClick={handleClick}
+                                        className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors w-full text-left ${
+                                            isActive
+                                                ? 'bg-primary/10 text-primary' 
+                                                : 'text-foreground hover:bg-muted'
+                                        }`}
+                                    >
+                                        <Icon name={item.icon} size={20} />
+                                        <span>{item.name}</span>
+                                    </button>
+                                );
+                            })}
+
+                            {/* Botón de Admin (si es aplicable) */}
+                            {user.isAdmin && (
+                                <Link
+                                    to="/admin"
+                                    onClick={() => setIsMainMenuModalOpen(false)}
+                                    className="flex items-center space-x-3 px-3 py-2 rounded-lg text-base font-medium transition-colors text-primary hover:bg-primary/10"
+                                >
+                                    <Icon name="Shield" size={20} />
+                                    <span>Panel Admin</span>
+                                </Link>
+                            )}
+                            
+                            <div className="border-t border-border mt-4 pt-4 flex-shrink-0">
+                                {/* Botón Comprar Puntos Móvil en el modal */}
+                                <Link 
+                                    to="/purchase-points"
+                                    onClick={() => setIsMainMenuModalOpen(false)}
+                                    className="flex items-center justify-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium mt-2"
+                                >
+                                    <Icon name="Sparkles" size={18} className="text-white" />
+                                    Comprar Puntos
+                                </Link>
+                            </div>
+
+                        </nav>
+                    </div>
                 </div>
             </div>
         )}
