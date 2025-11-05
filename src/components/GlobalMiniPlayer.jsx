@@ -8,9 +8,9 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useVideoPlayer } from '../contexts/VideoPlayerContext';
-import Icon from './AppIcon';
-import useIsMobile from '../hooks/useIsMobile';
+import { useVideoPlayer } from 'contexts/VideoPlayerContext';
+import Icon from 'components/AppIcon';
+import useIsMobile from 'hooks/useIsMobile';
 
 const GlobalMiniPlayer = () => {
   const navigate = useNavigate();
