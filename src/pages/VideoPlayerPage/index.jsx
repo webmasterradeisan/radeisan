@@ -1,12 +1,20 @@
 // src/pages/VideoPlayerPage/index.jsx
+// 
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN CORREGIDA
+// 🎬 VIDEO PLAYER PAGE - VERSIÓN FINAL CON MEJORAS
 // ============================================================================
-// ✅ Video principal 100% PAUSADO cuando está minimizado (NO se mueve)
-// ✅ Solo el mini-player reproduce
-// ✅ Click en video para play/pause
-// ✅ Drag & drop funcionando
-// ✅ Adaptado para móvil
+//
+// Componente principal para la reproducción de videos que incluye la 
+// lógica para el reproductor principal, el mini-reproductor (PIP), 
+// carga de datos, interacciones, sistema de puntos/misiones y comentarios.
+//
+// MEJORAS APLICADAS:
+// ✅ Video principal 100% PAUSADO cuando está minimizado.
+// ✅ Drag & drop funcionando para el mini-player.
+// ✅ Controles de teclado funcionales.
+// ✅ Descripción del video con función "Ver más / Ver menos".
+// ✅ Reproducción automática del siguiente video al finalizar el actual.
+//
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,20 +31,26 @@ import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
 const VideoPlayerPage = () => {
+  // Hooks y utilidades
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addPoints } = usePoints();
   const isMobile = useIsMobile();
+  
+  // Constante para la longitud máxima de la descripción antes de 'Ver más'
+  const MAX_DESCRIPTION_LENGTH = 150;
 
-  // Estados del video
+  // --- ESTADOS DE DATOS Y PERFIL ---
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [relatedVideos, setRelatedVideos] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
+  // Estado para la descripción: true si debe mostrarse completa
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false); 
 
-  // Estados de interacción
+  // --- ESTADOS DE INTERACCIÓN (Likes, Guardado, Seguir, Contadores) ---
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -48,8 +62,8 @@ const VideoPlayerPage = () => {
     comments: 0
   });
 
-  // Estados de video player
-  const [isPlaying, setIsPlaying] = useState(false);
+  // --- ESTADOS DE VIDEO PLAYER PRINCIPAL ---
+  const [isPlaying, setIsPlaying] = useState(false); 
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -57,32 +71,32 @@ const VideoPlayerPage = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
 
-  // Estados de comentarios
+  // --- ESTADOS DE COMENTARIOS ---
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [loadingComments, setLoadingComments] = useState(false);
   const [showReplies, setShowReplies] = useState({});
 
-  // Estados de tracking de puntos
+  // --- ESTADOS DE TRACKING DE PUNTOS ---
   const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
   const [hasEarnedLikePoints, setHasEarnedLikePoints] = useState(false);
   const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
   const [hasEarnedSharePoints, setHasEarnedSharePoints] = useState(false);
 
-  // Estados de modal compartir
+  // --- ESTADOS DE MODAL COMPARTIR Y NOTIFICACIONES ---
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLink, setShareLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
-
-  // Estados de notificaciones
   const [pointsNotification, setPointsNotification] = useState({
     show: false,
     message: ''
   });
 
-  // ✅ ESTADOS PARA MINI-PLAYER
-  const [isMinimized, setIsMinimized] = useState(false);
+  // ===============================
+  // 🧭 ESTADOS Y REFS PARA MINI-PLAYER (Picture-in-Picture)
+  // ===============================
+  const [isMinimized, setIsMinimized] = useState(false); 
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
     x: window.innerWidth - 420,
     y: window.innerHeight - 300
@@ -90,28 +104,31 @@ const VideoPlayerPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Refs - ✅ DOS REFS SEPARADOS
-  const videoRef = useRef(null);
-  const miniVideoRef = useRef(null);
-  const containerRef = useRef(null);
-  const controlsTimeoutRef = useRef(null);
-  const miniPlayerRef = useRef(null);
+  // Refs - DOS REFS SEPARADOS para el video principal y el mini-player
+  const videoRef = useRef(null); 
+  const miniVideoRef = useRef(null); 
+  const containerRef = useRef(null); 
+  const controlsTimeoutRef = useRef(null); 
+  const miniPlayerRef = useRef(null); 
 
   // ===============================
-  // ✅ CONTROLES DE TECLADO
+  // ⌨️ CONTROLES DE TECLADO
   // ===============================
   useEffect(() => {
     const handleKeyPress = (e) => {
+      // Ignorar si el foco está en un campo de texto
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+      // Determinar qué reproductor está activo
       const currentVideo = isMinimized ? miniVideoRef.current : videoRef.current;
       if (!currentVideo) return;
 
       switch (e.key) {
         case ' ':
-        case 'k':
+        case 'k': // Toggle Play/Pause
           e.preventDefault();
           if (isMinimized) {
+            // Manejo directo de play/pause para el mini-player
             if (currentVideo.paused) {
               currentVideo.play();
               setIsPlaying(true);
@@ -120,30 +137,31 @@ const VideoPlayerPage = () => {
               setIsPlaying(false);
             }
           } else {
+            // Usar la función principal para el video normal
             togglePlayPause();
           }
           break;
-        case 'f':
+        case 'f': // Toggle Fullscreen (solo en modo normal)
           e.preventDefault();
           if (!isMinimized) toggleFullscreen();
           break;
-        case 'm':
+        case 'm': // Toggle Mute
           e.preventDefault();
           toggleMute();
           break;
-        case 'ArrowLeft':
+        case 'ArrowLeft': // Retroceder 5 segundos
           e.preventDefault();
           currentVideo.currentTime = Math.max(0, currentVideo.currentTime - 5);
           break;
-        case 'ArrowRight':
+        case 'ArrowRight': // Avanzar 5 segundos
           e.preventDefault();
           currentVideo.currentTime = Math.min(currentVideo.duration, currentVideo.currentTime + 5);
           break;
-        case 'ArrowUp':
+        case 'ArrowUp': // Subir volumen 10%
           e.preventDefault();
           handleVolumeChange({ target: { value: Math.min(1, volume + 0.1) } });
           break;
-        case 'ArrowDown':
+        case 'ArrowDown': // Bajar volumen 10%
           e.preventDefault();
           handleVolumeChange({ target: { value: Math.max(0, volume - 0.1) } });
           break;
@@ -154,12 +172,15 @@ const VideoPlayerPage = () => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [volume, isMinimized]);
+  }, [volume, isMinimized]); 
 
   // ===============================
-  // ✅ FUNCIONES DE DRAG & DROP
+  // 👆 FUNCIONES DE DRAG & DROP para MINI-PLAYER
   // ===============================
+
+  /** Inicia el arrastre al presionar el botón del ratón/tocar la pantalla */
   const handleMouseDown = (e) => {
+    // Evitar arrastrar si se hace click en un botón o el propio video
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
     
     e.preventDefault();
@@ -169,16 +190,18 @@ const VideoPlayerPage = () => {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     
+    // Calcular el offset para un arrastre suave
     setDragOffset({
       x: clientX - miniPlayerPosition.x,
       y: clientY - miniPlayerPosition.y
     });
   };
 
+  /** Mueve el mini-player mientras se arrastra (optimizado con useCallback) */
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
     
-    e.preventDefault();
+    e.preventDefault(); 
 
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -186,23 +209,26 @@ const VideoPlayerPage = () => {
     const newX = clientX - dragOffset.x;
     const newY = clientY - dragOffset.y;
 
+    // Lógica para mantener el mini-player dentro de los límites de la ventana
     const miniWidth = isMobile ? 250 : 400;
     const miniHeight = isMobile ? 180 : 250;
-    const maxX = window.innerWidth - miniWidth - 20;
-    const maxY = window.innerHeight - miniHeight - 20;
+    const maxX = window.innerWidth - miniWidth - 20; 
+    const maxY = window.innerHeight - miniHeight - 20; 
 
-    const boundedX = Math.max(10, Math.min(newX, maxX));
-    const boundedY = Math.max(10, Math.min(newY, maxY));
+    const boundedX = Math.max(10, Math.min(newX, maxX)); 
+    const boundedY = Math.max(10, Math.min(newY, maxY)); 
 
     setMiniPlayerPosition({ x: boundedX, y: boundedY });
   }, [isDragging, dragOffset, isMobile]);
 
+  /** Finaliza el arrastre */
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
       setIsDragging(false);
     }
   }, [isDragging]);
 
+  /** Hook para añadir/remover listeners de eventos de movimiento y soltar */
   useEffect(() => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
@@ -220,24 +246,26 @@ const VideoPlayerPage = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // ===============================
-  // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - CORREGIDA
+  // 🔄 FUNCIÓN MINIMIZAR/MAXIMIZAR (Sincronización de videos)
   // ===============================
+  
+  /** Minimiza el reproductor, pausando el principal y activando/sincronizando el mini-player. */
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
     if (!mainVideo) return;
 
-    // Guardar estado actual ANTES de hacer cambios
+    // 1. Guardar estado del principal
     const currentTime = mainVideo.currentTime;
     const wasPlaying = !mainVideo.paused;
 
-    // PAUSAR COMPLETAMENTE el video principal
+    // 2. PAUSAR el video principal
     mainVideo.pause();
     setIsPlaying(false);
 
-    // Activar mini-player
+    // 3. Activar mini-player
     setIsMinimized(true);
 
-    // Sincronizar mini-player después de que se monte
+    // 4. Sincronizar y potencialmente reproducir mini-player
     setTimeout(() => {
       const miniVideo = miniVideoRef.current;
       if (miniVideo) {
@@ -254,29 +282,30 @@ const VideoPlayerPage = () => {
     }, 100);
   };
 
+  /** Maximiza el reproductor, pausando el mini-player y activando/sincronizando el principal. */
   const handleMaximize = () => {
     const mainVideo = videoRef.current;
     const miniVideo = miniVideoRef.current;
 
-    if (miniVideo) {
-      // Guardar estado del mini-player ANTES de hacer cambios
-      const currentTime = miniVideo.currentTime;
-      const wasPlaying = !miniVideo.paused;
+    let currentTime = 0;
+    let wasPlaying = false;
 
-      // PAUSAR COMPLETAMENTE el mini-player
+    if (miniVideo) {
+      // 1. Guardar estado del mini-player
+      currentTime = miniVideo.currentTime;
+      wasPlaying = !miniVideo.paused;
+
+      // 2. PAUSAR el mini-player
       miniVideo.pause();
       setIsPlaying(false);
     }
 
-    // Desactivar mini-player
+    // 3. Desactivar mini-player
     setIsMinimized(false);
 
-    // Sincronizar video principal
+    // 4. Sincronizar y potencialmente reproducir video principal
     setTimeout(() => {
-      if (mainVideo && miniVideo) {
-        const currentTime = miniVideo.currentTime;
-        const wasPlaying = miniVideo.paused === false;
-        
+      if (mainVideo) {
         mainVideo.currentTime = currentTime;
         mainVideo.volume = volume;
         mainVideo.muted = isMuted;
@@ -293,19 +322,18 @@ const VideoPlayerPage = () => {
   };
 
   // ===============================
-  // FUNCIONES DE CARGA DE DATOS
+  // 💾 FUNCIONES DE CARGA DE DATOS (Perfil, Video, Relacionados, Comentarios)
   // ===============================
 
   const fetchUserProfile = useCallback(async () => {
+    // ... (Lógica de fetchUserProfile)
     if (!user) return;
-
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('id, full_name, username, avatar_url, is_verified')
         .eq('id', user.id)
         .single();
-
       if (error) throw error;
       setUserProfile(data);
     } catch (err) {
@@ -314,101 +342,56 @@ const VideoPlayerPage = () => {
   }, [user]);
 
   const fetchVideoData = useCallback(async () => {
+    // ... (Lógica de fetchVideoData)
     if (!videoId) return;
-
     try {
       setLoading(true);
       setError(null);
-
       const { data: videoData, error: videoError } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('id', videoId)
-        .eq('is_published', true)
-        .single();
-
+        .from('videos').select('*').eq('id', videoId).eq('is_published', true).single();
       if (videoError) throw videoError;
 
+      // Cargar datos del creador
       if (videoData?.user_id) {
         const { data: creatorData, error: creatorError } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, username, avatar_url, is_verified')
-          .eq('id', videoData.user_id)
-          .single();
-        
+          .from('user_profiles').select('id, full_name, username, avatar_url, is_verified')
+          .eq('id', videoData.user_id).single();
         if (!creatorError && creatorData) {
-          videoData.creator = {
-            id: creatorData.id,
-            name: creatorData.full_name,
-            username: creatorData.username,
-            profile_image_url: creatorData.avatar_url,
-            is_verified: creatorData.is_verified
-          };
+          videoData.creator = { id: creatorData.id, name: creatorData.full_name, username: creatorData.username, profile_image_url: creatorData.avatar_url, is_verified: creatorData.is_verified };
         }
       }
-
       setVideo(videoData);
 
+      // Incrementar vistas
       await supabase.rpc('increment_video_views', { video_id: videoId });
 
-      const { data: countersData } = await supabase
-        .from('videos')
-        .select('likes_count, dislikes_count, views_count, comments_count')
-        .eq('id', videoId)
-        .single();
-
+      // Cargar contadores
+      const { data: countersData } = await supabase.from('videos').select('likes_count, dislikes_count, views_count, comments_count').eq('id', videoId).single();
       if (countersData) {
         setVideoCounters({
-          likes: countersData.likes_count || 0,
-          dislikes: countersData.dislikes_count || 0,
-          views: countersData.views_count || 0,
-          comments: countersData.comments_count || 0
+          likes: countersData.likes_count || 0, dislikes: countersData.dislikes_count || 0,
+          views: countersData.views_count || 0, comments: countersData.comments_count || 0
         });
       }
 
+      // Cargar estado de interacciones del usuario
       if (user) {
-        const { data: likeData } = await supabase
-          .from('video_likes')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setLiked(!!likeData);
+        // Likes, Dislikes, Guardado, Seguir, Puntos ganados
+        const [likeData, dislikeData, savedData, followData, pointsData] = await Promise.all([
+          supabase.from('video_likes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle(),
+          supabase.from('video_dislikes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle(),
+          supabase.from('saved_videos').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle(),
+          videoData.user_id ? supabase.from('user_follows').select('*').eq('follower_id', user.id).eq('following_id', videoData.user_id).maybeSingle() : Promise.resolve({ data: null }),
+          supabase.from('user_video_points').select('action_type').eq('user_id', user.id).eq('video_id', videoId)
+        ]);
 
-        const { data: dislikeData } = await supabase
-          .from('video_dislikes')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setDisliked(!!dislikeData);
+        setLiked(!!likeData.data);
+        setDisliked(!!dislikeData.data);
+        setSaved(!!savedData.data);
+        setFollowing(!!followData.data);
 
-        const { data: savedData } = await supabase
-          .from('saved_videos')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setSaved(!!savedData);
-
-        if (videoData.user_id) {
-          const { data: followData } = await supabase
-            .from('user_follows')
-            .select('*')
-            .eq('follower_id', user.id)
-            .eq('following_id', videoData.user_id)
-            .maybeSingle();
-          setFollowing(!!followData);
-        }
-
-        const { data: pointsData } = await supabase
-          .from('user_video_points')
-          .select('action_type')
-          .eq('user_id', user.id)
-          .eq('video_id', videoId);
-
-        if (pointsData) {
-          const actions = pointsData.map(p => p.action_type);
+        if (pointsData.data) {
+          const actions = pointsData.data.map(p => p.action_type);
           setHasEarnedLikePoints(actions.includes('like'));
           setHasEarnedCommentPoints(actions.includes('comment'));
           setHasEarnedSharePoints(actions.includes('share'));
@@ -427,49 +410,32 @@ const VideoPlayerPage = () => {
   }, [videoId, user]);
 
   const loadRelatedVideos = async () => {
+    // ... (Lógica de loadRelatedVideos)
     try {
       const { data, error } = await supabase
-        .from('videos')
-        .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id, orientation')
-        .neq('id', videoId)
-        .eq('is_published', true)
-        .limit(50);
-
+        .from('videos').select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id, orientation')
+        .neq('id', videoId).eq('is_published', true).limit(50);
       if (error) throw error;
 
       const horizontalVideos = data.filter(v => !v.orientation || v.orientation === 'horizontal');
-
       if (horizontalVideos && horizontalVideos.length > 0) {
         const userIds = [...new Set(horizontalVideos.map(v => v.user_id).filter(Boolean))];
         
         if (userIds.length > 0) {
           const { data: creatorsData } = await supabase
-            .from('user_profiles')
-            .select('id, full_name, username, avatar_url, is_verified')
-            .in('id', userIds);
+            .from('user_profiles').select('id, full_name, username, avatar_url, is_verified').in('id', userIds);
           
           if (creatorsData) {
             const creatorsMap = {};
-            creatorsData.forEach(creator => {
-              creatorsMap[creator.id] = creator;
-            });
+            creatorsData.forEach(creator => { creatorsMap[creator.id] = creator; });
             
             const transformed = horizontalVideos.map(video => ({
-              id: video.id,
-              title: video.title,
-              thumbnail: video.thumbnail_url,
-              duration: video.duration_seconds,
-              views: video.views_count,
-              views_count: video.views_count,
-              likes: video.likes_count,
-              category: video.category,
-              created_at: video.created_at,
-              orientation: video.orientation,
+              id: video.id, title: video.title, thumbnail: video.thumbnail_url, duration: video.duration_seconds,
+              views: video.views_count, views_count: video.views_count, likes: video.likes_count,
+              category: video.category, created_at: video.created_at, orientation: video.orientation,
               creator: creatorsMap[video.user_id] ? {
-                id: creatorsMap[video.user_id].id,
-                name: creatorsMap[video.user_id].full_name,
-                username: creatorsMap[video.user_id].username,
-                profile_image_url: creatorsMap[video.user_id].avatar_url,
+                id: creatorsMap[video.user_id].id, name: creatorsMap[video.user_id].full_name,
+                username: creatorsMap[video.user_id].username, profile_image_url: creatorsMap[video.user_id].avatar_url,
                 is_verified: creatorsMap[video.user_id].is_verified
               } : null
             }));
@@ -485,61 +451,49 @@ const VideoPlayerPage = () => {
   };
 
   const loadComments = useCallback(async () => {
+    // ... (Lógica de loadComments)
     if (!videoId) return;
 
     try {
       setLoadingComments(true);
 
+      // Cargar comentarios principales
       const { data: commentsData, error } = await supabase
-        .from('video_comments')
-        .select('*')
-        .eq('video_id', videoId)
-        .is('parent_comment_id', null)
-        .order('created_at', { ascending: false });
+        .from('video_comments').select('*').eq('video_id', videoId)
+        .is('parent_comment_id', null).order('created_at', { ascending: false });
 
       if (error) throw error;
 
       if (commentsData && commentsData.length > 0) {
         const commentIds = commentsData.map(c => c.id);
+        // Cargar respuestas
         const { data: repliesData } = await supabase
-          .from('video_comments')
-          .select('*')
-          .in('parent_comment_id', commentIds);
+          .from('video_comments').select('*').in('parent_comment_id', commentIds);
 
         const allComments = [...commentsData, ...(repliesData || [])];
         const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
         
+        // Cargar perfiles de usuario
         let usersMap = {};
         if (userIds.length > 0) {
           const { data: usersData } = await supabase
-            .from('user_profiles')
-            .select('id, full_name, username, avatar_url, is_verified')
-            .in('id', userIds);
+            .from('user_profiles').select('id, full_name, username, avatar_url, is_verified').in('id', userIds);
           
           if (usersData) {
             usersData.forEach(userProfile => {
-              usersMap[userProfile.id] = {
-                id: userProfile.id,
-                name: userProfile.full_name,
-                username: userProfile.username,
-                profile_image_url: userProfile.avatar_url,
-                is_verified: userProfile.is_verified
-              };
+              usersMap[userProfile.id] = { id: userProfile.id, name: userProfile.full_name, username: userProfile.username, profile_image_url: userProfile.avatar_url, is_verified: userProfile.is_verified };
             });
           }
         }
 
+        // Asignar usuarios y respuestas a los comentarios principales
         commentsData.forEach(comment => {
-          if (comment.user_id && usersMap[comment.user_id]) {
-            comment.user = usersMap[comment.user_id];
-          }
+          if (comment.user_id && usersMap[comment.user_id]) { comment.user = usersMap[comment.user_id]; }
           
           comment.replies = (repliesData || [])
             .filter(reply => reply.parent_comment_id === comment.id)
             .map(reply => {
-              if (reply.user_id && usersMap[reply.user_id]) {
-                reply.user = usersMap[reply.user_id];
-              }
+              if (reply.user_id && usersMap[reply.user_id]) { reply.user = usersMap[reply.user_id]; }
               return reply;
             });
         });
@@ -554,334 +508,171 @@ const VideoPlayerPage = () => {
   }, [videoId]);
 
   // ===============================
-  // FUNCIONES DE INTERACCIÓN
+  // 🔗 FUNCIONES DE INTERACCIÓN (Likes, Share, Comments, Follow, Puntos)
   // ===============================
 
-  const showPointsNotification = (message) => {
+  const showPointsNotification = (message) => { /* ... */
     setPointsNotification({ show: true, message });
-    setTimeout(() => {
-      setPointsNotification({ show: false, message: '' });
-    }, 3000);
+    setTimeout(() => { setPointsNotification({ show: false, message: '' }); }, 3000);
   };
 
-  const trackPointsEarned = async (actionType, pointsAmount) => {
+  const trackPointsEarned = async (actionType, pointsAmount) => { /* ... */
     if (!user) return;
-
     try {
-      await supabase
-        .from('user_video_points')
-        .insert({
-          user_id: user.id,
-          video_id: videoId,
-          action_type: actionType,
-          points_earned: pointsAmount
-        });
+      await supabase.from('user_video_points').insert({ user_id: user.id, video_id: videoId, action_type: actionType, points_earned: pointsAmount });
     } catch (err) {
       console.error('Error al registrar puntos:', err);
     }
   };
 
-  const handleLike = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+  const handleLike = async () => { /* ... */
+    if (!user) { navigate('/login'); return; }
     try {
       if (liked) {
         setLiked(false);
-        setVideoCounters(prev => ({
-          ...prev,
-          likes: Math.max(0, prev.likes - 1)
-        }));
-
-        await supabase
-          .from('video_likes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
+        setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+        await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
-
       } else {
-        if (disliked) {
-          await handleDislike();
-        }
-
+        if (disliked) { await handleDislike(); }
         setLiked(true);
-        setVideoCounters(prev => ({
-          ...prev,
-          likes: prev.likes + 1
-        }));
-
-        await supabase
-          .from('video_likes')
-          .insert({ video_id: videoId, user_id: user.id });
-
+        setVideoCounters(prev => ({ ...prev, likes: prev.likes + 1 }));
+        await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         await supabase.rpc('increment_video_likes', { video_id: videoId });
-
         if (!hasEarnedLikePoints) {
-          const pointsAmount = 5;
-          await addPoints(pointsAmount, 'Like en video', 'free');
-          await trackPointsEarned('like', pointsAmount);
-          setHasEarnedLikePoints(true);
-          showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
-          missionsService.trackAction('like');
+          const pointsAmount = 5; await addPoints(pointsAmount, 'Like en video', 'free');
+          await trackPointsEarned('like', pointsAmount); setHasEarnedLikePoints(true);
+          showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`); missionsService.trackAction('like');
         }
       }
-    } catch (err) {
-      console.error('Error en like:', err);
-    }
+    } catch (err) { console.error('Error en like:', err); }
   };
 
-  const handleDislike = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+  const handleDislike = async () => { /* ... */
+    if (!user) { navigate('/login'); return; }
     try {
       if (disliked) {
         setDisliked(false);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: Math.max(0, prev.dislikes - 1)
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
+        setVideoCounters(prev => ({ ...prev, dislikes: Math.max(0, prev.dislikes - 1) }));
+        await supabase.from('video_dislikes').delete().eq('video_id', videoId).eq('user_id', user.id);
         await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
-
       } else {
         if (liked) {
           setLiked(false);
-          setVideoCounters(prev => ({
-            ...prev,
-            likes: Math.max(0, prev.likes - 1)
-          }));
-
-          await supabase
-            .from('video_likes')
-            .delete()
-            .eq('video_id', videoId)
-            .eq('user_id', user.id);
-
+          setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
           await supabase.rpc('decrement_video_likes', { video_id: videoId });
         }
-
         setDisliked(true);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: prev.dislikes + 1
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .insert({ video_id: videoId, user_id: user.id });
-
+        setVideoCounters(prev => ({ ...prev, dislikes: prev.dislikes + 1 }));
+        await supabase.from('video_dislikes').insert({ video_id: videoId, user_id: user.id });
         await supabase.rpc('increment_video_dislikes', { video_id: videoId });
       }
-    } catch (err) {
-      console.error('Error en dislike:', err);
-    }
+    } catch (err) { console.error('Error en dislike:', err); }
   };
 
-  const handleSave = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+  const handleSave = async () => { /* ... */
+    if (!user) { navigate('/login'); return; }
     try {
       if (saved) {
         setSaved(false);
-        await supabase
-          .from('saved_videos')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
+        await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id);
       } else {
         setSaved(true);
-        await supabase
-          .from('saved_videos')
-          .insert({ video_id: videoId, user_id: user.id });
-
+        await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
         missionsService.trackAction('save');
         showPointsNotification('Video guardado en favoritos');
       }
-    } catch (err) {
-      console.error('Error al guardar:', err);
-    }
+    } catch (err) { console.error('Error al guardar:', err); }
   };
 
-  const handleShare = async () => {
+  const handleShare = async () => { /* ... */
     const url = `${window.location.origin}/video/${videoId}`;
     setShareLink(url);
     setShowShareModal(true);
-
     if (user && !hasEarnedSharePoints) {
-      const pointsAmount = 3;
-      await addPoints(pointsAmount, 'Compartir video', 'free');
-      await trackPointsEarned('share', pointsAmount);
-      setHasEarnedSharePoints(true);
-      showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
-      missionsService.trackAction('share');
+      const pointsAmount = 3; await addPoints(pointsAmount, 'Compartir video', 'free');
+      await trackPointsEarned('share', pointsAmount); setHasEarnedSharePoints(true);
+      showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`); missionsService.trackAction('share');
     }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = () => { /* ... */
     navigator.clipboard.writeText(shareLink);
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
-  const handleFollow = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+  const handleFollow = async () => { /* ... */
+    if (!user) { navigate('/login'); return; }
     if (!video?.user_id) return;
-
     try {
       if (following) {
         setFollowing(false);
-        await supabase
-          .from('user_follows')
-          .delete()
-          .eq('follower_id', user.id)
-          .eq('following_id', video.user_id);
+        await supabase.from('user_follows').delete().eq('follower_id', user.id).eq('following_id', video.user_id);
       } else {
         setFollowing(true);
-        await supabase
-          .from('user_follows')
-          .insert({
-            follower_id: user.id,
-            following_id: video.user_id
-          });
-
+        await supabase.from('user_follows').insert({ follower_id: user.id, following_id: video.user_id });
         missionsService.trackAction('follow');
         showPointsNotification('Ahora sigues a este creador');
       }
-    } catch (err) {
-      console.error('Error al seguir:', err);
-    }
+    } catch (err) { console.error('Error al seguir:', err); }
   };
 
-  const handleSubmitComment = async (e) => {
+  const handleSubmitComment = async (e) => { /* ... */
     e.preventDefault();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+    if (!user) { navigate('/login'); return; }
     if (!newComment.trim()) return;
-
     try {
-      const commentData = {
-        video_id: videoId,
-        user_id: user.id,
-        content: newComment.trim(),
-        parent_comment_id: replyingTo
-      };
-
-      const { data, error } = await supabase
-        .from('video_comments')
-        .insert(commentData)
-        .select('*')
-        .single();
-
+      const commentData = { video_id: videoId, user_id: user.id, content: newComment.trim(), parent_comment_id: replyingTo };
+      const { data, error } = await supabase.from('video_comments').insert(commentData).select('*').single();
       if (error) throw error;
 
-      const { data: userData } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, username, avatar_url, is_verified')
-        .eq('id', user.id)
-        .single();
-
-      if (userData) {
-        data.user = {
-          id: userData.id,
-          name: userData.full_name,
-          username: userData.username,
-          profile_image_url: userData.avatar_url,
-          is_verified: userData.is_verified
-        };
-      }
+      // Cargar info de usuario para el nuevo comentario
+      const { data: userData } = await supabase.from('user_profiles').select('id, full_name, username, avatar_url, is_verified').eq('id', user.id).single();
+      if (userData) { data.user = { id: userData.id, name: userData.full_name, username: userData.username, profile_image_url: userData.avatar_url, is_verified: userData.is_verified }; }
 
       await supabase.rpc('increment_video_comments', { video_id: videoId });
-      setVideoCounters(prev => ({
-        ...prev,
-        comments: prev.comments + 1
-      }));
+      setVideoCounters(prev => ({ ...prev, comments: prev.comments + 1 }));
 
       if (!hasEarnedCommentPoints) {
-        const pointsAmount = 10;
-        await addPoints(pointsAmount, 'Comentar video', 'free');
-        await trackPointsEarned('comment', pointsAmount);
-        setHasEarnedCommentPoints(true);
-        showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
-        missionsService.trackAction('comment');
+        const pointsAmount = 10; await addPoints(pointsAmount, 'Comentar video', 'free');
+        await trackPointsEarned('comment', pointsAmount); setHasEarnedCommentPoints(true);
+        showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`); missionsService.trackAction('comment');
       }
 
+      // Actualizar la lista de comentarios
       if (replyingTo) {
         setComments(prev => prev.map(comment => {
-          if (comment.id === replyingTo) {
-            return {
-              ...comment,
-              replies: [...(comment.replies || []), data]
-            };
-          }
+          if (comment.id === replyingTo) { return { ...comment, replies: [...(comment.replies || []), data] }; }
           return comment;
         }));
       } else {
         setComments(prev => [data, ...prev]);
       }
-
       setNewComment('');
       setReplyingTo(null);
-
-    } catch (err) {
-      console.error('Error al publicar comentario:', err);
-    }
+    } catch (err) { console.error('Error al publicar comentario:', err); }
   };
 
-  const handleDeleteComment = async (commentId) => {
+  const handleDeleteComment = async (commentId) => { /* ... */
     if (!user) return;
-
     try {
-      await supabase
-        .from('video_comments')
-        .delete()
-        .eq('id', commentId)
-        .eq('user_id', user.id);
-
+      await supabase.from('video_comments').delete().eq('id', commentId).eq('user_id', user.id);
       await supabase.rpc('decrement_video_comments', { video_id: videoId });
-
-      setVideoCounters(prev => ({
-        ...prev,
-        comments: Math.max(0, prev.comments - 1)
-      }));
-
+      setVideoCounters(prev => ({ ...prev, comments: Math.max(0, prev.comments - 1) }));
       setComments(prev => prev.filter(c => c.id !== commentId));
-
-    } catch (err) {
-      console.error('Error al eliminar comentario:', err);
-    }
+    } catch (err) { console.error('Error al eliminar comentario:', err); }
   };
 
   // ===============================
-  // FUNCIONES DEL VIDEO PLAYER
+  // ⏯️ FUNCIONES DEL VIDEO PLAYER
   // ===============================
 
+  /** Alterna el estado de play/pause del video principal. */
   const togglePlayPause = () => {
     const currentVideo = videoRef.current;
     if (!currentVideo) return;
-
     if (currentVideo.paused) {
       currentVideo.play();
       setIsPlaying(true);
@@ -891,23 +682,21 @@ const VideoPlayerPage = () => {
     }
   };
 
+  /** Maneja el cambio de volumen en ambos reproductores. */
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    
     if (videoRef.current) videoRef.current.volume = newVolume;
     if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
-    
     setIsMuted(newVolume === 0);
   };
 
+  /** Alterna el mute/unmute en ambos reproductores. */
   const toggleMute = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    
     if (videoRef.current) videoRef.current.muted = newMuted;
     if (miniVideoRef.current) miniVideoRef.current.muted = newMuted;
-    
     if (newMuted) {
       setVolume(0);
     } else if (volume === 0) {
@@ -917,14 +706,17 @@ const VideoPlayerPage = () => {
     }
   };
 
-  const handleTimeUpdate = () => {
+  /** * Actualiza el progreso y trackea la obtención de puntos por vista (a los 30 segundos).
+   * @param {React.SyntheticEvent} e - Evento de tiempo del video.
+   */
+  const handleTimeUpdate = (e) => {
     const currentVideo = videoRef.current;
     if (!currentVideo) return;
 
     setProgress((currentVideo.currentTime / currentVideo.duration) * 100);
-    
     const currentTime = currentVideo.currentTime;
 
+    // Lógica para puntos por vista (a los 30 segundos)
     if (currentTime >= 30 && !hasEarnedViewPoints && user) {
       const pointsAmount = 2;
       addPoints(pointsAmount, 'Ver video', 'free');
@@ -934,7 +726,31 @@ const VideoPlayerPage = () => {
       missionsService.trackAction('watch');
     }
   };
+  
+  /** * Maneja el fin de la reproducción para iniciar el siguiente video.
+   * @param {React.SyntheticEvent} e - Evento de fin de video.
+   */
+  const handleVideoEnd = () => {
+    setIsPlaying(false);
 
+    // Lógica para reproducir el siguiente video
+    if (relatedVideos.length > 0) {
+      // Encontrar el índice del video actual en la lista de relacionados
+      const currentIndex = relatedVideos.findIndex(v => v.id === videoId);
+      const nextVideo = relatedVideos[currentIndex + 1];
+
+      if (nextVideo) {
+        // Navegar al siguiente video
+        navigate(`/video/${nextVideo.id}`);
+        window.scrollTo(0, 0); // Desplazar al inicio de la página del nuevo video
+      } else {
+        // Si no hay más videos, se puede optar por repetir, o no hacer nada
+        console.log('No hay más videos relacionados para reproducción automática.');
+      }
+    }
+  };
+
+  /** Busca una posición específica en el video al hacer click en la barra de progreso. */
   const handleSeek = (e) => {
     if (!videoRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -942,34 +758,25 @@ const VideoPlayerPage = () => {
     videoRef.current.currentTime = pos * videoRef.current.duration;
   };
 
+  /** Alterna el modo de pantalla completa. */
   const toggleFullscreen = async () => {
     if (!containerRef.current) return;
-
     try {
       if (!document.fullscreenElement) {
         await containerRef.current.requestFullscreen();
         setIsFullscreen(true);
-        
         if (isMobile && screen.orientation && screen.orientation.lock) {
-          try {
-            await screen.orientation.lock('landscape');
-          } catch (err) {
-            console.log('No se pudo bloquear orientación:', err);
-          }
+          try { await screen.orientation.lock('landscape'); } catch (err) { console.log('No se pudo bloquear orientación:', err); }
         }
       } else {
         await document.exitFullscreen();
         setIsFullscreen(false);
-        
-        if (isMobile && screen.orientation && screen.orientation.unlock) {
-          screen.orientation.unlock();
-        }
+        if (isMobile && screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); }
       }
-    } catch (err) {
-      console.error('Fullscreen error:', err);
-    }
+    } catch (err) { console.error('Fullscreen error:', err); }
   };
 
+  /** Muestra los controles al mover el ratón y los oculta después de 3 segundos si está reproduciendo. */
   const handleMouseMovePlayer = () => {
     setShowControls(true);
     if (controlsTimeoutRef.current) {
@@ -983,20 +790,23 @@ const VideoPlayerPage = () => {
   };
 
   // ===============================
-  // EFECTOS
+  // 💡 EFECTOS Y UTILIDADES
   // ===============================
 
+  /** Carga los datos al montar o al cambiar el videoId/user. */
   useEffect(() => {
     fetchVideoData();
     fetchUserProfile();
   }, [fetchVideoData, fetchUserProfile]);
 
+  /** Carga los comentarios al montar o al cambiar el videoId. */
   useEffect(() => {
     if (videoId) {
       loadComments();
     }
   }, [videoId, loadComments]);
 
+  /** Limpia el timeout de los controles al desmontar. */
   useEffect(() => {
     return () => {
       if (controlsTimeoutRef.current) {
@@ -1004,10 +814,6 @@ const VideoPlayerPage = () => {
       }
     };
   }, []);
-
-  // ===============================
-  // UTILIDADES
-  // ===============================
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -1017,20 +823,25 @@ const VideoPlayerPage = () => {
   };
 
   const formatNumber = (num) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
+    if (num >= 1000000) { return (num / 1000000).toFixed(1) + 'M'; }
+    if (num >= 1000) { return (num / 1000).toFixed(1) + 'K'; }
     return num?.toString() || '0';
   };
+  
+  // Lógica para la descripción corta y el botón "Ver más"
+  const displayDescription = video?.description
+    ? (isDescriptionExpanded || video.description.length <= MAX_DESCRIPTION_LENGTH)
+      ? video.description
+      : video.description.substring(0, MAX_DESCRIPTION_LENGTH) + '...'
+    : 'No hay descripción disponible.';
+  const needsExpansion = video?.description && video.description.length > MAX_DESCRIPTION_LENGTH;
 
   // ===============================
-  // RENDER
+  // 🎨 RENDERIZADO
   // ===============================
 
   if (loading) {
+    // ... (Render de carga)
     return (
       <>
         <Header />
@@ -1048,6 +859,7 @@ const VideoPlayerPage = () => {
   }
 
   if (error || !video) {
+    // ... (Render de error)
     return (
       <>
         <Header />
@@ -1086,7 +898,7 @@ const VideoPlayerPage = () => {
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
-              {/* ✅ Video Player Principal */}
+              {/* VIDEO PLAYER PRINCIPAL */}
               <div
                 ref={containerRef}
                 className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${
@@ -1101,18 +913,14 @@ const VideoPlayerPage = () => {
                   className="w-full aspect-video object-contain"
                   onLoadedMetadata={(e) => setDuration(e.target.duration)}
                   onTimeUpdate={handleTimeUpdate}
-                  onEnded={() => setIsPlaying(false)}
+                  onEnded={handleVideoEnd} {/* ✅ LLAMADA A LA FUNCIÓN DE AUTOPLAY SIGUIENTE */}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
+                  // Evita que el video se pueda pausar/reproducir si está minimizado
+                  onClick={!isMinimized ? togglePlayPause : undefined} 
                 />
 
-                {!isMinimized && (
-                  <div 
-                    className="absolute inset-0 cursor-pointer"
-                    onClick={togglePlayPause}
-                  />
-                )}
-
+                {/* Overlay de minimizado */}
                 {isMinimized && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
                     <div className="text-center text-white">
@@ -1124,11 +932,13 @@ const VideoPlayerPage = () => {
                   </div>
                 )}
 
+                {/* Controles del reproductor (solo visibles en modo normal) */}
                 <div
                   className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 pointer-events-none ${
                     showControls && !isMinimized ? 'opacity-100' : 'opacity-0'
                   }`}
                 >
+                  {/* Botón de Play/Pause central */}
                   {!isPlaying && !isMinimized && (
                     <button
                       onClick={togglePlayPause}
@@ -1140,6 +950,7 @@ const VideoPlayerPage = () => {
                     </button>
                   )}
 
+                  {/* Barra de Progreso y Controles Inferiores */}
                   <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
                     <div
                       className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
@@ -1155,22 +966,18 @@ const VideoPlayerPage = () => {
 
                     <div className="flex items-center justify-between text-white">
                       <div className="flex items-center gap-2 md:gap-4">
+                        {/* Play/Pause */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            togglePlayPause();
-                          }}
+                          onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
                           className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                         >
                           <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} />
                         </button>
 
+                        {/* Control de Volumen */}
                         <div className="flex items-center gap-2 group/volume">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMute();
-                            }}
+                            onClick={(e) => { e.stopPropagation(); toggleMute(); }}
                             className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                           >
                             <Icon
@@ -1192,28 +999,25 @@ const VideoPlayerPage = () => {
                           )}
                         </div>
 
+                        {/* Tiempo de reproducción */}
                         <span className="text-xs md:text-sm font-medium">
                           {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-1 md:gap-2">
+                        {/* Botón Minimizar */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMinimize();
-                          }}
+                          onClick={(e) => { e.stopPropagation(); handleMinimize(); }}
                           className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                           title="Minimizar"
                         >
                           <Icon name="Minimize2" size={isMobile ? 18 : 20} />
                         </button>
 
+                        {/* Botón Fullscreen */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFullscreen();
-                          }}
+                          onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
                           className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
                         >
                           <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} />
@@ -1224,15 +1028,303 @@ const VideoPlayerPage = () => {
                 </div>
               </div>
 
-              {/* Información del video - Mantiene TODO igual, omitido por brevedad */}
+              {/* Información del video y Botones de Interacción */}
               <div className="mt-4 space-y-4">
                 <h1 className="text-lg md:text-xl font-bold text-foreground">
                   {video.title}
                 </h1>
-                {/* ... resto del código de información, comentarios, etc ... */}
+
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  {/* Info del Creador y Botón Seguir */}
+                  <div className="flex items-center gap-3">
+                    <Link to={`/profile/${video.creator?.username || 'unknown'}`}>
+                      <img
+                        src={video.creator?.profile_image_url || '/default-avatar.png'}
+                        alt={video.creator?.name || 'Usuario'}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    </Link>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/profile/${video.creator?.username || 'unknown'}`}
+                          className="font-semibold text-foreground hover:text-primary text-sm md:text-base"
+                        >
+                          {video.creator?.name || 'Usuario'}
+                        </Link>
+                        {video.creator?.is_verified && (
+                          <Icon name="BadgeCheck" size={16} className="text-blue-500" />
+                        )}
+                      </div>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        {formatNumber(videoCounters.views)} visualizaciones
+                      </p>
+                    </div>
+                    {user?.id !== video.user_id && (
+                      <Button
+                        onClick={handleFollow}
+                        variant={following ? 'outline' : 'default'}
+                        size="sm"
+                        className="ml-auto md:ml-4"
+                      >
+                        {following ? 'Siguiendo' : 'Seguir'}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Botones de Interacción (Likes, Dislikes, Share, Save) */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                    <div className="flex items-center bg-muted rounded-full overflow-hidden">
+                      <button
+                        onClick={handleLike}
+                        className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${
+                          liked ? 'text-primary' : ''
+                        }`}
+                      >
+                        <Icon name="ThumbsUp" size={18} className={liked ? 'fill-current' : ''} />
+                        <span className="font-medium text-sm">{formatNumber(videoCounters.likes)}</span>
+                      </button>
+
+                      <button
+                        onClick={handleDislike}
+                        className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
+                          disliked ? 'text-primary' : ''
+                        }`}
+                      >
+                        <Icon name="ThumbsDown" size={18} className={disliked ? 'fill-current' : ''} />
+                        <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleShare}
+                      className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"
+                    >
+                      <Icon name="Share2" size={18} />
+                      <span className="font-medium text-sm">Compartir</span>
+                    </button>
+
+                    <button
+                      onClick={handleSave}
+                      className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap ${
+                        saved ? 'text-primary' : ''
+                      }`}
+                    >
+                      <Icon name="Bookmark" size={18} className={saved ? 'fill-current' : ''} />
+                      <span className="font-medium text-sm">{saved ? 'Guardado' : 'Guardar'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ✅ DESCRIPCIÓN DEL VIDEO CON "VER MÁS / VER MENOS" */}
+                <div className="bg-muted rounded-lg p-4">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {displayDescription}
+                    {needsExpansion && (
+                      <button
+                        onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                        className="text-primary font-medium ml-2 hover:underline"
+                      >
+                        {isDescriptionExpanded ? 'Ver menos' : 'Ver más'}
+                      </button>
+                    )}
+                  </p>
+                  {video.created_at && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Publicado el {new Date(video.created_at).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  )}
+                </div>
+
+                {/* ✅ SECCIÓN DE COMENTARIOS */}
+                <div className="border-t pt-6">
+                  <h3 className="text-base md:text-lg font-bold mb-4">
+                    {formatNumber(videoCounters.comments)} comentarios
+                  </h3>
+
+                  {/* Formulario de comentario/respuesta */}
+                  {user ? (
+                    <form onSubmit={handleSubmitComment} className="mb-6">
+                      <div className="flex gap-3">
+                        <img
+                          src={userProfile?.avatar_url || '/default-avatar.png'}
+                          alt="Tu avatar"
+                          className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
+                        />
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            placeholder={replyingTo ? 'Escribe una respuesta...' : 'Añade un comentario...'}
+                            className="w-full px-0 py-2 bg-transparent border-b border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground text-sm md:text-base"
+                          />
+                          <div className="flex items-center justify-end gap-2 mt-2">
+                            {replyingTo && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setReplyingTo(null)}
+                              >
+                                Cancelar
+                              </Button>
+                            )}
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={!newComment.trim()}
+                            >
+                              Comentar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="bg-muted rounded-lg p-4 text-center mb-6">
+                      <p className="text-muted-foreground mb-2 text-sm">
+                        Inicia sesión para comentar
+                      </p>
+                      <Button onClick={() => navigate('/login')} size="sm">
+                        Iniciar sesión
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Lista de comentarios y respuestas */}
+                  <div className="space-y-4">
+                    {loadingComments ? (
+                      <div className="text-center py-8">
+                        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        No hay comentarios aún. ¡Sé el primero en comentar!
+                      </div>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className="space-y-3">
+                          <div className="flex gap-2 md:gap-3">
+                            <Link to={`/profile/${comment.user?.username || 'unknown'}`}>
+                              <img
+                                src={comment.user?.profile_image_url || '/default-avatar.png'}
+                                alt={comment.user?.name || 'Usuario'}
+                                className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
+                              />
+                            </Link>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Link
+                                  to={`/profile/${comment.user?.username || 'unknown'}`}
+                                  className="font-semibold text-xs md:text-sm hover:text-primary"
+                                >
+                                  {comment.user?.name || 'Usuario'}
+                                </Link>
+                                {comment.user?.is_verified && (
+                                  <Icon name="BadgeCheck" size={14} className="text-blue-500" />
+                                )}
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(comment.created_at).toLocaleDateString('es-ES')}
+                                </span>
+                              </div>
+                              <p className="text-xs md:text-sm text-foreground mt-1">
+                                {comment.content}
+                              </p>
+                              <div className="flex items-center gap-4 mt-2">
+                                <button
+                                  onClick={() => setReplyingTo(comment.id)}
+                                  className="text-xs font-medium text-muted-foreground hover:text-primary"
+                                >
+                                  Responder
+                                </button>
+                                {user?.id === comment.user_id && (
+                                  <button
+                                    onClick={() => handleDeleteComment(comment.id)}
+                                    className="text-xs font-medium text-destructive hover:text-destructive/80"
+                                  >
+                                    Eliminar
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Respuestas anidadas */}
+                              {comment.replies && comment.replies.length > 0 && (
+                                <div className="mt-4 space-y-3">
+                                  {!showReplies[comment.id] ? (
+                                    <button
+                                      onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: true }))}
+                                      className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"
+                                    >
+                                      <Icon name="CornerDownRight" size={14} />
+                                      Ver {comment.replies.length} respuesta{comment.replies.length !== 1 ? 's' : ''}
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: false }))}
+                                        className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"
+                                      >
+                                        <Icon name="CornerDownRight" size={14} />
+                                        Ocultar respuestas
+                                      </button>
+                                      {comment.replies.map((reply) => (
+                                        <div key={reply.id} className="flex gap-2 md:gap-3 ml-4 md:ml-6">
+                                          <Link to={`/profile/${reply.user?.username || 'unknown'}`}>
+                                            <img
+                                              src={reply.user?.profile_image_url || '/default-avatar.png'}
+                                              alt={reply.user?.name || 'Usuario'}
+                                              className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover flex-shrink-0"
+                                            />
+                                          </Link>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <Link
+                                                to={`/profile/${reply.user?.username || 'unknown'}`}
+                                                className="font-semibold text-xs md:text-sm hover:text-primary"
+                                              >
+                                                {reply.user?.name || 'Usuario'}
+                                              </Link>
+                                              {reply.user?.is_verified && (
+                                                <Icon name="BadgeCheck" size={12} className="text-blue-500" />
+                                              )}
+                                              <span className="text-xs text-muted-foreground">
+                                                {new Date(reply.created_at).toLocaleDateString('es-ES')}
+                                              </span>
+                                            </div>
+                                            <p className="text-xs md:text-sm text-foreground mt-1">
+                                              {reply.content}
+                                            </p>
+                                            {user?.id === reply.user_id && (
+                                              <button
+                                                onClick={() => handleDeleteComment(reply.id)}
+                                                className="text-xs font-medium text-destructive hover:text-destructive/80 mt-2"
+                                              >
+                                                Eliminar
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
+            {/* BARRA LATERAL DE VIDEOS RELACIONADOS */}
             {!isMobile && (
               <div className="lg:w-[400px] flex-shrink-0">
                 <RelatedVideosSidebar
@@ -1250,7 +1342,7 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER - CORREGIDO: Ya NO sincroniza con el video principal */}
+      {/* MINI-PLAYER FLOTANTE */}
       {isMinimized && video && (
         <div
           ref={miniPlayerRef}
@@ -1266,7 +1358,7 @@ const VideoPlayerPage = () => {
           onMouseDown={handleMouseDown}
           onTouchStart={handleMouseDown}
         >
-          {/* ✅ Video en mini-player - Ya NO mueve el video principal */}
+          {/* Video en mini-player - Sincronizado con el principal */}
           <div className="relative aspect-video bg-black">
             <video
               ref={miniVideoRef}
@@ -1275,12 +1367,15 @@ const VideoPlayerPage = () => {
               muted={isMuted}
               volume={volume}
               onTimeUpdate={(e) => {
-                // ✅ CAMBIO CRÍTICO: Solo actualiza la barra de progreso
-                // YA NO sincroniza currentTime con el video principal
+                // Sincronizar el progreso del principal con el mini-player
+                if (videoRef.current) {
+                  videoRef.current.currentTime = e.target.currentTime;
+                }
                 setProgress((e.target.currentTime / e.target.duration) * 100);
               }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onEnded={handleVideoEnd} {/* ✅ LLAMADA A LA FUNCIÓN DE AUTOPLAY SIGUIENTE */}
             />
 
             <div 
@@ -1289,7 +1384,6 @@ const VideoPlayerPage = () => {
                 e.stopPropagation();
                 const miniVideo = miniVideoRef.current;
                 if (!miniVideo) return;
-
                 if (miniVideo.paused) {
                   miniVideo.play();
                   setIsPlaying(true);
@@ -1309,6 +1403,7 @@ const VideoPlayerPage = () => {
             <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full pointer-events-none"></div>
           </div>
 
+          {/* Controles y Metadata del Mini-Player */}
           <div className="p-2 md:p-3 bg-black/95 border-t border-primary/30">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -1325,7 +1420,6 @@ const VideoPlayerPage = () => {
                     e.stopPropagation();
                     const miniVideo = miniVideoRef.current;
                     if (!miniVideo) return;
-
                     if (miniVideo.paused) {
                       miniVideo.play();
                       setIsPlaying(true);
@@ -1340,20 +1434,14 @@ const VideoPlayerPage = () => {
                   <Icon name={isPlaying ? 'Pause' : 'Play'} size={14} />
                 </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleMaximize();
-                  }}
+                  onClick={(e) => { e.stopPropagation(); handleMaximize(); }}
                   className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Maximizar"
                 >
                   <Icon name="Maximize2" size={14} />
                 </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsMinimized(false);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
                   className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
                   title="Cerrar"
                 >
@@ -1365,10 +1453,80 @@ const VideoPlayerPage = () => {
         </div>
       )}
 
-      {/* Modal de compartir - Mantiene TODO igual */}
+      {/* Modal de compartir (Share Modal) */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          {/* ... código del modal ... */}
+          <div className="bg-background rounded-lg max-w-md w-full p-4 md:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base md:text-lg font-bold">Compartir video</h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <a
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
+              >
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Icon name="Facebook" size={20} className="text-white" />
+                </div>
+                <span className="font-medium text-sm">Compartir en Facebook</span>
+              </a>
+
+              <a
+                href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(video.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
+              >
+                <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Icon name="Twitter" size={20} className="text-white" />
+                </div>
+                <span className="font-medium text-sm">Compartir en Twitter</span>
+              </a>
+
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
+              >
+                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Icon name="MessageCircle" size={20} className="text-white" />
+                </div>
+                <span className="font-medium text-sm">Compartir en WhatsApp</span>
+              </a>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={shareLink}
+                readOnly
+                className="flex-1 px-3 py-2 bg-muted rounded-lg text-xs md:text-sm"
+              />
+              <Button onClick={handleCopyLink} size="sm">
+                {copySuccess ? (
+                  <>
+                    <Icon name="Check" size={16} className="mr-2" />
+                    Copiado
+                  </>
+                ) : (
+                  <>
+                    <Icon name="Copy" size={16} className="mr-2" />
+                    Copiar
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </>
