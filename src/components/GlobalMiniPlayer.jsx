@@ -14,10 +14,17 @@ import Icon from './AppIcon';
 const GlobalMiniPlayer = () => {
   const navigate = useNavigate();
   
-  // Detección inline de móvil
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  // Detección inline de móvil con verificación de window
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false; // Valor por defecto si window no existe
+  });
   
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
