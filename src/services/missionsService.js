@@ -377,7 +377,7 @@ export async function trackDailyLogin() {
 }
 
 // ============================================================================
-// FUNCIONES DE COMPLETADO - Marcar como Completada
+// FUNCIONES DE COMPLETADO - Marcar como Completada (CORREGIDA)
 // ============================================================================
 
 /**
@@ -444,12 +444,12 @@ export async function claimMissionReward(missionId) {
     if (!progress.is_completed) throw new Error('Misión no completada');
     if (progress.reward_claimed) throw new Error('Recompensa ya reclamada');
 
-    // Otorgar puntos
+    // ✅ CORRECCIÓN CRÍTICA: Se usa la firma de addFreePoints que acepta el monto explícito.
     const pointsResult = await pointsService.addFreePoints(
-      progress.mission.points_reward,
-      `Recompensa por completar: ${progress.mission.title}`,
-      'mission',
-      missionId
+      user.id, // 1. userId
+      progress.mission.points_reward, // 2. amount
+      `Recompensa por completar: ${progress.mission.title}`, // 3. reason
+      'mission_reward' // 4. actionType
     );
 
     if (!pointsResult.success) throw new Error('Error otorgando puntos');
