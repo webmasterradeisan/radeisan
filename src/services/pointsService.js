@@ -1,9 +1,9 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - Corregido para Montos Explícitos y Exportaciones
+// SERVICIO DE PUNTOS - FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN FINAL: Eliminada la exportación duplicada de calculateVideoPoints
-//    para solucionar el RollupError en Vercel.
+// ✅ CORRECCIÓN FINAL: Se eliminó el bloque de exportaciones desestructuradas 
+//    para solucionar el RollupError: Duplicate export.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -328,16 +328,17 @@ export const hasEarnedPoints = async (userId, actionType, referenceId) => {
 // ============================================================================
 // EXPORTACIONES FINALES
 // ============================================================================
-// ✅ ALIAS: La función que acepta el monto explícito se exporta como 'addFreePoints'
+// ALIAS: La función que acepta el monto explícito se exporta como 'addFreePoints'
 export const addFreePoints = grantFreePoints;
 
-// ✅ EXPORTACIÓN POR DEFECTO
+// EXPORTACIÓN POR DEFECTO: incluye todas las funciones para compatibilidad
 export default {
   getUserPoints,
-  addFreePoints, // Exporta grantFreePoints
+  addFreePoints, 
   trackFreePointsAction,
   addPremiumPoints,
   deductPoints,
   calculateVideoPoints,
-  hasEarnedPoints
+  hasEarnedPoints,
+  grantFreePoints, // Si alguien la usa por su nombre original
 };
