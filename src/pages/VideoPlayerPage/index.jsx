@@ -2,8 +2,10 @@
 // ============================================================================
 // VIDEO PLAYER PAGE - VERSIÓN FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN CRÍTICA: Se añade verificación de existencia para addPoints 
-//    antes de la llamada para prevenir el error 'reading addPoints'.
+// ✅ CORRECCIÓN CRÍTICA: Se añade verificación de existencia para addPoints
+// ✅ CORRECCIÓN DE ERRORES 404: Se lee de 'points_transactions' y se elimina
+//    la función redundante 'trackPointsEarned' que escribía en
+//    'user_video_points' (que no existe).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -409,18 +411,23 @@ const VideoPlayerPage = () => {
           setFollowing(!!followData);
         }
 
-        const { data: pointsData } = await supabase
-          .from('user_video_points')
+        // ✅ CORRECCIÓN 404: Leer de 'points_transactions' y usar 'reference_id'
+        const { data: pointsData, error: pointsError } = await supabase
+          .from('points_transactions') 
           .select('action_type')
           .eq('user_id', user.id)
-          .eq('video_id', videoId);
+          .eq('reference_id', videoId); // El videoId se guarda como reference_id
 
+        if (pointsError) {
+            console.error("Error al verificar puntos ganados: ", pointsError.message);
+        }
+          
         if (pointsData) {
           const actions = pointsData.map(p => p.action_type);
-          setHasEarnedLikePoints(actions.includes('like'));
-          setHasEarnedCommentPoints(actions.includes('comment'));
-          setHasEarnedSharePoints(actions.includes('share'));
-          setHasEarnedViewPoints(actions.includes('view'));
+          setHasEarnedLikePoints(actions.includes('Like en video')); // Ajustar al 'action_type' real
+          setHasEarnedCommentPoints(actions.includes('Comentar video')); // Ajustar al 'action_type' real
+          setHasEarnedSharePoints(actions.includes('Compartir video')); // Ajustar al 'action_type' real
+          setHasEarnedViewPoints(actions.includes('Ver video')); // Ajustar al 'action_type' real
         }
       }
 
@@ -572,29 +579,16 @@ const VideoPlayerPage = () => {
     }, 3000);
   };
 
-  const trackPointsEarned = async (actionType, pointsAmount) => {
-    if (!user) return;
-
-    try {
-      await supabase
-        .from('user_video_points')
-        .insert({
-          user_id: user.id,
-          video_id: videoId,
-          action_type: actionType,
-          points_earned: pointsAmount
-        });
-    } catch (err) {
-      // Captura el error de Supabase para evitar que rompa el programa
-      console.error('Error al registrar puntos en DB:', err);
-    }
-  };
+  // ✅ CORRECCIÓN 404: Esta función era redundante y causaba errores 404.
+  // La función RPC 'addPoints' ya inserta el registro en 'points_transactions'.
+  // const trackPointsEarned = async (actionType, pointsAmount) => {
+  //   ...
+  // };
 
   // FUNCIÓN SEGURA PARA PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
     if (hasEarnedViewPoints || !user) return;
 
-    // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
     if (!addPoints) {
         console.warn("⚠️ PointsContext no está listo. addPoints es undefined.");
         return; 
@@ -602,10 +596,12 @@ const VideoPlayerPage = () => {
 
     try {
       const pointsAmount = 2;
+      const actionType = 'Ver video';
 
+      // Llamamos a addPoints, que ahora es la única fuente de verdad
       await Promise.all([
         trackWatchVideo(videoId, 30),
-        addPoints(pointsAmount, 'Ver video', 'free') 
+        addPoints(pointsAmount, 'free', actionType, videoId) // Pasamos videoId como reference_id
       ]);
 
       setHasEarnedViewPoints(true);
@@ -625,7 +621,6 @@ const VideoPlayerPage = () => {
 
     try {
       if (liked) {
-        // Lógica para quitar like (sin cambios importantes)
         setLiked(false);
         setVideoCounters(prev => ({
           ...prev,
@@ -659,27 +654,24 @@ const VideoPlayerPage = () => {
 
         if (!hasEarnedLikePoints) {
           const pointsAmount = 5;
+          const actionType = 'Like en video';
 
-          // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
           if (!addPoints) {
               console.warn("⚠️ PointsContext no está listo. addPoints es undefined.");
-              // Aún registramos la misión y puntos ganados para evitar que el usuario gane más tarde si la app se recupera.
               try {
-                  await Promise.all([
-                      trackPointsEarned('like', pointsAmount),
-                      trackGiveLike('video', videoId) 
-                  ]);
+                  // ✅ CORRECCIÓN 404: Se elimina la llamada a trackPointsEarned
+                  await trackGiveLike('video', videoId);
               } catch (e) {
-                  console.error("❌ Fallo parcial: Misión/Puntos no registrados.", e);
+                  console.error("❌ Fallo parcial: Misión no registrada.", e);
               }
-              setHasEarnedLikePoints(true); // Previene doble clic
+              setHasEarnedLikePoints(true); 
               return; 
           }
           
           try {
             await Promise.all([
-                addPoints(pointsAmount, 'Like en video', 'free'),
-                trackPointsEarned('like', pointsAmount),
+                addPoints(pointsAmount, 'free', actionType, videoId), // Pasamos videoId
+                // ✅ CORRECCIÓN 404: Se elimina la llamada a trackPointsEarned
                 trackGiveLike('video', videoId) 
             ]);
 
@@ -692,7 +684,6 @@ const VideoPlayerPage = () => {
         }
       }
     } catch (err) {
-      // Este try/catch ahora se enfoca en fallos de la operación LIKE/UNLIKE
       console.error('Error en like:', err);
     }
   };
@@ -772,10 +763,8 @@ const VideoPlayerPage = () => {
         await supabase
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
-
-        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
+        
         try {
-          // Asumimos que existe una misión de tipo 'save_video'
           trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
@@ -794,18 +783,18 @@ const VideoPlayerPage = () => {
 
     if (user && !hasEarnedSharePoints) {
       
-      // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
       if (!addPoints) {
           console.warn("⚠️ PointsContext no está listo. addPoints es undefined.");
           return;
       }
       
-      // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
       try {
         const pointsAmount = 3;
+        const actionType = 'Compartir video';
+
         await Promise.all([
-          addPoints(pointsAmount, 'Compartir video', 'free'),
-          trackPointsEarned('share', pointsAmount),
+          addPoints(pointsAmount, 'free', actionType, videoId), // Pasamos videoId
+          // ✅ CORRECCIÓN 404: Se elimina la llamada a trackPointsEarned
           trackShareContent('video', videoId, 'link') 
         ]);
 
@@ -848,8 +837,7 @@ const VideoPlayerPage = () => {
             follower_id: user.id,
             following_id: video.user_id
           });
-
-        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
+        
         try {
           trackFollowUser(video.user_id);
         } catch (missionError) {
@@ -911,13 +899,13 @@ const VideoPlayerPage = () => {
 
       if (!hasEarnedCommentPoints) {
         const pointsAmount = 10;
+        const actionType = 'Comentar video';
         
-        // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
         if (addPoints) {
             try {
                 await Promise.all([
-                    addPoints(pointsAmount, 'Comentar video', 'free'),
-                    trackPointsEarned('comment', pointsAmount),
+                    addPoints(pointsAmount, 'free', actionType, videoId), // Pasamos videoId
+                    // ✅ CORRECCIÓN 404: Se elimina la llamada a trackPointsEarned
                     trackComment('video', videoId)
                 ]);
 
@@ -929,7 +917,6 @@ const VideoPlayerPage = () => {
             }
         } else {
             console.warn("⚠️ PointsContext no está listo. addPoints es undefined. Solo se registrará el comentario.");
-            // Si addPoints falla, al menos intentamos registrar la misión de comentario para no perder progreso
             try {
                  trackComment('video', videoId);
             } catch (e) {
@@ -1036,7 +1023,6 @@ const VideoPlayerPage = () => {
     const currentTime = currentVideo.currentTime;
 
     if (currentTime >= 30 && !hasEarnedViewPoints && user) {
-      // Llama a la función segura para ganar puntos
       handleEarnViewPoints();
     }
   };
@@ -1676,7 +1662,6 @@ const VideoPlayerPage = () => {
               muted={isMuted}
               volume={volume}
               onTimeUpdate={(e) => {
-                // CORREGIDO: Se eliminó la línea que sincronizaba constantemente el player principal pausado.
                 setProgress((e.target.currentTime / e.target.duration) * 100);
               }}
               onPlay={() => setIsPlaying(true)}
