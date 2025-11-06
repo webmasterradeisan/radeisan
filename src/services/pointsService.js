@@ -1,9 +1,8 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - FINAL Y ESTABLE (CORRECCIÓN DE PERSISTENCIA Y EXPORTACIÓN)
+// SERVICIO DE PUNTOS - FINAL Y ESTABLE (FIX DE ROLLUP Y PERSISTENCIA)
 // ============================================================================
-// ✅ Incluye initializeUserPoints para asegurar el registro en la DB.
-// ✅ La lógica de error de RPC está manejada para evitar colapsos en el Contexto.
+// ✅ Se añade calculateVideoPoints como exportación nombrada para FIX el error de Vercel.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -18,19 +17,37 @@ const UPDATE_POINTS_RPC_NAME = 'update_user_points';
 
 
 // ============================================================================
-// INICIALIZACIÓN DE PUNTOS (CRÍTICO)
+// CÁLCULO Y VALOR (EXPORTACIONES NOMBRADAS)
 // ============================================================================
 
 /**
- * Asegura que el usuario tenga un registro en la tabla 'user_points' (para evitar fallos RPC).
- * @param {string} userId - ID del usuario
- * @returns {Promise<boolean>} true si existe o se creó, false si falló.
+ * Función requerida para el despliegue (RollupError)
+ * Calcula los puntos base por la duración de un video.
+ */
+export const calculateVideoPoints = (durationSeconds) => {
+  if (durationSeconds < 10) return 0;
+  // Lógica simple: 1 punto por cada 30 segundos.
+  return Math.floor(durationSeconds / 30);
+};
+
+/**
+ * Calcula el valor equivalente de los puntos Premium en Free Points.
+ */
+export const calculatePremiumValue = (premiumPoints) => {
+    return premiumPoints * PREMIUM_POINTS_MULTIPLIER;
+};
+
+// ============================================================================
+// INICIALIZACIÓN DE PUNTOS (CRÍTICO para la persistencia)
+// ============================================================================
+
+/**
+ * Asegura que el usuario tenga un registro en la tabla 'user_points'.
  */
 export const initializeUserPoints = async (userId) => {
   if (!userId) return false;
 
   try {
-    // ASUMIMOS QUE EL BACKEND TIENE ESTE RPC DE INICIALIZACIÓN
     const { error } = await supabase.rpc(INIT_POINTS_RPC_NAME, {
         p_user_id: userId
     });
@@ -54,9 +71,6 @@ export const initializeUserPoints = async (userId) => {
 // OBTENER PUNTOS DEL USUARIO (LECTURA)
 // ============================================================================
 
-/**
- * Obtiene el balance completo de puntos de un usuario
- */
 export const getUserPoints = async (userId) => {
   try {
     if (!userId) return { free: 0, premium: 0, total: 0 };
@@ -67,7 +81,7 @@ export const getUserPoints = async (userId) => {
 
     if (error) {
       console.error('❌ Error en RPC get_user_points:', error);
-      // Devolvemos 0 si el RPC falla, estabilizando el Contexto.
+      // 🛑 Devolvemos 0 si el RPC falla (necesario para la estabilidad del Contexto)
       return { free: 0, premium: 0, total: 0 };
     }
 
@@ -87,12 +101,9 @@ export const getUserPoints = async (userId) => {
 
 
 // ============================================================================
-// REGISTRAR TRANSACCIÓN (Historial)
+// REGISTRAR TRANSACCIÓN (Para Historial)
 // ============================================================================
 
-/**
- * Registra una transacción de puntos (usado después de updatePointsBalance)
- */
 export const trackPointsAction = async (userId, amount, pointType, actionType, referenceId) => {
   try {
     const { error } = await supabase
@@ -121,16 +132,10 @@ export const trackPointsAction = async (userId, amount, pointType, actionType, r
 // SUMAR/RESTAR PUNTOS (FUNCIÓN CORE QUE LLAMA AL RPC)
 // ============================================================================
 
-/**
- * Función genérica para otorgar o deducir puntos
- * @param {number} amount - Cantidad (positiva para sumar, negativa para restar)
- */
 export const updatePointsBalance = async (userId, amount, type, actionType, referenceId = null) => {
   try {
-    // Se asume que el Contexto llama a initializeUserPoints() antes.
+    console.log(`📡 Llamando RPC ${UPDATE_POINTS_RPC_NAME}: ${amount} ${type} para ${userId}`);
     
-    // 🛑 ATENCIÓN: El RPC de tu sistema requiere una firma muy específica.
-    // Usamos el formato que el error de tu consola sugirió.
     const { data, error } = await supabase.rpc(UPDATE_POINTS_RPC_NAME, {
       p_user_id: userId,
       p_amount: amount,
@@ -143,7 +148,6 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
         throw error; 
     }
     
-    // Si la RPC es exitosa, devolvemos el objeto de nuevos saldos
     return data || { new_free_points: 0, new_premium_points: 0 };
 
   } catch (error) {
@@ -152,19 +156,14 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
   }
 };
 
-
 // ============================================================================
-// ALIASES DE INTERFAZ (Para PointsContext y Misiones)
+// ALIASES DE INTERFAZ (Exportaciones de uso común)
 // ============================================================================
 
-/**
- * Función universal para añadir puntos (usada por addPoints del Contexto)
- */
 export const addPoints = async (userId, amount, type, actionType, referenceId = null) => {
     try {
         const balanceResult = await updatePointsBalance(userId, amount, type, actionType, referenceId);
         
-        // 2. Registrar la transacción (para el historial)
         await trackPointsAction(userId, amount, type, actionType, referenceId); 
         
         return balanceResult;
@@ -173,15 +172,18 @@ export const addPoints = async (userId, amount, type, actionType, referenceId = 
     }
 };
 
-/**
- * Función universal para deducir puntos (usada por deductPoints del Contexto)
- */
 export const deductPoints = (userId, amount, type, actionType, referenceId = null) => 
     updatePointsBalance(userId, -amount, type, actionType, referenceId);
 
 
+// 🛑 EXPORTACIÓN NOMBRADA NECESARIA para Misiones y Upload Studio
+export const addFreePoints = async (userId, amount, actionType, referenceId = null) => {
+    return addPoints(userId, amount, 'free', actionType, referenceId);
+};
+
+
 // ============================================================================
-// EXPORTACIONES FINALES
+// EXPORTACIONES POR DEFECTO
 // ============================================================================
 
 export default {
@@ -189,6 +191,7 @@ export default {
   initializeUserPoints, 
   trackPointsAction,
   updatePointsBalance,
+  calculateVideoPoints,
   addPoints, 
   deductPoints,
   calculatePremiumValue,
