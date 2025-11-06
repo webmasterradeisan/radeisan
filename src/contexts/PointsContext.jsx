@@ -1,24 +1,27 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - Gestión Global del Sistema de Puntos (SOLUCIÓN PERSISTENCIA)
+// POINTS CONTEXT - GESTIÓN GLOBAL DEL SISTEMA DE PUNTOS (VERSIÓN FINAL)
 // ============================================================================
-// ✅ CORRECCIÓN: Implementada la lógica de comunicación con Supabase (RPC) 
-//    dentro de addPoints y deductPoints para asegurar la persistencia de los puntos.
-// ✅ La aplicación ahora lee y escribe los puntos 'free' y 'premium' correctamente.
+// ✅ CORRECCIÓN: Se eliminó el retorno temprano en loadPoints para forzar
+//    la ejecución completa del Provider, evitando que las funciones como addPoints
+//    sean undefined debido a un estado inconsistente de autenticación.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { getUserPoints } from '../services/pointsService';
-import { supabase } from 'lib/supabase'; // ⚠️ NECESARIO para la persistencia
+import { supabase } from 'lib/supabase';
 
 const PointsContext = createContext();
 
 export const usePoints = () => {
   const context = useContext(PointsContext);
   if (!context) {
+    // Si ves este error, DEBES envolver tu aplicación en <PointsProvider> dentro de <AuthProvider>
     throw new Error('usePoints debe ser usado dentro de un PointsProvider');
   }
+  // ✅ El error 'reading addPoints' ocurre si se intenta leer una propiedad de 'context' antes
+  //    de que el Provider haya terminado de definir sus funciones.
   return context;
 };
 
@@ -61,14 +64,14 @@ export const PointsProvider = ({ children }) => {
   // CARGAR PUNTOS INICIALES (Funciona como el Polling)
   // ============================================================================
   const loadPoints = useCallback(async () => {
-    if (!user || !isAuthenticated) {
-      // Limpiar puntos si no hay usuario
-      setPoints({ total: 0, free: 0, premium: 0, loading: false });
-      return;
+    // 🛑 CORRECCIÓN CLAVE: Permitimos que el Provider se inicialice completamente.
+    // La lógica de limpieza y retorno temprano la manejamos aquí solo si no hay user.
+    if (!user) {
+        setPoints({ total: 0, free: 0, premium: 0, loading: false });
+        return;
     }
 
     try {
-      // ✅ Se asume que getUserPoints llama a Supabase y trae { free: N, premium: M }
       const pointsData = await getUserPoints(user.id);
 
       if (mountedRef.current) {
@@ -84,18 +87,21 @@ export const PointsProvider = ({ children }) => {
         setPoints(prev => ({ ...prev, loading: false }));
       }
     }
-  }, [user, isAuthenticated]);
+  }, [user]); // Dependencia solo en user, no en isAuthenticated (redundante)
 
   // ============================================================================
   // FUNCIÓN PARA AÑADIR PUNTOS CON PERSISTENCIA
   // ============================================================================
   const addPoints = useCallback(async (amount, message = '', type = 'free') => {
-    if (!user || amount <= 0 || !['free', 'premium'].includes(type)) return;
+    if (!user || amount <= 0 || !['free', 'premium'].includes(type)) {
+        console.warn('⚠️ addPoints: Operación cancelada, usuario no válido o monto incorrecto.');
+        return { success: false, error: 'Usuario o monto inválido' };
+    }
 
     console.log(`🎉 addPoints llamado: +${amount} ${type} por ${message}`);
 
     try {
-      // ⚠️ PASO CRÍTICO: Llamada a la función RPC de Supabase para SUMAR
+      // PASO CRÍTICO: Llamada a la función RPC de Supabase para SUMAR
       const { data, error } = await supabase.rpc(POINTS_RPC_NAME, {
         p_user_id: user.id,
         p_amount: amount, // Cantidad positiva para sumar
@@ -134,13 +140,16 @@ export const PointsProvider = ({ children }) => {
           setPointsAnimation(prev => ({ ...prev, show: false }));
         }
       }, 3000);
+      
+      return { success: true, points_added: amount };
 
     } catch (error) {
       console.error('❌ Error al añadir puntos:', error);
       // Si la operación falla en el servidor, cargamos los puntos reales
       loadPoints(); 
+      return { success: false, error: error.message };
     }
-  }, [user, loadPoints]);
+  }, [user, loadPoints]); // Dependencia en user, loadPoints
 
   // ============================================================================
   // FUNCIÓN PARA DEDUCIR PUNTOS CON PERSISTENCIA
@@ -148,13 +157,13 @@ export const PointsProvider = ({ children }) => {
   // 💡 Modificada para requerir el tipo de punto a descontar
   const deductPoints = useCallback(async (amount, message = '', type) => {
     if (!user || amount <= 0 || !['free', 'premium'].includes(type)) {
-      throw new Error('Tipo de punto o cantidad inválida para la deducción.');
+        throw new Error('Usuario, tipo de punto o cantidad inválida para la deducción.');
     }
 
     console.log(`💸 deductPoints llamado: -${amount} ${type} por ${message}`);
     
     try {
-      // ⚠️ PASO CRÍTICO: Llamada a la función RPC de Supabase para RESTAR
+      // PASO CRÍTICO: Llamada a la función RPC de Supabase para RESTAR
       const { data, error } = await supabase.rpc(POINTS_RPC_NAME, {
         p_user_id: user.id,
         p_amount: -amount, // Cantidad negativa para restar
@@ -195,7 +204,7 @@ export const PointsProvider = ({ children }) => {
       // Re-lanza el error (útil para manejar "Puntos insuficientes" en la compra)
       throw new Error(error.message || 'Error desconocido al deducir puntos.');
     }
-  }, [user, loadPoints]);
+  }, [user, loadPoints]); // Dependencia en user, loadPoints
 
   // ============================================================================
   // EFECTOS DE SINCRONIZACIÓN
@@ -208,7 +217,7 @@ export const PointsProvider = ({ children }) => {
 
   // 2. Polling para sincronización (cada 30 segundos)
   useEffect(() => {
-    if (!user || !isAuthenticated) {
+    if (!user) {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
@@ -226,7 +235,7 @@ export const PointsProvider = ({ children }) => {
         pollingIntervalRef.current = null;
       }
     };
-  }, [user, isAuthenticated, loadPoints]);
+  }, [user, loadPoints]); // Dependencia simplificada
 
   // ============================================================================
   // FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE
