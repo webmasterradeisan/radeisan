@@ -1,9 +1,10 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - Corregido para Montos Explícitos
+// SERVICIO DE PUNTOS - Corregido para Montos Explícitos y Exportaciones
 // ============================================================================
 // ✅ CORRECCIÓN CRÍTICA: Se define grantFreePoints (que acepta AMOUNT) y se exporta 
 //    como addFreePoints para compatibilidad con MissionsService y Context.
+// ✅ CORRECCIÓN DE BUILD: calculateVideoPoints ahora está exportada explícitamente.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -164,7 +165,6 @@ export const trackFreePointsAction = async (userId, actionType) => {
  * @returns {Promise<Object>}
  */
 export const addPremiumPoints = async (userId, amount) => {
-  // ... (cuerpo sin cambios)
   try {
     if (!userId) {
       throw new Error('Usuario no autenticado');
@@ -217,7 +217,6 @@ export const addPremiumPoints = async (userId, amount) => {
  * @returns {Promise<Object>}
  */
 export const deductPoints = async (userId, amount, reason = 'Canje de recompensa') => {
-  // ... (cuerpo sin cambios)
   try {
     if (!userId) {
       throw new Error('Usuario no autenticado');
@@ -266,7 +265,68 @@ export const deductPoints = async (userId, amount, reason = 'Canje de recompensa
   }
 };
 
-// ... (calculateVideoPoints y hasEarnedPoints sin cambios)
+// ============================================================================
+// LÓGICA DE PUNTOS POR VIDEO
+// ============================================================================
+
+/**
+ * Calcula los puntos de recompensa estimados por subir un video
+ * @param {number} durationSeconds - Duración del video en segundos
+ * @param {boolean} isPremiumContent - Si es contenido exclusivo
+ * @returns {number} Puntos estimados
+ */
+export const calculateVideoPoints = (durationSeconds, isPremiumContent) => {
+  // Lógica de cálculo (ejemplo): 1 punto por cada 10 segundos, más un bonus premium.
+  let basePoints = Math.floor(durationSeconds / 10);
+
+  if (isPremiumContent) {
+    basePoints += 50; // Bonus premium
+  }
+
+  // Asegurar un mínimo (ejemplo)
+  return Math.max(10, basePoints);
+};
+
+
+// ============================================================================
+// VERIFICAR SI USUARIO YA GANÓ PUNTOS POR ACCIÓN
+// ============================================================================
+
+/**
+ * Verifica si el usuario ya ganó puntos por una acción específica
+ * (para evitar duplicados)
+ * @param {string} userId - ID del usuario
+ * @param {string} actionType - Tipo de acción
+ * @param {string} referenceId - ID de referencia (video_id, comment_id, etc.)
+ * @returns {Promise<boolean>} true si ya ganó puntos, false si no
+ */
+export const hasEarnedPoints = async (userId, actionType, referenceId) => {
+  try {
+    if (!userId || !actionType || !referenceId) {
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from('points_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('action_type', actionType)
+      .eq('reference_id', referenceId)
+      .limit(1);
+
+    if (error) {
+      console.error('❌ Error verificando puntos ganados:', error);
+      return false;
+    }
+
+    return data && data.length > 0;
+
+  } catch (error) {
+    console.error('❌ Error en hasEarnedPoints:', error);
+    return false;
+  }
+};
+
 
 // ============================================================================
 // EXPORTACIONES FINALES
@@ -274,6 +334,17 @@ export const deductPoints = async (userId, amount, reason = 'Canje de recompensa
 // ✅ La función que acepta el monto explícito se exporta como 'addFreePoints'
 //    para no romper las llamadas del Context y del MissionsService.
 export const addFreePoints = grantFreePoints;
+
+// ✅ EXPORTACIONES DESESTRUCTURADAS PARA EVITAR ERRORES DE BUILD
+export { 
+  calculateVideoPoints,
+  trackFreePointsAction,
+  addPremiumPoints,
+  deductPoints,
+  hasEarnedPoints,
+  getUserPoints
+};
+
 
 export default {
   getUserPoints,
