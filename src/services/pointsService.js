@@ -2,9 +2,8 @@
 // ============================================================================
 // SERVICIO DE PUNTOS - Corregido para Montos Explícitos y Exportaciones
 // ============================================================================
-// ✅ CORRECCIÓN CRÍTICA: Se define grantFreePoints (que acepta AMOUNT) y se exporta 
-//    como addFreePoints para compatibilidad con MissionsService y Context.
-// ✅ CORRECCIÓN DE BUILD: calculateVideoPoints ahora está exportada explícitamente.
+// ✅ CORRECCIÓN FINAL: Eliminada la exportación duplicada de calculateVideoPoints
+//    para solucionar el RollupError en Vercel.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -75,8 +74,7 @@ export const grantFreePoints = async (userId, amount, reason, actionType) => {
 
         console.log('🎁 Otorgando puntos gratis explícitos:', { userId, amount, reason, actionType });
 
-        // ✅ ASUMIMOS que existe una RPC en la DB que permite otorgar una cantidad explícita
-        // Reemplaza la RPC original 'add_free_points' que solo usaba actionType.
+        // ASUMIMOS que existe una RPC en la DB que permite otorgar una cantidad explícita
         const { data, error } = await supabase.rpc('grant_free_points', {
             p_user_id: userId,
             p_points: amount,
@@ -111,7 +109,6 @@ export const grantFreePoints = async (userId, amount, reason, actionType) => {
 
 /**
  * Agrega puntos gratis al usuario por realizar acciones (monto fijo definido en el RPC).
- * RENOMBRADO: Usado para acciones de puntos fijos (e.g., ver 30s) donde el monto lo define el servidor.
  * @param {string} userId - ID del usuario
  * @param {string} actionType - Tipo de acción ('watch_video', 'like', 'comment', etc.)
  * @returns {Promise<Object>}
@@ -331,25 +328,14 @@ export const hasEarnedPoints = async (userId, actionType, referenceId) => {
 // ============================================================================
 // EXPORTACIONES FINALES
 // ============================================================================
-// ✅ La función que acepta el monto explícito se exporta como 'addFreePoints'
-//    para no romper las llamadas del Context y del MissionsService.
+// ✅ ALIAS: La función que acepta el monto explícito se exporta como 'addFreePoints'
 export const addFreePoints = grantFreePoints;
 
-// ✅ EXPORTACIONES DESESTRUCTURADAS PARA EVITAR ERRORES DE BUILD
-export { 
-  calculateVideoPoints,
-  trackFreePointsAction,
-  addPremiumPoints,
-  deductPoints,
-  hasEarnedPoints,
-  getUserPoints
-};
-
-
+// ✅ EXPORTACIÓN POR DEFECTO
 export default {
   getUserPoints,
   addFreePoints, // Exporta grantFreePoints
-  trackFreePointsAction, // El original (para tracking de acciones fijas)
+  trackFreePointsAction,
   addPremiumPoints,
   deductPoints,
   calculateVideoPoints,
