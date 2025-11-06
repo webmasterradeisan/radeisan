@@ -2,16 +2,15 @@
 // ============================================================================
 // MISSIONS SERVICE - Sistema de Misiones Diarias (IMPLEMENTACIÓN FINAL)
 // ============================================================================
-// ✅ Implementa las reglas de negocio de puntos solicitadas.
-// ✅ Soluciona la importación de addFreePoints y la usa para otorgar recompensas.
-// ✅ Utiliza initializeUserPoints para asegurar la persistencia en la DB.
+// ✅ CORRECCIÓN CRÍTICA: Se cambia la importación a desestructurada para
+//    compatibilidad con Rollup/Vite y el servicio de puntos.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
-// 🛑 IMPORTACIÓN CRÍTICA: Importar las funciones de puntos como named exports
+// 🛑 CORRECCIÓN: Usamos importaciones desestructuradas directas
 import { 
-  addFreePoints, 
-  initializeUserPoints // Para asegurar que el registro de puntos exista
+  addPoints, 
+  initializeUserPoints 
 } from './pointsService'; 
 
 // ============================================================================
@@ -27,10 +26,11 @@ export const MISSION_TYPES = {
   PUBLISH_CONTENT: 'publish_content', // Publicar contenido (30 puntos)
   DONATE_POINTS: 'donate_points',   // Apoyar (donar puntos) (2 puntos)
   COMPLETE_ALL: 'complete_all',     // Misión de racha (100 puntos)
-  // Añadimos los tipos específicos de publicación para el tracking
+  // Tipos de contenido para la misión de publicación
   UPLOAD_VIDEO: 'upload_video',
   UPLOAD_PHOTO: 'upload_photo',
   UPLOAD_REEL: 'upload_reel',
+  WATCH_VIDEO: 'watch_video', // Para la misión de ver videos
 };
 
 /**
@@ -79,7 +79,6 @@ export async function trackMissionProgress(type, increment, userId, referenceId 
     const { data: currentProgress, error: fetchError } = await supabase
       .from(MISSION_PROGRESS_TABLE)
       .select('progress, claimed')
-      // Se asume que hay un filtro de fecha implícito o en la política RLS para que sea DIARIO
       .eq('user_id', userId)
       .eq('mission_type', type)
       .maybeSingle();
@@ -121,10 +120,11 @@ export async function trackMissionProgress(type, increment, userId, referenceId 
 export async function claimMissionReward(userId, missionType, rewardAmount) {
   try {
     // 1. Otorgar los puntos (usa la función de pointsService)
-    // 🛑 Usamos la función nombrada addFreePoints.
-    const result = await addFreePoints(
+    // 🛑 USO DE addPoints (que es el alias de addFreePoints en pointsService)
+    const result = await addPoints(
       userId, 
       rewardAmount, 
+      'free', // El tipo de punto que se otorga es FREE
       missionType, // actionType
       missionType // referenceId 
     );
@@ -150,15 +150,18 @@ export async function claimMissionReward(userId, missionType, rewardAmount) {
 // ============================================================================\
 // FUNCIONES DE TRACKING ESPECÍFICO (Llamadas desde Componentes)
 // ============================================================================\
-// NOTA: Estas funciones son las que se deben importar y llamar en VideoPlayerPage
+// NOTA: Estas son las funciones que se deben importar y llamar en VideoPlayerPage
 
 export async function trackDailyLogin(userId) {
   return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 1, userId);
 }
 
-export async function trackWatchVideo(videoId, userId) {
-  // Aquí se registraría si tuvieras una misión de "Ver X videos"
-  return true; 
+export async function trackWatchVideo(videoId, watchDuration) {
+  return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, 1, userId, videoId);
+}
+
+export async function trackUploadVideo(videoId, userId) {
+  return trackMissionProgress(MISSION_TYPES.UPLOAD_VIDEO, 1, userId, videoId);
 }
 
 export async function trackGiveLike(contentType, contentId, userId) {
@@ -166,7 +169,7 @@ export async function trackGiveLike(contentType, contentId, userId) {
   return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, 1, userId, contentId);
 }
 
-export async function trackShareContent(contentType, contentId, userId, method = 'link') {
+export async function trackShareContent(contentType, contentId, userId, platform) {
   return trackMissionProgress(MISSION_TYPES.SHARE_CONTENT, 1, userId, contentId);
 }
 
@@ -193,6 +196,7 @@ export default {
     // Tracking Específico
     trackDailyLogin,
     trackWatchVideo,
+    trackUploadVideo,
     trackGiveLike,
     trackShareContent,
     trackComment,
@@ -200,5 +204,5 @@ export default {
     
     // Recompensas
     claimMissionReward,
-    // ... (otras funciones que puedan existir) // 🛑 SE ELIMINA LA NOTA COMENTADA PARA SER COMPLETO
+    // ... (otras funciones que puedan existir en tu código original)
 };
