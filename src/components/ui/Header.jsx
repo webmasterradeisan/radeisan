@@ -2,7 +2,7 @@
 // ============================================================================
 // HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
-// ✅ Base: Copia del Header (1).jsx (Puntos duales con etiquetas).
+// ✅ BASE: Header (1).jsx (Puntos duales con etiquetas).
 // ✅ Solución UX FINAL: Panel lateral FIXED y H-SCREEN para tapar TODO el contenido.
 // ✅ Logo en el encabezado del modal.
 // ============================================================================
@@ -252,8 +252,6 @@ const Header = () => {
                 
                 {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                  {/* Lógica del Logo Original */}
-                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -614,26 +612,28 @@ const Header = () => {
           </div>
         </div>
         
-        {/* MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL */}
+        {/* ===============================
+            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (PANTALLA COMPLETA - SOLUCIÓN UX FINAL)
+            =============================== */}
         {isMainMenuModalOpen && user && (
             <div 
-                className="fixed inset-0 z-[100] md:hidden" 
+                className="fixed inset-0 z-[100] md:hidden" // Z-index alto para superponer
             >
-                {/* Overlay oscuro */}
+                {/* Overlay oscuro que se cierra al clickar */}
                 <div 
-                    className="absolute inset-0 bg-black/70" 
+                    className="absolute inset-0 bg-black/70" // Fondo oscuro para opacar contenido
                     onClick={toggleMainMenuModal}
                 ></div>
 
-                {/* Contenido del Modal (Panel Lateral) */}
+                {/* ✅ Contenido del Modal (Panel Lateral) - FIXED y H-SCREEN */}
                 <div 
                     ref={mainMenuModalRef}
-                    className="fixed left-0 top-0 w-64 h-screen bg-white shadow-2xl transition-transform duration-300 ease-out" 
+                    className="fixed left-0 top-0 w-64 h-screen bg-white shadow-2xl transition-transform duration-300 ease-out" // Cambiado a FIXED y H-SCREEN
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex flex-col h-full overflow-y-auto p-4">
                         <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                            {/* TÍTULO REEMPLAZADO POR EL LOGO */}
+                            {/* ✅ TÍTULO REEMPLAZADO POR EL LOGO */}
                             <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
                               {branding.logo.primary ? (
                                 <img 
@@ -757,6 +757,21 @@ const Header = () => {
           }
         }
         
-        @keyframes fadeOut {\n          from {\n            opacity: 1;\n          }\n          to {\n            opacity: 0;\n          }\n        }\n        \n        .animate-slide-in-fade {\n          animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;\n        }\n      `}</style>
-    </>\r\n  );\r\n};\r\n\r\nexport default Header;\r\n"
-}
+        @keyframes fadeOut {
+          from {
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+        
+        .animate-slide-in-fade {
+          animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;
+        }
+      `}</style>
+    </>
+  );
+};
+
+export default Header;
