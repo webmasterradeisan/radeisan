@@ -3,6 +3,7 @@
 // SERVICIO DE PUNTOS - FINAL Y ESTABLE (FIX DE ROLLUP Y PERSISTENCIA)
 // ============================================================================
 // ✅ Se añade calculateVideoPoints como exportación nombrada para FIX el error de Vercel.
+// ✅ CORREGIDO: 'amount' -> 'points_change' y eliminada llamada redundante en 'addPoints'.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -110,7 +111,8 @@ export const trackPointsAction = async (userId, amount, pointType, actionType, r
       .from(TRANSACTION_TABLE)
       .insert({
         user_id: userId,
-        amount: amount,
+        // ✅ CORRECCIÓN: La columna en la DB se llama 'points_change', no 'amount'.
+        points_change: amount, 
         point_type: pointType,
         action_type: actionType,
         reference_id: referenceId,
@@ -164,7 +166,9 @@ export const addPoints = async (userId, amount, type, actionType, referenceId = 
     try {
         const balanceResult = await updatePointsBalance(userId, amount, type, actionType, referenceId);
         
-        await trackPointsAction(userId, amount, type, actionType, referenceId); 
+        // 🛑 CORRECCIÓN: Llamada redundante. El RPC 'updatePointsBalance' (que llama a 'update_user_points')
+        // ya se encarga de insertar la transacción en la DB. Esta línea causaba el error 400.
+        // await trackPointsAction(userId, amount, type, actionType, referenceId); 
         
         return balanceResult;
     } catch (error) {
