@@ -2,10 +2,6 @@
 // ============================================================================
 // HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
-// ✅ BASE: Header (1).jsx (Puntos duales con etiquetas).
-// ✅ Solución UX FINAL: Panel lateral FIXED y H-SCREEN para tapar TODO el contenido.
-// ✅ Logo en el encabezado del modal.
-// ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -252,6 +248,10 @@ const Header = () => {
                 
                 {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+                  {/* Lógica del Logo Original */}
+                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
+                  {/* Esto asume que el logo es más complejo que solo un span */}
+                  
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -385,11 +385,7 @@ const Header = () => {
                   >
                     {/* Fila 1: Icono y Saldo */}
                     <div className="flex items-center space-x-1">
-                      <Icon 
-                        name="Star" 
-                        size={18} 
-                        className="text-orange-400" 
-                      />
+                      <Icon name="Star" size={18} className="text-orange-400" />
                       {pointsLoading ? (
                         <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
                       ) : (
@@ -612,20 +608,18 @@ const Header = () => {
           </div>
         </div>
         
-        {/* ===============================
-            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (PANTALLA COMPLETA - SOLUCIÓN UX FINAL)
-            =============================== */}
+        {/* MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL */}
         {isMainMenuModalOpen && user && (
             <div 
                 className="fixed inset-0 z-[100] md:hidden" // Z-index alto para superponer
             >
-                {/* Overlay oscuro que se cierra al clickar */}
+                {/* Overlay oscuro */}
                 <div 
                     className="absolute inset-0 bg-black/70" // Fondo oscuro para opacar contenido
                     onClick={toggleMainMenuModal}
                 ></div>
 
-                {/* ✅ Contenido del Modal (Panel Lateral) - FIXED y H-SCREEN */}
+                {/* Contenido del Modal (Panel Lateral) */}
                 <div 
                     ref={mainMenuModalRef}
                     className="fixed left-0 top-0 w-64 h-screen bg-white shadow-2xl transition-transform duration-300 ease-out" // Cambiado a FIXED y H-SCREEN
@@ -633,7 +627,7 @@ const Header = () => {
                 >
                     <div className="flex flex-col h-full overflow-y-auto p-4">
                         <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                            {/* ✅ TÍTULO REEMPLAZADO POR EL LOGO */}
+                            {/* TÍTULO REEMPLAZADO POR EL LOGO */}
                             <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
                               {branding.logo.primary ? (
                                 <img 
