@@ -749,6 +749,7 @@ const VideoPlayerPage = () => {
 
         // ✅ CORRECCIÓN: Usar trackMissionProgress para acciones sin función específica
         try {
+          // Asumimos que existe una misión de tipo 'save_video'
           missionsService.trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
