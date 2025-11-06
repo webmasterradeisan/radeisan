@@ -377,7 +377,7 @@ export async function trackDailyLogin() {
 }
 
 // ============================================================================
-// FUNCIONES DE COMPLETADO - Marcar como Completada (CORREGIDA)
+// FUNCIONES DE COMPLETADO - Marcar como Completada
 // ============================================================================
 
 /**
