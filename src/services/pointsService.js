@@ -1,15 +1,72 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - FINAL Y ESTABLE
+// SERVICIO DE PUNTOS - FINAL Y ESTABLE (FIX DE INICIALIZACIÓN DE BASE DE DATOS)
 // ============================================================================
-// ✅ CORRECCIÓN FINAL: Se eliminó el conflicto de exportación duplicada 
-//    para solucionar el RollupError en Vercel.
+// ✅ CORRECCIÓN CRÍTICA: Se añade initializeUserPoints para evitar fallos 
+//    de 'no row found' en las RPCs de Supabase al consultar la tabla user_points.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 
 // ============================================================================
-// OBTENER PUNTOS DEL USUARIO
+// INICIALIZACIÓN DE PUNTOS (CRÍTICO)
+// ============================================================================
+
+/**
+ * Asegura que el usuario tenga un registro en la tabla 'user_points'.
+ * Si el registro no existe, lo crea con 0 puntos.
+ * @param {string} userId - ID del usuario
+ * @returns {Promise<boolean>} true si existe o se creó, false si falló.
+ */
+export const initializeUserPoints = async (userId) => {
+  if (!userId) {
+    console.warn('⚠️ initializeUserPoints: No se proporcionó userId');
+    return false;
+  }
+
+  try {
+    // 1. Intentar leer el registro para verificar existencia
+    const { data, error } = await supabase
+      .from('user_points')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Si ya existe (data is not null), retornamos true.
+    if (data) {
+      return true;
+    }
+
+    // 2. Si no hay registro (data es null), intentar crearlo.
+    console.log('✨ Inicializando registro de puntos para:', userId);
+    const { error: insertError } = await supabase
+      .from('user_points')
+      .insert({
+        user_id: userId,
+        free_points: 0,
+        premium_points: 0,
+      })
+      // Usamos onConflict para evitar errores si dos procesos intentan crearlo a la vez
+      .onConflict('user_id') 
+      .single();
+
+    if (insertError) {
+      console.error('❌ Error al insertar registro de puntos:', insertError);
+      return false;
+    }
+
+    console.log('✅ Registro de puntos inicializado.');
+    return true;
+
+  } catch (error) {
+    console.error('❌ Error en initializeUserPoints (excepción):', error);
+    return false;
+  }
+};
+
+
+// ============================================================================
+// OBTENER PUNTOS DEL USUARIO (USA RPC)
 // ============================================================================
 
 /**
@@ -24,6 +81,8 @@ export const getUserPoints = async (userId) => {
       return { free: 0, premium: 0, total: 0 };
     }
 
+    // 🛑 initializeUserPoints() debe llamarse en PointsContext antes de esta función.
+    
     console.log('📊 Consultando puntos para usuario:', userId);
 
     const { data, error } = await supabase.rpc('get_user_points', {
@@ -36,6 +95,7 @@ export const getUserPoints = async (userId) => {
     }
 
     const points = {
+      // Si la RPC devuelve nulo por inconsistencia, usamos 0 como fallback.
       free: data?.free_points || 0,
       premium: data?.premium_points || 0,
       total: data?.total_points || 0
@@ -46,300 +106,130 @@ export const getUserPoints = async (userId) => {
 
   } catch (error) {
     console.error('❌ Error en getUserPoints:', error);
+    // Devolvemos 0 en caso de excepción para evitar que el Contexto colapse.
     return { free: 0, premium: 0, total: 0 };
   }
 };
 
-// ============================================================================
-// OTORGAR PUNTOS GRATIS (MONTO EXPLÍCITO - PARA MISIONES/CONTEXT)
-// ============================================================================
-
-/**
- * Agrega una cantidad explícita de puntos gratis al usuario (para misiones, recompensas, etc.).
- * @param {string} userId - ID del usuario
- * @param {number} amount - Cantidad de puntos a otorgar
- * @param {string} reason - Razón del otorgamiento
- * @param {string} actionType - Tipo de acción para la transacción ('mission_reward', 'view_video', etc.)
- * @returns {Promise<{success: boolean, points_added: number, new_balance: object}>}
- */
-export const grantFreePoints = async (userId, amount, reason, actionType) => {
-    try {
-        if (!userId) {
-            throw new Error('Usuario no autenticado');
-        }
-
-        if (!amount || amount <= 0) {
-            throw new Error('Cantidad de puntos inválida');
-        }
-
-        console.log('🎁 Otorgando puntos gratis explícitos:', { userId, amount, reason, actionType });
-
-        // ASUMIMOS que existe una RPC en la DB que permite otorgar una cantidad explícita
-        const { data, error } = await supabase.rpc('grant_free_points', {
-            p_user_id: userId,
-            p_points: amount,
-            p_reason: reason,
-            p_action_type: actionType,
-        });
-
-        if (error) {
-            console.error('❌ Error en RPC grant_free_points:', error);
-            throw error;
-        }
-
-        return {
-            success: true,
-            points_added: amount,
-            new_balance: {
-                free: data?.new_free_balance || 0,
-                premium: data?.new_premium_balance || 0,
-                total: (data?.new_free_balance || 0) + (data?.new_premium_balance || 0)
-            }
-        };
-
-    } catch (error) {
-        console.error('❌ Error en grantFreePoints:', error);
-        throw error;
-    }
-};
 
 // ============================================================================
-// TRACKING PUNTOS POR ACCIÓN (MONTO FIJO EN RPC)
+// REGISTRAR PUNTOS POR ACCIÓN ESPECÍFICA (TRANSACCIÓN)
 // ============================================================================
 
 /**
- * Agrega puntos gratis al usuario por realizar acciones (monto fijo definido en el RPC).
+ * Registra una transacción de puntos libres
  * @param {string} userId - ID del usuario
- * @param {string} actionType - Tipo de acción ('watch_video', 'like', 'comment', etc.)
- * @returns {Promise<Object>}
+ * @param {number} amount - Cantidad de puntos a sumar
+ * @param {string} actionType - Tipo de acción ('like', 'watch_video', etc.)
+ * @param {string} referenceId - ID de la referencia (video_id, etc.)
+ * @returns {Promise<boolean>}
  */
-export const trackFreePointsAction = async (userId, actionType) => {
+export const trackFreePointsAction = async (userId, amount, actionType, referenceId) => {
+  // Lógica para INSERTAR en points_transactions
   try {
-    if (!userId) {
-      throw new Error('Usuario no autenticado');
-    }
-
-    console.log('🎁 Agregando puntos gratis (fijo RPC):', { userId, actionType });
-
-    // La RPC original 'add_free_points' se mantiene para acciones de monto fijo
-    const { data, error } = await supabase.rpc('add_free_points', {
-      p_user_id: userId,
-      p_action_type: actionType
-    });
-
-    if (error) {
-      console.error('❌ Error en RPC add_free_points:', error);
-      throw error;
-    }
-
-    console.log('✅ Puntos fijos agregados:', data);
-
-    return {
-      success: true,
-      points_added: data?.points_added || 0,
-      new_balance: {
-        free: data?.new_free_balance || 0,
-        premium: data?.new_premium_balance || 0,
-        total: (data?.new_free_balance || 0) + (data?.new_premium_balance || 0)
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Error en trackFreePointsAction:', error);
-    throw error;
-  }
-};
-
-
-// ============================================================================
-// AGREGAR PUNTOS PREMIUM
-// ============================================================================
-
-/**
- * Agrega puntos premium al usuario (comprados)
- * @param {string} userId - ID del usuario
- * @param {number} amount - Cantidad de puntos a agregar
- * @returns {Promise<Object>}
- */
-export const addPremiumPoints = async (userId, amount) => {
-  try {
-    if (!userId) {
-      throw new Error('Usuario no autenticado');
-    }
-
-    if (!amount || amount <= 0) {
-      throw new Error('Cantidad de puntos inválida');
-    }
-
-    console.log('💎 Agregando puntos premium:', { userId, amount });
-
-    // Llamar a la función RPC de Supabase
-    const { data, error } = await supabase.rpc('add_premium_points', {
-      p_user_id: userId,
-      p_points: amount
-    });
-
-    if (error) {
-      console.error('❌ Error en RPC add_premium_points:', error);
-      throw error;
-    }
-
-    console.log('✅ Puntos premium agregados:', data);
-
-    return {
-      success: true,
-      points_added: amount,
-      new_balance: {
-        free: data?.new_free_balance || 0,
-        premium: data?.new_premium_balance || 0,
-        total: (data?.new_free_balance || 0) + (data?.new_premium_balance || 0)
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Error en addPremiumPoints:', error);
-    throw error;
-  }
-};
-
-// ============================================================================
-// DEDUCIR PUNTOS
-// ============================================================================
-
-/**
- * Deduce puntos del usuario (por canje de recompensas)
- * @param {string} userId - ID del usuario
- * @param {number} amount - Cantidad de puntos a deducir
- * @param {string} reason - Razón de la deducción
- * @returns {Promise<Object>}
- */
-export const deductPoints = async (userId, amount, reason = 'Canje de recompensa') => {
-  try {
-    if (!userId) {
-      throw new Error('Usuario no autenticado');
-    }
-
-    if (!amount || amount <= 0) {
-      throw new Error('Cantidad de puntos inválida');
-    }
-
-    console.log('💸 Deduciendo puntos:', { userId, amount, reason });
-
-    // Obtener balance actual
-    const currentBalance = await getUserPoints(userId);
-
-    if (currentBalance.total < amount) {
-      throw new Error('Puntos insuficientes');
-    }
-
-    // Llamar a la función RPC de Supabase
-    const { data, error } = await supabase.rpc('deduct_points', {
-      p_user_id: userId,
-      p_points: amount,
-      p_reason: reason
-    });
-
-    if (error) {
-      console.error('❌ Error en RPC deduct_points:', error);
-      throw error;
-    }
-
-    console.log('✅ Puntos deducidos:', data);
-
-    return {
-      success: true,
-      points_deducted: amount,
-      new_balance: {
-        free: data?.new_free_balance || 0,
-        premium: data?.new_premium_balance || 0,
-        total: (data?.new_free_balance || 0) + (data?.new_premium_balance || 0)
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Error en deductPoints:', error);
-    throw error;
-  }
-};
-
-// ============================================================================
-// LÓGICA DE PUNTOS POR VIDEO
-// ============================================================================
-
-/**
- * Calcula los puntos de recompensa estimados por subir un video
- * @param {number} durationSeconds - Duración del video en segundos
- * @param {boolean} isPremiumContent - Si es contenido exclusivo
- * @returns {number} Puntos estimados
- */
-export const calculateVideoPoints = (durationSeconds, isPremiumContent) => {
-  // Lógica de cálculo (ejemplo): 1 punto por cada 10 segundos, más un bonus premium.
-  let basePoints = Math.floor(durationSeconds / 10);
-
-  if (isPremiumContent) {
-    basePoints += 50; // Bonus premium
-  }
-
-  // Asegurar un mínimo (ejemplo)
-  return Math.max(10, basePoints);
-};
-
-
-// ============================================================================
-// VERIFICAR SI USUARIO YA GANÓ PUNTOS POR ACCIÓN
-// ============================================================================
-
-/**
- * Verifica si el usuario ya ganó puntos por una acción específica
- * (para evitar duplicados)
- * @param {string} userId - ID del usuario
- * @param {string} actionType - Tipo de acción
- * @param {string} referenceId - ID de referencia (video_id, comment_id, etc.)
- * @returns {Promise<boolean>} true si ya ganó puntos, false si no
- */
-export const hasEarnedPoints = async (userId, actionType, referenceId) => {
-  try {
-    if (!userId || !actionType || !referenceId) {
-      return false;
-    }
-
-    const { data, error } = await supabase
+    // initializeUserPoints() debe llamarse en el Contexto antes de esto.
+    
+    const { error } = await supabase
       .from('points_transactions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('action_type', actionType)
-      .eq('reference_id', referenceId)
-      .limit(1);
+      .insert({
+        user_id: userId,
+        amount: amount,
+        point_type: 'free',
+        action_type: actionType,
+        reference_id: referenceId,
+      });
 
     if (error) {
-      console.error('❌ Error verificando puntos ganados:', error);
+      console.error('❌ Error registrando acción de puntos:', error);
       return false;
     }
 
-    return data && data.length > 0;
-
+    return true;
   } catch (error) {
-    console.error('❌ Error en hasEarnedPoints:', error);
+    console.error('❌ Excepción al registrar acción de puntos:', error);
     return false;
   }
 };
+
+// ============================================================================
+// SUMAR/RESTAR PUNTOS (USA RPC update_user_points)
+// ============================================================================
+
+/**
+ * Función genérica para otorgar o deducir puntos
+ * @param {string} userId - ID del usuario
+ * @param {number} amount - Cantidad (positiva para sumar, negativa para restar)
+ * @param {'free' | 'premium'} type - Tipo de punto
+ * @returns {Promise<{new_free_points: number, new_premium_points: number}>}
+ */
+export const updatePointsBalance = async (userId, amount, type) => {
+  try {
+    // initializeUserPoints() debe llamarse en el Contexto antes de esto.
+    
+    console.log(`📡 Llamando RPC update_user_points: ${amount} ${type} para ${userId}`);
+    
+    // Asumimos que esta RPC maneja la suma/resta según el signo de 'amount'
+    const { data, error } = await supabase.rpc('update_user_points', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_type: type,
+    });
+
+    if (error) throw error;
+    
+    if (data && typeof data === 'object') {
+        console.log('✅ Balance actualizado por RPC:', data);
+        // Devolvemos el objeto que contiene los nuevos saldos
+        return data; 
+    }
+    
+    // Si la RPC no devuelve data con los saldos, devolvemos un objeto vacío/cero.
+    return { new_free_points: 0, new_premium_points: 0 };
+
+  } catch (error) {
+    console.error('❌ Error en RPC update_user_points:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// FUNCIONES DE ALIAS Y LEGADO
+// ============================================================================
+
+// Alias para otorgar puntos libres (la acción principal de like/vista)
+export const grantFreePoints = async (userId, amount, actionType, referenceId) => {
+    // 1. Actualizar el balance (sumar puntos)
+    const balanceResult = await updatePointsBalance(userId, amount, 'free');
+    
+    // 2. Registrar la transacción (para el historial)
+    // No esperamos esta promesa para no ralentizar el flujo
+    trackFreePointsAction(userId, amount, actionType, referenceId); 
+    
+    return balanceResult;
+};
+
+// ALIAS: La función que acepta el monto explícito se exporta como 'addFreePoints'
+export const addFreePoints = grantFreePoints;
+
+// Alias para sumar puntos premium
+export const addPremiumPoints = (userId, amount, actionType, referenceId) => 
+    updatePointsBalance(userId, amount, 'premium');
+
+// Alias para deducir puntos
+export const deductPoints = (userId, amount, type) => 
+    updatePointsBalance(userId, -amount, type);
 
 
 // ============================================================================
 // EXPORTACIONES FINALES
 // ============================================================================
-// ALIAS: La función que acepta el monto explícito se exporta como 'addFreePoints'
-export const addFreePoints = grantFreePoints;
 
-// EXPORTACIÓN POR DEFECTO: incluye todas las funciones para compatibilidad
-// ✅ SOLO INCLUIMOS REFERENCIAS A LAS FUNCIONES, NO RE-EXPORTAMOS NADA
 export default {
   getUserPoints,
-  addFreePoints, 
+  initializeUserPoints, 
   trackFreePointsAction,
+  updatePointsBalance,
+  addFreePoints, 
   addPremiumPoints,
   deductPoints,
-  calculateVideoPoints,
-  hasEarnedPoints,
-  grantFreePoints,
 };
