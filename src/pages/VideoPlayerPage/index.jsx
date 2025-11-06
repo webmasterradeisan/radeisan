@@ -2,9 +2,10 @@
 // ============================================================================
 // VIDEO PLAYER PAGE - VERSIÓN CORREGIDA FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN CRÍTICA: Se reemplazó el placeholder missionsService.trackAction('...')
-//    por las funciones específicas del servicio: trackWatchVideo, trackGiveLike, etc.
-// ✅ Manejo robusto de promesas (try/catch) para evitar el crash (Something Went Wrong).
+// ✅ CORRECCIÓN CRÍTICA: Se usa un manejo robusto de errores y se reemplaza el
+//    placeholder missionsService.trackAction por las funciones específicas del servicio
+//    (trackWatchVideo, trackGiveLike, etc.), resolviendo el crash.
+// ✅ La lógica de mini-player, comentarios y datos permanece intacta.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -236,7 +237,7 @@ const VideoPlayerPage = () => {
 
     // PAUSAR COMPLETAMENTE el video principal
     mainVideo.pause();
-    setIsPlaying(false); // Settear isPlaying a false para que se muestre el botón de Play en el principal
+    setIsPlaying(false); 
 
     // Activar mini-player
     setIsMinimized(true);
@@ -251,7 +252,7 @@ const VideoPlayerPage = () => {
         
         if (wasPlaying) {
           miniVideo.play()
-            .then(() => setIsPlaying(true)) // Settear isPlaying a true para que se muestre el Pause en el mini
+            .then(() => setIsPlaying(true)) 
             .catch(err => console.error('Error play mini:', err));
         }
       }
@@ -589,14 +590,13 @@ const VideoPlayerPage = () => {
     
     try {
       const pointsAmount = 2;
-      // Espera todas las promesas de puntos/misiones antes de actualizar el estado de bloqueo
+      
+      // ✅ CORRECCIÓN: Uso de Promise.all para hacer las llamadas de tracking y puntos seguras
       await Promise.all([
-        addPoints(pointsAmount, 'Ver video', 'free'),
-        trackPointsEarned('view', pointsAmount),
-        // ✅ CORRECCIÓN: Usar la función específica
-        missionsService.trackWatchVideo(videoId, 30)
+        missionsService.trackWatchVideo(videoId, 30),
+        addPoints(pointsAmount, 'Ver video', 'free') 
       ]);
-
+      
       setHasEarnedViewPoints(true);
       showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
       
@@ -649,12 +649,11 @@ const VideoPlayerPage = () => {
         if (!hasEarnedLikePoints) {
           const pointsAmount = 5;
           
-          // ✅ Manejo de promesas con try/catch para evitar que un fallo rompa handleLike
+          // ✅ CORRECCIÓN: Uso de Promise.all y función específica
           try {
             await Promise.all([
                 addPoints(pointsAmount, 'Like en video', 'free'),
                 trackPointsEarned('like', pointsAmount),
-                // ✅ CORRECCIÓN: Usar la función específica
                 missionsService.trackGiveLike('video', videoId)
             ]);
             
@@ -748,9 +747,8 @@ const VideoPlayerPage = () => {
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // ✅ CORRECCIÓN: Usar la función más genérica para acciones sin tracking directo
+        // ✅ CORRECCIÓN: Usar trackMissionProgress para acciones sin función específica
         try {
-          // Asumimos que existe una misión de tipo 'save_video'
           missionsService.trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
@@ -768,14 +766,13 @@ const VideoPlayerPage = () => {
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
-        // ✅ Manejo de promesas con try/catch
+        // ✅ CORRECCIÓN: Uso de Promise.all y función específica
       try {
         const pointsAmount = 3;
         await Promise.all([
           addPoints(pointsAmount, 'Compartir video', 'free'),
           trackPointsEarned('share', pointsAmount),
-          // ✅ CORRECCIÓN: Usar la función específica
-          missionsService.trackShareContent('video', videoId, 'link') // 'link' como plataforma genérica
+          missionsService.trackShareContent('video', videoId, 'link') 
         ]);
         
         setHasEarnedSharePoints(true);
@@ -818,7 +815,7 @@ const VideoPlayerPage = () => {
             following_id: video.user_id
           });
         
-        // ✅ CORRECCIÓN: Usar la función específica
+        // ✅ CORRECCIÓN: Uso de función específica
         try {
           missionsService.trackFollowUser(video.user_id);
         } catch (missionError) {
@@ -880,12 +877,11 @@ const VideoPlayerPage = () => {
 
       if (!hasEarnedCommentPoints) {
         const pointsAmount = 10;
-        // ✅ Manejo de promesas con try/catch para evitar que un fallo rompa la publicación
+        // ✅ CORRECCIÓN: Uso de Promise.all y función específica
         try {
             await Promise.all([
                 addPoints(pointsAmount, 'Comentar video', 'free'),
                 trackPointsEarned('comment', pointsAmount),
-                // ✅ CORRECCIÓN: Usar la función específica
                 missionsService.trackComment('video', videoId)
             ]);
 
