@@ -2,12 +2,12 @@
 // ============================================================================
 // HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
-// ✅ BASE: Header (1).jsx (Puntos duales con etiquetas).
+// ✅ Base: Copia del Header (1).jsx (Puntos duales con etiquetas).
 // ✅ Solución UX FINAL: Panel lateral FIXED y H-SCREEN para tapar TODO el contenido.
 // ✅ Logo en el encabezado del modal.
 // ============================================================================
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePoints } from '../../contexts/PointsContext';
@@ -16,7 +16,7 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Tomado de la base)
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO
 // ============================================================================
 const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
@@ -38,6 +38,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   }, [points]);
 
   useEffect(() => {
+    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -78,7 +79,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
 };
 
 // ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Tomado de la base)
+// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -164,7 +165,7 @@ const Header = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isMainMenuModalOpen]); // Dependencia agregada para re-evaluar el cierre del modal
+  }, [isMainMenuModalOpen]);
 
   // Cerrar menús/modals al cambiar de ruta
   useEffect(() => {
@@ -237,7 +238,7 @@ const Header = () => {
                 LOGO Y BOTÓN MENÚ MÓVIL (Izquierda)
                 =============================== */}
             <div className="flex items-center space-x-2">
-                {/* ✅ Botón "Menú" principal - Visible solo en móvil (Texto) */}
+                {/* Botón "Menú" principal - Visible solo en móvil (Texto) */}
                 {user && (
                     <Button 
                         id="mobile-main-menu-toggle" 
@@ -252,6 +253,11 @@ const Header = () => {
                 
                 {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+                  {/* Lógica del Logo Original */}
+                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
+                  {/* ... (código del logo) ... */}
+                  {/* Esto asume que el logo es más complejo que solo un span */}
+                  
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -360,7 +366,7 @@ const Header = () => {
                     className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       location.pathname.startsWith('/admin')
                         ? 'bg-primary/10 text-primary' 
-                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                     }`}
                   >
                     <Icon name="Shield" size={18} />
@@ -467,7 +473,7 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu (Menú de Perfil) */}
+                    {/* Dropdown Menu */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
@@ -612,28 +618,26 @@ const Header = () => {
           </div>
         </div>
         
-        {/* ===============================
-            ✅ MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL (PANTALLA COMPLETA - SOLUCIÓN UX FINAL)
-            =============================== */}
+        {/* MODAL DE NAVEGACIÓN PRINCIPAL MÓVIL */}
         {isMainMenuModalOpen && user && (
             <div 
-                className="fixed inset-0 z-[100] md:hidden" // Z-index alto para superponer
+                className="fixed inset-0 z-[100] md:hidden" 
             >
-                {/* Overlay oscuro que se cierra al clickar */}
+                {/* Overlay oscuro */}
                 <div 
-                    className="absolute inset-0 bg-black/70" // Fondo oscuro para opacar contenido
+                    className="absolute inset-0 bg-black/70" 
                     onClick={toggleMainMenuModal}
                 ></div>
 
-                {/* ✅ Contenido del Modal (Panel Lateral) - FIXED y H-SCREEN */}
+                {/* Contenido del Modal (Panel Lateral) */}
                 <div 
                     ref={mainMenuModalRef}
-                    className="fixed left-0 top-0 w-64 h-screen bg-white shadow-2xl transition-transform duration-300 ease-out" // Cambiado a FIXED y H-SCREEN
+                    className="fixed left-0 top-0 w-64 h-screen bg-white shadow-2xl transition-transform duration-300 ease-out" 
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex flex-col h-full overflow-y-auto p-4">
                         <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                            {/* ✅ TÍTULO REEMPLAZADO POR EL LOGO */}
+                            {/* TÍTULO REEMPLAZADO POR EL LOGO */}
                             <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
                               {branding.logo.primary ? (
                                 <img 
