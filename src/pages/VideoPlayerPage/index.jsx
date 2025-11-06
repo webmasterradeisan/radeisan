@@ -1,11 +1,10 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN CORREGIDA FINAL Y ESTABLE
+// VIDEO PLAYER PAGE - VERSIÓN FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN CRÍTICA: Se usa un manejo robusto de errores y se reemplaza el
-//    placeholder missionsService.trackAction por las funciones específicas del servicio
-//    (trackWatchVideo, trackGiveLike, etc.), resolviendo el crash.
-// ✅ La lógica de mini-player, comentarios y datos permanece intacta.
+// ✅ CORRECCIÓN CRÍTICA: Se cambia la importación global por importaciones 
+//    desestructuradas para trackGiveLike, trackWatchVideo, etc. para evitar el 
+//    error 'is not a function' y el crash de la aplicación.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -14,7 +13,15 @@ import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext';
-import * as missionsService from 'services/missionsService'; 
+// 🛑 CORRECCIÓN: CAMBIO DE import * as missionsService por importación desestructurada
+import { 
+  trackWatchVideo, 
+  trackGiveLike, 
+  trackShareContent, 
+  trackComment, 
+  trackFollowUser,
+  trackMissionProgress 
+} from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
@@ -591,9 +598,9 @@ const VideoPlayerPage = () => {
     try {
       const pointsAmount = 2;
       
-      // ✅ CORRECCIÓN: Uso de Promise.all para hacer las llamadas de tracking y puntos seguras
       await Promise.all([
-        missionsService.trackWatchVideo(videoId, 30),
+        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
+        trackWatchVideo(videoId, 30), 
         addPoints(pointsAmount, 'Ver video', 'free') 
       ]);
       
@@ -649,12 +656,12 @@ const VideoPlayerPage = () => {
         if (!hasEarnedLikePoints) {
           const pointsAmount = 5;
           
-          // ✅ CORRECCIÓN: Uso de Promise.all y función específica
           try {
             await Promise.all([
                 addPoints(pointsAmount, 'Like en video', 'free'),
                 trackPointsEarned('like', pointsAmount),
-                missionsService.trackGiveLike('video', videoId)
+                // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE (Resuelve el error 'is not a function')
+                trackGiveLike('video', videoId) 
             ]);
             
             setHasEarnedLikePoints(true);
@@ -747,10 +754,9 @@ const VideoPlayerPage = () => {
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // ✅ CORRECCIÓN: Usar trackMissionProgress para acciones sin función específica
+        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
         try {
-          // Asumimos que existe una misión de tipo 'save_video'
-          missionsService.trackMissionProgress('save_video', 1, { video_id: videoId }); 
+          trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
         }
@@ -767,13 +773,13 @@ const VideoPlayerPage = () => {
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
-        // ✅ CORRECCIÓN: Uso de Promise.all y función específica
+        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
       try {
         const pointsAmount = 3;
         await Promise.all([
           addPoints(pointsAmount, 'Compartir video', 'free'),
           trackPointsEarned('share', pointsAmount),
-          missionsService.trackShareContent('video', videoId, 'link') 
+          trackShareContent('video', videoId, 'link') 
         ]);
         
         setHasEarnedSharePoints(true);
@@ -816,9 +822,9 @@ const VideoPlayerPage = () => {
             following_id: video.user_id
           });
         
-        // ✅ CORRECCIÓN: Uso de función específica
+        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
         try {
-          missionsService.trackFollowUser(video.user_id);
+          trackFollowUser(video.user_id);
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
         }
@@ -878,12 +884,12 @@ const VideoPlayerPage = () => {
 
       if (!hasEarnedCommentPoints) {
         const pointsAmount = 10;
-        // ✅ CORRECCIÓN: Uso de Promise.all y función específica
+        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
         try {
             await Promise.all([
                 addPoints(pointsAmount, 'Comentar video', 'free'),
                 trackPointsEarned('comment', pointsAmount),
-                missionsService.trackComment('video', videoId)
+                trackComment('video', videoId)
             ]);
 
             setHasEarnedCommentPoints(true);
