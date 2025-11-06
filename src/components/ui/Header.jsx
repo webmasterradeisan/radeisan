@@ -386,7 +386,11 @@ const Header = () => {
                   >
                     {/* Fila 1: Icono y Saldo */}
                     <div className="flex items-center space-x-1">
-                      <Icon name="Star" size={18} className="text-orange-400" />
+                      <Icon 
+                        name="Star" 
+                        size={18} 
+                        className="text-orange-400" 
+                      />
                       {pointsLoading ? (
                         <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
                       ) : (
@@ -464,7 +468,7 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu (Menú de Perfil) */}
+                    {/* Dropdown Menu */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
