@@ -251,6 +251,8 @@ const Header = () => {
                 
                 {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
+                  {/* Lógica del Logo Original */}
+                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -384,11 +386,7 @@ const Header = () => {
                   >
                     {/* Fila 1: Icono y Saldo */}
                     <div className="flex items-center space-x-1">
-                      <Icon 
-                        name="Star" 
-                        size={18} 
-                        className="text-orange-400" 
-                      />
+                      <Icon name="Star" size={18} className="text-orange-400" />
                       {pointsLoading ? (
                         <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
                       ) : (
