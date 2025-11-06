@@ -7,7 +7,7 @@
 // ✅ Logo en el encabezado del modal.
 // ============================================================================
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePoints } from '../../contexts/PointsContext';
@@ -16,7 +16,7 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTE: CONTADOR DE PUNTOS ANIMADO
+// COMPONENTE: CONTADOR DE PUNTOS ANIMADO (Tomado de la base)
 // ============================================================================
 const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   const [displayPoints, setDisplayPoints] = useState(points);
@@ -38,7 +38,6 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   }, [points]);
 
   useEffect(() => {
-    // Solo anima si el tipo de punto de la animación coincide con este contador
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
       
@@ -79,7 +78,7 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
 };
 
 // ============================================================================
-// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS
+// COMPONENTE: NOTIFICACIÓN FLOTANTE DE PUNTOS (Tomado de la base)
 // ============================================================================
 const FloatingPointsNotification = ({ animation }) => {
   if (!animation.show) return null;
@@ -255,9 +254,6 @@ const Header = () => {
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
                   {/* Lógica del Logo Original */}
                   {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
-                  {/* ... (código del logo) ... */}
-                  {/* Esto asume que el logo es más complejo que solo un span */}
-                  
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -366,7 +362,7 @@ const Header = () => {
                     className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       location.pathname.startsWith('/admin')
                         ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                     }`}
                   >
                     <Icon name="Shield" size={18} />
@@ -473,7 +469,7 @@ const Header = () => {
                       </div>
                     </Button>
 
-                    {/* Dropdown Menu */}
+                    {/* Dropdown Menu (Menú de Perfil) */}
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
                         <div className="py-1">
@@ -761,21 +757,6 @@ const Header = () => {
           }
         }
         
-        @keyframes fadeOut {
-          from {
-            opacity: 1;
-          }
-          to {
-            opacity: 0;
-          }
-        }
-        
-        .animate-slide-in-fade {
-          animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;
-        }
-      `}</style>
-    </>
-  );
-};
-
-export default Header;
+        @keyframes fadeOut {\n          from {\n            opacity: 1;\n          }\n          to {\n            opacity: 0;\n          }\n        }\n        \n        .animate-slide-in-fade {\n          animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;\n        }\n      `}</style>
+    </>\r\n  );\r\n};\r\n\r\nexport default Header;\r\n"
+}
