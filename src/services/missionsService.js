@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 // 🛑 IMPORTACIÓN CRÍTICA: Importar las funciones de puntos como named exports
 import { 
   addFreePoints, 
-  initializeUserPoints 
+  initializeUserPoints // Para asegurar que el registro de puntos exista
 } from './pointsService'; 
 
 // ============================================================================
@@ -27,7 +27,10 @@ export const MISSION_TYPES = {
   PUBLISH_CONTENT: 'publish_content', // Publicar contenido (30 puntos)
   DONATE_POINTS: 'donate_points',   // Apoyar (donar puntos) (2 puntos)
   COMPLETE_ALL: 'complete_all',     // Misión de racha (100 puntos)
-  // ... (otros tipos que puedan existir)
+  // Añadimos los tipos específicos de publicación para el tracking
+  UPLOAD_VIDEO: 'upload_video',
+  UPLOAD_PHOTO: 'upload_photo',
+  UPLOAD_REEL: 'upload_reel',
 };
 
 /**
@@ -36,8 +39,8 @@ export const MISSION_TYPES = {
 const DAILY_MISSION_REWARDS = {
   [MISSION_TYPES.LOGIN_DAILY]: { target: 1, points: 10, action_type: 'login' },
   [MISSION_TYPES.GIVE_LIKE]: { target: 10, points: 5, action_type: 'like' },
-  [MISSION_TYPES.PUBLISH_CONTENT]: { target: 3, points: 30, action_type: 'upload' }, // Video, Foto, Reel = 3
-  [MISSION_TYPES.DONATE_POINTS]: { target: 5, points: 2, action_type: 'donation' }, // Donar 5 puntos (ejemplo)
+  [MISSION_TYPES.PUBLISH_CONTENT]: { target: 3, points: 30, action_type: 'upload' }, // 1 Video, 1 Foto, 1 Reel = 3
+  [MISSION_TYPES.DONATE_POINTS]: { target: 5, points: 2, action_type: 'donation' }, // 5 puntos donados ganan 2
 };
 
 const STREAK_BONUS = {
@@ -118,7 +121,7 @@ export async function trackMissionProgress(type, increment, userId, referenceId 
 export async function claimMissionReward(userId, missionType, rewardAmount) {
   try {
     // 1. Otorgar los puntos (usa la función de pointsService)
-    // 🛑 addFreePoints es una función nombrada en pointsService.js y otorga FREE POINTS
+    // 🛑 Usamos la función nombrada addFreePoints.
     const result = await addFreePoints(
       userId, 
       rewardAmount, 
@@ -150,14 +153,11 @@ export async function claimMissionReward(userId, missionType, rewardAmount) {
 // NOTA: Estas funciones son las que se deben importar y llamar en VideoPlayerPage
 
 export async function trackDailyLogin(userId) {
-  // Aquí se llama a trackMissionProgress con el tipo de misión LOGIN_DAILY
   return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 1, userId);
 }
 
 export async function trackWatchVideo(videoId, userId) {
-  // Asumimos que la recompensa por 30s se da directamente en VideoPlayerPage/addPoints
-  // Si hay una misión de "Ver X videos", esta función la rastrea.
-  // Ejemplo: trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, 1, userId, videoId);
+  // Aquí se registraría si tuvieras una misión de "Ver X videos"
   return true; 
 }
 
@@ -178,16 +178,8 @@ export async function trackFollowUser(followedUserId, userId) {
   return trackMissionProgress(MISSION_TYPES.FOLLOW_USER, 1, userId, followedUserId);
 }
 
-export async function trackMissionProgressWrapper(type, increment, userId, referenceId = null) {
-  // Alias para la función principal, para cuando la importación es desestructurada
-  return trackMissionProgress(type, increment, userId, referenceId);
-}
-
-// ... Puedes agregar más funciones de tracking aquí si las necesitas ...
-
-
 // ============================================================================\
-// EXPORTACIONES POR DEFECTO (Para asegurar compatibilidad con import * as)
+// EXPORTACIONES POR DEFECTO (Para asegurar compatibilidad)
 // ============================================================================\
 
 export default {
@@ -195,7 +187,7 @@ export default {
     DAILY_MISSION_REWARDS,
     STREAK_BONUS,
     
-    // Tracking de Misión
+    // Tracking
     trackMissionProgress,
     
     // Tracking Específico
@@ -208,5 +200,5 @@ export default {
     
     // Recompensas
     claimMissionReward,
-    // ... (otras funciones que puedan existir)
+    // ... (otras funciones que puedan existir) // 🛑 SE ELIMINA LA NOTA COMENTADA PARA SER COMPLETO
 };
