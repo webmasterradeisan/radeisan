@@ -1,10 +1,11 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - GESTIÓN GLOBAL DEL SISTEMA DE PUNTOS (VERSIÓN FINAL)
+// POINTS CONTEXT - GESTIÓN GLOBAL DEL SISTEMA DE PUNTOS (VERSIÓN FINAL CON FIX DE RUNTIME)
 // ============================================================================
-// ✅ CORRECCIÓN: Se eliminó el retorno temprano en loadPoints para forzar
-//    la ejecución completa del Provider, evitando que las funciones como addPoints
-//    sean undefined debido a un estado inconsistente de autenticación.
+// ✅ CORRECCIÓN CRÍTICA: Se implementa initializeUserPoints (RPC) para asegurar
+//    que el registro de puntos exista al iniciar la sesión.
+// ✅ La lógica de inicialización se llama de forma robusta en el useEffect,
+//    eliminando el error de runtime "reading 'addPoints'".
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -28,8 +29,9 @@ export const usePoints = () => {
 // ============================================================================
 // CONSTANTES DE CONFIGURACIÓN
 // ============================================================================
-// Nombre de la función RPC en Supabase (debe existir en el backend)
+// Nombres de las funciones RPC en Supabase (deben existir en el backend)
 const POINTS_RPC_NAME = 'update_user_points'; 
+const INIT_POINTS_RPC_NAME = 'ensure_user_points_record'; // 💡 NUEVA FUNCIÓN RPC para inicializar
 const POLLING_INTERVAL = 30000; // 30 segundos
 
 export const PointsProvider = ({ children }) => {
@@ -45,41 +47,49 @@ export const PointsProvider = ({ children }) => {
     loading: true
   });
 
-  // Estado de animación
+  // Estado de animación para notificar al usuario
   const [pointsAnimation, setPointsAnimation] = useState({
     show: false,
     amount: 0,
-    type: 'earn', // 'earn' o 'spend'
-    message: ''
+    type: 'earn', // 'earn' | 'deduct'
+    colorType: 'free' // 'free' | 'premium'
   });
 
-  // ============================================================================
-  // REFS
-  // ============================================================================
+  // Referencias para evitar fugas de memoria y controlar intervalos
   const mountedRef = useRef(true);
-  const animationTimeoutRef = useRef(null);
   const pollingIntervalRef = useRef(null);
-
+  const animationTimeoutRef = useRef(null);
+  
   // ============================================================================
-  // CARGAR PUNTOS INICIALES (Funciona como el Polling)
+  // FUNCIÓN PARA CARGAR PUNTOS (RPC)
   // ============================================================================
   const loadPoints = useCallback(async () => {
-    // 🛑 CORRECCIÓN CLAVE: Permitimos que el Provider se inicialice completamente.
-    // La lógica de limpieza y retorno temprano la manejamos aquí solo si no hay user.
-    if (!user) {
-        setPoints({ total: 0, free: 0, premium: 0, loading: false });
+    if (!mountedRef.current) return;
+    
+    // Si no está autenticado, simplemente establecemos el estado sin cargar.
+    if (!isAuthenticated || !user?.id) {
+        setPoints({
+            total: 0,
+            free: 0,
+            premium: 0,
+            loading: false
+        });
         return;
     }
+    
+    setPoints(prev => ({ ...prev, loading: true }));
 
     try {
-      const pointsData = await getUserPoints(user.id);
-
+      const data = await getUserPoints(user.id);
+      
       if (mountedRef.current) {
         setPoints({
-          ...pointsData,
-          total: (pointsData.free || 0) + (pointsData.premium || 0),
+          total: data.total,
+          free: data.free,
+          premium: data.premium,
           loading: false
         });
+        console.log(`✅ Puntos cargados: Total ${data.total} (Free: ${data.free}, Premium: ${data.premium})`);
       }
     } catch (error) {
       console.error('❌ Error al cargar puntos:', error);
@@ -87,160 +97,191 @@ export const PointsProvider = ({ children }) => {
         setPoints(prev => ({ ...prev, loading: false }));
       }
     }
-  }, [user]); // Dependencia solo en user, no en isAuthenticated (redundante)
+  }, [isAuthenticated, user?.id]);
 
   // ============================================================================
-  // FUNCIÓN PARA AÑADIR PUNTOS CON PERSISTENCIA
+  // FUNCIÓN PARA INICIALIZAR REGISTRO DE PUNTOS EN BACKEND (NUEVA)
   // ============================================================================
-  const addPoints = useCallback(async (amount, message = '', type = 'free') => {
-    if (!user || amount <= 0 || !['free', 'premium'].includes(type)) {
-        console.warn('⚠️ addPoints: Operación cancelada, usuario no válido o monto incorrecto.');
-        return { success: false, error: 'Usuario o monto inválido' };
-    }
-
-    console.log(`🎉 addPoints llamado: +${amount} ${type} por ${message}`);
-
-    try {
-      // PASO CRÍTICO: Llamada a la función RPC de Supabase para SUMAR
-      const { data, error } = await supabase.rpc(POINTS_RPC_NAME, {
-        p_user_id: user.id,
-        p_amount: amount, // Cantidad positiva para sumar
-        p_type: type
-      });
-      
-      if (error) throw error;
-      
-      // OPTIMIZACIÓN: Si la RPC devuelve los nuevos totales, actualizamos el estado
-      if (data && typeof data === 'object') {
-        setPoints(prev => ({
-            ...prev,
-            free: data.new_free_points,
-            premium: data.new_premium_points,
-            total: data.new_free_points + data.new_premium_points
-        }));
-      } else {
-        // Sino, forzamos una recarga de todos los puntos para sincronizar
-        loadPoints();
-      }
-
-      // Mostrar animación (siempre después de la operación exitosa)
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
-
-      setPointsAnimation({
-        show: true,
-        amount: amount,
-        type: 'earn',
-        message: message || `+${amount} puntos`
-      });
-
-      animationTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current) {
-          setPointsAnimation(prev => ({ ...prev, show: false }));
-        }
-      }, 3000);
-      
-      return { success: true, points_added: amount };
-
-    } catch (error) {
-      console.error('❌ Error al añadir puntos:', error);
-      // Si la operación falla en el servidor, cargamos los puntos reales
-      loadPoints(); 
-      return { success: false, error: error.message };
-    }
-  }, [user, loadPoints]); // Dependencia en user, loadPoints
-
-  // ============================================================================
-  // FUNCIÓN PARA DEDUCIR PUNTOS CON PERSISTENCIA
-  // ============================================================================
-  // 💡 Modificada para requerir el tipo de punto a descontar
-  const deductPoints = useCallback(async (amount, message = '', type) => {
-    if (!user || amount <= 0 || !['free', 'premium'].includes(type)) {
-        throw new Error('Usuario, tipo de punto o cantidad inválida para la deducción.');
-    }
-
-    console.log(`💸 deductPoints llamado: -${amount} ${type} por ${message}`);
+  /**
+   * Asegura que el registro de puntos del usuario exista en la base de datos.
+   * Llama a un RPC que debe crear el registro si no existe (upsert implícito).
+   * @param {string} userId - ID del usuario
+   * @returns {Promise<boolean>} Éxito de la operación
+   */
+  const initializeUserPoints = useCallback(async (userId) => {
+    if (!userId) return false;
     
     try {
-      // PASO CRÍTICO: Llamada a la función RPC de Supabase para RESTAR
-      const { data, error } = await supabase.rpc(POINTS_RPC_NAME, {
-        p_user_id: user.id,
-        p_amount: -amount, // Cantidad negativa para restar
-        p_type: type 
-      });
+        const { error } = await supabase.rpc(INIT_POINTS_RPC_NAME, {
+            p_user_id: userId
+        });
 
-      if (error) throw error;
-
-      // Actualizar el estado con los valores de retorno de la RPC
-      if (data && typeof data === 'object') {
-        setPoints(prev => ({
-            ...prev,
-            free: data.new_free_points,
-            premium: data.new_premium_points,
-            total: data.new_free_points + data.new_premium_points
-        }));
-      } else {
-        loadPoints();
-      }
-      
-      // Lógica de animación
-      setPointsAnimation({
-        show: true,
-        amount: amount,
-        type: 'spend',
-        message: message || `-${amount} puntos`
-      });
-      animationTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current) {
-          setPointsAnimation(prev => ({ ...prev, show: false }));
+        if (error) {
+            console.error(`❌ Error RPC ${INIT_POINTS_RPC_NAME} (inicialización):`, error);
+            return false;
         }
-      }, 3000); 
+        console.log(`✅ Inicialización de puntos para ${userId} completada.`);
+        return true;
 
-      return true; // Éxito
-
-    } catch (error) {
-      console.error('❌ Error al deducir puntos:', error);
-      // Re-lanza el error (útil para manejar "Puntos insuficientes" en la compra)
-      throw new Error(error.message || 'Error desconocido al deducir puntos.');
+    } catch (err) {
+        console.error('❌ Error de conexión al inicializar puntos:', err);
+        return false;
     }
-  }, [user, loadPoints]); // Dependencia en user, loadPoints
+  }, []);
 
   // ============================================================================
-  // EFECTOS DE SINCRONIZACIÓN
+  // FUNCIÓN RPC PARA ACTUALIZAR PUNTOS EN BACKEND
   // ============================================================================
-  
-  // 1. Cargar puntos al iniciar sesión
-  useEffect(() => {
-    loadPoints();
+  /**
+   * Ejecuta la función RPC para actualizar puntos y refresca el estado local.
+   * @param {string} userId - ID del usuario
+   * @param {number} freeDelta - Cambio en puntos 'free'
+   * @param {number} premiumDelta - Cambio en puntos 'premium'
+   * @returns {Promise<boolean>} Éxito de la operación
+   */
+  const updatePointsInSupabase = useCallback(async (userId, freeDelta, premiumDelta) => {
+    try {
+      const { error } = await supabase.rpc(POINTS_RPC_NAME, {
+        p_user_id: userId,
+        p_free_delta: freeDelta,
+        p_premium_delta: premiumDelta
+      });
+
+      if (error) {
+        console.error(`❌ Error RPC ${POINTS_RPC_NAME}:`, error);
+        return false;
+      }
+      return true;
+
+    } catch (err) {
+      console.error('❌ Error de conexión al actualizar puntos:', err);
+      return false;
+    } finally {
+        // Siempre refrescamos el estado local desde el backend para tener la fuente de verdad
+        await loadPoints();
+    }
   }, [loadPoints]);
 
-  // 2. Polling para sincronización (cada 30 segundos)
-  useEffect(() => {
-    if (!user) {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      return;
+
+  // ============================================================================
+  // FUNCIÓN PARA ANIMACIÓN Y NOTIFICACIÓN
+  // ============================================================================
+  const triggerAnimation = useCallback((amount, type, colorType) => {
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
     }
 
-    pollingIntervalRef.current = setInterval(() => {
-      loadPoints();
-    }, POLLING_INTERVAL);
+    setPointsAnimation({
+      show: true,
+      amount,
+      type,
+      colorType
+    });
 
-    return () => {
-      if (pollingIntervalRef.current) {
+    animationTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) {
+        setPointsAnimation(prev => ({ ...prev, show: false }));
+      }
+    }, 3000); // Muestra la animación por 3 segundos
+  }, []);
+
+  // ============================================================================
+  // FUNCIÓN PARA AÑADIR PUNTOS (INTERFAZ PÚBLICA)
+  // ============================================================================
+  const addPoints = useCallback(async (amount, type = 'free', notify = true) => {
+    if (!isAuthenticated || !user?.id || amount <= 0) return false;
+    
+    console.log(`🎁 Intentando añadir ${amount} puntos ${type} a ${user.id}`);
+
+    const freeDelta = type === 'free' ? amount : 0;
+    const premiumDelta = type === 'premium' ? amount : 0;
+    
+    const success = await updatePointsInSupabase(user.id, freeDelta, premiumDelta);
+
+    if (success && notify) {
+        triggerAnimation(amount, 'earn', type);
+    }
+    
+    return success;
+  }, [isAuthenticated, user?.id, updatePointsInSupabase, triggerAnimation]);
+
+  // ============================================================================
+  // FUNCIÓN PARA DEDUCIR PUNTOS (INTERFAZ PÚBLICA)
+  // ============================================================================
+  const deductPoints = useCallback(async (amount, type = 'free', notify = true) => {
+    if (!isAuthenticated || !user?.id || amount <= 0) return false;
+
+    console.log(`💸 Intentando deducir ${amount} puntos ${type} a ${user.id}`);
+
+    // La deducción se pasa como valor negativo al RPC
+    const freeDelta = type === 'free' ? -amount : 0;
+    const premiumDelta = type === 'premium' ? -amount : 0;
+
+    // TODO: Se debe implementar lógica de validación de balance en el RPC para evitar saldos negativos.
+    
+    const success = await updatePointsInSupabase(user.id, freeDelta, premiumDelta);
+    
+    if (success && notify) {
+        triggerAnimation(amount, 'deduct', type);
+    }
+    
+    return success;
+  }, [isAuthenticated, user?.id, updatePointsInSupabase, triggerAnimation]);
+
+
+  // ============================================================================
+  // EFECTO: Carga inicial de puntos y Polling (Sincronización)
+  // ============================================================================
+  useEffect(() => {
+    // 1. Limpieza de Polling al inicio
+    if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
-      }
+    }
+
+    const setupPoints = async () => {
+        if (!user?.id) {
+            // Usuario no autenticado o cargando, resetear estado.
+            setPoints({
+                total: 0,
+                free: 0,
+                premium: 0,
+                loading: false
+            });
+            return;
+        }
+
+        // 2. 💡 CORRECCIÓN DE RUNTIME: Inicializar el registro de puntos.
+        // Esto asegura que el registro exista antes de cualquier operación.
+        await initializeUserPoints(user.id);
+
+        // 3. Carga de puntos
+        await loadPoints();
+        
+        // 4. Configurar Polling
+        if (mountedRef.current && isAuthenticated && user?.id) {
+            console.log(`⏱️ Iniciando Polling (${POLLING_INTERVAL / 1000}s)`);
+            pollingIntervalRef.current = setInterval(loadPoints, POLLING_INTERVAL);
+        }
     };
-  }, [user, loadPoints]); // Dependencia simplificada
+    
+    // Ejecutar la configuración de puntos
+    setupPoints();
+
+    // Limpieza al desmontar o al cambiar de usuario
+    return () => {
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+    };
+  }, [user, isAuthenticated, loadPoints, initializeUserPoints]);
 
   // ============================================================================
   // FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE
   // ============================================================================
   const refreshPoints = useCallback(() => {
+    console.log('🔄 Refrescando puntos manualmente');
     return loadPoints();
   }, [loadPoints]);
 
@@ -249,10 +290,13 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   useEffect(() => {
     return () => {
+      console.log('🧹 Limpiando PointsProvider');
       mountedRef.current = false;
+      
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
       }
+      
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
