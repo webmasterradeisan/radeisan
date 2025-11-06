@@ -4,7 +4,7 @@
 // ============================================================================
 // ✅ CORRECCIÓN CRÍTICA: Se cambia la importación global por importaciones 
 //    desestructuradas para trackGiveLike, trackWatchVideo, etc. para evitar el 
-//    error 'is not a function' y el crash de la aplicación.
+//    error 'is not a function' al dar like o a los 30s.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -13,7 +13,7 @@ import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext';
-// 🛑 CORRECCIÓN: CAMBIO DE import * as missionsService por importación desestructurada
+// 🛑 CORRECCIÓN: SE ELIMINA import * as missionsService Y SE USA IMPORTACIÓN DESESTRUCTURADA
 import { 
   trackWatchVideo, 
   trackGiveLike, 
@@ -598,8 +598,8 @@ const VideoPlayerPage = () => {
     try {
       const pointsAmount = 2;
       
+      // ✅ USO DIRECTO DE LA FUNCIÓN IMPORTADA
       await Promise.all([
-        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
         trackWatchVideo(videoId, 30), 
         addPoints(pointsAmount, 'Ver video', 'free') 
       ]);
@@ -660,7 +660,7 @@ const VideoPlayerPage = () => {
             await Promise.all([
                 addPoints(pointsAmount, 'Like en video', 'free'),
                 trackPointsEarned('like', pointsAmount),
-                // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE (Resuelve el error 'is not a function')
+                // ✅ USO DIRECTO DE LA FUNCIÓN IMPORTADA
                 trackGiveLike('video', videoId) 
             ]);
             
@@ -756,6 +756,7 @@ const VideoPlayerPage = () => {
 
         // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
         try {
+          // Asumimos que existe una misión de tipo 'save_video'
           trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
