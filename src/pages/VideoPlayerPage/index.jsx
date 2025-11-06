@@ -1,11 +1,10 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN COMPLETA Y ESTABLE
+// VIDEO PLAYER PAGE - VERSIÓN CORREGIDA FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN DE ERRORES CRÍTICOS: Se añadió un manejo robusto de promesas (try/catch
-//    con Promise.all) en handleTimeUpdate, handleLike, handleShare, handleSubmitComment,
-//    handleSave y handleFollow para prevenir el crash de la aplicación (Something Went Wrong).
-// ✅ Funcionalidad del Mini-Player y Controles intacta.
+// ✅ CORRECCIÓN CRÍTICA: Se reemplazó el placeholder missionsService.trackAction('...')
+//    por las funciones específicas del servicio: trackWatchVideo, trackGiveLike, etc.
+// ✅ Manejo robusto de promesas (try/catch) para evitar el crash (Something Went Wrong).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -14,7 +13,7 @@ import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext';
-import * as missionsService from 'services/missionsService'; // ASUMIDO
+import * as missionsService from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
@@ -80,10 +79,10 @@ const VideoPlayerPage = () => {
     message: ''
   });
 
-  // ✅ ESTADO PARA LA DESCRIPCIÓN
+  // ESTADO PARA LA DESCRIPCIÓN
   const [showFullDescription, setShowFullDescription] = useState(false);
 
-  // ✅ ESTADOS PARA MINI-PLAYER
+  // ESTADOS PARA MINI-PLAYER
   const [isMinimized, setIsMinimized] = useState(false);
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
     x: window.innerWidth - 420,
@@ -92,20 +91,18 @@ const VideoPlayerPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Refs - ✅ DOS REFS SEPARADOS
+  // Refs
   const videoRef = useRef(null);
   const miniVideoRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
   const miniPlayerRef = useRef(null);
 
-  // ===============================
-  // ✅ CONSTANTE PARA LA DESCRIPCIÓN
-  // ===============================
+  // CONSTANTE PARA LA DESCRIPCIÓN
   const DESCRIPTION_MAX_LENGTH = 150;
 
   // ===============================
-  // ✅ CONTROLES DE TECLADO
+  // CONTROLES DE TECLADO
   // ===============================
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -164,7 +161,7 @@ const VideoPlayerPage = () => {
   }, [volume, isMinimized]);
 
   // ===============================
-  // ✅ FUNCIONES DE DRAG & DROP
+  // FUNCIONES DE DRAG & DROP
   // ===============================
   const handleMouseDown = (e) => {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
@@ -227,7 +224,7 @@ const VideoPlayerPage = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // ===============================
-  // ✅ FUNCIÓN MINIMIZAR/MAXIMIZAR - CORREGIDA Y OPTIMIZADA
+  // FUNCIONES MINIMIZAR/MAXIMIZAR
   // ===============================
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
@@ -581,12 +578,12 @@ const VideoPlayerPage = () => {
           points_earned: pointsAmount
         });
     } catch (err) {
-      // ✅ Captura el error de Supabase para evitar que rompa el programa
+      // Captura el error de Supabase para evitar que rompa el programa
       console.error('Error al registrar puntos en DB:', err);
     }
   };
   
-  // ✅ NUEVA FUNCIÓN SEGURA PARA PUNTOS POR VISTA (30 SEGS)
+  // FUNCIÓN SEGURA PARA PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
     if (hasEarnedViewPoints || !user) return;
     
@@ -596,7 +593,8 @@ const VideoPlayerPage = () => {
       await Promise.all([
         addPoints(pointsAmount, 'Ver video', 'free'),
         trackPointsEarned('view', pointsAmount),
-        missionsService.trackAction('watch') // Asumiendo que esta función existe
+        // ✅ CORRECCIÓN: Usar la función específica
+        missionsService.trackWatchVideo(videoId, 30)
       ]);
 
       setHasEarnedViewPoints(true);
@@ -656,7 +654,8 @@ const VideoPlayerPage = () => {
             await Promise.all([
                 addPoints(pointsAmount, 'Like en video', 'free'),
                 trackPointsEarned('like', pointsAmount),
-                missionsService.trackAction('like') // Asumiendo que esta función existe
+                // ✅ CORRECCIÓN: Usar la función específica
+                missionsService.trackGiveLike('video', videoId)
             ]);
             
             setHasEarnedLikePoints(true);
@@ -668,7 +667,7 @@ const VideoPlayerPage = () => {
         }
       }
     } catch (err) {
-      // ✅ Este try/catch ahora se enfoca en fallos de la operación LIKE/UNLIKE
+      // Este try/catch ahora se enfoca en fallos de la operación LIKE/UNLIKE
       console.error('Error en like:', err);
     }
   };
@@ -749,9 +748,10 @@ const VideoPlayerPage = () => {
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // ✅ Manejo de misión para asegurar que no falle
+        // ✅ CORRECCIÓN: Usar la función más genérica para acciones sin tracking directo
         try {
-          missionsService.trackAction('save');
+          // Asumimos que existe una misión de tipo 'save_video'
+          missionsService.trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
         }
@@ -774,7 +774,8 @@ const VideoPlayerPage = () => {
         await Promise.all([
           addPoints(pointsAmount, 'Compartir video', 'free'),
           trackPointsEarned('share', pointsAmount),
-          missionsService.trackAction('share')
+          // ✅ CORRECCIÓN: Usar la función específica
+          missionsService.trackShareContent('video', videoId, 'link') // 'link' como plataforma genérica
         ]);
         
         setHasEarnedSharePoints(true);
@@ -817,9 +818,9 @@ const VideoPlayerPage = () => {
             following_id: video.user_id
           });
         
-        // ✅ Manejo de misión para asegurar que no falle
+        // ✅ CORRECCIÓN: Usar la función específica
         try {
-          missionsService.trackAction('follow');
+          missionsService.trackFollowUser(video.user_id);
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
         }
@@ -884,7 +885,8 @@ const VideoPlayerPage = () => {
             await Promise.all([
                 addPoints(pointsAmount, 'Comentar video', 'free'),
                 trackPointsEarned('comment', pointsAmount),
-                missionsService.trackAction('comment')
+                // ✅ CORRECCIÓN: Usar la función específica
+                missionsService.trackComment('video', videoId)
             ]);
 
             setHasEarnedCommentPoints(true);
@@ -993,7 +995,7 @@ const VideoPlayerPage = () => {
     const currentTime = currentVideo.currentTime;
 
     if (currentTime >= 30 && !hasEarnedViewPoints && user) {
-      // ✅ Llama a la función segura para ganar puntos
+      // Llama a la función segura para ganar puntos
       handleEarnViewPoints();
     }
   };
@@ -1159,7 +1161,7 @@ const VideoPlayerPage = () => {
         <div className="max-w-[1800px] mx-auto px-4 py-4">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
-              {/* ✅ Video Player Principal */}
+              {/* Video Player Principal */}
               <div
                 ref={containerRef}
                 className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${
@@ -1316,7 +1318,7 @@ const VideoPlayerPage = () => {
                       <div className="flex items-center gap-2">
                         <Link
                           to={`/profile/${video.creator?.username || 'unknown'}`}
-                          className="font-semibold text-foreground hover:text-primary text-sm md:text-base"
+                          className="font-semibold text-sm md:text-base text-foreground hover:text-primary"
                         >
                           {video.creator?.name || 'Usuario'}
                         </Link>
@@ -1384,7 +1386,7 @@ const VideoPlayerPage = () => {
                 </div>
 
                 <div className="bg-muted rounded-lg p-4">
-                  {/* ✅ Lógica de Ver Más/Ver Menos */}
+                  {/* Lógica de Ver Más/Ver Menos */}
                   <p className="text-sm text-foreground whitespace-pre-wrap">
                     {getDisplayedDescription()}
                   </p>
@@ -1608,7 +1610,7 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* ✅ MINI-PLAYER FLOTANTE - Solo reproduce cuando está minimizado */}
+      {/* MINI-PLAYER FLOTANTE - Solo reproduce cuando está minimizado */}
       {isMinimized && video && (
         <div
           ref={miniPlayerRef}
@@ -1633,7 +1635,7 @@ const VideoPlayerPage = () => {
               muted={isMuted}
               volume={volume}
               onTimeUpdate={(e) => {
-                // ✅ CORREGIDO: Se eliminó la línea que sincronizaba constantemente el player principal pausado.
+                // CORREGIDO: Se eliminó la línea que sincronizaba constantemente el player principal pausado.
                 setProgress((e.target.currentTime / e.target.duration) * 100);
               }}
               onPlay={() => setIsPlaying(true)}
