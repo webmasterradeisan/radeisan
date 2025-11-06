@@ -2,6 +2,10 @@
 // ============================================================================
 // HEADER - Diseño ORIGINAL RESTAURADO con Menú Principal Móvil (MODAL FINAL CORREGIDO)
 // ============================================================================
+// ✅ BASE: Header (1).jsx (Puntos duales con etiquetas).
+// ✅ Solución UX FINAL: Panel lateral FIXED y H-SCREEN para tapar TODO el contenido.
+// ✅ Logo en el encabezado del modal.
+// ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -149,7 +153,6 @@ const Header = () => {
       }
       // ✅ Cerrar modal de menú principal al hacer click fuera
       if (isMainMenuModalOpen && mainMenuModalRef.current && !mainMenuModalRef.current.contains(event.target)) {
-        // Excluir el botón de toggle del menú principal
         if (!event.target.closest('#mobile-main-menu-toggle')) {
             setIsMainMenuModalOpen(false);
         }
@@ -248,10 +251,6 @@ const Header = () => {
                 
                 {/* Logo original */}
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                  {/* Lógica del Logo Original */}
-                  {/* Nota: Mantuve el logo tal como me lo diste, incluso el div de fallback */}
-                  {/* Esto asume que el logo es más complejo que solo un span */}
-                  
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -385,7 +384,11 @@ const Header = () => {
                   >
                     {/* Fila 1: Icono y Saldo */}
                     <div className="flex items-center space-x-1">
-                      <Icon name="Star" size={18} className="text-orange-400" />
+                      <Icon 
+                        name="Star" 
+                        size={18} 
+                        className="text-orange-400" 
+                      />
                       {pointsLoading ? (
                         <span className="text-sm text-muted-foreground animate-pulse">Cargando...</span>
                       ) : (
