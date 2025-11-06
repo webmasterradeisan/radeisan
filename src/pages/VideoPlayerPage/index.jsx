@@ -2,9 +2,8 @@
 // ============================================================================
 // VIDEO PLAYER PAGE - VERSIÓN FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN CRÍTICA: Se cambia la importación global por importaciones 
-//    desestructuradas para trackGiveLike, trackWatchVideo, etc. para evitar el 
-//    error 'is not a function' al dar like o a los 30s.
+// ✅ CORRECCIÓN CRÍTICA: Se añade verificación de existencia para addPoints 
+//    antes de la llamada para prevenir el error 'reading addPoints'.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -13,7 +12,7 @@ import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext';
-// 🛑 CORRECCIÓN: SE ELIMINA import * as missionsService Y SE USA IMPORTACIÓN DESESTRUCTURADA
+// 🛑 CORRECCIÓN: SE USA IMPORTACIÓN DESESTRUCTURADA PARA MISSIONS SERVICE
 import { 
   trackWatchVideo, 
   trackGiveLike, 
@@ -32,7 +31,7 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addPoints } = usePoints();
+  const { addPoints } = usePoints(); // Se mantiene aquí la desestructuración
   const isMobile = useIsMobile();
 
   // Estados del video
@@ -344,7 +343,7 @@ const VideoPlayerPage = () => {
           .select('id, full_name, username, avatar_url, is_verified')
           .eq('id', videoData.user_id)
           .single();
-        
+
         if (!creatorError && creatorData) {
           videoData.creator = {
             id: creatorData.id,
@@ -450,19 +449,19 @@ const VideoPlayerPage = () => {
 
       if (horizontalVideos && horizontalVideos.length > 0) {
         const userIds = [...new Set(horizontalVideos.map(v => v.user_id).filter(Boolean))];
-        
+
         if (userIds.length > 0) {
           const { data: creatorsData } = await supabase
             .from('user_profiles')
             .select('id, full_name, username, avatar_url, is_verified')
             .in('id', userIds);
-          
+
           if (creatorsData) {
             const creatorsMap = {};
             creatorsData.forEach(creator => {
               creatorsMap[creator.id] = creator;
             });
-            
+
             const transformed = horizontalVideos.map(video => ({
               id: video.id,
               title: video.title,
@@ -517,14 +516,14 @@ const VideoPlayerPage = () => {
 
         const allComments = [...commentsData, ...(repliesData || [])];
         const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
-        
+
         let usersMap = {};
         if (userIds.length > 0) {
           const { data: usersData } = await supabase
             .from('user_profiles')
             .select('id, full_name, username, avatar_url, is_verified')
             .in('id', userIds);
-          
+
           if (usersData) {
             usersData.forEach(userProfile => {
               usersMap[userProfile.id] = {
@@ -542,7 +541,7 @@ const VideoPlayerPage = () => {
           if (comment.user_id && usersMap[comment.user_id]) {
             comment.user = usersMap[comment.user_id];
           }
-          
+
           comment.replies = (repliesData || [])
             .filter(reply => reply.parent_comment_id === comment.id)
             .map(reply => {
@@ -590,23 +589,28 @@ const VideoPlayerPage = () => {
       console.error('Error al registrar puntos en DB:', err);
     }
   };
-  
+
   // FUNCIÓN SEGURA PARA PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
     if (hasEarnedViewPoints || !user) return;
-    
+
+    // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
+    if (!addPoints) {
+        console.warn("⚠️ PointsContext no está listo. addPoints es undefined.");
+        return; 
+    }
+
     try {
       const pointsAmount = 2;
-      
-      // ✅ USO DIRECTO DE LA FUNCIÓN IMPORTADA
+
       await Promise.all([
-        trackWatchVideo(videoId, 30), 
+        trackWatchVideo(videoId, 30),
         addPoints(pointsAmount, 'Ver video', 'free') 
       ]);
-      
+
       setHasEarnedViewPoints(true);
       showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
-      
+
     } catch (err) {
       console.error('❌ Error al otorgar puntos/misión por vista:', err);
     }
@@ -655,15 +659,30 @@ const VideoPlayerPage = () => {
 
         if (!hasEarnedLikePoints) {
           const pointsAmount = 5;
+
+          // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
+          if (!addPoints) {
+              console.warn("⚠️ PointsContext no está listo. addPoints es undefined.");
+              // Aún registramos la misión y puntos ganados para evitar que el usuario gane más tarde si la app se recupera.
+              try {
+                  await Promise.all([
+                      trackPointsEarned('like', pointsAmount),
+                      trackGiveLike('video', videoId) 
+                  ]);
+              } catch (e) {
+                  console.error("❌ Fallo parcial: Misión/Puntos no registrados.", e);
+              }
+              setHasEarnedLikePoints(true); // Previene doble clic
+              return; 
+          }
           
           try {
             await Promise.all([
                 addPoints(pointsAmount, 'Like en video', 'free'),
                 trackPointsEarned('like', pointsAmount),
-                // ✅ USO DIRECTO DE LA FUNCIÓN IMPORTADA
                 trackGiveLike('video', videoId) 
             ]);
-            
+
             setHasEarnedLikePoints(true);
             showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
 
@@ -774,7 +793,14 @@ const VideoPlayerPage = () => {
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
-        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
+      
+      // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
+      if (!addPoints) {
+          console.warn("⚠️ PointsContext no está listo. addPoints es undefined.");
+          return;
+      }
+      
+      // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
       try {
         const pointsAmount = 3;
         await Promise.all([
@@ -782,7 +808,7 @@ const VideoPlayerPage = () => {
           trackPointsEarned('share', pointsAmount),
           trackShareContent('video', videoId, 'link') 
         ]);
-        
+
         setHasEarnedSharePoints(true);
         showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
 
@@ -822,7 +848,7 @@ const VideoPlayerPage = () => {
             follower_id: user.id,
             following_id: video.user_id
           });
-        
+
         // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
         try {
           trackFollowUser(video.user_id);
@@ -885,19 +911,30 @@ const VideoPlayerPage = () => {
 
       if (!hasEarnedCommentPoints) {
         const pointsAmount = 10;
-        // ✅ USO DE FUNCIÓN IMPORTADA DIRECTAMENTE
-        try {
-            await Promise.all([
-                addPoints(pointsAmount, 'Comentar video', 'free'),
-                trackPointsEarned('comment', pointsAmount),
-                trackComment('video', videoId)
-            ]);
+        
+        // 🛑 SEGURIDAD CRÍTICA: Asegurarse de que addPoints existe
+        if (addPoints) {
+            try {
+                await Promise.all([
+                    addPoints(pointsAmount, 'Comentar video', 'free'),
+                    trackPointsEarned('comment', pointsAmount),
+                    trackComment('video', videoId)
+                ]);
 
-            setHasEarnedCommentPoints(true);
-            showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
+                setHasEarnedCommentPoints(true);
+                showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
 
-        } catch (pointsError) {
-            console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
+            } catch (pointsError) {
+                console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
+            }
+        } else {
+            console.warn("⚠️ PointsContext no está listo. addPoints es undefined. Solo se registrará el comentario.");
+            // Si addPoints falla, al menos intentamos registrar la misión de comentario para no perder progreso
+            try {
+                 trackComment('video', videoId);
+            } catch (e) {
+                 console.error("❌ Fallo parcial: Misión de comentario no registrada.", e);
+            }
         }
       }
 
@@ -967,20 +1004,20 @@ const VideoPlayerPage = () => {
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    
+
     if (videoRef.current) videoRef.current.volume = newVolume;
     if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
-    
+
     setIsMuted(newVolume === 0);
   };
 
   const toggleMute = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    
+
     if (videoRef.current) videoRef.current.muted = newMuted;
     if (miniVideoRef.current) miniVideoRef.current.muted = newMuted;
-    
+
     if (newMuted) {
       setVolume(0);
     } else if (volume === 0) {
@@ -995,7 +1032,7 @@ const VideoPlayerPage = () => {
     if (!currentVideo) return;
 
     setProgress((currentVideo.currentTime / currentVideo.duration) * 100);
-    
+
     const currentTime = currentVideo.currentTime;
 
     if (currentTime >= 30 && !hasEarnedViewPoints && user) {
@@ -1018,7 +1055,7 @@ const VideoPlayerPage = () => {
       if (!document.fullscreenElement) {
         await containerRef.current.requestFullscreen();
         setIsFullscreen(true);
-        
+
         if (isMobile && screen.orientation && screen.orientation.lock) {
           try {
             await screen.orientation.lock('landscape');
@@ -1029,7 +1066,7 @@ const VideoPlayerPage = () => {
       } else {
         await document.exitFullscreen();
         setIsFullscreen(false);
-        
+
         if (isMobile && screen.orientation && screen.orientation.unlock) {
           screen.orientation.unlock();
         }
@@ -1394,7 +1431,7 @@ const VideoPlayerPage = () => {
                   <p className="text-sm text-foreground whitespace-pre-wrap">
                     {getDisplayedDescription()}
                   </p>
-                  
+
                   {shouldShowToggleButton && (
                     <button
                       onClick={() => setShowFullDescription(prev => !prev)}
