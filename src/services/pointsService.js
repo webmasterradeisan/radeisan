@@ -2,8 +2,8 @@
 // ============================================================================
 // SERVICIO DE PUNTOS - FINAL Y ESTABLE
 // ============================================================================
-// ✅ CORRECCIÓN FINAL: Se eliminó el bloque de exportaciones desestructuradas 
-//    para solucionar el RollupError: Duplicate export.
+// ✅ CORRECCIÓN FINAL: Se eliminó el conflicto de exportación duplicada 
+//    para solucionar el RollupError en Vercel.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -332,6 +332,7 @@ export const hasEarnedPoints = async (userId, actionType, referenceId) => {
 export const addFreePoints = grantFreePoints;
 
 // EXPORTACIÓN POR DEFECTO: incluye todas las funciones para compatibilidad
+// ✅ SOLO INCLUIMOS REFERENCIAS A LAS FUNCIONES, NO RE-EXPORTAMOS NADA
 export default {
   getUserPoints,
   addFreePoints, 
@@ -340,5 +341,5 @@ export default {
   deductPoints,
   calculateVideoPoints,
   hasEarnedPoints,
-  grantFreePoints, // Si alguien la usa por su nombre original
+  grantFreePoints,
 };
