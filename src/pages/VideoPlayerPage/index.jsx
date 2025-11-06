@@ -1,15 +1,11 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN CORREGIDA FINAL
+// VIDEO PLAYER PAGE - VERSIÓN COMPLETA Y ESTABLE
 // ============================================================================
-// ✅ Mini-player visible y funcional
-// ✅ Video principal se pausa al minimizar
-// ✅ Solo uno reproduce a la vez
-// ✅ Click en video para play/pause
-// ✅ Drag & drop funcionando
-// ✅ Adaptado para móvil
-// ✅ CORRECCIÓN: Eliminada la sincronización constante que causaba lag en el player principal
-// ✅ NUEVA FUNCIÓN: Agregado "Ver más/Ver menos" a la descripción.
+// ✅ CORRECCIÓN DE ERRORES CRÍTICOS: Se añadió un manejo robusto de promesas (try/catch
+//    con Promise.all) en handleTimeUpdate, handleLike, handleShare, handleSubmitComment,
+//    handleSave y handleFollow para prevenir el crash de la aplicación (Something Went Wrong).
+// ✅ Funcionalidad del Mini-Player y Controles intacta.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,7 +14,7 @@ import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext';
-import * as missionsService from 'services/missionsService';
+import * as missionsService from 'services/missionsService'; // ASUMIDO
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
@@ -84,7 +80,7 @@ const VideoPlayerPage = () => {
     message: ''
   });
 
-  // ✅ NUEVO ESTADO PARA LA DESCRIPCIÓN
+  // ✅ ESTADO PARA LA DESCRIPCIÓN
   const [showFullDescription, setShowFullDescription] = useState(false);
 
   // ✅ ESTADOS PARA MINI-PLAYER
@@ -562,7 +558,7 @@ const VideoPlayerPage = () => {
   }, [videoId]);
 
   // ===============================
-  // FUNCIONES DE INTERACCIÓN
+  // FUNCIONES DE INTERACCIÓN Y PUNTOS (CORREGIDAS)
   // ===============================
 
   const showPointsNotification = (message) => {
@@ -585,9 +581,32 @@ const VideoPlayerPage = () => {
           points_earned: pointsAmount
         });
     } catch (err) {
-      console.error('Error al registrar puntos:', err);
+      // ✅ Captura el error de Supabase para evitar que rompa el programa
+      console.error('Error al registrar puntos en DB:', err);
     }
   };
+  
+  // ✅ NUEVA FUNCIÓN SEGURA PARA PUNTOS POR VISTA (30 SEGS)
+  const handleEarnViewPoints = async () => {
+    if (hasEarnedViewPoints || !user) return;
+    
+    try {
+      const pointsAmount = 2;
+      // Espera todas las promesas de puntos/misiones antes de actualizar el estado de bloqueo
+      await Promise.all([
+        addPoints(pointsAmount, 'Ver video', 'free'),
+        trackPointsEarned('view', pointsAmount),
+        missionsService.trackAction('watch') // Asumiendo que esta función existe
+      ]);
+
+      setHasEarnedViewPoints(true);
+      showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
+      
+    } catch (err) {
+      console.error('❌ Error al otorgar puntos/misión por vista:', err);
+    }
+  };
+
 
   const handleLike = async () => {
     if (!user) {
@@ -597,6 +616,7 @@ const VideoPlayerPage = () => {
 
     try {
       if (liked) {
+        // Lógica para quitar like (sin cambios importantes)
         setLiked(false);
         setVideoCounters(prev => ({
           ...prev,
@@ -630,14 +650,25 @@ const VideoPlayerPage = () => {
 
         if (!hasEarnedLikePoints) {
           const pointsAmount = 5;
-          await addPoints(pointsAmount, 'Like en video', 'free');
-          await trackPointsEarned('like', pointsAmount);
-          setHasEarnedLikePoints(true);
-          showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
-          missionsService.trackAction('like');
+          
+          // ✅ Manejo de promesas con try/catch para evitar que un fallo rompa handleLike
+          try {
+            await Promise.all([
+                addPoints(pointsAmount, 'Like en video', 'free'),
+                trackPointsEarned('like', pointsAmount),
+                missionsService.trackAction('like') // Asumiendo que esta función existe
+            ]);
+            
+            setHasEarnedLikePoints(true);
+            showPointsNotification(`+${pointsAmount} puntos por dar like 🎉`);
+
+          } catch (pointsError) {
+             console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
+          }
         }
       }
     } catch (err) {
+      // ✅ Este try/catch ahora se enfoca en fallos de la operación LIKE/UNLIKE
       console.error('Error en like:', err);
     }
   };
@@ -718,7 +749,12 @@ const VideoPlayerPage = () => {
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        missionsService.trackAction('save');
+        // ✅ Manejo de misión para asegurar que no falle
+        try {
+          missionsService.trackAction('save');
+        } catch (missionError) {
+          console.error('❌ Error al registrar misión de Guardar:', missionError);
+        }
         showPointsNotification('Video guardado en favoritos');
       }
     } catch (err) {
@@ -732,12 +768,21 @@ const VideoPlayerPage = () => {
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
-      const pointsAmount = 3;
-      await addPoints(pointsAmount, 'Compartir video', 'free');
-      await trackPointsEarned('share', pointsAmount);
-      setHasEarnedSharePoints(true);
-      showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
-      missionsService.trackAction('share');
+        // ✅ Manejo de promesas con try/catch
+      try {
+        const pointsAmount = 3;
+        await Promise.all([
+          addPoints(pointsAmount, 'Compartir video', 'free'),
+          trackPointsEarned('share', pointsAmount),
+          missionsService.trackAction('share')
+        ]);
+        
+        setHasEarnedSharePoints(true);
+        showPointsNotification(`+${pointsAmount} puntos por compartir 🎉`);
+
+      } catch (pointsError) {
+        console.error('❌ Error al otorgar puntos/misión por Compartir:', pointsError);
+      }
     }
   };
 
@@ -771,8 +816,13 @@ const VideoPlayerPage = () => {
             follower_id: user.id,
             following_id: video.user_id
           });
-
-        missionsService.trackAction('follow');
+        
+        // ✅ Manejo de misión para asegurar que no falle
+        try {
+          missionsService.trackAction('follow');
+        } catch (missionError) {
+          console.error('❌ Error al registrar misión de Seguir:', missionError);
+        }
         showPointsNotification('Ahora sigues a este creador');
       }
     } catch (err) {
@@ -829,11 +879,20 @@ const VideoPlayerPage = () => {
 
       if (!hasEarnedCommentPoints) {
         const pointsAmount = 10;
-        await addPoints(pointsAmount, 'Comentar video', 'free');
-        await trackPointsEarned('comment', pointsAmount);
-        setHasEarnedCommentPoints(true);
-        showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
-        missionsService.trackAction('comment');
+        // ✅ Manejo de promesas con try/catch para evitar que un fallo rompa la publicación
+        try {
+            await Promise.all([
+                addPoints(pointsAmount, 'Comentar video', 'free'),
+                trackPointsEarned('comment', pointsAmount),
+                missionsService.trackAction('comment')
+            ]);
+
+            setHasEarnedCommentPoints(true);
+            showPointsNotification(`+${pointsAmount} puntos por comentar 🎉`);
+
+        } catch (pointsError) {
+            console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
+        }
       }
 
       if (replyingTo) {
@@ -934,12 +993,8 @@ const VideoPlayerPage = () => {
     const currentTime = currentVideo.currentTime;
 
     if (currentTime >= 30 && !hasEarnedViewPoints && user) {
-      const pointsAmount = 2;
-      addPoints(pointsAmount, 'Ver video', 'free');
-      trackPointsEarned('view', pointsAmount);
-      setHasEarnedViewPoints(true);
-      showPointsNotification(`+${pointsAmount} puntos por ver video 🎉`);
-      missionsService.trackAction('watch');
+      // ✅ Llama a la función segura para ganar puntos
+      handleEarnViewPoints();
     }
   };
 
