@@ -1,7 +1,5 @@
 // src/contexts/AuthContext.jsx
-// ============================================================================
-// AuthContext FINAL ESTABLE - Fix para Carrera de Contextos y Roles Administrativos
-// ============================================================================
+// AuthContext ESTABLE - Fix para timeout de perfil
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -10,7 +8,6 @@ const AuthContext = createContext();
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    // ⚠️ Si ves este error, DEBES envolver tu componente principal (<Routes />) en <AuthProvider> en App.jsx
     throw new Error('useAuth debe ser usado dentro de un AuthProvider');
   }
   return context;
@@ -22,231 +19,392 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   
   const mountedRef = useRef(true);
+  const initializingRef = useRef(false);
+  const sessionCheckedRef = useRef(false);
+  
   const isAuthenticated = !!user;
 
-  // ===========================================================================
-  // HELPERS
-  // ===========================================================================
+  // Crear usuario desde sesión (fallback rápido)
+  const createUserFromSession = useCallback((session) => {
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      username: session.user.email?.split('@')[0] || 'usuario',
+      full_name: session.user.user_metadata?.full_name || 'Usuario',
+      name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuario',
+      avatar_url: session.user.user_metadata?.avatar_url || null,
+      points: 0,
+      role: 'user',
+      permissions: [],
+      isAdmin: false,
+      isActive: true,
+      admin_role: null
+    };
+  }, []);
 
-  // Función unificada para obtener y construir el objeto de usuario final
-  const getAndProcessUserProfile = useCallback(async (session) => {
-    const userId = session?.user?.id;
-    if (!userId) return null;
+  // Función para obtener perfil (en background, no bloqueante)
+  const fetchUserProfile = useCallback(async (userId) => {
+    if (!userId || !mountedRef.current) return null;
 
     try {
-      // 1. Obtener perfil de la tabla 'profiles'
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
+      console.log('🔍 Obteniendo perfil para:', userId);
+      
+      // Timeout para query de perfil
+      const profilePromise = supabase
+        .from('user_profiles')
+        .select(`
+          id, 
+          username, 
+          avatar_url, 
+          email, 
+          full_name,
+          admin_role:admin_roles!admin_roles_user_id_fkey(
+            role_name, 
+            permissions, 
+            is_active
+          )
+        `)
         .eq('id', userId)
-        .single();
-        
-      if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = No row found
-        console.error('❌ Error fetching user profile:', profileError);
+        .maybeSingle();
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile query timeout')), 4000)
+      );
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
+
+      if (error && error.code !== 'PGRST116') {
+        console.warn('⚠️ Error obteniendo perfil:', error.message);
+        return null;
       }
-      
-      const userData = session.user;
-      const metadata = userData.user_metadata || {};
-      
-      // Construir el objeto de usuario final combinando Auth, Metadata y Profile
-      const finalUser = {
-        id: userId,
-        email: userData.email,
-        username: profile?.username || metadata?.username || userData.email?.split('@')[0] || 'usuario',
-        full_name: profile?.full_name || metadata?.full_name || 'Usuario',
-        avatar_url: profile?.avatar_url || metadata?.avatar_url || null,
-        points: profile?.points || 0, // Asignar 0 si no está en profile o es nulo
-        permissions: profile?.permissions || [],
-        isActive: profile?.is_active ?? true,
-        profile_completed: profile?.profile_completed ?? false,
-        
-        // 🛑 CORRECCIÓN CRÍTICA PARA EL ROL DE ADMINISTRADOR:
-        // El rol principal es el admin_role si existe. Si no, usa profile.role, sino 'user'.
-        admin_role: profile?.admin_role || null, // 'Super Admin'
-        isAdmin: profile?.admin_role !== null,
-        role: profile?.admin_role || profile?.role || 'user', // Soluciona la degradación de rol
-        
-        // Campo de display
-        name: profile?.full_name || profile?.username || userData.email?.split('@')[0] || 'Usuario',
-      };
-      
-      return finalUser;
+
+      if (data) {
+        console.log('✅ Perfil completo cargado');
+        return {
+          id: data.id,
+          email: data.email,
+          username: data.username || data.email?.split('@')[0] || 'usuario',
+          full_name: data.full_name || data.username || 'Usuario',
+          name: data.full_name || data.username || data.email?.split('@')[0] || 'Usuario',
+          avatar_url: data.avatar_url,
+          points: 0,
+          role: data.admin_role?.role_name || 'user',
+          permissions: data.admin_role?.permissions || [],
+          isActive: data.admin_role?.is_active !== false,
+          admin_role: data.admin_role,
+          isAdmin: ['super_admin', 'admin', 'moderator'].includes(data.admin_role?.role_name) && 
+                   data.admin_role?.is_active !== false
+        };
+      }
+
+      return null;
 
     } catch (err) {
-      console.error('❌ Excepción al buscar/procesar perfil:', err);
+      console.warn('⚠️ Error en fetchUserProfile:', err.message);
       return null;
     }
   }, []);
 
-  // ===========================================================================
-  // EFECTO PRINCIPAL DE AUTENTICACIÓN
-  // ===========================================================================
-  
+  // Inicializar autenticación
   useEffect(() => {
-    // Función para manejar la sesión (Inicial y Cambios de Estado)
-    const handleAuthEvent = async (currentSession) => {
-      setLoading(true); // Siempre cargar al inicio de un evento de autenticación
+    let isCancelled = false;
+
+    const initializeAuth = async () => {
+      if (initializingRef.current) {
+        console.log('⏭️ Ya inicializando, skipping...');
+        return;
+      }
+
+      initializingRef.current = true;
+      console.log('🚀 Inicializando autenticación...');
 
       try {
-        if (currentSession) {
-          // 🛑 CORRECCIÓN CLAVE: Esperar el perfil completo antes de actualizar el estado
-          const fullProfile = await getAndProcessUserProfile(currentSession);
+        // Obtener sesión primero (rápido)
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-          if (mountedRef.current && fullProfile) {
-             setUser(fullProfile);
-          } else if (mountedRef.current) {
-             // Si hay sesión pero falla la carga del perfil, solo usar los datos básicos
-             // En un caso real, esto requeriría una función separada robusta, pero por ahora, forzamos un log.
-             console.warn('⚠️ No se pudo obtener el perfil completo. La sesión es válida, pero el estado de usuario puede ser básico.');
-             setUser(null); // O forzar un estado 'básico' si es necesario
-          }
-        } else {
-          // No hay sesión
+        sessionCheckedRef.current = true;
+
+        if (isCancelled) return;
+
+        if (sessionError) {
+          console.error('❌ Error obteniendo sesión:', sessionError);
           setUser(null);
+          setError(sessionError.message);
+          setLoading(false);
+          initializingRef.current = false;
+          return;
         }
-      } catch (err) {
-        console.error('❌ Error general en la gestión de Auth:', err);
-        setUser(null);
-      } finally {
-        if (mountedRef.current) {
+
+        if (session?.user) {
+          console.log('✅ Sesión encontrada:', session.user.email);
+          
+          // CRÍTICO: Establecer usuario básico INMEDIATAMENTE
+          const basicUser = createUserFromSession(session);
+          setUser(basicUser);
+          setLoading(false); // ⬅️ Terminar loading AHORA
+          
+          console.log('👤 Usuario básico establecido, cargando perfil completo en background...');
+
+          // Intentar obtener perfil completo en BACKGROUND (no bloqueante)
+          fetchUserProfile(session.user.id).then(profile => {
+            if (profile && !isCancelled && mountedRef.current) {
+              console.log('✅ Perfil completo cargado, actualizando usuario');
+              setUser(profile);
+            } else {
+              console.log('ℹ️ Usando perfil básico');
+            }
+          }).catch(err => {
+            console.warn('⚠️ No se pudo cargar perfil completo:', err.message);
+          });
+
+        } else {
+          console.log('ℹ️ No hay sesión activa');
+          setUser(null);
           setLoading(false);
         }
+
+        setError(null);
+
+      } catch (err) {
+        console.error('❌ Error en inicialización:', err);
+        sessionCheckedRef.current = true;
+        if (!isCancelled) {
+          setUser(null);
+          setError(err.message);
+          setLoading(false);
+        }
+      } finally {
+        if (!isCancelled && mountedRef.current) {
+          initializingRef.current = false;
+          console.log('✅ Inicialización completada');
+        }
       }
     };
 
-    // 1. Manejar la sesión inicial de forma síncrona/esperada
-    const checkInitialSession = async () => {
-      if (mountedRef.current) {
-          const { data: { session } } = await supabase.auth.getSession();
-          // Este initial check manejará la primera carga del contexto
-          await handleAuthEvent(session); 
-      }
-    };
-    
-    checkInitialSession();
-    
-    // 2. Suscripción a cambios de estado (LOGIN, LOGOUT, etc.)
+    initializeAuth();
+
+    // Listener de cambios de auth
+    console.log('🔗 Configurando listener...');
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mountedRef.current) return;
+      async (event, session) => {
+        if (isCancelled) return;
         
-        // Si hay un cambio de sesión (ej. SIGNED_IN), lo manejamos
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
-           // Usamos el session object que nos da el evento para manejar el cambio de estado
-           handleAuthEvent(session);
+        console.log('📡 Auth event:', event);
+
+        switch (event) {
+          case 'SIGNED_IN':
+            if (session?.user) {
+              console.log('🔑 Usuario signed in');
+              
+              // Establecer usuario básico inmediatamente
+              const basicUser = createUserFromSession(session);
+              setUser(basicUser);
+              setLoading(false);
+              
+              // Cargar perfil completo en background
+              fetchUserProfile(session.user.id).then(profile => {
+                if (profile && !isCancelled && mountedRef.current) {
+                  setUser(profile);
+                }
+              });
+            }
+            break;
+
+          case 'SIGNED_OUT':
+            console.log('🚪 Usuario signed out');
+            if (!isCancelled && mountedRef.current) {
+              setUser(null);
+              setLoading(false);
+              setError(null);
+            }
+            break;
+
+          case 'TOKEN_REFRESHED':
+            console.log('🔄 Token refrescado');
+            if (session?.user && !isCancelled && mountedRef.current) {
+              fetchUserProfile(session.user.id).then(profile => {
+                if (profile) {
+                  setUser(profile);
+                }
+              });
+            }
+            break;
+
+          case 'USER_UPDATED':
+            console.log('👤 Usuario actualizado');
+            if (session?.user && !isCancelled && mountedRef.current) {
+              fetchUserProfile(session.user.id).then(profile => {
+                if (profile) {
+                  setUser(profile);
+                }
+              });
+            }
+            break;
+
+          default:
+            break;
         }
       }
     );
 
     return () => {
+      console.log('🧹 Limpiando AuthProvider...');
+      isCancelled = true;
       mountedRef.current = false;
-      subscription?.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [getAndProcessUserProfile]);
+  }, [fetchUserProfile, createUserFromSession]);
 
-  // ===========================================================================
-  // FUNCIONES DE AUTENTICACIÓN
-  // ===========================================================================
-
-  const signIn = useCallback(async (credentials) => {
-    setError(null);
+  const signIn = useCallback(async (email, password) => {
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword(credentials);
-      if (authError) {
-        throw authError;
+      console.log('🔑 Iniciando signIn...');
+      setLoading(true);
+      setError(null);
+
+      if (!email || !password) {
+        throw new Error('Email y contraseña son requeridos');
       }
-      // El onAuthStateChange manejará la actualización del estado de 'user'
-      return { success: true, data: data.user };
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
+      });
+
+      if (error) {
+        console.error('❌ Error en signIn:', error);
+        let errorMessage = error.message;
+        
+        if (error.message === 'Invalid login credentials') {
+          errorMessage = 'Email o contraseña incorrectos';
+        } else if (error.message === 'Email not confirmed') {
+          errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
+        }
+        
+        setError(errorMessage);
+        setLoading(false);
+        return { success: false, error: errorMessage };
+      }
+
+      if (data?.session?.user) {
+        console.log('✅ Sesión creada');
+        
+        // Establecer usuario básico inmediatamente
+        const basicUser = createUserFromSession(data.session);
+        setUser(basicUser);
+        setLoading(false);
+
+        // Cargar perfil completo en background
+        fetchUserProfile(data.session.user.id).then(profile => {
+          if (profile && mountedRef.current) {
+            setUser(profile);
+          }
+        });
+
+        setError(null);
+        console.log('✅ SignIn exitoso');
+        return { success: true, user: basicUser };
+      }
+
+      throw new Error('No se recibió sesión válida');
     } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+      console.error('❌ Error en signIn:', err);
+      const errorMessage = err.message || 'Error de conexión';
+      setError(errorMessage);
+      setLoading(false);
+      return { success: false, error: errorMessage };
     }
-  }, []);
+  }, [fetchUserProfile, createUserFromSession]);
 
-  const signUp = useCallback(async (credentials) => {
-    setError(null);
+  const signUp = useCallback(async (email, password, metadata = {}) => {
     try {
-      const { data, error: authError } = await supabase.auth.signUp(credentials);
-      if (authError) {
-        throw authError;
+      setLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: metadata }
+      });
+      
+      if (error) {
+        setError(error.message);
+        return { success: false, error: error.message };
       }
-      // El onAuthStateChange manejará la actualización del estado de 'user'
-      return { success: true, data: data.user };
+      
+      return { success: true, data };
     } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+      const errorMessage = `Error de conexión: ${err.message}`;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      const { error: authError } = await supabase.auth.signOut();
-      if (authError) {
-        throw authError;
+      console.log('🚪 Cerrando sesión...');
+      setLoading(true);
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('❌ Error en signOut:', error);
+        setError(error.message);
+        return { success: false, error: error.message };
       }
-      // El onAuthStateChange manejará el setUser(null)
+      
+      setUser(null);
+      setError(null);
+      console.log('✅ SignOut exitoso');
       return { success: true };
     } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+      const errorMessage = `Error cerrando sesión: ${err.message}`;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   const resetPassword = useCallback(async (email) => {
-    setError(null);
     try {
-      const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/update-password`,
-      });
-      if (authError) {
-        throw authError;
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) {
+        return { success: false, error: error.message };
       }
       return { success: true };
     } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
+      return { success: false, error: `Error de conexión: ${err.message}` };
     }
   }, []);
-  
+
   const updateProfile = useCallback(async (updates) => {
     if (!user) {
       return { success: false, error: 'Usuario no autenticado' };
     }
     
     try {
-      // Actualizar la tabla 'profiles'
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: updates.full_name,
-          username: updates.username,
-          avatar_url: updates.avatar_url,
-          profile_completed: true,
-        })
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update(updates)
         .eq('id', user.id)
         .select()
         .single();
-        
-      if (profileError) {
-        throw profileError;
+      
+      if (error) {
+        return { success: false, error: error.message };
       }
       
-      // Actualizar el estado local con los datos combinados (simplificado)
       const updatedUser = {
         ...user,
-        ...profileData, 
-        name: profileData.full_name || profileData.username,
-        full_name: profileData.full_name,
-        username: profileData.username,
-        avatar_url: profileData.avatar_url,
-        profile_completed: profileData.profile_completed,
+        ...updates,
+        name: updates.full_name || updates.name || user.name,
+        full_name: updates.full_name || user.full_name
       };
       
       setUser(updatedUser);
-      // Opcional: Llamar a refreshAuth() aquí para sincronizar el auth.users metadata si es necesario
       return { success: true, data: updatedUser };
     } catch (err) {
-      console.error('Error actualizando perfil:', err);
       return { success: false, error: `Error de conexión: ${err.message}` };
     }
   }, [user]);
@@ -259,14 +417,15 @@ export const AuthProvider = ({ children }) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        // 🛑 Usar la función robusta para obtener el perfil completo
-        const profile = await getAndProcessUserProfile(session);
+        const basicUser = createUserFromSession(session);
+        setUser(basicUser);
+        
+        const profile = await fetchUserProfile(session.user.id);
         if (profile) {
           setUser(profile);
-          console.log('✅ Auth refrescado con perfil completo');
-        } else {
-          setUser(null); // Si la sesión existe pero el perfil no se puede cargar
         }
+        
+        console.log('✅ Auth refrescado');
       } else {
         setUser(null);
       }
@@ -275,7 +434,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [getAndProcessUserProfile]);
+  }, [fetchUserProfile, createUserFromSession]);
 
   const clearError = useCallback(() => {
     setError(null);
