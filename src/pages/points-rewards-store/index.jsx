@@ -1,6 +1,6 @@
 // src/pages/points-rewards-store/index.jsx (Versión Final y Corregida)
-// ✅ FIX: Sincronizado el hook 'useRewards' con la nueva estructura de DB
-//    (leyendo 'cost_free_points' y 'cost_premium_points')
+// ✅ FIX: Sincronizado con la nueva estructura de DB ('cost_free_points', etc.)
+// ✅ FIX 2: Corregido el typo </S.O.S> por </p> en ErrorState
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,7 +36,7 @@ const VIEW_MODES = { GRID: 'grid', LIST: 'list' };
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// ✅✅✅ HOOK CORREGIDO CON NUEVA ESTRUCTURA DB ✅✅✅
+// Hook para manejar recompensas con datos reales de Supabase
 const useRewards = () => {
   const [rewards, setRewards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +45,6 @@ const useRewards = () => {
   const fetchRewards = useCallback(async (filters = {}) => {
     try {
       setLoading(true); setError(null);
-      // 1. La consulta ahora selecciona las columnas nuevas
       let query = supabase.from('rewards')
         .select(`
           id, title, description, image_url, category, 
@@ -62,28 +61,23 @@ const useRewards = () => {
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
-      // 2. Transformación de datos
       const transformedRewards = data?.map(r => ({
         id: r.id, 
         title: r.title,
         description: r.description, 
         image: r.image_url || 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400',
         
-        // ✅ FIX: Leer directamente de las nuevas columnas
         cost_free_points: r.cost_free_points || 0, 
         cost_premium_points: r.cost_premium_points || 0,
         
-        // Costo genérico (para ordenar, usa el más alto de los dos, o el que exista)
         pointsCost: Math.max(r.cost_free_points || 0, r.cost_premium_points || 0),
         
         stock: r.stock_quantity,
         
-        // Lógica de disponibilidad (Stock ilimitado O stock > 0)
         isAvailable: r.stock_quantity === -1 || r.stock_quantity > 0,
         
         category: r.category || 'General',
         
-        // Valores que tu DB no tiene, pero el UI espera
         categoryIcon: 'Star',
         isExclusive: false, 
         isPopular: false,
@@ -126,7 +120,7 @@ const PointsRewardsStore = () => {
     loading: rewardsLoading, 
     error: rewardsError, 
     refresh: refreshRewards 
-  } = useRewards(); // Este hook ahora devuelve los datos correctos
+  } = useRewards();
   
   const [selectedReward, setSelectedReward] = useState(null);
   const [isRedemptionModalOpen, setIsRedemptionModalOpen] = useState(false);
@@ -139,7 +133,6 @@ const PointsRewardsStore = () => {
   const [viewMode, setViewMode] = useState(VIEW_MODES.GRID);
   const [showTransactions, setShowTransactions] = useState(false);
   
-  // Datos simulados (Reemplazar con tus propios hooks si existen)
   const statsLoading = false; 
   const totalPointsEarned = 2661;
   const totalPointsSpent = 0;
@@ -149,7 +142,6 @@ const PointsRewardsStore = () => {
   
   const pageLoading = rewardsLoading || pointsLoading; 
 
-  // Filtrado y Asequibilidad
   const filteredRewards = useMemo(() => {
     let list = rewards;
     
@@ -168,7 +160,7 @@ const PointsRewardsStore = () => {
         list.sort((a, b) => a.pointsCost - b.pointsCost);
         break;
       case 'points_high':
-        list.sort((a, b) => b.pointsCost - a.pointsCost);
+        list.sort((a, b) => b.pointsCost - b.pointsCost);
         break;
       case 'newest':
         list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); 
@@ -185,8 +177,6 @@ const PointsRewardsStore = () => {
   const affordableRewards = useMemo(() => {
     if (pointsLoading) return []; 
     return filteredRewards.filter(reward => {
-      // ✅ FIX: Lógica de asequibilidad actualizada
-      // El usuario puede costearlo si CUMPLE CUALQUIERA de los dos precios
       const canAffordFree = (reward.cost_free_points > 0) && (freePoints >= reward.cost_free_points);
       const canAffordPremium = (reward.cost_premium_points > 0) && (premiumPoints >= reward.cost_premium_points);
       return canAffordFree || canAffordPremium;
@@ -201,7 +191,6 @@ const PointsRewardsStore = () => {
   // HANDLERS
   // ===============================
 
-  // Se llama desde RewardCard
   const handleRewardClick = (reward, redemptionType) => {
     setSelectedReward({ ...reward, redemptionType }); 
     setIsRedemptionModalOpen(true);
@@ -308,7 +297,7 @@ const PointsRewardsStore = () => {
       </h3>
       <p className="text-muted-foreground mb-6 max-w-md">
         Ha ocurrido un problema al cargar las recompensas. Por favor, intenta nuevamente.
-      </S.O.S>
+      </p> {/* ✅✅✅ FIX AQUÍ: Se cambió </S.O.S> por </p> */}
       <Button onClick={() => refreshRewards()}>
         <Icon name="RefreshCw" size={16} className="mr-2" />
         Reintentar
