@@ -1,7 +1,8 @@
-// src/pages/points-rewards-store/index.jsx (Versión Final y Estable)
-// ✅ FIX: Importado 'getUserPointsHistory' de pointsService.
-// ✅ FIX: Añadido 'useEffect' para cargar el historial de transacciones.
-// ✅ FIX: Movida la sección del Historial de la barra lateral al contenido principal.
+// src/pages/points-rewards-store/index.jsx
+// ============================================================================
+// ✅ FIX: Añadido estado para filtros de fecha (dateFilter) y paginación (page).
+// ✅ FIX: 'loadHistory' ahora carga datos paginados y filtrados.
+// ✅ FIX: Añadida función 'handleLoadMore' para paginación.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -18,7 +19,6 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { redeemReward } from '../../services/rewardsService'; 
-// ✅ Importar el servicio de puntos
 import { getUserPointsHistory } from '../../services/pointsService'; 
 
 
@@ -39,7 +39,7 @@ const VIEW_MODES = { GRID: 'grid', LIST: 'list' };
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar recompensas
+// Hook para manejar recompensas (Sin cambios)
 const useRewards = () => {
   const [rewards, setRewards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +134,11 @@ const PointsRewardsStore = () => {
   const [transactions, setTransactions] = useState([]);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
   
+  // ✅ NUEVOS ESTADOS PARA FILTRO Y PAGINACIÓN
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month'
+  const [page, setPage] = useState(1);
+  const [hasMorePages, setHasMorePages] = useState(false);
+  
   // Datos simulados (Reemplazar con tus propios hooks si existen)
   const statsLoading = false; 
   const totalPointsEarned = 2661;
@@ -142,36 +147,64 @@ const PointsRewardsStore = () => {
   
   const pageLoading = rewardsLoading || pointsLoading; 
 
-  // ✅ EFECTO PARA CARGAR EL HISTORIAL
-  useEffect(() => {
-    if (user?.id) {
-      setTransactionsLoading(true);
-      getUserPointsHistory(user.id)
-        .then(result => {
-          if (result.success) {
-            setTransactions(result.data);
-          } else {
-            console.error("Error al cargar historial:", result.error);
-          }
-        })
-        .finally(() => setTransactionsLoading(false));
+  // ✅ FUNCIÓN PARA CARGAR EL HISTORIAL (AHORA CON LÓGICA)
+  const loadHistory = useCallback(async (filter, pageNum, reset = false) => {
+    if (!user?.id) return;
+
+    setTransactionsLoading(true);
+
+    // 1. Calcular rango de fechas
+    let startDate = null;
+    let endDate = null;
+    const now = new Date();
+    
+    if (filter === 'today') {
+      startDate = new Date(now.setHours(0, 0, 0, 0));
+    } else if (filter === 'week') {
+      const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+      startDate = new Date(firstDayOfWeek.setHours(0, 0, 0, 0));
+    } else if (filter === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
+
+    // 2. Llamar al servicio
+    const result = await getUserPointsHistory(user.id, {
+      startDate,
+      endDate,
+      page: pageNum
+    });
+
+    if (result.success) {
+      if (reset) {
+        setTransactions(result.data); // Reemplaza la lista
+      } else {
+        setTransactions(prev => [...prev, ...result.data]); // Añade a la lista
+      }
+      setHasMorePages(result.hasMore);
+    } else {
+      console.error("Error al cargar historial:", result.error);
+    }
+    
+    setTransactionsLoading(false);
   }, [user]);
 
-  // Filtrado y Asequibilidad
+  // ✅ EFECTO PARA CARGAR EL HISTORIAL (se activa con el usuario y el filtro de fecha)
+  useEffect(() => {
+    setPage(1); // Resetea la página
+    loadHistory(dateFilter, 1, true); // Carga la página 1 y resetea la lista
+  }, [user, dateFilter, loadHistory]);
+
+  // Filtrado y Asequibilidad (Sin cambios)
   const filteredRewards = useMemo(() => {
     let list = rewards;
-    
     if (searchQuery) {
       list = list.filter(reward => 
         reward.title.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
     if (filter !== 'all') {
       list = list.filter(reward => reward.category === filter);
     }
-    
     switch (sortBy) {
       case 'points_low':
         list.sort((a, b) => a.pointsCost - b.pointsCost);
@@ -187,7 +220,6 @@ const PointsRewardsStore = () => {
         list.sort((a, b) => (b.isPopular ? 1 : 0) - (a.isPopular ? 1 : 0));
         break;
     }
-    
     return list;
   }, [rewards, searchQuery, filter, sortBy]);
   
@@ -237,9 +269,8 @@ const PointsRewardsStore = () => {
         await refreshRewards();
         
         // Refrescar historial también
-        if (user?.id) {
-          getUserPointsHistory(user.id).then(res => setTransactions(res.data));
-        }
+        setPage(1);
+        loadHistory(dateFilter, 1, true);
         
         setIsRedemptionModalOpen(false);
         setSelectedReward(null);
@@ -257,7 +288,7 @@ const PointsRewardsStore = () => {
     } finally {
       setRedemptionLoading(false);
     }
-  }, [selectedReward, refreshPoints, refreshRewards, user]);
+  }, [selectedReward, refreshPoints, refreshRewards, dateFilter, loadHistory]);
 
   const handleWaitlist = (reward) => {
     alert(`Te avisaremos cuando ${reward.title} esté disponible.`);
@@ -274,6 +305,18 @@ const PointsRewardsStore = () => {
   const handleSortChange = useCallback((sort) => {
     setSortBy(sort);
   }, []);
+
+  // ✅ NUEVOS HANDLERS
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    loadHistory(dateFilter, nextPage, false); // Carga la sig. página sin resetear
+  };
+  
+  const handleDateFilterChange = (newDateFilter) => {
+    setPage(1); // Resetea la página
+    setDateFilter(newDateFilter); // Esto activará el useEffect para recargar
+  };
 
 
   // ===============================
@@ -402,8 +445,6 @@ const PointsRewardsStore = () => {
                     </div>
                   </div>
 
-                  {/* ✅ UI FIX: Transactions Toggle MOVIDO de aquí */}
-
                 </div>
               </div>
 
@@ -479,10 +520,15 @@ const PointsRewardsStore = () => {
                   </Button>
                   
                   {showTransactions && (
-                    <div className="mt-4 max-h-96 overflow-y-auto">
+                    <div className="mt-4">
                       <TransactionHistory
                         transactions={transactions}
                         loading={transactionsLoading}
+                        // ✅ Pasar los nuevos props de filtro y paginación
+                        dateFilter={dateFilter}
+                        onDateFilterChange={handleDateFilterChange}
+                        hasMore={hasMorePages}
+                        onLoadMore={handleLoadMore}
                       />
                     </div>
                   )}
