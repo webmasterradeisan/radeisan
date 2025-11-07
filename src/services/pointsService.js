@@ -1,10 +1,9 @@
 // src/services/pointsService.js
 // ============================================================================
 // SERVICIO DE PUNTOS - FINAL Y CORREGIDO
-// ============================================================================
-// ✅ ESTE ES EL CÓDIGO FINAL:
-//    - Llama al RPC con 'p_transaction_type' para coincidir con la DB.
-//    - Llama al RPC con 'p_free_points_change' y 'p_premium_points_change'.
+// ... (otros fixes)
+// ✅ FIX 7: Añadida la función 'getUserPointsHistory' para cargar
+//    el historial de transacciones del usuario.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -81,7 +80,7 @@ export const getUserPoints = async (userId) => {
 
 
 // ============================================================================
-// REGISTRAR TRANSACCIÓN (Para Historial) - (Esta función ya no se usa por el RPC)
+// REGISTRAR TRANSACCIÓN (Para Historial)
 // ============================================================================
 
 export const trackPointsAction = async (userId, amount, pointType, actionType, referenceId) => {
@@ -92,7 +91,7 @@ export const trackPointsAction = async (userId, amount, pointType, actionType, r
         user_id: userId,
         points_change: amount, 
         point_type: pointType,
-        transaction_type: actionType, // Corregido por si se usa
+        transaction_type: actionType, 
         reference_id: referenceId,
       });
     if (error) {
@@ -123,13 +122,11 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
       premium_change = amount;
     }
 
-    // ✅ ESTA ES LA PARTE IMPORTANTE
-    // El objeto de parámetros ahora coincide 100% con el SQL
     const rpcParams = {
       p_user_id: userId,
       p_free_points_change: free_change,
       p_premium_points_change: premium_change,
-      p_transaction_type: actionType, // <-- Nombre corregido
+      p_transaction_type: actionType,
       p_reference_id: referenceId
     };
     
@@ -186,6 +183,37 @@ export const addFreePoints = async (userId, amount, actionType, referenceId = nu
     return addPoints(userId, amount, 'free', actionType, referenceId);
 };
 
+// ============================================================================
+// ✅✅✅ NUEVA FUNCIÓN AÑADIDA ✅✅✅
+// ============================================================================
+
+/**
+ * Obtener el historial de puntos (transacciones) del usuario.
+ */
+export const getUserPointsHistory = async (userId) => {
+  if (!userId) {
+    return { success: false, error: 'User ID is required', data: [] };
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('points_transactions')
+      .select('*') // Obtiene todas las columnas
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      throw error;
+    }
+    
+    return { success: true, data };
+    
+  } catch (error) {
+    console.error('Error fetching points history:', error);
+    return { success: false, error: error.message, data: [] };
+  }
+};
 
 // ============================================================================
 // EXPORTACIONES POR DEFECTO
@@ -200,5 +228,6 @@ export default {
   addPoints, 
   deductPoints,
   calculatePremiumValue,
-  PREMIUM_POINTS_MULTIPLIER
+  PREMIUM_POINTS_MULTIPLIER,
+  getUserPointsHistory // <-- Nueva función exportada
 };
