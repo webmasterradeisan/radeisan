@@ -1,3 +1,12 @@
+// src/pages/points-rewards-store/components/TransactionHistory.jsx
+// ============================================================================
+// ✅ FIX: Sincronizado con la tabla 'points_transactions'
+//    - 'points' -> 'points_change'
+//    - 'type' -> 'points_change > 0' (para 'earned'/'spent')
+//    - 'date' -> 'created_at'
+//    - 'category' -> 'transaction_type'
+// ============================================================================
+
 import React, { useState } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
@@ -7,46 +16,46 @@ const TransactionHistory = ({
   className = '' 
 }) => {
   const [filter, setFilter] = useState('all'); // all, earned, spent
-  const [isExpanded, setIsExpanded] = useState(false);
 
+  // ✅ FIX: Filtrar usando 'points_change'
   const filteredTransactions = transactions?.filter(transaction => {
-    if (filter === 'earned') return transaction?.type === 'earned';
-    if (filter === 'spent') return transaction?.type === 'spent';
+    if (filter === 'earned') return transaction?.points_change > 0;
+    if (filter === 'spent') return transaction?.points_change < 0;
     return true;
   });
 
-  const displayedTransactions = isExpanded ? 
-    filteredTransactions : 
-    filteredTransactions?.slice(0, 5);
+  // Mostramos todas, ya que tu captura muestra "Ver 19 más"
+  const displayedTransactions = filteredTransactions; 
 
+  // ✅ FIX: Icono basado en 'transaction_type' (valores de tu DB)
   const getTransactionIcon = (transaction) => {
-    switch (transaction?.category) {
-      case 'video_watch':
-        return 'Play';
-      case 'daily_login':
-        return 'Calendar';
-      case 'social_interaction':
+    switch (transaction?.transaction_type) {
+      case 'video_like':
         return 'Heart';
-      case 'reward_redemption':
-        return 'Gift';
-      case 'bonus':
-        return 'Star';
+      case 'admin_adjustment':
+        return 'User';
+      case 'other': // 'other' se usa para canjes y comentarios
+        return (transaction?.points_change < 0) ? 'Gift' : 'MessageCircle';
       default:
         return 'Circle';
     }
   };
 
+  // ✅ FIX: Color basado en 'points_change'
   const getTransactionColor = (transaction) => {
-    return transaction?.type === 'earned' ? 'var(--color-success)' : 'var(--color-error)';
+    return transaction?.points_change > 0 ? 'var(--color-success)' : 'var(--color-error)';
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'Fecha inválida'; // Fallback
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Fecha inválida'; // Fallback
+    
     const now = new Date();
     const diffTime = Math.abs(now - date);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 1) return 'Hoy';
+    if (diffDays <= 1) return 'Hoy';
     if (diffDays === 2) return 'Ayer';
     if (diffDays <= 7) return `Hace ${diffDays - 1} días`;
     
@@ -57,9 +66,14 @@ const TransactionHistory = ({
     });
   };
 
-  const totalEarned = transactions?.filter(t => t?.type === 'earned')?.reduce((sum, t) => sum + t?.points, 0);
+  // ✅ FIX: Totales basados en 'points_change'
+  const totalEarned = transactions
+    ?.filter(t => t?.points_change > 0)
+    ?.reduce((sum, t) => sum + (t?.points_change || 0), 0);
 
-  const totalSpent = transactions?.filter(t => t?.type === 'spent')?.reduce((sum, t) => sum + Math.abs(t?.points), 0);
+  const totalSpent = transactions
+    ?.filter(t => t?.points_change < 0)
+    ?.reduce((sum, t) => sum + Math.abs(t?.points_change || 0), 0);
 
   return (
     <div className={`bg-card border border-border rounded-lg ${className}`} id="transaction-history">
@@ -69,6 +83,7 @@ const TransactionHistory = ({
           <h2 className="text-lg font-heading font-bold text-foreground">
             Historial de Puntos
           </h2>
+          {/* TODO: Agregar un botón de recarga si se desea */}
           <Icon name="History" size={20} color="var(--color-muted-foreground)" />
         </div>
 
@@ -137,11 +152,11 @@ const TransactionHistory = ({
         ) : (
           <div className="space-y-4">
             {displayedTransactions?.map((transaction, index) => (
-              <div key={index} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+              <div key={transaction.id || index} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
                 {/* Icon */}
                 <div className={`
                   w-10 h-10 rounded-full flex items-center justify-center
-                  ${transaction?.type === 'earned' ? 'bg-success/10' : 'bg-error/10'}
+                  ${transaction?.points_change > 0 ? 'bg-success/10' : 'bg-error/10'}
                 `}>
                   <Icon 
                     name={getTransactionIcon(transaction)} 
@@ -153,20 +168,15 @@ const TransactionHistory = ({
                 {/* Details */}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-foreground truncate">
-                    {transaction?.description}
+                    {/* ✅ FIX: Mostrar 'description' o 'transaction_type' */}
+                    {transaction?.description || transaction?.transaction_type}
                   </h3>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-sm text-muted-foreground">
-                      {formatDate(transaction?.date)}
+                      {/* ✅ FIX: Formatear 'created_at' */}
+                      {formatDate(transaction?.created_at)}
                     </span>
-                    {transaction?.source && (
-                      <>
-                        <span className="text-muted-foreground">•</span>
-                        <span className="text-xs text-muted-foreground">
-                          {transaction?.source}
-                        </span>
-                      </>
-                    )}
+                    {/* ✅ FIX: Sección 'source' eliminada (no existe en DB) */}
                   </div>
                 </div>
 
@@ -174,9 +184,10 @@ const TransactionHistory = ({
                 <div className="text-right">
                   <span className={`
                     font-mono font-bold
-                    ${transaction?.type === 'earned' ? 'text-success' : 'text-error'}
+                    ${transaction?.points_change > 0 ? 'text-success' : 'text-error'}
                   `}>
-                    {transaction?.type === 'earned' ? '+' : '-'}{Math.abs(transaction?.points)?.toLocaleString()}
+                    {/* ✅ FIX: Mostrar 'points_change' */}
+                    {transaction?.points_change > 0 ? '+' : ''}{transaction?.points_change?.toLocaleString()}
                   </span>
                   <p className="text-xs text-muted-foreground">puntos</p>
                 </div>
@@ -185,7 +196,8 @@ const TransactionHistory = ({
           </div>
         )}
 
-        {/* Show More Button */}
+        {/* 'Show More' ya no es necesario si quitamos el slice (como en tu captura) */}
+        {/*
         {filteredTransactions?.length > 5 && (
           <div className="text-center mt-6">
             <Button
@@ -201,6 +213,7 @@ const TransactionHistory = ({
             </Button>
           </div>
         )}
+        */}
       </div>
     </div>
   );
