@@ -1,25 +1,88 @@
-// src/services/rewardsService.js
-// (Versión para usar DESPUÉS de actualizar la DB con "reward_redemption")
+// ============================================================================
+// REWARDS SERVICE - Servicio de Recompensas (VERSIÓN COMPLETA Y CORREGIDA)
+// ============================================================================
+// ✅ FIX 1: Sincronizado con la DB real ('is_active', 'cost_free_points', etc.)
+// ✅ FIX 2: Corregida la llamada a 'getUserPoints' (soluciona error 'is not a function')
+// ✅ FIX 3: Usa el 'action_type' = "reward_redemption" (ahora válido en la DB)
+// ✅ FIX 4: Archivo completo para solucionar 'REWARD_CATEGORIES is not defined'
+// ============================================================================
 
 import { supabase } from '../lib/supabase';
-import * as pointsService from './pointsService'; 
+import * as pointsService from './pointsService'; // Importación necesaria
 
-// ... (todas las constantes y funciones de 'getRewardById', etc. van aquí...
-// ... el archivo es idéntico al anterior HASTA la función 'redeemReward') ...
+// ============================================================================
+// CONSTANTES Y CONFIGURACIÓN (¡AHORA INCLUIDAS!)
+// ============================================================================
+
+export const REWARD_CATEGORIES = {
+  DIGITAL: 'digital',
+  PHYSICAL: 'physical',
+  DISCOUNT: 'discount',
+  PREMIUM: 'premium',
+  EXCLUSIVE: 'exclusive',
+  GIFT_CARD: 'gift_card'
+};
+
+/**
+ * Estados de canjes (redenciones)
+ */
+export const REDEMPTION_STATUS = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  DELIVERED: 'delivered',
+  CANCELLED: 'cancelled'
+};
+
+/**
+ * Tipos de puntos que se pueden usar
+ */
+export const POINTS_TYPE = {
+  FREE: 'free',
+  PREMIUM: 'premium'
+};
+
+// ============================================================================
+// FUNCIONES DE CONSULTA
+// ============================================================================
+
+/**
+ * Obtener una recompensa por ID
+ */
+export async function getRewardById(rewardId) {
+  const { data, error } = await supabase
+    .from('rewards')
+    .select(`
+      id, title, is_active, stock_quantity, 
+      cost_free_points, cost_premium_points
+    `)
+    .eq('id', rewardId)
+    .single();
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true, reward: data };
+}
 
 // ============================================================================
 // FUNCIONES DE VALIDACIÓN (CORREGIDA)
 // ============================================================================
 
+/**
+ * Validar si el usuario puede canjear una recompensa
+ */
 export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuario no autenticado');
 
+    // 1. Obtener recompensa
     const rewardResult = await getRewardById(rewardId);
     if (!rewardResult.success) throw new Error('Recompensa no encontrada');
     const reward = rewardResult.reward;
 
+    // 2. Validaciones de estado y stock
     if (reward.is_active !== true) {
       return { success: false, canRedeem: false, reason: 'Esta recompensa no está disponible' };
     }
@@ -27,19 +90,24 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
       return { success: false, canRedeem: false, reason: 'Esta recompensa está agotada' };
     }
 
+    // 3. Obtener balance del usuario (Llamada corregida)
     const balanceResult = await pointsService.getUserPoints(user.id);
     if (!balanceResult) throw new Error('Error obteniendo balance');
 
+    // Lectura de respuesta corregida
     const { free: free_points, premium: premium_points } = balanceResult;
+
 
     let canAfford = false;
     let costDetails = { type: pointsType, cost: 0, available: 0, actualDeduction: 0 };
 
+    // 4. Lógica de Costos (Leyendo los costos explícitos de la DB)
     if (pointsType === POINTS_TYPE.FREE) {
         const requiredFree = reward.cost_free_points;
         if (!requiredFree || requiredFree <= 0) {
             throw new Error('Esta recompensa no se puede canjear con Puntos Gratis');
         }
+        
         costDetails.cost = requiredFree;
         costDetails.available = free_points;
         costDetails.actualDeduction = requiredFree;
@@ -50,6 +118,7 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
         if (!requiredPremium || requiredPremium <= 0) {
             throw new Error('Esta recompensa no se puede canjear con Puntos Premium');
         }
+
         costDetails.cost = requiredPremium;
         costDetails.available = premium_points;
         costDetails.actualDeduction = requiredPremium;
@@ -71,6 +140,9 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
 // FUNCIONES DE CANJE - Redención de Recompensas (CORREGIDA)
 // ============================================================================
 
+/**
+ * Canjear una recompensa con puntos
+ */
 export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, options = {}) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -78,6 +150,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
 
     const { userNotes = '', deliveryAddress = null, contactInfo = null } = options;
 
+    // 1. Validar canje
     const validation = await validateRedemption(rewardId, pointsType);
     if (!validation.canRedeem) {
       return { success: false, error: validation.reason };
@@ -91,7 +164,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         user.id,
         costDetails.actualDeduction, 
         pointsType,                   
-        'reward_redemption', // ✅✅✅ AHORA ESTO FUNCIONARÁ ✅✅✅
+        'reward_redemption', // <-- Ahora usa el tipo correcto
         rewardId                    
     );
 
@@ -138,14 +211,6 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
   }
 }
 
-
-// ... (El resto del archivo 'rewardsService.js' va aquí: 
-// cancelRedemption, getUserRedemptionHistory, isRewardAvailable, y las exportaciones) ...
-
-
-// --- COPIAR DESDE AQUÍ HACIA ABAJO ---
-
-
 /**
  * Cancelar un canje (PENDING) y devolver los puntos.
  */
@@ -161,7 +226,6 @@ export async function cancelRedemption(redemptionId) {
 
 /**
  * Obtener el historial de canjes del usuario actual
- * @returns {Promise<Object>}
  */
 export async function getUserRedemptionHistory() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -217,7 +281,7 @@ export function isRewardAvailable(reward) {
 // ============================================================================
 
 export default {
-  // Constantes
+  // Constantes (¡AHORA INCLUIDAS!)
   REWARD_CATEGORIES,
   REDEMPTION_STATUS,
   POINTS_TYPE,
