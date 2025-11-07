@@ -1,6 +1,6 @@
 // src/pages/points-rewards-store/index.jsx
 // ============================================================================
-// ✅ FIX: Añadido estado para filtros de fecha (dateFilter) y paginación (page).
+// ✅ FIX: Añadido estado para filtros de fecha (dateFilter, customDates) y paginación (page).
 // ✅ FIX: 'loadHistory' ahora carga datos paginados y filtrados.
 // ✅ FIX: Añadida función 'handleLoadMore' para paginación.
 // ============================================================================
@@ -135,9 +135,11 @@ const PointsRewardsStore = () => {
   const [transactionsLoading, setTransactionsLoading] = useState(true);
   
   // ✅ NUEVOS ESTADOS PARA FILTRO Y PAGINACIÓN
-  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month'
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month', 'custom'
   const [page, setPage] = useState(1);
   const [hasMorePages, setHasMorePages] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   
   // Datos simulados (Reemplazar con tus propios hooks si existen)
   const statsLoading = false; 
@@ -148,7 +150,7 @@ const PointsRewardsStore = () => {
   const pageLoading = rewardsLoading || pointsLoading; 
 
   // ✅ FUNCIÓN PARA CARGAR EL HISTORIAL (AHORA CON LÓGICA)
-  const loadHistory = useCallback(async (filter, pageNum, reset = false) => {
+  const loadHistory = useCallback(async (pageNum, reset = false) => {
     if (!user?.id) return;
 
     setTransactionsLoading(true);
@@ -158,13 +160,19 @@ const PointsRewardsStore = () => {
     let endDate = null;
     const now = new Date();
     
-    if (filter === 'today') {
+    if (dateFilter === 'today') {
       startDate = new Date(now.setHours(0, 0, 0, 0));
-    } else if (filter === 'week') {
+    } else if (dateFilter === 'week') {
       const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
       startDate = new Date(firstDayOfWeek.setHours(0, 0, 0, 0));
-    } else if (filter === 'month') {
+    } else if (dateFilter === 'month') {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (dateFilter === 'custom') {
+        if (customStartDate) startDate = new Date(customStartDate);
+        if (customEndDate) {
+            endDate = new Date(customEndDate);
+            endDate.setHours(23, 59, 59, 999); // Asegura que cubra todo el día
+        }
     }
 
     // 2. Llamar al servicio
@@ -186,13 +194,13 @@ const PointsRewardsStore = () => {
     }
     
     setTransactionsLoading(false);
-  }, [user]);
+  }, [user, dateFilter, customStartDate, customEndDate]); // Depende de los filtros
 
-  // ✅ EFECTO PARA CARGAR EL HISTORIAL (se activa con el usuario y el filtro de fecha)
+  // ✅ EFECTO PARA CARGAR EL HISTORIAL (se activa con el usuario y los filtros)
   useEffect(() => {
     setPage(1); // Resetea la página
-    loadHistory(dateFilter, 1, true); // Carga la página 1 y resetea la lista
-  }, [user, dateFilter, loadHistory]);
+    loadHistory(1, true); // Carga la página 1 y resetea la lista
+  }, [user, dateFilter, customStartDate, customEndDate, loadHistory]);
 
   // Filtrado y Asequibilidad (Sin cambios)
   const filteredRewards = useMemo(() => {
@@ -270,7 +278,7 @@ const PointsRewardsStore = () => {
         
         // Refrescar historial también
         setPage(1);
-        loadHistory(dateFilter, 1, true);
+        loadHistory(1, true);
         
         setIsRedemptionModalOpen(false);
         setSelectedReward(null);
@@ -288,7 +296,7 @@ const PointsRewardsStore = () => {
     } finally {
       setRedemptionLoading(false);
     }
-  }, [selectedReward, refreshPoints, refreshRewards, dateFilter, loadHistory]);
+  }, [selectedReward, refreshPoints, refreshRewards, loadHistory]);
 
   const handleWaitlist = (reward) => {
     alert(`Te avisaremos cuando ${reward.title} esté disponible.`);
@@ -310,12 +318,26 @@ const PointsRewardsStore = () => {
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    loadHistory(dateFilter, nextPage, false); // Carga la sig. página sin resetear
+    loadHistory(nextPage, false); // Carga la sig. página sin resetear
   };
   
   const handleDateFilterChange = (newDateFilter) => {
     setPage(1); // Resetea la página
     setDateFilter(newDateFilter); // Esto activará el useEffect para recargar
+    setCustomStartDate('');
+    setCustomEndDate('');
+  };
+
+  const handleCustomStartDateChange = (date) => {
+    setPage(1);
+    setCustomStartDate(date);
+    setDateFilter('custom'); // Cambia a modo personalizado
+  };
+
+  const handleCustomEndDateChange = (date) => {
+    setPage(1);
+    setCustomEndDate(date);
+    setDateFilter('custom'); // Cambia a modo personalizado
   };
 
 
@@ -529,6 +551,11 @@ const PointsRewardsStore = () => {
                         onDateFilterChange={handleDateFilterChange}
                         hasMore={hasMorePages}
                         onLoadMore={handleLoadMore}
+                        // ✅ Pasar los nuevos props para el rango de fechas
+                        startDate={customStartDate}
+                        endDate={customEndDate}
+                        onStartDateChange={handleCustomStartDateChange}
+                        onEndDateChange={handleCustomEndDateChange}
                       />
                     </div>
                   )}
