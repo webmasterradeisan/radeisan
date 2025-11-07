@@ -1,12 +1,8 @@
 // src/pages/points-rewards-store/components/TransactionHistory.jsx
 // ============================================================================
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
-//    - 'points' -> 'points_change'
-//    - 'type' -> 'points_change > 0' (para 'earned'/'spent')
-//    - 'date' -> 'created_at'
-//    - 'category' -> 'transaction_type'
 // ✅ FIX: Añadida función 'getTransactionTitle' para traducir 'other'
-//    a "Canje de Recompensa" o "Puntos Devueltos".
+// ✅ FIX 3: Corregido el typo en la etiqueta de cierre </Button>
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -20,7 +16,7 @@ const TransactionHistory = ({
   const [filter, setFilter] = useState('all'); // all, earned, spent
   const [isExpanded, setIsExpanded] = useState(false); // Estado para "Ver más"
 
-  // ✅ FIX: Filtrar usando 'points_change'
+  // Filtrar usando 'points_change'
   const filteredTransactions = transactions?.filter(transaction => {
     if (filter === 'earned') return transaction?.points_change > 0;
     if (filter === 'spent') return transaction?.points_change < 0;
@@ -32,29 +28,34 @@ const TransactionHistory = ({
     filteredTransactions : 
     filteredTransactions?.slice(0, 5); // Muestra solo los primeros 5
 
-  // ✅ FIX: Función para 'traducir' el título de la transacción
+  // Función para 'traducir' el título de la transacción
   const getTransactionTitle = (transaction) => {
     const type = transaction?.transaction_type;
     const desc = transaction?.description;
     const points = transaction?.points_change;
 
     // Si la descripción es útil (ej: "Comentar"), la usamos
-    if (desc && desc !== 'other') {
+    if (desc && desc !== 'other' && desc !== type) {
       return desc;
     }
 
     // Si la descripción es 'other' o nula, traducimos el transaction_type
     if (type === 'other') {
-      if (points < 0) return 'Canje de Recompensa'; // Esto es 'other' con puntos negativos
-      if (points > 0) return 'Puntos Devueltos'; // Esto es 'other' con puntos positivos (reversión)
+      if (points < 0) return 'Canje de Recompensa'; // 'other' con puntos negativos
+      if (points > 0) return 'Puntos Devueltos'; // 'other' con puntos positivos (reversión)
     }
     if (type === 'video_like') return 'Like en video';
     if (type === 'admin_adjustment') return 'Ajuste de Administrador';
     
+    // Fallback para otros tipos de la DB que puedan no tener descripción
+    if (type === 'video_view') return 'Vista en video';
+    if (type === 'comment') return 'Comentario';
+    if (type === 'share') return 'Compartir contenido';
+    
     return type || 'Transacción'; // Fallback
   };
 
-  // ✅ FIX: Icono basado en 'transaction_type' y 'points_change'
+  // Icono basado en 'transaction_type' y 'points_change'
   const getTransactionIcon = (transaction) => {
     const type = transaction?.transaction_type;
     const points = transaction?.points_change;
@@ -63,17 +64,15 @@ const TransactionHistory = ({
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
     if (type === 'video_like') return 'Heart';
     if (type === 'admin_adjustment') return 'User';
+    if (type === 'video_view') return 'Play';
+    if (type === 'comment') return 'MessageCircle';
+    if (type === 'share') return 'Share2';
     
-    // Fallback para otros tipos de la DB
-    if (transaction?.description?.includes('Comentar')) return 'MessageCircle';
-    if (transaction?.description?.includes('video')) return 'Play';
-    if (transaction?.description?.includes('Dar me gusta')) return 'Heart';
-
     // Icono por defecto
     return (points > 0) ? 'Plus' : 'Minus';
   };
 
-  // ✅ FIX: Color basado en 'points_change'
+  // Color basado en 'points_change'
   const getTransactionColor = (transaction) => {
     return transaction?.points_change > 0 ? 'var(--color-success)' : 'var(--color-error)';
   };
@@ -98,7 +97,7 @@ const TransactionHistory = ({
     });
   };
 
-  // ✅ FIX: Totales basados en 'points_change'
+  // Totales basados en 'points_change'
   const totalEarned = transactions
     ?.filter(t => t?.points_change > 0)
     ?.reduce((sum, t) => sum + (t?.points_change || 0), 0);
@@ -166,7 +165,7 @@ const TransactionHistory = ({
             iconPosition="left"
           >
             Canjeados
-          Button>
+          </Button> {/* ✅✅✅ FIX AQUÍ: Corregida la etiqueta de cierre */}
         </div>
       </div>
       {/* Transaction List */}
@@ -199,12 +198,10 @@ const TransactionHistory = ({
                 {/* Details */}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-foreground truncate">
-                    {/* ✅ FIX: Usar la nueva función de título */}
                     {getTransactionTitle(transaction)}
                   </h3>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-sm text-muted-foreground">
-                      {/* ✅ FIX: Formatear 'created_at' */}
                       {formatDate(transaction?.created_at)}
                     </span>
                   </div>
@@ -216,7 +213,6 @@ const TransactionHistory = ({
                     font-mono font-bold
                     ${transaction?.points_change > 0 ? 'text-success' : 'text-error'}
                   `}>
-                    {/* ✅ FIX: Mostrar 'points_change' */}
                     {transaction?.points_change > 0 ? '+' : ''}{transaction?.points_change?.toLocaleString()}
                   </span>
                   <p className="text-xs text-muted-foreground">puntos</p>
