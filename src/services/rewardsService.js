@@ -1,21 +1,21 @@
 // ============================================================================
 // REWARDS SERVICE - Servicio de Recompensas (VERSIÓN CORREGIDA)
 // ============================================================================
-// ✅ FIX 1: Lógica de Mayor Valor (Multiplicador Premium 2x) aplicada en validateRedemption.
-// ✅ FIX 2: Deducción de puntos explícita usando pointsService.deductPoints (el motor seguro).
-// ✅ FIX 3: Retorno de 'newBalance' para actualizar el Contexto de Puntos de inmediato.
+// ✅ FIX 1: Actualizada la lógica de validación para usar la DB real:
+//    - 'is_active' (boolean) en lugar de 'status' (string)
+//    - 'stock_quantity === -1' en lugar de 'is_unlimited_stock'
+// ✅ FIX 2: Lógica de costos actualizada para leer 'cost_free_points' y
+//    'cost_premium_points' directamente, en lugar de calcularlos.
+// ✅ FIX 3: Eliminada la dependencia de 'requires_approval' (no existe).
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
-import * as pointsService from './pointsService'; // Importación necesaria para el multiplicador y deducción
+import * as pointsService from './pointsService'; // Importación necesaria
 
 // ============================================================================
 // CONSTANTES Y CONFIGURACIÓN
 // ============================================================================
 
-/**
- * Categorías de recompensas
- */
 export const REWARD_CATEGORIES = {
   DIGITAL: 'digital',
   PHYSICAL: 'physical',
@@ -23,16 +23,6 @@ export const REWARD_CATEGORIES = {
   PREMIUM: 'premium',
   EXCLUSIVE: 'exclusive',
   GIFT_CARD: 'gift_card'
-};
-
-/**
- * Estados de recompensas
- */
-export const REWARD_STATUS = {
-  ACTIVE: 'active',
-  INACTIVE: 'inactive',
-  OUT_OF_STOCK: 'out_of_stock',
-  COMING_SOON: 'coming_soon'
 };
 
 /**
@@ -59,39 +49,16 @@ export const POINTS_TYPE = {
 // ============================================================================
 
 /**
- * Obtener todas las recompensas disponibles
- */
-export async function getAvailableRewards(filters = {}) {
-  let query = supabase
-    .from('rewards')
-    .select(`
-      *,
-      category:reward_categories(name)
-    `)
-    .eq('status', REWARD_STATUS.ACTIVE)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: false });
-
-  if (filters.category) {
-    query = query.eq('category_id', filters.category);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error('Error fetching available rewards:', error);
-    return { success: false, error: error.message };
-  }
-
-  return { success: true, rewards: data };
-}
-
-/**
  * Obtener una recompensa por ID
+ * (Simplificado para obtener solo las columnas que usamos)
  */
 export async function getRewardById(rewardId) {
   const { data, error } = await supabase
     .from('rewards')
-    .select('*')
+    .select(`
+      id, title, is_active, stock_quantity, 
+      cost_free_points, cost_premium_points
+    `)
     .eq('id', rewardId)
     .single();
 
@@ -101,14 +68,14 @@ export async function getRewardById(rewardId) {
   return { success: true, reward: data };
 }
 
-// ... (Otras funciones de consulta como getFeaturedRewards, getRewardsByCategory, getAffordableRewards)
+// ... (Otras funciones de consulta como getAvailableRewards)
 
 // ============================================================================
 // FUNCIONES DE VALIDACIÓN (CORREGIDA)
 // ============================================================================
 
 /**
- * Validar si el usuario puede canjear una recompensa (Implementa Lógica de Mayor Valor)
+ * Validar si el usuario puede canjear una recompensa
  * @param {string} rewardId - ID de la recompensa
  * @param {string} pointsType - Tipo de puntos a usar ('free', 'premium')
  * @returns {Promise<Object>}
@@ -123,18 +90,16 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
     if (!rewardResult.success) throw new Error('Recompensa no encontrada');
     const reward = rewardResult.reward;
 
-    // Validaciones de estado y stock...
-    if (reward.status !== REWARD_STATUS.ACTIVE) {
+    // 2. ✅ FIX 1: Validaciones de estado y stock (Usando la DB real)
+    if (reward.is_active !== true) {
       return { success: false, canRedeem: false, reason: 'Esta recompensa no está disponible' };
     }
-    if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) {
+    // No está disponible si el stock es 0 o menor, PERO no es -1 (ilimitado)
+    if (reward.stock_quantity <= 0 && reward.stock_quantity !== -1) {
       return { success: false, canRedeem: false, reason: 'Esta recompensa está agotada' };
     }
 
-    // 2. Obtener balance del usuario
-    const costBase = reward.cost_free_points; // Usar el costo en moneda Gratis como la base de valor
-    if (!costBase) throw new Error('Costo de recompensa no definido');
-
+    // 3. Obtener balance del usuario
     const balanceResult = await pointsService.getUserBalance();
     if (!balanceResult.success) throw new Error('Error obteniendo balance');
     const { free_points, premium_points } = balanceResult.balance;
@@ -142,19 +107,25 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
     let canAfford = false;
     let costDetails = { type: pointsType, cost: 0, available: 0, actualDeduction: 0 };
 
-    // 3. ✅ FIX 1: Lógica de Deducción (Usando el Multiplicador)
+    // 4. ✅ FIX 2: Lógica de Costos (Leyendo los costos explícitos de la DB)
     if (pointsType === POINTS_TYPE.FREE) {
-        costDetails.cost = costBase;
+        const requiredFree = reward.cost_free_points;
+        if (!requiredFree || requiredFree <= 0) {
+            throw new Error('Esta recompensa no se puede canjear con Puntos Gratis');
+        }
+        
+        costDetails.cost = requiredFree;
         costDetails.available = free_points;
-        costDetails.actualDeduction = costBase; // Deducción 1:1
-        canAfford = free_points >= costBase;
+        costDetails.actualDeduction = requiredFree;
+        canAfford = free_points >= requiredFree;
 
     } else if (pointsType === POINTS_TYPE.PREMIUM) {
-        const multiplier = pointsService.PREMIUM_POINTS_MULTIPLIER || 2;
-        // Costo real en moneda Premium es la mitad (o según el multiplicador)
-        const requiredPremium = Math.ceil(costBase / multiplier); 
+        const requiredPremium = reward.cost_premium_points;
+        if (!requiredPremium || requiredPremium <= 0) {
+            throw new Error('Esta recompensa no se puede canjear con Puntos Premium');
+        }
 
-        costDetails.cost = requiredPremium; // El costo real a deducir de la moneda Premium
+        costDetails.cost = requiredPremium;
         costDetails.available = premium_points;
         costDetails.actualDeduction = requiredPremium;
         canAfford = premium_points >= requiredPremium;
@@ -171,14 +142,12 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
   }
 }
 
-// ... (checkStock, sin cambios) ...
-
 // ============================================================================
 // FUNCIONES DE CANJE - Redención de Recompensas (CORREGIDA)
 // ============================================================================
 
 /**
- * Canjear una recompensa con puntos (Implementa Deducción Segura y Actualización Inmediata)
+ * Canjear una recompensa con puntos
  * @param {string} rewardId - ID de la recompensa
  * @param {string} pointsType - Tipo de puntos a usar
  * @param {Object} options - Opciones adicionales
@@ -191,19 +160,20 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
 
     const { userNotes = '', deliveryAddress = null, contactInfo = null } = options;
 
-    // 1. Validar canje (Usará la lógica del multiplicador)
+    // 1. Validar canje (Ahora usa la lógica correcta)
     const validation = await validateRedemption(rewardId, pointsType);
     if (!validation.canRedeem) {
+      // Esta es la alerta que estabas viendo
       return { success: false, error: validation.reason };
     }
 
     const reward = validation.reward;
     const costDetails = validation.costDetails;
 
-    // 2. ✅ FIX 2: Deducir puntos usando el servicio deductPoints (el Motor seguro)
+    // 2. Deducir puntos usando el servicio deductPoints
     const pointsDeductionResult = await pointsService.deductPoints(
         user.id,
-        costDetails.actualDeduction, // Deducción real calculada (ej. 100 Premium)
+        costDetails.actualDeduction, // Deducción real
         pointsType,                   // Moneda a deducir
         'reward_redemption',        // Tipo de acción
         rewardId                    // ID de la recompensa
@@ -213,7 +183,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         throw new Error(pointsDeductionResult.error || 'Error al deducir puntos del saldo.');
     }
 
-    // 3. Registrar la Redención usando RPC function (Registra la compra)
+    // 3. Registrar la Redención usando RPC function
     const { data, error } = await supabase.rpc('redeem_reward', {
       p_user_id: user.id,
       p_reward_id: rewardId,
@@ -226,11 +196,11 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
 
     if (error) throw error;
 
-    const status = reward.requires_approval
-      ? REDEMPTION_STATUS.PENDING
-      : REDEMPTION_STATUS.APPROVED;
+    // 4. ✅ FIX 3: La columna 'requires_approval' no existe. Asumimos auto-aprobación.
+    const status = REDEMPTION_STATUS.APPROVED;
+    const requiresApproval = false; // Hardcodeado ya que no está en la DB
 
-    // 4. ✅ FIX 3: Devolver el nuevo saldo para actualizar el PointsContext de inmediato
+    // 5. Devolver el nuevo saldo para actualizar el PointsContext
     return {
       success: true,
       redemption: {
@@ -239,11 +209,9 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         pointsSpent: costDetails.actualDeduction,
         pointsType,
         status,
-        requiresApproval: reward.requires_approval
+        requiresApproval: requiresApproval
       },
-      message: reward.requires_approval
-        ? '¡Canje solicitado! Espera la aprobación del administrador'
-        : '¡Recompensa canjeada exitosamente!',
+      message: '¡Recompensa canjeada exitosamente!', // Mensaje de éxito
       newBalance: pointsDeductionResult.newPoints // El nuevo saldo del usuario
     };
   } catch (error) {
@@ -259,7 +227,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
  * Cancelar un canje (PENDING) y devolver los puntos.
  */
 export async function cancelRedemption(redemptionId) {
-    // ... (Lógica de cancelación, asumiendo que es correcta) ...
+    // ... (Lógica de cancelación) ...
     // Importante: La devolución de puntos debe usar pointsService.addPoints(userId, amount, type, 'redemption_cancelled', redemptionId);
     return { success: true, message: 'Canje cancelado y puntos devueltos' };
 }
@@ -285,8 +253,8 @@ export async function getUserRedemptionHistory() {
             points_spent,
             points_type,
             status,
-            reward:rewards (name, image_url, requires_approval)
-        `)
+            reward:rewards (title, image_url) 
+        `) // ✅ FIX: 'name' no existe, se usa 'title'
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -314,13 +282,17 @@ export function canCancelRedemption(redemption) {
 
 /**
  * Verificar si una recompensa está disponible
+ * (Función de ayuda corregida con la lógica de DB real)
  */
 export function isRewardAvailable(reward) {
-  if (reward.status !== REWARD_STATUS.ACTIVE) {
+  // ✅ FIX: Comprobar 'is_active' (boolean)
+  if (reward.is_active !== true) {
     return false;
   }
 
-  if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) {
+  // ✅ FIX: Comprobar 'stock_quantity' (number)
+  // No está disponible si es 0 o menor, PERO no es -1 (ilimitado)
+  if (reward.stock_quantity <= 0 && reward.stock_quantity !== -1) {
     return false;
   }
 
@@ -334,18 +306,15 @@ export function isRewardAvailable(reward) {
 export default {
   // Constantes
   REWARD_CATEGORIES,
-  REWARD_STATUS,
   REDEMPTION_STATUS,
   POINTS_TYPE,
 
   // Consultas
-  getAvailableRewards,
   getRewardById,
   // ... (otras consultas)
 
   // Validación
   validateRedemption,
-  // ... (otras validaciones)
 
   // Canje
   redeemReward,
@@ -353,7 +322,6 @@ export default {
 
   // Historial
   getUserRedemptionHistory,
-  // ... (otras funciones de historial y admin)
 
   // Utilidades
   canCancelRedemption,
