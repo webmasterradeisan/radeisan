@@ -1,4 +1,9 @@
-// src/pages/points-rewards-store/index.jsx (Versión Final y Estable)
+// src/pages/points-rewards-store/index.jsx (Versión Final y Corregida)
+// ✅ FIX: Sincronizado el hook 'useRewards' con la estructura real de la
+//    tabla 'rewards' (usando 'title', 'points_cost', 'points_type', etc.)
+// ✅ FIX: Asegurada la lógica de 'isAvailable' para 'stock_quantity = -1'
+// ============================================================================
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,6 +39,7 @@ const VIEW_MODES = { GRID: 'grid', LIST: 'list' };
 // HOOKS PERSONALIZADOS
 // ===============================
 
+// ✅✅✅ HOOK CORREGIDO ✅✅✅
 // Hook para manejar recompensas con datos reales de Supabase
 const useRewards = () => {
   const [rewards, setRewards] = useState([]);
@@ -43,28 +49,43 @@ const useRewards = () => {
   const fetchRewards = useCallback(async (filters = {}) => {
     try {
       setLoading(true); setError(null);
+      // 1. La consulta base está bien
       let query = supabase.from('rewards').select('*').eq('is_active', true).order('is_featured', { ascending: false }).order('created_at', { ascending: false });
       
       // Aplicar filtros (si existen)
       if (filters.category && filters.category !== 'all') { query = query.eq('category', filters.category); }
       if (filters.searchQuery) { query = query.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`); }
-      // ... más lógica de filtrado si es necesaria
       
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
+      // 2. ✅✅✅ LA TRANSFORMACIÓN DE DATOS HA SIDO CORREGIDA ✅✅✅
+      // Mapeamos los datos de la DB (r) a los datos de la UI (lo que espera RewardCard)
       const transformedRewards = data?.map(r => ({
-        id: r.id, title: r.name, description: r.description, 
+        id: r.id, 
+        title: r.title, // ✅ FIX: Leer 'title' (DB)
+        description: r.description, 
         image: r.image_url || 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400',
-        cost_free_points: r.cost_free_points, 
-        cost_premium_points: r.cost_premium_points,
-        pointsCost: r.points_cost || r.cost_free_points || r.cost_premium_points,
-        stock: r.stock_quantity, 
-        isAvailable: r.stock_quantity === -1 || r.stock_quantity > 0, // -1 significa stock ilimitado
-        category: r.category_name || 'General', 
-        categoryIcon: r.category_icon || 'Star',
-        isExclusive: r.is_exclusive, 
-        isPopular: r.is_popular,
+        
+        // ✅ FIX: Recrear la lógica de costos duales
+        cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
+        cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
+        
+        // Costo genérico (para ordenar)
+        pointsCost: r.points_cost || 0,
+        
+        stock: r.stock_quantity, // Columna real de stock
+        
+        // ✅ FIX: Lógica de disponibilidad (la que tenías era correcta, la mantenemos)
+        isAvailable: r.stock_quantity === -1 || r.stock_quantity > 0, // -1 es ilimitado
+        
+        category: r.category || 'General', // ✅ FIX: Leer 'category'
+        
+        // Valores hardcodeados (ya que estas columnas no existen en tu tabla)
+        categoryIcon: 'Star',
+        isExclusive: false, 
+        isPopular: false,
+        
         isFeatured: r.is_featured,
       })) || [];
 
@@ -104,7 +125,7 @@ const PointsRewardsStore = () => {
     loading: rewardsLoading, 
     error: rewardsError, 
     refresh: refreshRewards 
-  } = useRewards();
+  } = useRewards(); // Este hook ahora devuelve los datos correctos
   
   const [selectedReward, setSelectedReward] = useState(null);
   const [isRedemptionModalOpen, setIsRedemptionModalOpen] = useState(false);
@@ -171,7 +192,8 @@ const PointsRewardsStore = () => {
       const requiredFree = reward.cost_free_points || 0;
       const requiredPremium = reward.cost_premium_points || 0;
       // Puede costearlo si tiene los puntos GRATIS o los PREMIUM (ya que no se usan juntos)
-      const canAfford = (freePoints >= requiredFree) || (premiumPoints >= requiredPremium);
+      // ✅ Esta lógica ahora funciona porque 'cost_free_points' se calcula correctamente
+      const canAfford = (freePoints >= requiredFree && requiredFree > 0) || (premiumPoints >= requiredPremium && requiredPremium > 0);
       return canAfford;
     });
   }, [filteredRewards, freePoints, premiumPoints, pointsLoading]);
