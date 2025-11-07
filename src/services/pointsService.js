@@ -123,7 +123,7 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
       premium_change = amount;
     }
 
-    // ✅✅✅ ESTA ES LA PARTE IMPORTANTE ✅✅✅
+    // ✅ ESTA ES LA PARTE IMPORTANTE
     // El objeto de parámetros ahora coincide 100% con el SQL
     const rpcParams = {
       p_user_id: userId,
@@ -153,7 +153,6 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
 
 export const addPoints = async (userId, amount, type, actionType, referenceId = null) => {
     try {
-        // 'actionType' se pasa a updatePointsBalance
         const balanceResult = await updatePointsBalance(userId, amount, type, actionType, referenceId);
         return { 
             success: true, 
@@ -169,7 +168,6 @@ export const addPoints = async (userId, amount, type, actionType, referenceId = 
 
 export const deductPoints = async (userId, amount, type, actionType, referenceId = null) => {
     try {
-        // 'actionType' se pasa a updatePointsBalance
         const balanceResult = await updatePointsBalance(userId, -amount, type, actionType, referenceId);
         return { 
             success: true, 
