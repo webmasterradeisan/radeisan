@@ -1,9 +1,10 @@
 // ============================================================================
 // REWARDS SERVICE - Servicio de Recompensas (VERSIÓN FINAL)
 // ============================================================================
-// ✅ FIX 6 (FINAL): Eliminada la llamada al RPC 'redeem_reward' (que no existe)
-//    y reemplazada por una inserción directa en 'reward_redemptions'
-// ✅ FIX 7: Corregido error de sintaxis en 'console.error' (comillas anidadas).
+// ✅ FIX 7: Eliminada la columna 'processed_at' (que no existe) del
+//    'insert' en 'reward_redemptions'.
+// ✅ FIX 8: Corregido el 'action_type' en la lógica de REVERSIÓN a "other"
+//    para que los puntos SÍ se devuelvan si el canje falla.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -142,7 +143,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuario no autenticado');
 
-    const { userNotes = '' } = options; // Solo tomamos userNotes
+    const { userNotes = '' } = options;
 
     // 1. Validar canje
     const validation = await validateRedemption(rewardId, pointsType);
@@ -153,12 +154,12 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const reward = validation.reward;
     const costDetails = validation.costDetails;
 
-    // 2. Deducir puntos (Esto llama a 'update_user_points' y funciona)
+    // 2. Deducir puntos
     const pointsDeductionResult = await pointsService.deductPoints(
         user.id,
         costDetails.actualDeduction, 
         pointsType,                   
-        'other', 
+        'other', // Usamos 'other' para el canje
         rewardId                    
     );
 
@@ -166,8 +167,8 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         throw new Error(pointsDeductionResult.error || 'Error al deducir puntos del saldo.');
     }
 
-    // 3. Registrar la Redención usando INSERT (no RPC)
-    const status = REDEMPTION_STATUS.APPROVED; // Asumimos auto-aprobación
+    // 3. Registrar la Redención usando INSERT
+    const status = REDEMPTION_STATUS.APPROVED;
     
     const { data: redemptionData, error: insertError } = await supabase
       .from('reward_redemptions')
@@ -177,21 +178,22 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         points_spent: costDetails.actualDeduction,
         points_type: pointsType,
         status: status,
-        user_notes: userNotes,
-        processed_at: new Date().toISOString()
+        user_notes: userNotes
+        // ✅ FIX: 'processed_at' eliminado porque no existe en tu tabla
       })
-      .select('id') // Pedimos que nos devuelva el ID de la fila creada
+      .select('id')
       .single();
 
     if (insertError) {
       // Si falla, intentamos devolver los puntos al usuario
-      // ✅✅✅ FIX AQUÍ: Corregidas las comillas simples anidadas
       console.error("Error insertando 'reward_redemptions', revirtiendo puntos...", insertError);
+      
+      // ✅ FIX: Usamos 'other' para la reversión
       await pointsService.addPoints(
           user.id, 
           costDetails.actualDeduction, 
           pointsType, 
-          'reversal_failed_redemption', 
+          'other', // Usamos 'other' para la reversión
           rewardId
       );
       throw new Error('Error al registrar el canje. Tus puntos han sido devueltos.');
@@ -201,7 +203,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     return {
       success: true,
       redemption: {
-        id: redemptionData.id, // ID de la redención real
+        id: redemptionData.id,
         reward,
         pointsSpent: costDetails.actualDeduction,
         pointsType,
