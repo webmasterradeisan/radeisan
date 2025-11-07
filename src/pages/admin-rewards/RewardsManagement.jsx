@@ -2,8 +2,8 @@
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
 // ✅ Integración completa con la tabla 'rewards' (21 columnas)
-// ✅ FIX: Eliminada toda referencia a la columna 'metadata' que no existe
-//    en la base de datos del usuario.
+// ✅ FIX: Eliminada toda referencia a la columna 'metadata'
+// ✅ FIX 2: Corregido typo 'catch (err)_' en la función 'updateRedemptionStatus'
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -106,7 +106,7 @@ export default function RewardsManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingReward, setEditingReward] = useState(null);
   
-  // ✅ ESTADO DEL MODAL (Sincronizado con todas las columnas de la DB)
+  // Estado del modal
   const [modalData, setModalData] = useState({
     name: '', // Mapea a 'title'
     description: '',
@@ -137,8 +137,6 @@ export default function RewardsManagement() {
     // Vigencia (Nuevos campos)
     valid_from: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
     valid_until: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
-    
-    // ✅ FIX: 'metadata' eliminado
   });
 
   // Modal de detalles de canje
@@ -183,22 +181,15 @@ export default function RewardsManagement() {
 
       if (rewardsError) throw rewardsError;
       
-      // ✅ FIX: Mapear los datos de la DB a los inputs del modal (Incluyendo los nuevos)
       const mappedRewards = rewardsData?.map(r => ({
           ...r,
-          // Mapeamos 'title' de la DB a 'name' (que usa el resto del componente)
           name: r.title, 
-          // Mapeamos points_cost según el points_type
           cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
           cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
-          // Mapeamos stock quantity
           is_unlimited_stock: r.stock_quantity === -1,
-          stock_quantity_ui: r.stock_quantity === -1 ? 0 : r.stock_quantity, // Valor para el input
-          // Mapeamos is_active (DB) al 'status' de la UI
+          stock_quantity_ui: r.stock_quantity === -1 ? 0 : r.stock_quantity, 
           status: r.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE,
-          // Mapeamos instructions
           instructions: r.redemption_instructions || '',
-          // ✅ NUEVO: Mapear fechas para el input datetime-local
           valid_from_ui: formatISOToDateTimeLocal(r.valid_from),
           valid_until_ui: formatISOToDateTimeLocal(r.valid_until)
       })) || [];
@@ -214,8 +205,6 @@ export default function RewardsManagement() {
 
       if (redemptionsError) throw redemptionsError;
 
-      // Simplificado: Enriquecer los canjes con la info de usuario y reward
-      // TODO: Hacer el join real en el futuro
       const enrichedRedemptions = redemptionsData?.map(r => ({ ...r, user: { full_name: 'Usuario' }, reward: { name: 'Recompensa' } })) || [];
       setRedemptions(enrichedRedemptions);
 
@@ -243,7 +232,6 @@ export default function RewardsManagement() {
 
   const openCreateModal = () => {
     setEditingReward(null);
-    // ✅ ACTUALIZADO: Estado inicial con TODOS los campos
     setModalData({
       name: '', 
       description: '', 
@@ -254,23 +242,21 @@ export default function RewardsManagement() {
       is_unlimited_stock: false, 
       image_url: '', 
       instructions: '', 
-      terms_conditions: '', // ✅ NUEVO
+      terms_conditions: '',
       status: REWARD_STATUS_UI.ACTIVE, 
       is_featured: false, 
-      min_level_required: 0, // ✅ NUEVO
-      max_per_user: 0, // ✅ NUEVO
-      valid_from: '', // ✅ NUEVO
-      valid_until: '', // ✅ NUEVO
-      // ✅ FIX: 'metadata' eliminado
+      min_level_required: 0,
+      max_per_user: 0,
+      valid_from: '',
+      valid_until: '',
     });
     setShowModal(true);
   };
 
   const openEditModal = (reward) => {
     setEditingReward(reward);
-    // ✅ ACTUALIZADO: Cargar TODOS los campos desde la DB
     setModalData({
-      name: reward.title, // Mapear 'title' de DB
+      name: reward.title,
       description: reward.description,
       category: reward.category,
       
@@ -281,19 +267,17 @@ export default function RewardsManagement() {
       is_unlimited_stock: reward.is_unlimited_stock,
       
       image_url: reward.image_url || '', 
-      instructions: reward.redemption_instructions || '', // Mapear 'redemption_instructions'
-      terms_conditions: reward.terms_conditions || '', // ✅ NUEVO
+      instructions: reward.redemption_instructions || '',
+      terms_conditions: reward.terms_conditions || '',
       
-      status: reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE, // Mapear 'is_active'
+      status: reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE,
       is_featured: reward.is_featured, 
       
-      min_level_required: reward.min_level_required || 0, // ✅ NUEVO
-      max_per_user: reward.max_per_user || 0, // ✅ NUEVO
+      min_level_required: reward.min_level_required || 0,
+      max_per_user: reward.max_per_user || 0,
       
-      valid_from: reward.valid_from_ui, // ✅ NUEVO (usa el valor formateado)
-      valid_until: reward.valid_until_ui, // ✅ NUEVO (usa el valor formateado)
-
-      // ✅ FIX: 'metadata' eliminado
+      valid_from: reward.valid_from_ui,
+      valid_until: reward.valid_until_ui,
     });
     setShowModal(true);
   };
@@ -302,9 +286,8 @@ export default function RewardsManagement() {
     try {
       setSaving(true);
       setError(null);
-      setSuccessMessage(null); // Limpiar mensajes antiguos
+      setSuccessMessage(null);
 
-      // 1. Validaciones
       if (!modalData.name || !modalData.name.trim()) {
         throw new Error('El nombre es requerido'); 
       }
@@ -312,7 +295,6 @@ export default function RewardsManagement() {
         throw new Error('Debe definir al menos un costo en puntos');
       }
 
-      // 2. Determinar el costo y tipo de punto REAL (Columna única)
       let finalCost = 0;
       let finalType = 'free';
 
@@ -324,49 +306,34 @@ export default function RewardsManagement() {
           finalType = 'free';
       }
       
-      // 3. ✅ ACTUALIZADO: Preparar los datos para la DB (USANDO TODAS LAS COLUMNAS)
       const rewardDataForDB = {
-        title: modalData.name, // Mapear 'name' a 'title'
+        title: modalData.name,
         description: modalData.description,
         category: modalData.category,
         
-        // Costos
         points_cost: finalCost,
         points_type: finalType,
         
-        // Stock
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
         
         image_url: modalData.image_url,
         
-        // Textos
-        redemption_instructions: modalData.instructions, // Mapear 'instructions'
-        terms_conditions: modalData.terms_conditions, // ✅ NUEVO
+        redemption_instructions: modalData.instructions,
+        terms_conditions: modalData.terms_conditions,
         
-        // Banderas
-        is_active: modalData.status === REWARD_STATUS_UI.ACTIVE, // Mapear 'status'
+        is_active: modalData.status === REWARD_STATUS_UI.ACTIVE,
         is_featured: modalData.is_featured,
 
-        // Reglas
-        min_level_required: parseInt(modalData.min_level_required) || 0, // ✅ NUEVO
-        max_per_user: parseInt(modalData.max_per_user) || 0, // ✅ NUEVO
+        min_level_required: parseInt(modalData.min_level_required) || 0,
+        max_per_user: parseInt(modalData.max_per_user) || 0,
         
-        // Vigencia
-        valid_from: formatDateTimeLocalToISO(modalData.valid_from), // ✅ NUEVO
-        valid_until: formatDateTimeLocalToISO(modalData.valid_until), // ✅ NUEVO
-
-        // ✅ FIX: 'metadata' eliminado
+        valid_from: formatDateTimeLocalToISO(modalData.valid_from),
+        valid_until: formatDateTimeLocalToISO(modalData.valid_until),
         
         updated_at: new Date().toISOString()
-        
-        // Campos omitidos intencionalmente (no deben editarse aquí):
-        // reward_type: (requiere más lógica de UI)
-        // reward_value: (requiere más lógica de UI)
-        // redeemed_count: (es un contador automático)
       };
 
       if (editingReward) {
-        // 4. Actualizar
         const { error: updateError } = await supabase
           .from('rewards')
           .update(rewardDataForDB) 
@@ -375,7 +342,6 @@ export default function RewardsManagement() {
         if (updateError) throw updateError;
         setSuccessMessage('Recompensa actualizada exitosamente');
       } else {
-        // 5. Crear
         const { error: insertError } = await supabase
           .from('rewards')
           .insert({
@@ -392,7 +358,7 @@ export default function RewardsManagement() {
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error('Error guardando recompensa:', err);
-      setError(err.message); // Mostrar el error en la UI
+      setError(err.message);
     } finally {
       setSaving(false);
     }
@@ -462,7 +428,7 @@ export default function RewardsManagement() {
       setShowRedemptionModal(false);
       await loadData();
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err)_ {
+    } catch (err) { // ✅✅✅ ¡FIX AQUÍ! Se eliminó el guion bajo "_"
       console.error('Error actualizando canje:', err); setError(err.message);
     } finally { setSaving(false); }
   };
@@ -567,7 +533,6 @@ export default function RewardsManagement() {
           </button>
         </div>
 
-        {/* El error se mostrará aquí cuando el estado 'error' se actualice */}
         {successMessage && ( <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-sm text-green-800"> <AppIcon name="CheckCircle" className="w-4 h-4" /> {successMessage} </div> )}
         {error && ( <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-800"> <AppIcon name="AlertCircle" className="w-4 h-4" /> {error} </div> )}
       </div>
@@ -656,7 +621,7 @@ export default function RewardsManagement() {
         </div>
       </div>
 
-      {/* Modal: Crear/Editar Recompensa (ACTUALIZADO) */}
+      {/* Modal: Crear/Editar Recompensa */}
       {showModal && (
         <RewardModal
           isEditing={!!editingReward}
@@ -792,8 +757,7 @@ function RewardCard({
 }
 
 /**
- * ✅ MODAL ACTUALIZADO
- * Modal de crear/editar recompensa (con todos los campos)
+ * Modal de crear/editar recompensa
  */
 function RewardModal({ 
   isEditing, data, onChange, onSave, onClose, saving, getCategoryLabel, getCategoryIcon
@@ -852,7 +816,7 @@ function RewardModal({
             
             <hr/>
             
-            {/* ✅ NUEVO: Reglas */}
+            {/* Reglas */}
             <h3 className="text-lg font-medium text-gray-900 pt-2"> Reglas de Canje </h3>
             <div className="grid grid-cols-2 gap-4">
               <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Nivel Mínimo Requerido </label>
@@ -863,7 +827,7 @@ function RewardModal({
               </div>
             </div>
 
-            {/* ✅ NUEVO: Vigencia */}
+            {/* Vigencia */}
             <div className="grid grid-cols-2 gap-4">
               <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Válido Desde (Opcional) </label>
                 <input type="datetime-local" value={data.valid_from} onChange={(e) => onChange({ ...data, valid_from: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -885,7 +849,7 @@ function RewardModal({
               <textarea value={data.instructions} onChange={(e) => onChange({ ...data, instructions: e.target.value })} rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cómo canjear esta recompensa..." />
             </div>
 
-            {/* ✅ NUEVO: Términos y Condiciones */}
+            {/* Términos y Condiciones */}
             <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Términos y Condiciones </label>
               <textarea value={data.terms_conditions} onChange={(e) => onChange({ ...data, terms_conditions: e.target.value })} rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Términos y condiciones de esta recompensa..." />
             </div>
