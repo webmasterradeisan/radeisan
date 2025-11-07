@@ -1,12 +1,9 @@
 // ============================================================================
-// REWARDS MANAGEMENT - Gestión de Recompensas
+// REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN CORREGIDA)
 // ============================================================================
-// Componente de administración para gestionar el catálogo de recompensas:
-// - CRUD completo de productos canjeables
-// - Configuración de costos en puntos
-// - Gestión de stock e inventario
-// - Historial de canjes
-// - Aprobación de solicitudes
+// ✅ FIX: La función 'saveReward' ahora maneja el stock ilimitado (-1)
+//    y asegura que los costos sean enviados como números, permitiendo
+//    que el admin actualice las recompensas.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -128,7 +125,7 @@ export default function RewardsManagement() {
       if (rewardsError) throw rewardsError;
       setRewards(rewardsData || []);
 
-      // Cargar canjes recientes SIN JOINS
+      // Cargar canjes recientes SIN JOINS (Versión simplificada)
       const { data: redemptionsData, error: redemptionsError } = await supabase
         .from('reward_redemptions')
         .select('*')
@@ -211,8 +208,8 @@ export default function RewardsManagement() {
       category: REWARD_CATEGORIES.DIGITAL,
       cost_free_points: 0,
       cost_premium_points: 0,
-      stock_quantity: null,
-      is_unlimited_stock: true,
+      stock_quantity: 1, // ✅ FIX: Inicializar stock en 1 para evitar errores
+      is_unlimited_stock: false, // ✅ FIX: Empezar con stock limitado por defecto
       image_url: '',
       instructions: '',
       status: REWARD_STATUS.ACTIVE,
@@ -230,9 +227,10 @@ export default function RewardsManagement() {
       name: reward.name,
       description: reward.description,
       category: reward.category,
-      cost_free_points: reward.cost_free_points,
-      cost_premium_points: reward.cost_premium_points,
-      stock_quantity: reward.stock_quantity,
+      cost_free_points: reward.cost_free_points || 0,
+      cost_premium_points: reward.cost_premium_points || 0,
+      // ✅ FIX: Determinar si es ilimitado o el stock actual
+      stock_quantity: reward.is_unlimited_stock ? 0 : (reward.stock_quantity || 0), 
       is_unlimited_stock: reward.is_unlimited_stock,
       image_url: reward.image_url || '',
       instructions: reward.instructions || '',
@@ -250,7 +248,7 @@ export default function RewardsManagement() {
       setSaving(true);
       setError(null);
 
-      // Validaciones
+      // 1. Validaciones
       if (!modalData.name.trim()) {
         throw new Error('El nombre es requerido');
       }
@@ -259,26 +257,42 @@ export default function RewardsManagement() {
         throw new Error('Debe definir al menos un costo en puntos');
       }
 
-      const rewardData = {
-        ...modalData,
+      // 2. Preparar los datos que irán a la DB
+      const rewardDataForDB = {
+        name: modalData.name,
+        description: modalData.description,
+        category: modalData.category,
+        // ✅ FIX: Asegurar que los costos sean INTEGERS
+        cost_free_points: parseInt(modalData.cost_free_points) || 0,
+        cost_premium_points: parseInt(modalData.cost_premium_points) || 0,
+        // ✅ FIX CRÍTICO: Manejar el stock ilimitado (-1)
+        stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
+        is_unlimited_stock: modalData.is_unlimited_stock,
+        image_url: modalData.image_url,
+        instructions: modalData.instructions,
+        status: modalData.status,
+        is_featured: modalData.is_featured,
+        requires_approval: modalData.requires_approval,
+        external_url: modalData.external_url,
+        metadata: modalData.metadata,
         updated_at: new Date().toISOString()
       };
 
       if (editingReward) {
-        // Actualizar
+        // 3. Actualizar
         const { error: updateError } = await supabase
           .from('rewards')
-          .update(rewardData)
+          .update(rewardDataForDB) // Usa el objeto formateado
           .eq('id', editingReward.id);
 
         if (updateError) throw updateError;
         setSuccessMessage('Recompensa actualizada exitosamente');
       } else {
-        // Crear
+        // 4. Crear
         const { error: insertError } = await supabase
           .from('rewards')
           .insert({
-            ...rewardData,
+            ...rewardDataForDB,
             created_at: new Date().toISOString()
           });
 
@@ -1097,7 +1111,7 @@ function RewardModal({
                   type="number"
                   min="0"
                   value={data.cost_free_points}
-                  onChange={(e) => onChange({ ...data, cost_free_points: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => onChange({ ...data, cost_free_points: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1109,7 +1123,7 @@ function RewardModal({
                   type="number"
                   min="0"
                   value={data.cost_premium_points}
-                  onChange={(e) => onChange({ ...data, cost_premium_points: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => onChange({ ...data, cost_premium_points: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1133,7 +1147,7 @@ function RewardModal({
                   type="number"
                   min="0"
                   value={data.stock_quantity || 0}
-                  onChange={(e) => onChange({ ...data, stock_quantity: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => onChange({ ...data, stock_quantity: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Cantidad disponible"
                 />
