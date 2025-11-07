@@ -1,12 +1,10 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ FIX CRÍTICO: Mapeo de todas las columnas del formulario a las columnas
-//    reales de la base de datos (las que nos diste en la lista).
-//    - name (Form) <-> title (DB)
-//    - instructions (Form) <-> redemption_instructions (DB)
-//    - status (Form) <-> is_active (DB)
-//    - is_unlimited_stock (Form) <-> stock_quantity = -1 (DB)
+// ✅ Integración completa con la tabla 'rewards' (21 columnas)
+//    - Añadidos: min_level_required, max_per_user, terms_conditions,
+//                valid_from, valid_until.
+//    - Omitidos (Intencionalmente): reward_type, reward_value, redeemed_count.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -42,6 +40,46 @@ const REDEMPTION_STATUS = {
 };
 
 // ============================================================================
+// FUNCIONES AUXILIARES (Formato de Fechas)
+// ============================================================================
+
+/**
+ * Convierte un string ISO (de la DB) al formato requerido por <input type="datetime-local">
+ * @param {string | null} isoString - Ej: "2025-11-07T15:30:00+00:00"
+ * @returns {string} - Ej: "2025-11-07T10:30" (en hora local)
+ */
+const formatISOToDateTimeLocal = (isoString) => {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    // Restar la diferencia de zona horaria para mostrar la hora local correcta en el input
+    const timezoneOffset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(date.getTime() - timezoneOffset);
+    return localDate.toISOString().slice(0, 16); // Formato YYYY-MM-DDTHH:MM
+  } catch (e) {
+    console.warn("Error formateando fecha (ISO a Local):", isoString, e);
+    return '';
+  }
+};
+
+/**
+ * Convierte un string de <input type="datetime-local"> a un string ISO (para la DB)
+ * @param {string} localString - Ej: "2025-11-07T10:30"
+ * @returns {string | null} - Ej: "2025-11-07T15:30:00.000Z" (en UTC)
+ */
+const formatDateTimeLocalToISO = (localString) => {
+  if (!localString) return null;
+  try {
+    // El input local se interpreta como fecha local, y .toISOString() la convierte a UTC
+    return new Date(localString).toISOString();
+  } catch (e) {
+    console.warn("Error formateando fecha (Local a ISO):", localString, e);
+    return null;
+  }
+};
+
+
+// ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
 
@@ -68,20 +106,39 @@ export default function RewardsManagement() {
   // Modal de edición/creación
   const [showModal, setShowModal] = useState(false);
   const [editingReward, setEditingReward] = useState(null);
+  
+  // ✅ ESTADO DEL MODAL (Sincronizado con todas las columnas de la DB)
   const [modalData, setModalData] = useState({
     name: '', // Mapea a 'title'
     description: '',
     category: REWARD_CATEGORIES.DIGITAL,
-    // Inputs temporales para el formulario
+    
+    // Costos
     cost_free_points: 0, 
     cost_premium_points: 0, 
+    
+    // Stock
     stock_quantity: 1,
     is_unlimited_stock: false, // UI: Control de checkbox
+    
     image_url: '',
-    instructions: '', // UI: Campo de instrucciones, mapea a redemption_instructions
-    status: REWARD_STATUS_UI.ACTIVE, // UI: Estado (Activo/Inactivo/etc.)
+    
+    // Instrucciones y Términos
+    instructions: '', // Mapea a 'redemption_instructions'
+    terms_conditions: '', // ✅ NUEVO
+    
+    // Estado y Opciones
+    status: REWARD_STATUS_UI.ACTIVE, // Mapea a 'is_active'
     is_featured: false,
-    requires_approval: true,
+    
+    // Reglas (Nuevos campos)
+    min_level_required: 0, // ✅ NUEVO
+    max_per_user: 0, // ✅ NUEVO
+    
+    // Vigencia (Nuevos campos)
+    valid_from: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
+    valid_until: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
+    
     metadata: {}
   });
 
@@ -127,7 +184,7 @@ export default function RewardsManagement() {
 
       if (rewardsError) throw rewardsError;
       
-      // ✅ FIX: Mapear los datos de la DB a los inputs del modal
+      // ✅ FIX: Mapear los datos de la DB a los inputs del modal (Incluyendo los nuevos)
       const mappedRewards = rewardsData?.map(r => ({
           ...r,
           // Mapeamos 'title' de la DB a 'name' (que usa el resto del componente)
@@ -137,8 +194,14 @@ export default function RewardsManagement() {
           cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
           // Mapeamos stock quantity
           is_unlimited_stock: r.stock_quantity === -1,
+          stock_quantity_ui: r.stock_quantity === -1 ? 0 : r.stock_quantity, // Valor para el input
           // Mapeamos is_active (DB) al 'status' de la UI
-          status: r.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE
+          status: r.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE,
+          // Mapeamos instructions
+          instructions: r.redemption_instructions || '',
+          // ✅ NUEVO: Mapear fechas para el input datetime-local
+          valid_from_ui: formatISOToDateTimeLocal(r.valid_from),
+          valid_until_ui: formatISOToDateTimeLocal(r.valid_until)
       })) || [];
       
       setRewards(mappedRewards);
@@ -153,6 +216,7 @@ export default function RewardsManagement() {
       if (redemptionsError) throw redemptionsError;
 
       // Simplificado: Enriquecer los canjes con la info de usuario y reward
+      // TODO: Hacer el join real en el futuro
       const enrichedRedemptions = redemptionsData?.map(r => ({ ...r, user: { full_name: 'Usuario' }, reward: { name: 'Recompensa' } })) || [];
       setRedemptions(enrichedRedemptions);
 
@@ -180,11 +244,24 @@ export default function RewardsManagement() {
 
   const openCreateModal = () => {
     setEditingReward(null);
+    // ✅ ACTUALIZADO: Estado inicial con TODOS los campos
     setModalData({
-      name: '', description: '', category: REWARD_CATEGORIES.DIGITAL,
-      cost_free_points: 0, cost_premium_points: 0, stock_quantity: 1, 
-      is_unlimited_stock: false, image_url: '', instructions: '', 
-      status: REWARD_STATUS_UI.ACTIVE, is_featured: false, requires_approval: true,
+      name: '', 
+      description: '', 
+      category: REWARD_CATEGORIES.DIGITAL,
+      cost_free_points: 0, 
+      cost_premium_points: 0, 
+      stock_quantity: 1, 
+      is_unlimited_stock: false, 
+      image_url: '', 
+      instructions: '', 
+      terms_conditions: '', // ✅ NUEVO
+      status: REWARD_STATUS_UI.ACTIVE, 
+      is_featured: false, 
+      min_level_required: 0, // ✅ NUEVO
+      max_per_user: 0, // ✅ NUEVO
+      valid_from: '', // ✅ NUEVO
+      valid_until: '', // ✅ NUEVO
       metadata: {}
     });
     setShowModal(true);
@@ -192,22 +269,31 @@ export default function RewardsManagement() {
 
   const openEditModal = (reward) => {
     setEditingReward(reward);
+    // ✅ ACTUALIZADO: Cargar TODOS los campos desde la DB
     setModalData({
-      name: reward.title, // ✅ FIX: Cargar 'title' de la DB
+      name: reward.title, // Mapear 'title' de DB
       description: reward.description,
       category: reward.category,
-      // ✅ FIX: Cargar los valores desde las columnas reales de la DB
+      
       cost_free_points: reward.points_type === 'free' ? reward.points_cost : 0, 
       cost_premium_points: reward.points_type === 'premium' ? reward.points_cost : 0,
       
       stock_quantity: reward.is_unlimited_stock ? 0 : (reward.stock_quantity || 0), 
       is_unlimited_stock: reward.is_unlimited_stock,
+      
       image_url: reward.image_url || '', 
-      instructions: reward.redemption_instructions || '', // ✅ FIX: Mapear 'redemption_instructions'
-      status: reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE, // ✅ FIX: Mapear 'is_active'
+      instructions: reward.redemption_instructions || '', // Mapear 'redemption_instructions'
+      terms_conditions: reward.terms_conditions || '', // ✅ NUEVO
+      
+      status: reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE, // Mapear 'is_active'
       is_featured: reward.is_featured, 
-      // 'requires_approval' no existe en tu tabla, así que lo quitamos del estado
-      // requires_approval: reward.requires_approval, 
+      
+      min_level_required: reward.min_level_required || 0, // ✅ NUEVO
+      max_per_user: reward.max_per_user || 0, // ✅ NUEVO
+      
+      valid_from: reward.valid_from_ui, // ✅ NUEVO (usa el valor formateado)
+      valid_until: reward.valid_until_ui, // ✅ NUEVO (usa el valor formateado)
+
       metadata: reward.metadata || {}
     });
     setShowModal(true);
@@ -219,7 +305,7 @@ export default function RewardsManagement() {
       setError(null);
 
       // 1. Validaciones
-      if (!modalData.name || !modalData.name.trim()) { // ✅ FIX: 'trim' error
+      if (!modalData.name || !modalData.name.trim()) {
         throw new Error('El nombre es requerido'); 
       }
       if (modalData.cost_free_points <= 0 && modalData.cost_premium_points <= 0) {
@@ -238,27 +324,44 @@ export default function RewardsManagement() {
           finalType = 'free';
       }
       
-      // 3. Preparar los datos para la DB (USANDO LAS COLUMNAS CORRECTAS)
+      // 3. ✅ ACTUALIZADO: Preparar los datos para la DB (USANDO TODAS LAS COLUMNAS)
       const rewardDataForDB = {
-        title: modalData.name, // ✅ FIX: Mapear 'name' a 'title'
+        title: modalData.name, // Mapear 'name' a 'title'
         description: modalData.description,
         category: modalData.category,
         
-        // ✅ FIX CRÍTICO: Usar las columnas reales de la DB
-        points_cost: finalCost, // Columna numérica
-        points_type: finalType, // Columna de tipo de moneda
+        // Costos
+        points_cost: finalCost,
+        points_type: finalType,
         
-        // ✅ FIX: 'is_unlimited_stock' no existe, usar 'stock_quantity = -1'
+        // Stock
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
         
         image_url: modalData.image_url,
-        // ✅ FIX FINAL: Mapear 'instructions' a 'redemption_instructions'
-        redemption_instructions: modalData.instructions, 
-        is_active: modalData.status === REWARD_STATUS_UI.ACTIVE, // ✅ FIX: Mapear 'status' a 'is_active'
+        
+        // Textos
+        redemption_instructions: modalData.instructions, // Mapear 'instructions'
+        terms_conditions: modalData.terms_conditions, // ✅ NUEVO
+        
+        // Banderas
+        is_active: modalData.status === REWARD_STATUS_UI.ACTIVE, // Mapear 'status'
         is_featured: modalData.is_featured,
-        // 'requires_approval' no existe en tu tabla, así que lo quitamos
+
+        // Reglas
+        min_level_required: parseInt(modalData.min_level_required) || 0, // ✅ NUEVO
+        max_per_user: parseInt(modalData.max_per_user) || 0, // ✅ NUEVO
+        
+        // Vigencia
+        valid_from: formatDateTimeLocalToISO(modalData.valid_from), // ✅ NUEVO
+        valid_until: formatDateTimeLocalToISO(modalData.valid_until), // ✅ NUEVO
+
         metadata: modalData.metadata,
         updated_at: new Date().toISOString()
+        
+        // Campos omitidos intencionalmente (no deben editarse aquí):
+        // reward_type: (requiere más lógica de UI)
+        // reward_value: (requiere más lógica de UI)
+        // redeemed_count: (es un contador automático)
       };
 
       if (editingReward) {
@@ -310,7 +413,6 @@ export default function RewardsManagement() {
 
   const toggleRewardStatus = async (rewardId, currentStatus) => {
     try {
-      // ✅ FIX CRÍTICO: Toggle debe actualizar la columna 'is_active'
       const newActiveState = currentStatus === REWARD_STATUS_UI.ACTIVE ? false : true;
       const { error } = await supabase
         .from('rewards')
@@ -371,13 +473,12 @@ export default function RewardsManagement() {
   const filteredRewards = rewards.filter(reward => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      if (!reward.title.toLowerCase().includes(searchLower) && // ✅ FIX: Buscar en 'title'
+      if (!reward.title.toLowerCase().includes(searchLower) &&
           !reward.description?.toLowerCase().includes(searchLower)) {
         return false;
       }
     }
     if (filters.category !== 'all' && reward.category !== filters.category) { return false; }
-    // ✅ FIX: Filtrar por 'is_active'
     if (filters.status === REWARD_STATUS_UI.ACTIVE && !reward.is_active) { return false; }
     if (filters.status === REWARD_STATUS_UI.INACTIVE && reward.is_active) { return false; }
     if (filters.status === REWARD_STATUS_UI.OUT_OF_STOCK && reward.stock_quantity !== 0) { return false; }
@@ -405,7 +506,7 @@ export default function RewardsManagement() {
     return icons[category] || 'Gift';
   };
 
-  const getStatusColor = (reward) => { // ✅ FIX: Recibe el objeto 'reward'
+  const getStatusColor = (reward) => {
     if (!reward) return 'gray';
     if (reward.is_active) {
         if (reward.stock_quantity === 0) return 'red'; // Out of stock
@@ -414,7 +515,7 @@ export default function RewardsManagement() {
     return 'gray'; // Inactive
   };
   
-  const getStatusLabel = (reward) => { // ✅ FIX: Función para obtener la etiqueta de estado
+  const getStatusLabel = (reward) => {
     if (!reward) return 'Inactivo';
     if (reward.is_active) {
         if (reward.stock_quantity === 0) return 'Sin Stock';
@@ -553,7 +654,7 @@ export default function RewardsManagement() {
         </div>
       </div>
 
-      {/* Modal: Crear/Editar Recompensa */}
+      {/* Modal: Crear/Editar Recompensa (ACTUALIZADO) */}
       {showModal && (
         <RewardModal
           isEditing={!!editingReward}
@@ -612,7 +713,7 @@ function RewardCard({
   const [newStock, setNewStock] = useState(reward.stock_quantity || 0);
 
   const handleStockUpdate = () => { onUpdateStock(newStock); setEditingStock(false); };
-  const statusColor = getStatusColor(reward); // ✅ FIX: Pasar el objeto reward
+  const statusColor = getStatusColor(reward);
   const statusLabel = getStatusLabel(reward);
   const statusClasses = {
     green: 'bg-green-100 text-green-800', gray: 'bg-gray-100 text-gray-800', red: 'bg-red-100 text-red-800', blue: 'bg-blue-100 text-blue-800'
@@ -689,7 +790,8 @@ function RewardCard({
 }
 
 /**
- * Modal de crear/editar recompensa
+ * ✅ MODAL ACTUALIZADO
+ * Modal de crear/editar recompensa (con todos los campos)
  */
 function RewardModal({ 
   isEditing, data, onChange, onSave, onClose, saving, getCategoryLabel, getCategoryIcon
@@ -712,7 +814,7 @@ function RewardModal({
             </div>
 
             {/* Descripción */}
-            <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Descripción * </label>
+            <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Descripción </label>
               <textarea value={data.description} onChange={(e) => onChange({ ...data, description: e.target.value })} rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Describe la recompensa..." />
             </div>
 
@@ -725,10 +827,10 @@ function RewardModal({
 
             {/* Costos */}
             <div className="grid grid-cols-2 gap-4">
-              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo en Puntos Gratis </label>
+              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo Puntos Gratis </label>
                 <input type="number" min="0" value={data.cost_free_points} onChange={(e) => onChange({ ...data, cost_free_points: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo en Puntos Premium </label>
+              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo Puntos Premium </label>
                 <input type="number" min="0" value={data.cost_premium_points} onChange={(e) => onChange({ ...data, cost_premium_points: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
@@ -739,9 +841,37 @@ function RewardModal({
                 <span className="text-sm font-medium text-gray-700"> Stock ilimitado </span>
               </label>
               {!data.is_unlimited_stock && (
-                <input type="number" min="0" value={data.stock_quantity || 0} onChange={(e) => onChange({ ...data, stock_quantity: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cantidad disponible" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1"> Cantidad disponible </label>
+                  <input type="number" min="0" value={data.stock_quantity || 0} onChange={(e) => onChange({ ...data, stock_quantity: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
               )}
             </div>
+            
+            <hr/>
+            
+            {/* ✅ NUEVO: Reglas */}
+            <h3 className="text-lg font-medium text-gray-900 pt-2"> Reglas de Canje </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Nivel Mínimo Requerido </label>
+                <input type="number" min="0" value={data.min_level_required} onChange={(e) => onChange({ ...data, min_level_required: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Máximo por Usuario </label>
+                <input type="number" min="0" value={data.max_per_user} onChange={(e) => onChange({ ...data, max_per_user: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0 = ilimitado" />
+              </div>
+            </div>
+
+            {/* ✅ NUEVO: Vigencia */}
+            <div className="grid grid-cols-2 gap-4">
+              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Válido Desde (Opcional) </label>
+                <input type="datetime-local" value={data.valid_from} onChange={(e) => onChange({ ...data, valid_from: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Válido Hasta (Opcional) </label>
+                <input type="datetime-local" value={data.valid_until} onChange={(e) => onChange({ ...data, valid_until: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            <hr/>
 
             {/* URL de imagen */}
             <div> <label className="block text-sm font-medium text-gray-700 mb-1"> URL de Imagen </label>
@@ -753,13 +883,17 @@ function RewardModal({
               <textarea value={data.instructions} onChange={(e) => onChange({ ...data, instructions: e.target.value })} rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cómo canjear esta recompensa..." />
             </div>
 
+            {/* ✅ NUEVO: Términos y Condiciones */}
+            <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Términos y Condiciones </label>
+              <textarea value={data.terms_conditions} onChange={(e) => onChange({ ...data, terms_conditions: e.target.value })} rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Términos y condiciones de esta recompensa..." />
+            </div>
+
             {/* Opciones */}
             <div className="space-y-2">
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={data.is_featured} onChange={(e) => onChange({ ...data, is_featured: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
                 <span className="text-sm text-gray-700">Destacar esta recompensa</span>
               </label>
-              {/* 'requires_approval' no existe en la DB, así que lo quitamos del formulario */}
             </div>
           </div>
 
