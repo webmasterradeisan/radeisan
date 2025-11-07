@@ -5,21 +5,36 @@ import Button from '../../../components/ui/Button';
 
 const RewardCard = ({ 
   reward, 
-  userPoints, 
+  // ✅ CORRECCIÓN: Ahora recibimos los saldos por separado para la lógica
+  userFreePoints,         
+  userPremiumPoints,      
   onRedeem, 
   onWaitlist,
   className = '' 
 }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const canAfford = userPoints >= reward?.pointsCost;
+  
+  // ✅ LÓGICA INTEGRADA: Leer los costos desde la recompensa
+  const requiredFree = reward?.cost_free_points || 0;
+  const requiredPremium = reward?.cost_premium_points || 0;
+
+  // Lógica de asequibilidad (puede pagar con cualquiera de las dos monedas)
+  const canAffordFree = userFreePoints >= requiredFree;
+  const canAffordPremium = userPremiumPoints >= requiredPremium;
+  const canAfford = canAffordFree || canAffordPremium;
+  
   const isAvailable = reward?.stock > 0;
+  
+  // Determinar la moneda a usar en el canje (Premium es preferida)
+  const redemptionType = canAffordPremium ? 'premium' : 'free';
 
   const handleRedeem = async () => {
     if (!canAfford || !isAvailable) return;
     
     setIsLoading(true);
     try {
-      await onRedeem(reward);
+      // ✅ INTEGRACIÓN: Pasar el TIPO de moneda a usar
+      await onRedeem(reward, redemptionType); 
     } finally {
       setIsLoading(false);
     }
@@ -95,22 +110,54 @@ const RewardCard = ({
           {reward?.description}
         </p>
 
-        {/* Points Cost */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-1">
-            <Icon name="Star" size={16} color="var(--color-accent)" />
-            <span className="font-mono font-bold text-accent">
-              {reward?.pointsCost?.toLocaleString()}
+        {/* ✅ MODIFICACIÓN: Mostrar el costo dual de la recompensa (Valor / Beneficio) */}
+        <div className="mb-4">
+            <span className="text-xs text-muted-foreground font-medium block mb-1">
+                Costo en Puntos de Valor:
             </span>
-            <span className="text-xs text-muted-foreground">puntos</span>
-          </div>
-          
-          {reward?.originalPrice && (
-            <div className="text-xs text-muted-foreground">
-              Valor: €{reward?.originalPrice}
+            <div className="space-y-1">
+                {/* 1. Costo en Puntos PREMIUM (La opción con mayor valor / descuento) */}
+                {requiredPremium > 0 && (
+                  <div 
+                    className={`flex items-center justify-between text-sm p-1 rounded-md ${
+                        canAffordPremium ? 'bg-green-50' : 'bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1">
+                        <Icon name="Award" size={16} className="text-green-600" />
+                        <span className="font-bold text-green-600">
+                          {requiredPremium.toLocaleString()}
+                        </span>
+                        <span className="text-xs text-gray-600">Premium</span>
+                    </div>
+                    <span className={`text-xs font-medium ${canAffordPremium ? 'text-green-700' : 'text-red-500'}`}>
+                        {canAffordPremium ? '¡Asequible!' : 'Insuficiente'}
+                    </span>
+                  </div>
+                )}
+                
+                {/* 2. Costo en Puntos GRATIS (Moneda Base) */}
+                {requiredFree > 0 && (
+                   <div 
+                    className={`flex items-center justify-between text-sm p-1 rounded-md ${
+                        canAffordFree ? 'bg-orange-50' : 'bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1">
+                        <Icon name="Star" size={16} className="text-orange-400" />
+                        <span className="font-bold text-orange-600">
+                          {requiredFree.toLocaleString()}
+                        </span>
+                        <span className="text-xs text-gray-600">Gratis</span>
+                    </div>
+                    <span className={`text-xs font-medium ${canAffordFree ? 'text-green-700' : 'text-red-500'}`}>
+                        {canAffordFree ? 'Asequible' : 'Insuficiente'}
+                    </span>
+                  </div>
+                )}
             </div>
-          )}
         </div>
+
 
         {/* Stock Info */}
         {isAvailable && reward?.stock <= 10 && (
@@ -134,7 +181,8 @@ const RewardCard = ({
               iconName={canAfford ? "Gift" : "Lock"}
               iconPosition="left"
             >
-              {canAfford ? "Canjear Ahora" : "Puntos Insuficientes"}
+              {/* ✅ Texto de Acción Dinámico: Prioriza la moneda Premium */}
+              {canAfford ? `Canjear con ${canAffordPremium ? 'Premium' : 'Gratis'}` : "Puntos Insuficientes"}
             </Button>
           ) : (
             <Button
