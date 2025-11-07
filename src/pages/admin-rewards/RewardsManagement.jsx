@@ -1,9 +1,11 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ Integración completa con la tabla 'rewards' (21 columnas)
-// ✅ FIX: Eliminada toda referencia a la columna 'metadata'
-// ✅ FIX 2: Corregido typo 'catch (err)_' en la función 'updateRedemptionStatus'
+// ✅ Integración completa con la tabla 'rewards'
+// ✅ FIX: Eliminada referencia a 'metadata'
+// ✅ FIX 2: Corregido typo 'catch (err)_'
+// ✅ FIX 3: Corregida lógica de 'stock ilimitado' vs 'Sin Stock' en
+//    getStatusLabel, getStatusColor, y filteredRewards.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -42,34 +44,22 @@ const REDEMPTION_STATUS = {
 // FUNCIONES AUXILIARES (Formato de Fechas)
 // ============================================================================
 
-/**
- * Convierte un string ISO (de la DB) al formato requerido por <input type="datetime-local">
- * @param {string | null} isoString - Ej: "2025-11-07T15:30:00+00:00"
- * @returns {string} - Ej: "2025-11-07T10:30" (en hora local)
- */
 const formatISOToDateTimeLocal = (isoString) => {
   if (!isoString) return '';
   try {
     const date = new Date(isoString);
-    // Restar la diferencia de zona horaria para mostrar la hora local correcta en el input
     const timezoneOffset = date.getTimezoneOffset() * 60000;
     const localDate = new Date(date.getTime() - timezoneOffset);
-    return localDate.toISOString().slice(0, 16); // Formato YYYY-MM-DDTHH:MM
+    return localDate.toISOString().slice(0, 16);
   } catch (e) {
     console.warn("Error formateando fecha (ISO a Local):", isoString, e);
     return '';
   }
 };
 
-/**
- * Convierte un string de <input type="datetime-local"> a un string ISO (para la DB)
- * @param {string} localString - Ej: "2025-11-07T10:30"
- * @returns {string | null} - Ej: "2025-11-07T15:30:00.000Z" (en UTC)
- */
 const formatDateTimeLocalToISO = (localString) => {
   if (!localString) return null;
   try {
-    // El input local se interpreta como fecha local, y .toISOString() la convierte a UTC
     return new Date(localString).toISOString();
   } catch (e) {
     console.warn("Error formateando fecha (Local a ISO):", localString, e);
@@ -99,7 +89,7 @@ export default function RewardsManagement() {
   const [filters, setFilters] = useState({
     search: '',
     category: 'all',
-    status: 'all' // Usa REWARD_STATUS_UI
+    status: 'all'
   });
 
   // Modal de edición/creación
@@ -108,35 +98,22 @@ export default function RewardsManagement() {
   
   // Estado del modal
   const [modalData, setModalData] = useState({
-    name: '', // Mapea a 'title'
+    name: '',
     description: '',
     category: REWARD_CATEGORIES.DIGITAL,
-    
-    // Costos
     cost_free_points: 0, 
     cost_premium_points: 0, 
-    
-    // Stock
     stock_quantity: 1,
-    is_unlimited_stock: false, // UI: Control de checkbox
-    
+    is_unlimited_stock: false,
     image_url: '',
-    
-    // Instrucciones y Términos
-    instructions: '', // Mapea a 'redemption_instructions'
-    terms_conditions: '', // ✅ NUEVO
-    
-    // Estado y Opciones
-    status: REWARD_STATUS_UI.ACTIVE, // Mapea a 'is_active'
-    is_featured: false,
-    
-    // Reglas (Nuevos campos)
-    min_level_required: 0, // ✅ NUEVO
-    max_per_user: 0, // ✅ NUEVO
-    
-    // Vigencia (Nuevos campos)
-    valid_from: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
-    valid_until: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
+    instructions: '',
+    terms_conditions: '',
+    status: REWARD_STATUS_UI.ACTIVE,
+    is_featured: false, 
+    min_level_required: 0,
+    max_per_user: 0,
+    valid_from: '',
+    valid_until: '',
   });
 
   // Modal de detalles de canje
@@ -181,11 +158,13 @@ export default function RewardsManagement() {
 
       if (rewardsError) throw rewardsError;
       
+      // Mapeo de datos de DB a UI
       const mappedRewards = rewardsData?.map(r => ({
           ...r,
           name: r.title, 
           cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
           cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
+          // ✅ Lógica de Stock: 'is_unlimited_stock' es crucial
           is_unlimited_stock: r.stock_quantity === -1,
           stock_quantity_ui: r.stock_quantity === -1 ? 0 : r.stock_quantity, 
           status: r.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE,
@@ -314,6 +293,7 @@ export default function RewardsManagement() {
         points_cost: finalCost,
         points_type: finalType,
         
+        // Aquí se guarda -1 si es ilimitado
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
         
         image_url: modalData.image_url,
@@ -397,6 +377,8 @@ export default function RewardsManagement() {
 
   const updateStock = async (rewardId, newStock) => {
     try {
+      // Esta función asume que solo se llama si NO es ilimitado, 
+      // lo cual es correcto por la UI de RewardCard
       const { error } = await supabase.from('rewards').update({ stock_quantity: parseInt(newStock), updated_at: new Date().toISOString() }).eq('id', rewardId);
       if (error) throw error;
       setSuccessMessage('Stock actualizado');
@@ -428,13 +410,13 @@ export default function RewardsManagement() {
       setShowRedemptionModal(false);
       await loadData();
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) { // ✅✅✅ ¡FIX AQUÍ! Se eliminó el guion bajo "_"
+    } catch (err) {
       console.error('Error actualizando canje:', err); setError(err.message);
     } finally { setSaving(false); }
   };
 
   // ============================================================================
-  // FUNCIONES DE FILTRADO
+  // FUNCIONES DE FILTRADO (¡AQUÍ ESTÁ LA CORRECCIÓN!)
   // ============================================================================
 
   const filteredRewards = rewards.filter(reward => {
@@ -446,15 +428,31 @@ export default function RewardsManagement() {
       }
     }
     if (filters.category !== 'all' && reward.category !== filters.category) { return false; }
-    if (filters.status === REWARD_STATUS_UI.ACTIVE && !reward.is_active) { return false; }
-    if (filters.status === REWARD_STATUS_UI.INACTIVE && reward.is_active) { return false; }
-    if (filters.status === REWARD_STATUS_UI.OUT_OF_STOCK && reward.stock_quantity !== 0) { return false; }
+
+    // ✅✅✅ LÓGICA DE FILTRO CORREGIDA ✅✅✅
+    // Definimos qué significa "Sin Stock"
+    const isOutOfStock = !reward.is_unlimited_stock && reward.stock_quantity === 0;
+
+    // Aplicamos filtros de estado
+    if (filters.status === REWARD_STATUS_UI.ACTIVE && (!reward.is_active || isOutOfStock)) {
+      // Si el filtro es "Activas", ocultamos las inactivas Y las que no tienen stock
+      return false; 
+    }
+    if (filters.status === REWARD_STATUS_UI.INACTIVE && reward.is_active) {
+      // Si el filtro es "Inactivas", ocultamos las activas
+      return false; 
+    }
+    if (filters.status === REWARD_STATUS_UI.OUT_OF_STOCK && !isOutOfStock) {
+      // Si el filtro es "Sin Stock", ocultamos CUALQUIERA que NO esté sin stock
+      // (Esto incluye las ilimitadas, que nunca están sin stock)
+      return false; 
+    }
 
     return true;
   });
 
   // ============================================================================
-  // FUNCIONES AUXILIARES
+  // FUNCIONES AUXILIARES (¡AQUÍ ESTÁN LAS OTRAS CORRECCIONES!)
   // ============================================================================
 
   const getCategoryLabel = (category) => {
@@ -473,19 +471,25 @@ export default function RewardsManagement() {
     return icons[category] || 'Gift';
   };
 
+  // ✅✅✅ LÓGICA CORREGIDA ✅✅✅
   const getStatusColor = (reward) => {
     if (!reward) return 'gray';
     if (reward.is_active) {
-        if (reward.stock_quantity === 0) return 'red'; // Out of stock
-        return 'green'; // Active
+        // Solo es 'red' (Sin Stock) si NO es ilimitado Y el stock es 0
+        if (!reward.is_unlimited_stock && reward.stock_quantity === 0) return 'red';
+        // Es 'green' (Activo) si es ilimitado, o si tiene stock
+        return 'green';
     }
     return 'gray'; // Inactive
   };
   
+  // ✅✅✅ LÓGICA CORREGIDA ✅✅✅
   const getStatusLabel = (reward) => {
     if (!reward) return 'Inactivo';
     if (reward.is_active) {
-        if (reward.stock_quantity === 0) return 'Sin Stock';
+        // Solo es 'Sin Stock' si NO es ilimitado Y el stock es 0
+        if (!reward.is_unlimited_stock && reward.stock_quantity === 0) return 'Sin Stock';
+        // Es 'Activo' si es ilimitado, o si tiene stock
         return 'Activo';
     }
     return 'Inactivo';
@@ -597,7 +601,19 @@ export default function RewardsManagement() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredRewards.map(reward => (
-                    <RewardCard key={reward.id} reward={reward} onEdit={() => openEditModal(reward)} onDelete={() => deleteReward(reward.id)} onToggleStatus={() => toggleRewardStatus(reward.id, reward.status)} onUpdateStock={(stock) => updateStock(reward.id, stock)} getCategoryLabel={getCategoryLabel} getCategoryIcon={getCategoryIcon} getStatusColor={getStatusColor} getStatusLabel={getStatusLabel} />
+                    <RewardCard 
+                      key={reward.id} 
+                      reward={reward} 
+                      onEdit={() => openEditModal(reward)} 
+                      onDelete={() => deleteReward(reward.id)} 
+                      onToggleStatus={() => toggleRewardStatus(reward.id, reward.status)} 
+                      onUpdateStock={(stock) => updateStock(reward.id, stock)} 
+                      getCategoryLabel={getCategoryLabel} 
+                      getCategoryIcon={getCategoryIcon} 
+                      // Pasando las funciones corregidas
+                      getStatusColor={getStatusColor} 
+                      getStatusLabel={getStatusLabel} 
+                    />
                   ))}
                 </div>
               )}
@@ -680,8 +696,11 @@ function RewardCard({
   const [newStock, setNewStock] = useState(reward.stock_quantity || 0);
 
   const handleStockUpdate = () => { onUpdateStock(newStock); setEditingStock(false); };
+  
+  // ✅ Estas funciones ahora tienen la lógica correcta
   const statusColor = getStatusColor(reward);
   const statusLabel = getStatusLabel(reward);
+  
   const statusClasses = {
     green: 'bg-green-100 text-green-800', gray: 'bg-gray-100 text-gray-800', red: 'bg-red-100 text-red-800', blue: 'bg-blue-100 text-blue-800'
   };
