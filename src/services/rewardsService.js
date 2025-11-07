@@ -1,10 +1,9 @@
 // ============================================================================
-// REWARDS SERVICE - Servicio de Recompensas (VERSIÓN COMPLETA Y CORREGIDA)
+// REWARDS SERVICE - Servicio de Recompensas (VERSIÓN FINAL)
 // ============================================================================
-// ✅ FIX 1: Sincronizado con la DB real ('is_active', 'cost_free_points', etc.)
-// ✅ FIX 2: Corregida la llamada a 'getUserPoints'
-// ✅ FIX 3: Cambiado el 'action_type' a "other" para cumplir con la regla
-//    de la base de datos y evitar el error "check constraint".
+// ✅ FIX 6 (FINAL): Eliminada la llamada al RPC 'redeem_reward' (que no existe)
+//    y reemplazada por una inserción directa en 'reward_redemptions'
+//    para registrar el canje.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -90,24 +89,20 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
       return { success: false, canRedeem: false, reason: 'Esta recompensa está agotada' };
     }
 
-    // 3. Obtener balance del usuario (Llamada corregida)
+    // 3. Obtener balance del usuario
     const balanceResult = await pointsService.getUserPoints(user.id);
     if (!balanceResult) throw new Error('Error obteniendo balance');
-
-    // Lectura de respuesta corregida
     const { free: free_points, premium: premium_points } = balanceResult;
-
 
     let canAfford = false;
     let costDetails = { type: pointsType, cost: 0, available: 0, actualDeduction: 0 };
 
-    // 4. Lógica de Costos (Leyendo los costos explícitos de la DB)
+    // 4. Lógica de Costos
     if (pointsType === POINTS_TYPE.FREE) {
         const requiredFree = reward.cost_free_points;
         if (!requiredFree || requiredFree <= 0) {
             throw new Error('Esta recompensa no se puede canjear con Puntos Gratis');
         }
-        
         costDetails.cost = requiredFree;
         costDetails.available = free_points;
         costDetails.actualDeduction = requiredFree;
@@ -118,7 +113,6 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
         if (!requiredPremium || requiredPremium <= 0) {
             throw new Error('Esta recompensa no se puede canjear con Puntos Premium');
         }
-
         costDetails.cost = requiredPremium;
         costDetails.available = premium_points;
         costDetails.actualDeduction = requiredPremium;
@@ -148,7 +142,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuario no autenticado');
 
-    const { userNotes = '', deliveryAddress = null, contactInfo = null } = options;
+    const { userNotes = '' } = options; // Solo tomamos userNotes
 
     // 1. Validar canje
     const validation = await validateRedemption(rewardId, pointsType);
@@ -159,12 +153,12 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const reward = validation.reward;
     const costDetails = validation.costDetails;
 
-    // 2. Deducir puntos
+    // 2. Deducir puntos (Esto llama a 'update_user_points' y funciona)
     const pointsDeductionResult = await pointsService.deductPoints(
         user.id,
         costDetails.actualDeduction, 
         pointsType,                   
-        'other', // ✅✅✅ FIX AQUÍ: Usamos "other"
+        'other', 
         rewardId                    
     );
 
@@ -172,32 +166,47 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         throw new Error(pointsDeductionResult.error || 'Error al deducir puntos del saldo.');
     }
 
-    // 3. Registrar la Redención
-    const { data, error } = await supabase.rpc('redeem_reward', {
-      p_user_id: user.id,
-      p_reward_id: rewardId,
-      p_points_type: pointsType,
-      p_points_spent: costDetails.actualDeduction,
-      p_user_notes: userNotes,
-      p_delivery_address: deliveryAddress,
-      p_contact_info: contactInfo
-    });
+    // 3. ✅✅✅ FIX: Registrar la Redención usando INSERT (no RPC) ✅✅✅
+    // Esto reemplaza la llamada al RPC 'redeem_reward' que no existía.
+    const status = REDEMPTION_STATUS.APPROVED; // Asumimos auto-aprobación
+    
+    const { data: redemptionData, error: insertError } = await supabase
+      .from('reward_redemptions')
+      .insert({
+        user_id: user.id,
+        reward_id: rewardId,
+        points_spent: costDetails.actualDeduction,
+        points_type: pointsType,
+        status: status,
+        user_notes: userNotes,
+        processed_at: new Date().toISOString()
+      })
+      .select('id') // Pedimos que nos devuelva el ID de la fila creada
+      .single();
 
-    if (error) throw error;
+    if (insertError) {
+      // Si falla, intentamos devolver los puntos al usuario
+      console.error('Error insertando 'reward_redemptions', revirtiendo puntos...', insertError);
+      await pointsService.addPoints(
+          user.id, 
+          costDetails.actualDeduction, 
+          pointsType, 
+          'reversal_failed_redemption', 
+          rewardId
+      );
+      throw new Error('Error al registrar el canje. Tus puntos han sido devueltos.');
+    }
 
-    const status = REDEMPTION_STATUS.APPROVED;
-    const requiresApproval = false; 
-
-    // 5. Devolver el nuevo saldo
+    // 4. Devolver el nuevo saldo y el éxito
     return {
       success: true,
       redemption: {
-        id: data.redemption_id,
+        id: redemptionData.id, // ID de la redención real
         reward,
         pointsSpent: costDetails.actualDeduction,
         pointsType,
-        status,
-        requiresApproval: requiresApproval
+        status: status,
+        requiresApproval: false
       },
       message: '¡Recompensa canjeada exitosamente!',
       newBalance: pointsDeductionResult.newPoints
