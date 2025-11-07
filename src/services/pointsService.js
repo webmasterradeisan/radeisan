@@ -1,9 +1,7 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - FINAL Y CORREGIDO
-// ... (otros fixes)
-// ✅ FIX 7: Añadida la función 'getUserPointsHistory' para cargar
-//    el historial de transacciones del usuario.
+// ✅ FIX 8: 'getUserPointsHistory' ahora acepta rangos de fecha
+//    y paginación (limit/offset) para los nuevos filtros.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -184,34 +182,56 @@ export const addFreePoints = async (userId, amount, actionType, referenceId = nu
 };
 
 // ============================================================================
-// ✅✅✅ NUEVA FUNCIÓN AÑADIDA ✅✅✅
+// HISTORIAL DE PUNTOS (CON FILTROS Y PAGINACIÓN)
 // ============================================================================
+
+const PAGE_SIZE = 10; // Cuántos items cargar por página
 
 /**
  * Obtener el historial de puntos (transacciones) del usuario.
+ * Acepta filtros de fecha y paginación.
  */
-export const getUserPointsHistory = async (userId) => {
+export const getUserPointsHistory = async (userId, options = {}) => {
+  const { startDate, endDate, page = 1 } = options;
+  
   if (!userId) {
-    return { success: false, error: 'User ID is required', data: [] };
+    return { success: false, error: 'User ID is required', data: [], hasMore: false };
   }
   
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('points_transactions')
-      .select('*') // Obtiene todas las columnas
+      .select('*', { count: 'exact' }) // Pedimos el conteo total
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(50);
+      .order('created_at', { ascending: false });
+
+    // Aplicar filtros de fecha si existen
+    if (startDate) {
+      query = query.gte('created_at', startDate.toISOString());
+    }
+    if (endDate) {
+      query = query.lte('created_at', endDate.toISOString());
+    }
+
+    // Aplicar paginación
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
 
     if (error) {
       throw error;
     }
     
-    return { success: true, data };
+    // Calcular si hay más páginas
+    const hasMore = (from + data.length) < count;
+    
+    return { success: true, data, hasMore, count };
     
   } catch (error) {
     console.error('Error fetching points history:', error);
-    return { success: false, error: error.message, data: [] };
+    return { success: false, error: error.message, data: [], hasMore: false };
   }
 };
 
@@ -229,5 +249,5 @@ export default {
   deductPoints,
   calculatePremiumValue,
   PREMIUM_POINTS_MULTIPLIER,
-  getUserPointsHistory // <-- Nueva función exportada
+  getUserPointsHistory // <-- Función actualizada
 };
