@@ -1,7 +1,6 @@
 // src/pages/points-rewards-store/index.jsx (Versión Final y Corregida)
-// ✅ FIX: Sincronizado el hook 'useRewards' con la estructura real de la
-//    tabla 'rewards' (usando 'title', 'points_cost', 'points_type', etc.)
-// ✅ FIX: Asegurada la lógica de 'isAvailable' para 'stock_quantity = -1'
+// ✅ FIX: Sincronizado el hook 'useRewards' con la nueva estructura de DB
+//    (leyendo 'cost_free_points' y 'cost_premium_points')
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -17,7 +16,6 @@ import RedemptionModal from './components/RedemptionModal';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-// ✅ Importar la función clave del servicio de recompensas
 import { redeemReward } from '../../services/rewardsService'; 
 
 
@@ -25,7 +23,6 @@ import { redeemReward } from '../../services/rewardsService';
 // CONSTANTES ASUMIDAS (Definir o importar de rewardsService)
 // ===============================
 
-// **ASUMIMOS ESTAS CONSTANTES PARA QUE EL CÓDIGO SEA FUNCIONAL**
 const REWARD_CATEGORIES = [
   { id: 'all', name: 'Todo', icon: 'Sparkles' },
   { id: 'digital', name: 'Digital', icon: 'Monitor' },
@@ -39,8 +36,7 @@ const VIEW_MODES = { GRID: 'grid', LIST: 'list' };
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// ✅✅✅ HOOK CORREGIDO ✅✅✅
-// Hook para manejar recompensas con datos reales de Supabase
+// ✅✅✅ HOOK CORREGIDO CON NUEVA ESTRUCTURA DB ✅✅✅
 const useRewards = () => {
   const [rewards, setRewards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,39 +45,45 @@ const useRewards = () => {
   const fetchRewards = useCallback(async (filters = {}) => {
     try {
       setLoading(true); setError(null);
-      // 1. La consulta base está bien
-      let query = supabase.from('rewards').select('*').eq('is_active', true).order('is_featured', { ascending: false }).order('created_at', { ascending: false });
+      // 1. La consulta ahora selecciona las columnas nuevas
+      let query = supabase.from('rewards')
+        .select(`
+          id, title, description, image_url, category, 
+          cost_free_points, cost_premium_points, 
+          stock_quantity, is_featured, is_active, created_at
+        `)
+        .eq('is_active', true)
+        .order('is_featured', { ascending: false })
+        .order('created_at', { ascending: false });
       
-      // Aplicar filtros (si existen)
       if (filters.category && filters.category !== 'all') { query = query.eq('category', filters.category); }
       if (filters.searchQuery) { query = query.or(`title.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`); }
       
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
-      // 2. ✅✅✅ LA TRANSFORMACIÓN DE DATOS HA SIDO CORREGIDA ✅✅✅
-      // Mapeamos los datos de la DB (r) a los datos de la UI (lo que espera RewardCard)
+      // 2. Transformación de datos
       const transformedRewards = data?.map(r => ({
         id: r.id, 
-        title: r.title, // ✅ FIX: Leer 'title' (DB)
+        title: r.title,
         description: r.description, 
         image: r.image_url || 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400',
         
-        // ✅ FIX: Recrear la lógica de costos duales
-        cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
-        cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
+        // ✅ FIX: Leer directamente de las nuevas columnas
+        cost_free_points: r.cost_free_points || 0, 
+        cost_premium_points: r.cost_premium_points || 0,
         
-        // Costo genérico (para ordenar)
-        pointsCost: r.points_cost || 0,
+        // Costo genérico (para ordenar, usa el más alto de los dos, o el que exista)
+        pointsCost: Math.max(r.cost_free_points || 0, r.cost_premium_points || 0),
         
-        stock: r.stock_quantity, // Columna real de stock
+        stock: r.stock_quantity,
         
-        // ✅ FIX: Lógica de disponibilidad (la que tenías era correcta, la mantenemos)
-        isAvailable: r.stock_quantity === -1 || r.stock_quantity > 0, // -1 es ilimitado
+        // Lógica de disponibilidad (Stock ilimitado O stock > 0)
+        isAvailable: r.stock_quantity === -1 || r.stock_quantity > 0,
         
-        category: r.category || 'General', // ✅ FIX: Leer 'category'
+        category: r.category || 'General',
         
-        // Valores hardcodeados (ya que estas columnas no existen en tu tabla)
+        // Valores que tu DB no tiene, pero el UI espera
         categoryIcon: 'Star',
         isExclusive: false, 
         isPopular: false,
@@ -111,7 +113,6 @@ const useRewards = () => {
 const PointsRewardsStore = () => {
   const { user } = useAuth();
   
-  // ✅ CORRECCIÓN 1: Desestructurar el saldo y el loading del contexto de Puntos
   const { 
     totalPoints, 
     freePoints, 
@@ -130,14 +131,13 @@ const PointsRewardsStore = () => {
   const [selectedReward, setSelectedReward] = useState(null);
   const [isRedemptionModalOpen, setIsRedemptionModalOpen] = useState(false);
   const [redemptionSuccess, setRedemptionSuccess] = useState(null);
-  const [redemptionLoading, setRedemptionLoading] = useState(false); // Nuevo estado de carga
+  const [redemptionLoading, setRedemptionLoading] = useState(false);
   
-  // Estados de UI y Filtros
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('popular');
-  const [viewMode, setViewMode] = useState(VIEW_MODES.GRID); // Definir el modo de vista
-  const [showTransactions, setShowTransactions] = useState(false); // Estado para el historial
+  const [viewMode, setViewMode] = useState(VIEW_MODES.GRID);
+  const [showTransactions, setShowTransactions] = useState(false);
   
   // Datos simulados (Reemplazar con tus propios hooks si existen)
   const statsLoading = false; 
@@ -153,19 +153,16 @@ const PointsRewardsStore = () => {
   const filteredRewards = useMemo(() => {
     let list = rewards;
     
-    // 1. Filtrar por búsqueda
     if (searchQuery) {
       list = list.filter(reward => 
         reward.title.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     
-    // 2. Filtrar por categoría
     if (filter !== 'all') {
       list = list.filter(reward => reward.category === filter);
     }
     
-    // 3. Aplicar ordenamiento (Implementación simple)
     switch (sortBy) {
       case 'points_low':
         list.sort((a, b) => a.pointsCost - b.pointsCost);
@@ -174,7 +171,6 @@ const PointsRewardsStore = () => {
         list.sort((a, b) => b.pointsCost - a.pointsCost);
         break;
       case 'newest':
-        // Asumiendo que las recompensas tienen un campo 'created_at' para ordenar
         list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); 
         break;
       case 'popular':
@@ -189,12 +185,11 @@ const PointsRewardsStore = () => {
   const affordableRewards = useMemo(() => {
     if (pointsLoading) return []; 
     return filteredRewards.filter(reward => {
-      const requiredFree = reward.cost_free_points || 0;
-      const requiredPremium = reward.cost_premium_points || 0;
-      // Puede costearlo si tiene los puntos GRATIS o los PREMIUM (ya que no se usan juntos)
-      // ✅ Esta lógica ahora funciona porque 'cost_free_points' se calcula correctamente
-      const canAfford = (freePoints >= requiredFree && requiredFree > 0) || (premiumPoints >= requiredPremium && requiredPremium > 0);
-      return canAfford;
+      // ✅ FIX: Lógica de asequibilidad actualizada
+      // El usuario puede costearlo si CUMPLE CUALQUIERA de los dos precios
+      const canAffordFree = (reward.cost_free_points > 0) && (freePoints >= reward.cost_free_points);
+      const canAffordPremium = (reward.cost_premium_points > 0) && (premiumPoints >= reward.cost_premium_points);
+      return canAffordFree || canAffordPremium;
     });
   }, [filteredRewards, freePoints, premiumPoints, pointsLoading]);
   
@@ -212,7 +207,6 @@ const PointsRewardsStore = () => {
     setIsRedemptionModalOpen(true);
   };
   
-  // ✅ FIX CRÍTICO: Estabilizar el canje y manejo de errores
   const handleRedeemConfirm = useCallback(async (deliveryDetails) => {
     if (!selectedReward) return;
 
@@ -220,25 +214,20 @@ const PointsRewardsStore = () => {
     setRedemptionSuccess(null);
 
     try {
-      // 1. Llamar al servicio de canje con los parámetros correctos
       const result = await redeemReward(
         selectedReward.id, 
-        selectedReward.redemptionType, // ✅ Tipo de moneda a usar ('free' o 'premium')
-        deliveryDetails // Pasa la información de entrega
+        selectedReward.redemptionType, // 'free' o 'premium'
+        deliveryDetails
       );
       
-      // 2. Manejo de Éxito
       if (result.success) {
-        
-        // 3. FIX DE SALDO: Actualizar el Context con el nuevo saldo
         if (result.newBalance) {
              const { free: freeBalance, premium: premiumBalance } = result.newBalance;
              refreshPoints(freeBalance, premiumBalance);
         } else {
-             refreshPoints(); // Fallback
+             refreshPoints();
         }
         
-        // 4. Refrescar recompensas (para actualizar stock)
         await refreshRewards();
         
         setIsRedemptionModalOpen(false);
@@ -246,13 +235,11 @@ const PointsRewardsStore = () => {
         alert(result.message || '¡Canje completado exitosamente!'); 
         setRedemptionSuccess(result.message || '¡Canje completado exitosamente!');
       } else {
-        // 5. Manejo de Fallo del Servicio
         console.error('❌ Error devuelto por el servicio de canje:', result.error);
         alert(`Error al canjear: ${result.error}`);
         setIsRedemptionModalOpen(false);
       }
     } catch (error) {
-      // 6. Manejo de Fallo Inesperado (Previene el "Something Went Wrong")
       console.error('❌ Error crítico en handleRedeemConfirm:', error);
       alert(`Error inesperado al canjear: ${error.message}`);
       setIsRedemptionModalOpen(false);
@@ -321,7 +308,7 @@ const PointsRewardsStore = () => {
       </h3>
       <p className="text-muted-foreground mb-6 max-w-md">
         Ha ocurrido un problema al cargar las recompensas. Por favor, intenta nuevamente.
-      </p>
+      </S.O.S>
       <Button onClick={() => refreshRewards()}>
         <Icon name="RefreshCw" size={16} className="mr-2" />
         Reintentar
@@ -365,7 +352,7 @@ const PointsRewardsStore = () => {
               <div className="lg:col-span-4 xl:col-span-3">
                 <div className="sticky top-32 space-y-6">
                   
-                  {/* Points Balance Card con lógica de carga */}
+                  {/* Points Balance Card */}
                   <PointsBalanceCard
                     currentPoints={totalPoints}
                     freePoints={freePoints}
