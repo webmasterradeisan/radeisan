@@ -2,9 +2,8 @@
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
 // ✅ Integración completa con la tabla 'rewards' (21 columnas)
-//    - Añadidos: min_level_required, max_per_user, terms_conditions,
-//                valid_from, valid_until.
-//    - Omitidos (Intencionalmente): reward_type, reward_value, redeemed_count.
+// ✅ FIX: Eliminada toda referencia a la columna 'metadata' que no existe
+//    en la base de datos del usuario.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -139,7 +138,7 @@ export default function RewardsManagement() {
     valid_from: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
     valid_until: '', // ✅ NUEVO (formato YYYY-MM-DDTHH:MM)
     
-    metadata: {}
+    // ✅ FIX: 'metadata' eliminado
   });
 
   // Modal de detalles de canje
@@ -262,7 +261,7 @@ export default function RewardsManagement() {
       max_per_user: 0, // ✅ NUEVO
       valid_from: '', // ✅ NUEVO
       valid_until: '', // ✅ NUEVO
-      metadata: {}
+      // ✅ FIX: 'metadata' eliminado
     });
     setShowModal(true);
   };
@@ -294,7 +293,7 @@ export default function RewardsManagement() {
       valid_from: reward.valid_from_ui, // ✅ NUEVO (usa el valor formateado)
       valid_until: reward.valid_until_ui, // ✅ NUEVO (usa el valor formateado)
 
-      metadata: reward.metadata || {}
+      // ✅ FIX: 'metadata' eliminado
     });
     setShowModal(true);
   };
@@ -303,6 +302,7 @@ export default function RewardsManagement() {
     try {
       setSaving(true);
       setError(null);
+      setSuccessMessage(null); // Limpiar mensajes antiguos
 
       // 1. Validaciones
       if (!modalData.name || !modalData.name.trim()) {
@@ -355,7 +355,8 @@ export default function RewardsManagement() {
         valid_from: formatDateTimeLocalToISO(modalData.valid_from), // ✅ NUEVO
         valid_until: formatDateTimeLocalToISO(modalData.valid_until), // ✅ NUEVO
 
-        metadata: modalData.metadata,
+        // ✅ FIX: 'metadata' eliminado
+        
         updated_at: new Date().toISOString()
         
         // Campos omitidos intencionalmente (no deben editarse aquí):
@@ -391,7 +392,7 @@ export default function RewardsManagement() {
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error('Error guardando recompensa:', err);
-      setError(err.message);
+      setError(err.message); // Mostrar el error en la UI
     } finally {
       setSaving(false);
     }
@@ -461,7 +462,7 @@ export default function RewardsManagement() {
       setShowRedemptionModal(false);
       await loadData();
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
+    } catch (err)_ {
       console.error('Error actualizando canje:', err); setError(err.message);
     } finally { setSaving(false); }
   };
@@ -566,6 +567,7 @@ export default function RewardsManagement() {
           </button>
         </div>
 
+        {/* El error se mostrará aquí cuando el estado 'error' se actualice */}
         {successMessage && ( <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-sm text-green-800"> <AppIcon name="CheckCircle" className="w-4 h-4" /> {successMessage} </div> )}
         {error && ( <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-800"> <AppIcon name="AlertCircle" className="w-4 h-4" /> {error} </div> )}
       </div>
