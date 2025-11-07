@@ -1,10 +1,13 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ FIX CRÍTICO: Mapeo de columnas a los nombres de la DB:
-//    - status (Inexistente) -> is_active (DB)
-//    - instructions (Form) -> redemption_instructions (DB)
-//    - is_unlimited_stock (Form) -> stock_quantity = -1 (DB)
+// ✅ FIX CRÍTICO: Mapeo de todas las columnas del formulario a las columnas
+//    reales de la base de datos (las que nos diste en la lista).
+//    - name (Form) <-> title (DB)
+//    - instructions (Form) <-> redemption_instructions (DB)
+//    - status (Form) <-> is_active (DB)
+//    - is_unlimited_stock (Form) <-> stock_quantity = -1 (DB)
+//    - cost_free_points / cost_premium_points (Form) <-> points_cost / points_type (DB)
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -24,11 +27,11 @@ const REWARD_CATEGORIES = {
   GIFT_CARD: 'gift_card'
 };
 
-const REWARD_STATUS = {
+// ESTADOS DE LA UI (NO DE LA DB)
+const REWARD_STATUS_UI = {
   ACTIVE: 'active',
   INACTIVE: 'inactive',
-  OUT_OF_STOCK: 'out_of_stock',
-  COMING_SOON: 'coming_soon'
+  OUT_OF_STOCK: 'out_of_stock'
 };
 
 const REDEMPTION_STATUS = {
@@ -60,27 +63,25 @@ export default function RewardsManagement() {
   const [filters, setFilters] = useState({
     search: '',
     category: 'all',
-    status: 'all'
+    status: 'all' // Usa REWARD_STATUS_UI
   });
 
   // Modal de edición/creación
   const [showModal, setShowModal] = useState(false);
   const [editingReward, setEditingReward] = useState(null);
   const [modalData, setModalData] = useState({
-    name: '',
+    name: '', // Mapea a 'title'
     description: '',
     category: REWARD_CATEGORIES.DIGITAL,
-    // Inputs temporales para el formulario
     cost_free_points: 0, 
     cost_premium_points: 0, 
     stock_quantity: 1,
-    is_unlimited_stock: false, // UI: Control de checkbox
+    is_unlimited_stock: false, // Mapea a 'stock_quantity' = -1
     image_url: '',
-    instructions: '', // UI: Campo de instrucciones, mapea a redemption_instructions
-    status: REWARD_STATUS.ACTIVE, // UI: Estado (Activo/Inactivo/etc.)
+    instructions: '', // Mapea a 'redemption_instructions'
+    status: REWARD_STATUS_UI.ACTIVE, // Mapea a 'is_active'
     is_featured: false,
     requires_approval: true,
-    external_url: '', // UI: Campo para URL externa (se elimina en el guardado)
     metadata: {}
   });
 
@@ -129,16 +130,20 @@ export default function RewardsManagement() {
       // ✅ FIX: Mapear los datos de la DB a los inputs del modal
       const mappedRewards = rewardsData?.map(r => ({
           ...r,
+          // Mapeamos 'title' de la DB a 'name' (que usa el resto del componente)
+          name: r.title, 
           // Mapeamos points_cost según el points_type
           cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
           cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
           // Mapeamos stock quantity
-          is_unlimited_stock: r.stock_quantity === -1 // Asignamos la propiedad boolean de UI
+          is_unlimited_stock: r.stock_quantity === -1,
+          // Mapeamos is_active (DB) al 'status' de la UI
+          status: r.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE
       })) || [];
       
       setRewards(mappedRewards);
 
-      // Cargar canjes recientes SIN JOINS (Simplificado)
+      // Cargar canjes recientes
       const { data: redemptionsData, error: redemptionsError } = await supabase
         .from('reward_redemptions')
         .select('*')
@@ -162,8 +167,7 @@ export default function RewardsManagement() {
   const calculateStats = () => {
     setStats({
       totalRewards: rewards.length,
-      // ✅ FIX: Usar la columna real 'is_active' para las estadísticas
-      activeRewards: rewards.filter(r => r.is_active).length, 
+      activeRewards: rewards.filter(r => r.is_active).length,
       totalRedemptions: redemptions.length,
       pendingRedemptions: redemptions.filter(r => r.status === REDEMPTION_STATUS.PENDING).length,
       totalPointsRedeemed: redemptions.reduce((sum, r) => sum + (r.points_spent || 0), 0)
@@ -180,8 +184,8 @@ export default function RewardsManagement() {
       name: '', description: '', category: REWARD_CATEGORIES.DIGITAL,
       cost_free_points: 0, cost_premium_points: 0, stock_quantity: 1, 
       is_unlimited_stock: false, image_url: '', instructions: '', 
-      status: REWARD_STATUS.ACTIVE, is_featured: false, requires_approval: true,
-      external_url: '', metadata: {}
+      status: REWARD_STATUS_UI.ACTIVE, is_featured: false, requires_approval: true,
+      metadata: {}
     });
     setShowModal(true);
   };
@@ -189,17 +193,21 @@ export default function RewardsManagement() {
   const openEditModal = (reward) => {
     setEditingReward(reward);
     setModalData({
-      name: reward.name, description: reward.description, category: reward.category,
+      name: reward.title, // ✅ FIX: Cargar 'title' de la DB
+      description: reward.description,
+      category: reward.category,
       // ✅ FIX: Cargar los valores desde las columnas reales de la DB
       cost_free_points: reward.points_type === 'free' ? reward.points_cost : 0, 
       cost_premium_points: reward.points_type === 'premium' ? reward.points_cost : 0,
       
       stock_quantity: reward.is_unlimited_stock ? 0 : (reward.stock_quantity || 0), 
       is_unlimited_stock: reward.is_unlimited_stock,
-      image_url: reward.image_url || '', instructions: reward.redemption_instructions || '', // ✅ FIX: Mapear 'redemption_instructions'
-      status: reward.is_active ? REWARD_STATUS.ACTIVE : REWARD_STATUS.INACTIVE, // ✅ FIX: Mapear is_active a status de UI
-      is_featured: reward.is_featured, requires_approval: reward.requires_approval,
-      external_url: reward.external_url || '', metadata: reward.metadata || {}
+      image_url: reward.image_url || '', 
+      instructions: reward.redemption_instructions || '', // ✅ FIX: Mapear 'redemption_instructions'
+      status: reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE, // ✅ FIX: Mapear 'is_active'
+      is_featured: reward.is_featured, 
+      requires_approval: reward.requires_approval,
+      metadata: reward.metadata || {}
     });
     setShowModal(true);
   };
@@ -210,7 +218,9 @@ export default function RewardsManagement() {
       setError(null);
 
       // 1. Validaciones
-      if (!modalData.name.trim()) { throw new Error('El nombre es requerido'); }
+      if (!modalData.name || !modalData.name.trim()) { // ✅ FIX: 'trim' error
+        throw new Error('El nombre es requerido'); 
+      }
       if (modalData.cost_free_points <= 0 && modalData.cost_premium_points <= 0) {
         throw new Error('Debe definir al menos un costo en puntos');
       }
@@ -229,7 +239,7 @@ export default function RewardsManagement() {
       
       // 3. Preparar los datos para la DB (USANDO LAS COLUMNAS CORRECTAS)
       const rewardDataForDB = {
-        name: modalData.name,
+        title: modalData.name, // ✅ FIX: Mapear 'name' a 'title'
         description: modalData.description,
         category: modalData.category,
         
@@ -237,21 +247,18 @@ export default function RewardsManagement() {
         points_cost: finalCost, // Columna numérica
         points_type: finalType, // Columna de tipo de moneda
         
-        // ✅ FIX: Conversión de stock_quantity y is_unlimited_stock
+        // ✅ FIX: 'is_unlimited_stock' no existe, usar 'stock_quantity = -1'
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
-        // is_unlimited_stock NO EXISTE. No la enviamos.
         
         image_url: modalData.image_url,
-        // ✅ FIX FINAL: Mapear 'instructions' a 'redemption_instructions' y eliminar 'external_url'
-        redemption_instructions: modalData.instructions, // Columna real
-        is_active: modalData.status === REWARD_STATUS.ACTIVE, // ✅ FIX: Mapear status de UI a is_active de DB
+        // ✅ FIX FINAL: Mapear 'instructions' a 'redemption_instructions'
+        redemption_instructions: modalData.instructions, 
+        is_active: modalData.status === REWARD_STATUS_UI.ACTIVE, // ✅ FIX: Mapear 'status' a 'is_active'
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
         metadata: modalData.metadata,
         updated_at: new Date().toISOString()
       };
-      // ⚠️ NOTA: El formulario de React tiene 'is_unlimited_stock' como checkbox.
-      // Ya lo hemos manejado: lo convertimos a -1 en 'stock_quantity' y no lo enviamos como columna separada.
 
       if (editingReward) {
         // 4. Actualizar
@@ -303,7 +310,7 @@ export default function RewardsManagement() {
   const toggleRewardStatus = async (rewardId, currentStatus) => {
     try {
       // ✅ FIX CRÍTICO: Toggle debe actualizar la columna 'is_active'
-      const newActiveState = currentStatus === REWARD_STATUS.ACTIVE ? false : true;
+      const newActiveState = currentStatus === REWARD_STATUS_UI.ACTIVE ? false : true;
       const { error } = await supabase
         .from('rewards')
         .update({ is_active: newActiveState, updated_at: new Date().toISOString() })
@@ -363,15 +370,16 @@ export default function RewardsManagement() {
   const filteredRewards = rewards.filter(reward => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      if (!reward.name.toLowerCase().includes(searchLower) && !reward.description?.toLowerCase().includes(searchLower)) {
+      if (!reward.title.toLowerCase().includes(searchLower) && // ✅ FIX: Buscar en 'title'
+          !reward.description?.toLowerCase().includes(searchLower)) {
         return false;
       }
     }
     if (filters.category !== 'all' && reward.category !== filters.category) { return false; }
-    // ✅ FIX: Filtrar por is_active
-    if (filters.status === REWARD_STATUS.ACTIVE && !reward.is_active) { return false; }
-    if (filters.status === REWARD_STATUS.INACTIVE && reward.is_active) { return false; }
-    if (filters.status === REWARD_STATUS.OUT_OF_STOCK && reward.stock_quantity !== 0) { return false; }
+    // ✅ FIX: Filtrar por 'is_active'
+    if (filters.status === REWARD_STATUS_UI.ACTIVE && !reward.is_active) { return false; }
+    if (filters.status === REWARD_STATUS_UI.INACTIVE && reward.is_active) { return false; }
+    if (filters.status === REWARD_STATUS_UI.OUT_OF_STOCK && reward.stock_quantity !== 0) { return false; }
 
     return true;
   });
@@ -396,7 +404,7 @@ export default function RewardsManagement() {
     return icons[category] || 'Gift';
   };
 
-  const getStatusColor = (reward) => {
+  const getStatusColor = (reward) => { // ✅ FIX: Recibe el objeto 'reward'
     if (!reward) return 'gray';
     if (reward.is_active) {
         if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) return 'red'; // Out of stock
@@ -494,11 +502,10 @@ export default function RewardsManagement() {
                   {Object.values(REWARD_CATEGORIES).map(cat => ( <option key={cat} value={cat}>{getCategoryLabel(cat)}</option> ))}
                 </select>
                 <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" >
-                  <option value="all">Todos los estados</option>
-                  <option value={REWARD_STATUS.ACTIVE}>Activas</option>
-                  <option value={REWARD_STATUS.INACTIVE}>Inactivas</option>
-                  <option value={REWARD_STATUS.OUT_OF_STOCK}>Sin stock</option>
-                  <option value={REWARD_STATUS.COMING_SOON}>Próximamente</option>
+                  <option value="all">Todos los estados</Costo en Puntos Gratisoption>
+                  <option value={REWARD_STATUS_UI.ACTIVE}>Activas</option>
+                  <option value={REWARD_STATUS_UI.INACTIVE}>Inactivas</option>
+                  <option value={REWARD_STATUS_UI.OUT_OF_STOCK}>Sin stock</option>
                 </select>
               </div>
 
@@ -512,7 +519,7 @@ export default function RewardsManagement() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredRewards.map(reward => (
-                    <RewardCard key={reward.id} reward={reward} onEdit={() => openEditModal(reward)} onDelete={() => deleteReward(reward.id)} onToggleStatus={() => toggleRewardStatus(reward.id, reward.status)} onUpdateStock={(stock) => updateStock(reward.id, stock)} getCategoryLabel={getCategoryLabel} getCategoryIcon={getCategoryIcon} getStatusColor={getStatusColor} />
+                    <RewardCard key={reward.id} reward={reward} onEdit={() => openEditModal(reward)} onDelete={() => deleteReward(reward.id)} onToggleStatus={() => toggleRewardStatus(reward.id, reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE)} onUpdateStock={(stock) => updateStock(reward.id, stock)} getCategoryLabel={getCategoryLabel} getCategoryIcon={getCategoryIcon} getStatusColor={getStatusColor} />
                   ))}
                 </div>
               )}
@@ -595,7 +602,7 @@ function RewardCard({
   const [newStock, setNewStock] = useState(reward.stock_quantity || 0);
 
   const handleStockUpdate = () => { onUpdateStock(newStock); setEditingStock(false); };
-  const statusColor = getStatusColor(reward.status);
+  const statusColor = getStatusColor(reward); // ✅ FIX: Pasar el objeto reward
   const statusClasses = {
     green: 'bg-green-100 text-green-800', gray: 'bg-gray-100 text-gray-800', red: 'bg-red-100 text-red-800', blue: 'bg-blue-100 text-blue-800'
   };
@@ -604,12 +611,14 @@ function RewardCard({
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
       {/* Imagen */}
       <div className="relative h-48 bg-gradient-to-br from-blue-100 to-purple-100">
-        {reward.image_url ? ( <img src={reward.image_url} alt={reward.name} className="w-full h-full object-cover" /> ) : (
+        {reward.image_url ? ( <img src={reward.image_url} alt={reward.title} className="w-full h-full object-cover" /> ) : (
           <div className="w-full h-full flex items-center justify-center"> <AppIcon name={getCategoryIcon(reward.category)} className="w-16 h-16 text-gray-400" /> </div>
         )}
         {/* Badges */}
         <div className="absolute top-2 left-2 flex gap-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[statusColor]}`}> {reward.status} </span>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[statusColor]}`}>
+            {reward.is_active ? 'Activo' : 'Inactivo'}
+          </span>
           {reward.is_featured && ( <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium"> ⭐ Destacado </span> )}
         </div>
       </div>
@@ -619,7 +628,7 @@ function RewardCard({
         {/* Categoría */}
         <div className="flex items-center gap-2 text-sm text-gray-600 mb-2"> <AppIcon name={getCategoryIcon(reward.category)} className="w-4 h-4" /> {getCategoryLabel(reward.category)} </div>
         {/* Nombre */}
-        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1"> {reward.name} </h3>
+        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1"> {reward.title} </h3>
         {/* Descripción */}
         <p className="text-sm text-gray-600 mb-4 line-clamp-2"> {reward.description} </p>
 
@@ -660,8 +669,8 @@ function RewardCard({
         {/* Acciones */}
         <div className="flex gap-2">
           <button onClick={onEdit} className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium" > Editar </button>
-          <button onClick={onToggleStatus} className={`flex-1 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${reward.status === REWARD_STATUS.ACTIVE ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-green-50 text-green-600 hover:bg-green-100'}`} >
-            {reward.status === REWARD_STATUS.ACTIVE ? 'Desactivar' : 'Activar'}
+          <button onClick={onToggleStatus} className={`flex-1 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${reward.is_active ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-green-50 text-green-600 hover:bg-green-100'}`} >
+            {reward.is_active ? 'Desactivar' : 'Activar'}
           </button>
           <button onClick={onDelete} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" > <AppIcon name="Trash2" className="w-4 h-4" /> </button>
         </div>
