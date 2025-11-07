@@ -2,7 +2,8 @@
 // ============================================================================
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
 // ✅ FIX: Añadida función 'getTransactionTitle' para traducir 'other'
-// ✅ FIX 3: Corregido el typo en la etiqueta de cierre </Button>
+// ✅ NUEVO: Añadidos filtros de fecha ('dateFilter', 'onDateFilterChange')
+// ✅ NUEVO: Añadido botón 'Cargar Más' ('hasMore', 'onLoadMore')
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -10,11 +11,16 @@ import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 
 const TransactionHistory = ({ 
-  transactions = [], 
-  className = '' 
+  transactions = [],
+  loading = false,
+  className = '',
+  // Nuevos props para filtros y paginación
+  dateFilter,
+  onDateFilterChange,
+  hasMore,
+  onLoadMore
 }) => {
   const [filter, setFilter] = useState('all'); // all, earned, spent
-  const [isExpanded, setIsExpanded] = useState(false); // Estado para "Ver más"
 
   // Filtrar usando 'points_change'
   const filteredTransactions = transactions?.filter(transaction => {
@@ -23,10 +29,8 @@ const TransactionHistory = ({
     return true;
   });
 
-  // Lógica para el botón "Ver más"
-  const displayedTransactions = isExpanded ? 
-    filteredTransactions : 
-    filteredTransactions?.slice(0, 5); // Muestra solo los primeros 5
+  // Ya no cortamos la lista, la paginación se maneja en el componente padre
+  const displayedTransactions = filteredTransactions; 
 
   // Función para 'traducir' el título de la transacción
   const getTransactionTitle = (transaction) => {
@@ -38,7 +42,6 @@ const TransactionHistory = ({
     if (desc && desc !== 'other' && desc !== type) {
       return desc;
     }
-
     // Si la descripción es 'other' o nula, traducimos el transaction_type
     if (type === 'other') {
       if (points < 0) return 'Canje de Recompensa'; // 'other' con puntos negativos
@@ -68,7 +71,6 @@ const TransactionHistory = ({
     if (type === 'comment') return 'MessageCircle';
     if (type === 'share') return 'Share2';
     
-    // Icono por defecto
     return (points > 0) ? 'Plus' : 'Minus';
   };
 
@@ -97,7 +99,7 @@ const TransactionHistory = ({
     });
   };
 
-  // Totales basados en 'points_change'
+  // Totales basados en 'points_change' (ahora usa la lista COMPLETA de transacciones)
   const totalEarned = transactions
     ?.filter(t => t?.points_change > 0)
     ?.reduce((sum, t) => sum + (t?.points_change || 0), 0);
@@ -107,14 +109,16 @@ const TransactionHistory = ({
     ?.reduce((sum, t) => sum + Math.abs(t?.points_change || 0), 0);
 
   return (
-    <div className={`bg-card border border-border rounded-lg ${className}`} id="transaction-history">
-      {/* Header */}
-      <div className="p-6 border-b border-border">
+    <div className={`bg-card ${className}`} id="transaction-history">
+      {/* Header (ya no tiene borde inferior) */}
+      <div className="p-0">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-heading font-bold text-foreground">
             Historial de Puntos
           </h2>
-          <Icon name="History" size={20} color="var(--color-muted-foreground)" />
+          <Button variant="ghost" size="icon" className="text-muted-foreground">
+             <Icon name="RefreshCw" size={16} />
+          </Button>
         </div>
 
         {/* Summary Stats */}
@@ -139,7 +143,25 @@ const TransactionHistory = ({
           </div>
         </div>
 
-        {/* Filter Buttons */}
+        {/* ✅ NUEVO: Filtros de Fecha */}
+        <div className="flex space-x-2 mb-4 overflow-x-auto pb-2">
+          {['all', 'today', 'week', 'month'].map((filter) => (
+            <Button
+              key={filter}
+              variant={dateFilter === filter ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onDateFilterChange(filter)}
+              className="flex-shrink-0"
+            >
+              {filter === 'all' && 'Todos'}
+              {filter === 'today' && 'Hoy'}
+              {filter === 'week' && 'Esta Semana'}
+              {filter === 'month' && 'Este Mes'}
+            </Button>
+          ))}
+        </div>
+
+        {/* Filter Buttons (Tipo) */}
         <div className="flex space-x-2">
           <Button
             variant={filter === 'all' ? 'default' : 'outline'}
@@ -165,21 +187,34 @@ const TransactionHistory = ({
             iconPosition="left"
           >
             Canjeados
-          </Button> {/* ✅✅✅ FIX AQUÍ: Corregida la etiqueta de cierre */}
+          </Button>
         </div>
       </div>
-      {/* Transaction List */}
-      <div className="p-6">
-        {filteredTransactions?.length === 0 ? (
+      
+      {/* Transaction List (ya no tiene padding superior) */}
+      <div className="pt-6">
+        {loading && displayedTransactions?.length === 0 ? (
+          // Loading spinner
+          <div className="text-center py-8">
+            <div className="w-8 h-8 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Cargando historial...</p>
+          </div>
+        ) : displayedTransactions?.length === 0 ? (
+          // Empty state
           <div className="text-center py-8">
             <Icon name="History" size={48} color="var(--color-muted-foreground)" className="mx-auto mb-4" />
             <p className="text-muted-foreground">
-              {filter === 'all' ?'No hay transacciones aún'
-                : filter === 'earned' ?'No hay puntos ganados aún' :'No hay puntos canjeados aún'
+              {filter === 'all' ?'No hay transacciones'
+                : filter === 'earned' ?'No hay puntos ganados' :'No hay puntos canjeados'
               }
+              {dateFilter !== 'all' && (
+                dateFilter === 'today' ? ' hoy' :
+                dateFilter === 'week' ? ' esta semana' : ' este mes'
+              )}
             </p>
           </div>
         ) : (
+          // Lista
           <div className="space-y-4">
             {displayedTransactions?.map((transaction, index) => (
               <div key={transaction.id || index} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
@@ -222,19 +257,15 @@ const TransactionHistory = ({
           </div>
         )}
 
-        {/* Show More Button */}
-        {filteredTransactions?.length > 5 && (
+        {/* ✅ NUEVO: Botón 'Cargar Más' para Paginación */}
+        {hasMore && (
           <div className="text-center mt-6">
             <Button
               variant="outline"
-              onClick={() => setIsExpanded(!isExpanded)}
-              iconName={isExpanded ? "ChevronUp" : "ChevronDown"}
-              iconPosition="right"
+              onClick={onLoadMore}
+              loading={loading && displayedTransactions.length > 0} // Muestra 'loading' solo si ya hay items
             >
-              {isExpanded 
-                ? 'Mostrar Menos' 
-                : `Ver ${filteredTransactions?.length - 5} más`
-              }
+              Cargar más
             </Button>
           </div>
         )}
