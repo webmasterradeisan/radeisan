@@ -1,9 +1,9 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - FINAL Y ESTABLE (FIX DE ROLLUP Y PERSISTENCIA)
-// ============================================================================
-// ✅ Se añade calculateVideoPoints como exportación nombrada para FIX el error de Vercel.
-// ✅ CORREGIDO: 'amount' -> 'points_change' y eliminada llamada redundante en 'addPoints'.
+// SERVICIO DE PUNTOS - FINAL Y ESTABLE
+// ... (otros fixes)
+// ✅ FIX 4: Reescribir 'deductPoints' como una función 'async' explícita
+//    para solucionar el error de bundler/import '(void 0) is not a function'.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -111,7 +111,6 @@ export const trackPointsAction = async (userId, amount, pointType, actionType, r
       .from(TRANSACTION_TABLE)
       .insert({
         user_id: userId,
-        // ✅ CORRECCIÓN: La columna en la DB se llama 'points_change', no 'amount'.
         points_change: amount, 
         point_type: pointType,
         action_type: actionType,
@@ -166,8 +165,8 @@ export const addPoints = async (userId, amount, type, actionType, referenceId = 
     try {
         const balanceResult = await updatePointsBalance(userId, amount, type, actionType, referenceId);
         
-        // 🛑 CORRECCIÓN: Llamada redundante. El RPC 'updatePointsBalance' (que llama a 'update_user_points')
-        // ya se encarga de insertar la transacción en la DB. Esta línea causaba el error 400.
+        // 🛑 CORRECCIÓN: Llamada redundante. El RPC 'updatePointsBalance' 
+        // ya se encarga de insertar la transacción en la DB.
         // await trackPointsAction(userId, amount, type, actionType, referenceId); 
         
         return balanceResult;
@@ -176,8 +175,17 @@ export const addPoints = async (userId, amount, type, actionType, referenceId = 
     }
 };
 
-export const deductPoints = (userId, amount, type, actionType, referenceId = null) => 
-    updatePointsBalance(userId, -amount, type, actionType, referenceId);
+// ✅✅✅ FIX AQUÍ ✅✅✅
+// Reescribimos 'deductPoints' para que sea una función 'async' explícita
+// igual que 'addPoints'. Esto soluciona el error de importación en Vercel.
+export const deductPoints = async (userId, amount, type, actionType, referenceId = null) => {
+    try {
+        // Llama a la función core con una cantidad negativa
+        return await updatePointsBalance(userId, -amount, type, actionType, referenceId);
+    } catch (error) {
+        throw error;
+    }
+};
 
 
 // 🛑 EXPORTACIÓN NOMBRADA NECESARIA para Misiones y Upload Studio
@@ -197,7 +205,7 @@ export default {
   updatePointsBalance,
   calculateVideoPoints,
   addPoints, 
-  deductPoints,
+  deductPoints, // La exportación (que ya estaba bien) se mantiene
   calculatePremiumValue,
   PREMIUM_POINTS_MULTIPLIER
 };
