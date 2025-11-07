@@ -4,13 +4,24 @@ import Button from '../../../components/ui/Button';
 import { Link } from 'react-router-dom';
 
 const PointsBalanceCard = ({ 
-  currentPoints, 
-  pointsEarnedToday, 
+  // ✅ CORRECCIÓN 1: Recibe saldos separados y el estado de carga
+  freePoints = 0,
+  premiumPoints = 0,
+  pointsEarnedToday = 0, 
   nextRewardThreshold,
+  loading = false, // Estado de carga
   className = '' 
 }) => {
-  const [displayPoints, setDisplayPoints] = useState(currentPoints);
+  // ✅ CORRECCIÓN 2: Calcula el total disponible (Free + Premium)
+  const totalDisplayValue = freePoints + premiumPoints;
+  
+  const [displayPoints, setDisplayPoints] = useState(totalDisplayValue);
   const [showEarnedAnimation, setShowEarnedAnimation] = useState(false);
+
+  useEffect(() => {
+    // Actualizar el estado local cuando los puntos carguen o cambien
+    setDisplayPoints(totalDisplayValue);
+  }, [totalDisplayValue]);
 
   useEffect(() => {
     if (pointsEarnedToday > 0) {
@@ -19,11 +30,21 @@ const PointsBalanceCard = ({
     }
   }, [pointsEarnedToday]);
 
+  // Si los puntos aún no cargan y son cero, mostrar un spinner
+  if (loading && totalDisplayValue === 0 && freePoints === 0 && premiumPoints === 0) {
+     return (
+      <div className={`flex flex-col items-center justify-center p-6 bg-card border border-border rounded-lg shadow-elevation-1 min-h-[250px] ${className}`}>
+        <Icon name="Loader" className="animate-spin text-accent w-8 h-8 mb-3" />
+        <p className="text-sm text-muted-foreground">Obteniendo saldo...</p>
+      </div>
+    );
+  }
+
   const progressToNext = nextRewardThreshold ? 
-    Math.min((currentPoints / nextRewardThreshold) * 100, 100) : 0;
+    Math.min((totalDisplayValue / nextRewardThreshold) * 100, 100) : 0;
 
   const pointsNeeded = nextRewardThreshold ? 
-    Math.max(nextRewardThreshold - currentPoints, 0) : 0;
+    Math.max(nextRewardThreshold - totalDisplayValue, 0) : 0;
 
   const earningTips = [
     {
@@ -64,10 +85,11 @@ const PointsBalanceCard = ({
           <Icon name="Star" size={24} color="white" />
         </div>
       </div>
-      {/* Current Balance */}
-      <div className="text-center mb-6">
+      
+      {/* Current Balance (Combinado) */}
+      <div className="text-center mb-4">
         <div className="relative inline-block">
-          <span className="text-4xl font-mono font-bold text-accent">
+          <span className="text-5xl font-mono font-bold text-accent">
             {displayPoints?.toLocaleString()}
           </span>
           {showEarnedAnimation && (
@@ -78,8 +100,31 @@ const PointsBalanceCard = ({
             </div>
           )}
         </div>
-        <p className="text-sm text-muted-foreground mt-1">puntos disponibles</p>
+        <p className="text-lg font-medium text-foreground mt-1">puntos disponibles</p>
       </div>
+
+      {/* ✅ CORRECCIÓN 3: Mostrar el saldo dual por separado (Diferenciación UX) */}
+      <div className="flex justify-around border-b border-border pb-4 mb-4">
+          <div className="text-center">
+              <span className="text-xl font-bold text-orange-400 block">
+                  {freePoints.toLocaleString()}
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center justify-center gap-1 mt-1">
+                  <Icon name="Star" size={14} className="text-orange-400" />
+                  Puntos Gratis
+              </span>
+          </div>
+          <div className="text-center">
+              <span className="text-xl font-bold text-green-600 block">
+                  {premiumPoints.toLocaleString()}
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center justify-center gap-1 mt-1">
+                  <Icon name="Award" size={14} className="text-green-600" />
+                  Puntos Premium
+              </span>
+          </div>
+      </div>
+      
       {/* Today's Earnings */}
       {pointsEarnedToday > 0 && (
         <div className="bg-success/10 border border-success/20 rounded-lg p-3 mb-6">
@@ -91,6 +136,7 @@ const PointsBalanceCard = ({
           </div>
         </div>
       )}
+      
       {/* Progress to Next Reward */}
       {nextRewardThreshold && (
         <div className="mb-6">
