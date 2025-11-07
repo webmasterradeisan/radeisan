@@ -5,6 +5,8 @@
 //    - 'type' -> 'points_change > 0' (para 'earned'/'spent')
 //    - 'date' -> 'created_at'
 //    - 'category' -> 'transaction_type'
+// ✅ FIX: Añadida función 'getTransactionTitle' para traducir 'other'
+//    a "Canje de Recompensa" o "Puntos Devueltos".
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -16,6 +18,7 @@ const TransactionHistory = ({
   className = '' 
 }) => {
   const [filter, setFilter] = useState('all'); // all, earned, spent
+  const [isExpanded, setIsExpanded] = useState(false); // Estado para "Ver más"
 
   // ✅ FIX: Filtrar usando 'points_change'
   const filteredTransactions = transactions?.filter(transaction => {
@@ -24,21 +27,50 @@ const TransactionHistory = ({
     return true;
   });
 
-  // Mostramos todas, ya que tu captura muestra "Ver 19 más"
-  const displayedTransactions = filteredTransactions; 
+  // Lógica para el botón "Ver más"
+  const displayedTransactions = isExpanded ? 
+    filteredTransactions : 
+    filteredTransactions?.slice(0, 5); // Muestra solo los primeros 5
 
-  // ✅ FIX: Icono basado en 'transaction_type' (valores de tu DB)
-  const getTransactionIcon = (transaction) => {
-    switch (transaction?.transaction_type) {
-      case 'video_like':
-        return 'Heart';
-      case 'admin_adjustment':
-        return 'User';
-      case 'other': // 'other' se usa para canjes y comentarios
-        return (transaction?.points_change < 0) ? 'Gift' : 'MessageCircle';
-      default:
-        return 'Circle';
+  // ✅ FIX: Función para 'traducir' el título de la transacción
+  const getTransactionTitle = (transaction) => {
+    const type = transaction?.transaction_type;
+    const desc = transaction?.description;
+    const points = transaction?.points_change;
+
+    // Si la descripción es útil (ej: "Comentar"), la usamos
+    if (desc && desc !== 'other') {
+      return desc;
     }
+
+    // Si la descripción es 'other' o nula, traducimos el transaction_type
+    if (type === 'other') {
+      if (points < 0) return 'Canje de Recompensa'; // Esto es 'other' con puntos negativos
+      if (points > 0) return 'Puntos Devueltos'; // Esto es 'other' con puntos positivos (reversión)
+    }
+    if (type === 'video_like') return 'Like en video';
+    if (type === 'admin_adjustment') return 'Ajuste de Administrador';
+    
+    return type || 'Transacción'; // Fallback
+  };
+
+  // ✅ FIX: Icono basado en 'transaction_type' y 'points_change'
+  const getTransactionIcon = (transaction) => {
+    const type = transaction?.transaction_type;
+    const points = transaction?.points_change;
+
+    if (type === 'other' && points < 0) return 'Gift'; // Canje
+    if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
+    if (type === 'video_like') return 'Heart';
+    if (type === 'admin_adjustment') return 'User';
+    
+    // Fallback para otros tipos de la DB
+    if (transaction?.description?.includes('Comentar')) return 'MessageCircle';
+    if (transaction?.description?.includes('video')) return 'Play';
+    if (transaction?.description?.includes('Dar me gusta')) return 'Heart';
+
+    // Icono por defecto
+    return (points > 0) ? 'Plus' : 'Minus';
   };
 
   // ✅ FIX: Color basado en 'points_change'
@@ -47,9 +79,9 @@ const TransactionHistory = ({
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Fecha inválida'; // Fallback
+    if (!dateString) return 'Fecha inválida';
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Fecha inválida'; // Fallback
+    if (isNaN(date.getTime())) return 'Fecha inválida';
     
     const now = new Date();
     const diffTime = Math.abs(now - date);
@@ -83,7 +115,6 @@ const TransactionHistory = ({
           <h2 className="text-lg font-heading font-bold text-foreground">
             Historial de Puntos
           </h2>
-          {/* TODO: Agregar un botón de recarga si se desea */}
           <Icon name="History" size={20} color="var(--color-muted-foreground)" />
         </div>
 
@@ -135,12 +166,12 @@ const TransactionHistory = ({
             iconPosition="left"
           >
             Canjeados
-          </Button>
+          Button>
         </div>
       </div>
       {/* Transaction List */}
       <div className="p-6">
-        {displayedTransactions?.length === 0 ? (
+        {filteredTransactions?.length === 0 ? (
           <div className="text-center py-8">
             <Icon name="History" size={48} color="var(--color-muted-foreground)" className="mx-auto mb-4" />
             <p className="text-muted-foreground">
@@ -168,15 +199,14 @@ const TransactionHistory = ({
                 {/* Details */}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-foreground truncate">
-                    {/* ✅ FIX: Mostrar 'description' o 'transaction_type' */}
-                    {transaction?.description || transaction?.transaction_type}
+                    {/* ✅ FIX: Usar la nueva función de título */}
+                    {getTransactionTitle(transaction)}
                   </h3>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-sm text-muted-foreground">
                       {/* ✅ FIX: Formatear 'created_at' */}
                       {formatDate(transaction?.created_at)}
                     </span>
-                    {/* ✅ FIX: Sección 'source' eliminada (no existe en DB) */}
                   </div>
                 </div>
 
@@ -196,8 +226,7 @@ const TransactionHistory = ({
           </div>
         )}
 
-        {/* 'Show More' ya no es necesario si quitamos el slice (como en tu captura) */}
-        {/*
+        {/* Show More Button */}
         {filteredTransactions?.length > 5 && (
           <div className="text-center mt-6">
             <Button
@@ -213,7 +242,6 @@ const TransactionHistory = ({
             </Button>
           </div>
         )}
-        */}
       </div>
     </div>
   );
