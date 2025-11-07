@@ -1,9 +1,9 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ FIX CRÍTICO: Eliminadas las columnas inexistentes 'instructions' y 'external_url'
+// ✅ FIX 1: Eliminadas las columnas inexistentes 'instructions', 'external_url'
 //    del objeto de guardado para resolver el error 'Could not find the column'.
-// ✅ FIX: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
+// ✅ FIX 2: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -75,11 +75,11 @@ export default function RewardsManagement() {
     stock_quantity: 1,
     is_unlimited_stock: false,
     image_url: '',
-    instructions: '', // Se mantiene aquí para el input del formulario
+    instructions: '', // Se mantiene para el input del formulario
     status: REWARD_STATUS.ACTIVE,
     is_featured: false,
     requires_approval: true,
-    external_url: '', // Se mantiene aquí para el input del formulario
+    external_url: '', // Se mantiene para el input del formulario
     metadata: {}
   });
 
@@ -137,7 +137,7 @@ export default function RewardsManagement() {
       
       setRewards(mappedRewards);
 
-      // Cargar canjes recientes SIN JOINS
+      // Cargar canjes recientes SIN JOINS (Simplificado)
       const { data: redemptionsData, error: redemptionsError } = await supabase
         .from('reward_redemptions')
         .select('*')
@@ -217,11 +217,9 @@ export default function RewardsManagement() {
       let finalType = 'free';
 
       if (modalData.cost_premium_points > 0) {
-          // Opción 1: Si hay un valor en PREMIUM, se usa ese valor y tipo.
           finalCost = parseInt(modalData.cost_premium_points);
           finalType = 'premium';
       } else {
-          // Opción 2: Si no, se usa el valor de GRATIS.
           finalCost = parseInt(modalData.cost_free_points);
           finalType = 'free';
       }
@@ -240,7 +238,6 @@ export default function RewardsManagement() {
         is_unlimited_stock: modalData.is_unlimited_stock,
         image_url: modalData.image_url,
         // ✅ FIX FINAL: Eliminar las columnas que no existen para evitar el error 400
-        // No existe: 'instructions', 'external_url'
         status: modalData.status,
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
@@ -652,44 +649,6 @@ function RewardCard({
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * Card de canje
- */
-function RedemptionCard({ redemption, onClick, getStatusColor }) {
-  const statusColor = getStatusColor(redemption.status);
-  const statusClasses = {
-    yellow: 'bg-yellow-100 text-yellow-800', green: 'bg-green-100 text-green-800', red: 'bg-red-100 text-red-800',
-    blue: 'bg-blue-100 text-blue-800', gray: 'bg-gray-100 text-gray-800'
-  };
-
-  return (
-    <button onClick={onClick} className="w-full p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow text-left" >
-      <div className="flex items-start gap-4">
-        {/* Avatar del usuario */}
-        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-          {redemption.user?.avatar_url ? ( <img src={redemption.user.avatar_url} alt="" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full flex items-center justify-center"> <AppIcon name="User" className="w-6 h-6 text-gray-400" /> </div> )}
-        </div>
-
-        {/* Info del canje */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-4 mb-2">
-            <div className="flex-1 min-w-0"> <h4 className="font-semibold text-gray-900 truncate"> {redemption.user?.full_name || redemption.user?.username || 'Usuario'} </h4> <p className="text-sm text-gray-600 truncate"> {redemption.reward?.name} </p> </div>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${statusClasses[statusColor]}`}> {redemption.status} </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-1"> <AppIcon name="Coins" className="w-4 h-4" /> {redemption.points_spent} pts </div>
-            <div className="flex items-center gap-1"> <AppIcon name="Calendar" className="w-4 h-4" /> {new Date(redemption.created_at).toLocaleDateString('es')} </div>
-          </div>
-        </div>
-
-        {/* Flecha */}
-        <AppIcon name="ChevronRight" className="w-5 h-5 text-gray-400 flex-shrink-0" />
-      </div>
-    </button>
   );
 }
 
