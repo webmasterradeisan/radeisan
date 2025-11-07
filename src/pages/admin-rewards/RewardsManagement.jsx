@@ -1,11 +1,9 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ Integración completa con la tabla 'rewards'
-// ✅ FIX: Eliminada referencia a 'metadata'
-// ✅ FIX 2: Corregido typo 'catch (err)_'
-// ✅ FIX 3: Corregida lógica de 'stock ilimitado' vs 'Sin Stock' en
-//    getStatusLabel, getStatusColor, y filteredRewards.
+// ... (otros fixes anteriores)
+// ✅ FIX 4: Corregida la lógica del modal para que los costos de puntos
+//    "gratis" y "premium" sean mutuamente excluyentes.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -164,7 +162,6 @@ export default function RewardsManagement() {
           name: r.title, 
           cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
           cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
-          // ✅ Lógica de Stock: 'is_unlimited_stock' es crucial
           is_unlimited_stock: r.stock_quantity === -1,
           stock_quantity_ui: r.stock_quantity === -1 ? 0 : r.stock_quantity, 
           status: r.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE,
@@ -270,10 +267,12 @@ export default function RewardsManagement() {
       if (!modalData.name || !modalData.name.trim()) {
         throw new Error('El nombre es requerido'); 
       }
+      // ✅ FIX: La lógica de guardado ahora es más simple
       if (modalData.cost_free_points <= 0 && modalData.cost_premium_points <= 0) {
         throw new Error('Debe definir al menos un costo en puntos');
       }
 
+      // ✅ FIX: La lógica de guardado ahora respeta la exclusión mutua
       let finalCost = 0;
       let finalType = 'free';
 
@@ -293,7 +292,6 @@ export default function RewardsManagement() {
         points_cost: finalCost,
         points_type: finalType,
         
-        // Aquí se guarda -1 si es ilimitado
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
         
         image_url: modalData.image_url,
@@ -377,8 +375,6 @@ export default function RewardsManagement() {
 
   const updateStock = async (rewardId, newStock) => {
     try {
-      // Esta función asume que solo se llama si NO es ilimitado, 
-      // lo cual es correcto por la UI de RewardCard
       const { error } = await supabase.from('rewards').update({ stock_quantity: parseInt(newStock), updated_at: new Date().toISOString() }).eq('id', rewardId);
       if (error) throw error;
       setSuccessMessage('Stock actualizado');
@@ -416,7 +412,7 @@ export default function RewardsManagement() {
   };
 
   // ============================================================================
-  // FUNCIONES DE FILTRADO (¡AQUÍ ESTÁ LA CORRECCIÓN!)
+  // FUNCIONES DE FILTRADO
   // ============================================================================
 
   const filteredRewards = rewards.filter(reward => {
@@ -429,22 +425,16 @@ export default function RewardsManagement() {
     }
     if (filters.category !== 'all' && reward.category !== filters.category) { return false; }
 
-    // ✅✅✅ LÓGICA DE FILTRO CORREGIDA ✅✅✅
-    // Definimos qué significa "Sin Stock"
+    // Lógica de filtro corregida
     const isOutOfStock = !reward.is_unlimited_stock && reward.stock_quantity === 0;
 
-    // Aplicamos filtros de estado
     if (filters.status === REWARD_STATUS_UI.ACTIVE && (!reward.is_active || isOutOfStock)) {
-      // Si el filtro es "Activas", ocultamos las inactivas Y las que no tienen stock
       return false; 
     }
     if (filters.status === REWARD_STATUS_UI.INACTIVE && reward.is_active) {
-      // Si el filtro es "Inactivas", ocultamos las activas
       return false; 
     }
     if (filters.status === REWARD_STATUS_UI.OUT_OF_STOCK && !isOutOfStock) {
-      // Si el filtro es "Sin Stock", ocultamos CUALQUIERA que NO esté sin stock
-      // (Esto incluye las ilimitadas, que nunca están sin stock)
       return false; 
     }
 
@@ -452,7 +442,7 @@ export default function RewardsManagement() {
   });
 
   // ============================================================================
-  // FUNCIONES AUXILIARES (¡AQUÍ ESTÁN LAS OTRAS CORRECCIONES!)
+  // FUNCIONES AUXILIARES
   // ============================================================================
 
   const getCategoryLabel = (category) => {
@@ -471,25 +461,21 @@ export default function RewardsManagement() {
     return icons[category] || 'Gift';
   };
 
-  // ✅✅✅ LÓGICA CORREGIDA ✅✅✅
+  // Lógica corregida
   const getStatusColor = (reward) => {
     if (!reward) return 'gray';
     if (reward.is_active) {
-        // Solo es 'red' (Sin Stock) si NO es ilimitado Y el stock es 0
         if (!reward.is_unlimited_stock && reward.stock_quantity === 0) return 'red';
-        // Es 'green' (Activo) si es ilimitado, o si tiene stock
         return 'green';
     }
     return 'gray'; // Inactive
   };
   
-  // ✅✅✅ LÓGICA CORREGIDA ✅✅✅
+  // Lógica corregida
   const getStatusLabel = (reward) => {
     if (!reward) return 'Inactivo';
     if (reward.is_active) {
-        // Solo es 'Sin Stock' si NO es ilimitado Y el stock es 0
         if (!reward.is_unlimited_stock && reward.stock_quantity === 0) return 'Sin Stock';
-        // Es 'Activo' si es ilimitado, o si tiene stock
         return 'Activo';
     }
     return 'Inactivo';
@@ -610,7 +596,6 @@ export default function RewardsManagement() {
                       onUpdateStock={(stock) => updateStock(reward.id, stock)} 
                       getCategoryLabel={getCategoryLabel} 
                       getCategoryIcon={getCategoryIcon} 
-                      // Pasando las funciones corregidas
                       getStatusColor={getStatusColor} 
                       getStatusLabel={getStatusLabel} 
                     />
@@ -642,7 +627,16 @@ export default function RewardsManagement() {
         <RewardModal
           isEditing={!!editingReward}
           data={modalData}
-          onChange={setModalData}
+          // ✅ FIX: 'onChange' ahora es una función personalizada
+          onChange={setModalData} 
+          onCostChange={(field, value) => {
+            const numericValue = parseInt(value) || 0;
+            if (field === 'free') {
+              setModalData({ ...modalData, cost_free_points: numericValue, cost_premium_points: 0 });
+            } else if (field === 'premium') {
+              setModalData({ ...modalData, cost_free_points: 0, cost_premium_points: numericValue });
+            }
+          }}
           onSave={saveReward}
           onClose={() => setShowModal(false)}
           saving={saving}
@@ -697,7 +691,6 @@ function RewardCard({
 
   const handleStockUpdate = () => { onUpdateStock(newStock); setEditingStock(false); };
   
-  // ✅ Estas funciones ahora tienen la lógica correcta
   const statusColor = getStatusColor(reward);
   const statusLabel = getStatusLabel(reward);
   
@@ -779,7 +772,7 @@ function RewardCard({
  * Modal de crear/editar recompensa
  */
 function RewardModal({ 
-  isEditing, data, onChange, onSave, onClose, saving, getCategoryLabel, getCategoryIcon
+  isEditing, data, onChange, onCostChange, onSave, onClose, saving, getCategoryLabel, getCategoryIcon
 }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -813,10 +806,12 @@ function RewardModal({
             {/* Costos */}
             <div className="grid grid-cols-2 gap-4">
               <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo Puntos Gratis </label>
-                <input type="number" min="0" value={data.cost_free_points} onChange={(e) => onChange({ ...data, cost_free_points: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {/* ✅ FIX: Llama a onCostChange */}
+                <input type="number" min="0" value={data.cost_free_points} onChange={(e) => onCostChange('free', e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo Puntos Premium </label>
-                <input type="number" min="0" value={data.cost_premium_points} onChange={(e) => onChange({ ...data, cost_premium_points: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {/* ✅ FIX: Llama a onCostChange */}
+                <input type="number" min="0" value={data.cost_premium_points} onChange={(e) => onCostChange('premium', e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
 
