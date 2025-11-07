@@ -1,3 +1,8 @@
+// src/pages/points-rewards-store/components/RewardCard.jsx
+// ✅ FIX 3 (FINAL): Corregida la lógica de 'isAvailable' para que lea
+//    el valor del 'reward' (que ya entiende el stock ilimitado).
+// ============================================================================
+
 import React, { useState } from 'react';
 import Image from '../../../components/AppImage';
 import Icon from '../../../components/AppIcon';
@@ -5,7 +10,6 @@ import Button from '../../../components/ui/Button';
 
 const RewardCard = ({ 
   reward, 
-  // ✅ CORRECCIÓN: Ahora recibimos los saldos por separado para la lógica
   userFreePoints,         
   userPremiumPoints,      
   onRedeem, 
@@ -14,7 +18,6 @@ const RewardCard = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   
-  // ✅ LÓGICA INTEGRADA: Leer los costos desde la recompensa
   const requiredFree = reward?.cost_free_points || 0;
   const requiredPremium = reward?.cost_premium_points || 0;
 
@@ -23,7 +26,10 @@ const RewardCard = ({
   const canAffordPremium = userPremiumPoints >= requiredPremium;
   const canAfford = canAffordFree || canAffordPremium;
   
-  const isAvailable = reward?.stock > 0;
+  // ✅✅✅ ¡FIX AQUÍ! ✅✅✅
+  // Leemos el valor 'isAvailable' que nos pasa el 'reward'
+  // (Este valor ya fue calculado correctamente en 'index.jsx')
+  const isAvailable = reward?.isAvailable;
   
   // Determinar la moneda a usar en el canje (Premium es preferida)
   const redemptionType = canAffordPremium ? 'premium' : 'free';
@@ -33,7 +39,6 @@ const RewardCard = ({
     
     setIsLoading(true);
     try {
-      // ✅ INTEGRACIÓN: Pasar el TIPO de moneda a usar
       await onRedeem(reward, redemptionType); 
     } finally {
       setIsLoading(false);
@@ -45,6 +50,7 @@ const RewardCard = ({
   };
 
   const getStatusBadge = () => {
+    // Esta lógica ahora funciona porque 'isAvailable' es correcto
     if (!isAvailable) {
       return (
         <div className="absolute top-2 right-2 bg-error text-error-foreground px-2 py-1 rounded-full text-xs font-medium">
@@ -84,6 +90,7 @@ const RewardCard = ({
         {getStatusBadge()}
         
         {/* Overlay for out of stock */}
+        {/* Esta lógica ahora funciona porque 'isAvailable' es correcto */}
         {!isAvailable && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <span className="text-white font-medium text-sm">No Disponible</span>
@@ -110,13 +117,13 @@ const RewardCard = ({
           {reward?.description}
         </p>
 
-        {/* ✅ MODIFICACIÓN: Mostrar el costo dual de la recompensa (Valor / Beneficio) */}
+        {/* Costo dual de la recompensa (Valor / Beneficio) */}
         <div className="mb-4">
             <span className="text-xs text-muted-foreground font-medium block mb-1">
                 Costo en Puntos de Valor:
             </span>
             <div className="space-y-1">
-                {/* 1. Costo en Puntos PREMIUM (La opción con mayor valor / descuento) */}
+                {/* 1. Costo en Puntos PREMIUM */}
                 {requiredPremium > 0 && (
                   <div 
                     className={`flex items-center justify-between text-sm p-1 rounded-md ${
@@ -160,7 +167,8 @@ const RewardCard = ({
 
 
         {/* Stock Info */}
-        {isAvailable && reward?.stock <= 10 && (
+        {/* Esta lógica ahora funciona porque 'isAvailable' es correcto */}
+        {isAvailable && reward?.stock > 0 && reward?.stock <= 10 && (
           <div className="flex items-center space-x-1 mb-3">
             <Icon name="AlertTriangle" size={14} color="var(--color-warning)" />
             <span className="text-xs text-warning font-medium">
@@ -171,6 +179,7 @@ const RewardCard = ({
 
         {/* Action Buttons */}
         <div className="space-y-2">
+          {/* Esta lógica ahora funciona porque 'isAvailable' es correcto */}
           {isAvailable ? (
             <Button
               variant={canAfford ? "default" : "outline"}
@@ -181,7 +190,6 @@ const RewardCard = ({
               iconName={canAfford ? "Gift" : "Lock"}
               iconPosition="left"
             >
-              {/* ✅ Texto de Acción Dinámico: Prioriza la moneda Premium */}
               {canAfford ? `Canjear con ${canAffordPremium ? 'Premium' : 'Gratis'}` : "Puntos Insuficientes"}
             </Button>
           ) : (
