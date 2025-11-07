@@ -31,7 +31,7 @@ export const usePoints = () => {
 // ============================================================================
 // CONSTANTES DE CONFIGURACIÓN
 // ============================================================================
-const POLLING_INTERVAL = 30000; // 30 segundos
+const POLLING_INTERVAL = 10000; // 30 segundos
 
 export const PointsProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
