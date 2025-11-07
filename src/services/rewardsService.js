@@ -1,93 +1,25 @@
-// ============================================================================
-// REWARDS SERVICE - Servicio de Recompensas (VERSIÓN CORREGIDA)
-// ============================================================================
-// ... (otros fixes anteriores)
-// ✅ FIX 4: Corregida la llamada a 'getUserBalance' por el nombre real
-//    'getUserPoints' y ajustada la forma de leer la respuesta (el bug final).
-// ============================================================================
+// src/services/rewardsService.js
+// (Versión para usar DESPUÉS de actualizar la DB con "reward_redemption")
 
 import { supabase } from '../lib/supabase';
-import * as pointsService from './pointsService'; // Importación necesaria
+import * as pointsService from './pointsService'; 
 
-// ============================================================================
-// CONSTANTES Y CONFIGURACIÓN
-// ============================================================================
-
-export const REWARD_CATEGORIES = {
-  DIGITAL: 'digital',
-  PHYSICAL: 'physical',
-  DISCOUNT: 'discount',
-  PREMIUM: 'premium',
-  EXCLUSIVE: 'exclusive',
-  GIFT_CARD: 'gift_card'
-};
-
-/**
- * Estados de canjes (redenciones)
- */
-export const REDEMPTION_STATUS = {
-  PENDING: 'pending',
-  APPROVED: 'approved',
-  REJECTED: 'rejected',
-  DELIVERED: 'delivered',
-  CANCELLED: 'cancelled'
-};
-
-/**
- * Tipos de puntos que se pueden usar
- */
-export const POINTS_TYPE = {
-  FREE: 'free',
-  PREMIUM: 'premium'
-};
-
-// ============================================================================
-// FUNCIONES DE CONSULTA
-// ============================================================================
-
-/**
- * Obtener una recompensa por ID
- * (Simplificado para obtener solo las columnas que usamos)
- */
-export async function getRewardById(rewardId) {
-  const { data, error } = await supabase
-    .from('rewards')
-    .select(`
-      id, title, is_active, stock_quantity, 
-      cost_free_points, cost_premium_points
-    `)
-    .eq('id', rewardId)
-    .single();
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-  return { success: true, reward: data };
-}
-
-// ... (Otras funciones de consulta como getAvailableRewards)
+// ... (todas las constantes y funciones de 'getRewardById', etc. van aquí...
+// ... el archivo es idéntico al anterior HASTA la función 'redeemReward') ...
 
 // ============================================================================
 // FUNCIONES DE VALIDACIÓN (CORREGIDA)
 // ============================================================================
 
-/**
- * Validar si el usuario puede canjear una recompensa
- * @param {string} rewardId - ID de la recompensa
- * @param {string} pointsType - Tipo de puntos a usar ('free', 'premium')
- * @returns {Promise<Object>}
- */
 export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuario no autenticado');
 
-    // 1. Obtener recompensa
     const rewardResult = await getRewardById(rewardId);
     if (!rewardResult.success) throw new Error('Recompensa no encontrada');
     const reward = rewardResult.reward;
 
-    // 2. Validaciones de estado y stock
     if (reward.is_active !== true) {
       return { success: false, canRedeem: false, reason: 'Esta recompensa no está disponible' };
     }
@@ -95,26 +27,19 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
       return { success: false, canRedeem: false, reason: 'Esta recompensa está agotada' };
     }
 
-    // 3. ✅✅✅ FIX AQUÍ: Obtener balance del usuario ✅✅✅
-    // Se llama a 'getUserPoints' (el nombre real) en lugar de 'getUserBalance'
     const balanceResult = await pointsService.getUserPoints(user.id);
     if (!balanceResult) throw new Error('Error obteniendo balance');
 
-    // ✅✅✅ FIX AQUÍ: Leer la respuesta directa (no está anidada en 'balance')
-    // y renombrar 'free' a 'free_points' para que el resto de la función sirva.
     const { free: free_points, premium: premium_points } = balanceResult;
-
 
     let canAfford = false;
     let costDetails = { type: pointsType, cost: 0, available: 0, actualDeduction: 0 };
 
-    // 4. Lógica de Costos (Leyendo los costos explícitos de la DB)
     if (pointsType === POINTS_TYPE.FREE) {
         const requiredFree = reward.cost_free_points;
         if (!requiredFree || requiredFree <= 0) {
             throw new Error('Esta recompensa no se puede canjear con Puntos Gratis');
         }
-        
         costDetails.cost = requiredFree;
         costDetails.available = free_points;
         costDetails.actualDeduction = requiredFree;
@@ -125,7 +50,6 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
         if (!requiredPremium || requiredPremium <= 0) {
             throw new Error('Esta recompensa no se puede canjear con Puntos Premium');
         }
-
         costDetails.cost = requiredPremium;
         costDetails.available = premium_points;
         costDetails.actualDeduction = requiredPremium;
@@ -147,13 +71,6 @@ export async function validateRedemption(rewardId, pointsType = POINTS_TYPE.FREE
 // FUNCIONES DE CANJE - Redención de Recompensas (CORREGIDA)
 // ============================================================================
 
-/**
- * Canjear una recompensa con puntos
- * @param {string} rewardId - ID de la recompensa
- * @param {string} pointsType - Tipo de puntos a usar
- * @param {Object} options - Opciones adicionales
- * @returns {Promise<Object>}
- */
 export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, options = {}) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -161,7 +78,6 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
 
     const { userNotes = '', deliveryAddress = null, contactInfo = null } = options;
 
-    // 1. Validar canje (Ahora usa la lógica correcta)
     const validation = await validateRedemption(rewardId, pointsType);
     if (!validation.canRedeem) {
       return { success: false, error: validation.reason };
@@ -170,13 +86,12 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const reward = validation.reward;
     const costDetails = validation.costDetails;
 
-    // 2. Deducir puntos usando el servicio deductPoints
-    // Esta llamada ahora SÍ funcionará gracias al fix en pointsService.js
+    // 2. Deducir puntos
     const pointsDeductionResult = await pointsService.deductPoints(
         user.id,
         costDetails.actualDeduction, 
         pointsType,                   
-        'reward_redemption',        
+        'reward_redemption', // ✅✅✅ AHORA ESTO FUNCIONARÁ ✅✅✅
         rewardId                    
     );
 
@@ -184,7 +99,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         throw new Error(pointsDeductionResult.error || 'Error al deducir puntos del saldo.');
     }
 
-    // 3. Registrar la Redención usando RPC function
+    // 3. Registrar la Redención
     const { data, error } = await supabase.rpc('redeem_reward', {
       p_user_id: user.id,
       p_reward_id: rewardId,
@@ -200,7 +115,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const status = REDEMPTION_STATUS.APPROVED;
     const requiresApproval = false; 
 
-    // 5. Devolver el nuevo saldo para actualizar el PointsContext
+    // 5. Devolver el nuevo saldo
     return {
       success: true,
       redemption: {
@@ -222,6 +137,14 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     };
   }
 }
+
+
+// ... (El resto del archivo 'rewardsService.js' va aquí: 
+// cancelRedemption, getUserRedemptionHistory, isRewardAvailable, y las exportaciones) ...
+
+
+// --- COPIAR DESDE AQUÍ HACIA ABAJO ---
+
 
 /**
  * Cancelar un canje (PENDING) y devolver los puntos.
@@ -264,9 +187,6 @@ export async function getUserRedemptionHistory() {
 
     return { success: true, history: data };
 }
-
-// =C... (Otras funciones de historial y administración) ...
-
 
 // ============================================================================
 // FUNCIONES UTILITIES
