@@ -7,7 +7,6 @@
 //    - instructions (Form) <-> redemption_instructions (DB)
 //    - status (Form) <-> is_active (DB)
 //    - is_unlimited_stock (Form) <-> stock_quantity = -1 (DB)
-//    - cost_free_points / cost_premium_points (Form) <-> points_cost / points_type (DB)
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -70,16 +69,17 @@ export default function RewardsManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingReward, setEditingReward] = useState(null);
   const [modalData, setModalData] = useState({
-    name: '', // Mapea a 'title'
+    name: '',
     description: '',
     category: REWARD_CATEGORIES.DIGITAL,
+    // Inputs temporales para el formulario
     cost_free_points: 0, 
     cost_premium_points: 0, 
     stock_quantity: 1,
-    is_unlimited_stock: false, // Mapea a 'stock_quantity' = -1
+    is_unlimited_stock: false, // UI: Control de checkbox
     image_url: '',
-    instructions: '', // Mapea a 'redemption_instructions'
-    status: REWARD_STATUS_UI.ACTIVE, // Mapea a 'is_active'
+    instructions: '', // UI: Campo de instrucciones, mapea a redemption_instructions
+    status: REWARD_STATUS_UI.ACTIVE, // UI: Estado (Activo/Inactivo/etc.)
     is_featured: false,
     requires_approval: true,
     metadata: {}
@@ -412,6 +412,15 @@ export default function RewardsManagement() {
     }
     return 'gray'; // Inactive
   };
+  
+  const getStatusLabel = (reward) => { // ✅ FIX: Función para obtener la etiqueta de estado
+    if (!reward) return 'Inactivo';
+    if (reward.is_active) {
+        if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) return 'Sin Stock';
+        return 'Activo';
+    }
+    return 'Inactivo';
+  };
 
   const getRedemptionStatusColor = (status) => {
     const colors = {
@@ -502,7 +511,7 @@ export default function RewardsManagement() {
                   {Object.values(REWARD_CATEGORIES).map(cat => ( <option key={cat} value={cat}>{getCategoryLabel(cat)}</option> ))}
                 </select>
                 <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" >
-                  <option value="all">Todos los estados</Costo en Puntos Gratisoption>
+                  <option value="all">Todos los estados</option>
                   <option value={REWARD_STATUS_UI.ACTIVE}>Activas</option>
                   <option value={REWARD_STATUS_UI.INACTIVE}>Inactivas</option>
                   <option value={REWARD_STATUS_UI.OUT_OF_STOCK}>Sin stock</option>
@@ -519,7 +528,7 @@ export default function RewardsManagement() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredRewards.map(reward => (
-                    <RewardCard key={reward.id} reward={reward} onEdit={() => openEditModal(reward)} onDelete={() => deleteReward(reward.id)} onToggleStatus={() => toggleRewardStatus(reward.id, reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE)} onUpdateStock={(stock) => updateStock(reward.id, stock)} getCategoryLabel={getCategoryLabel} getCategoryIcon={getCategoryIcon} getStatusColor={getStatusColor} />
+                    <RewardCard key={reward.id} reward={reward} onEdit={() => openEditModal(reward)} onDelete={() => deleteReward(reward.id)} onToggleStatus={() => toggleRewardStatus(reward.id, reward.status)} onUpdateStock={(stock) => updateStock(reward.id, stock)} getCategoryLabel={getCategoryLabel} getCategoryIcon={getCategoryIcon} getStatusColor={getStatusColor} getStatusLabel={getStatusLabel} />
                   ))}
                 </div>
               )}
@@ -596,13 +605,14 @@ function StatCard({ icon, label, value, color }) {
  * Card de recompensa
  */
 function RewardCard({ 
-  reward, onEdit, onDelete, onToggleStatus, onUpdateStock, getCategoryLabel, getCategoryIcon, getStatusColor
+  reward, onEdit, onDelete, onToggleStatus, onUpdateStock, getCategoryLabel, getCategoryIcon, getStatusColor, getStatusLabel
 }) {
   const [editingStock, setEditingStock] = useState(false);
   const [newStock, setNewStock] = useState(reward.stock_quantity || 0);
 
   const handleStockUpdate = () => { onUpdateStock(newStock); setEditingStock(false); };
-  const statusColor = getStatusColor(reward); // ✅ FIX: Pasar el objeto reward
+  const statusColor = getStatusColor(reward);
+  const statusLabel = getStatusLabel(reward);
   const statusClasses = {
     green: 'bg-green-100 text-green-800', gray: 'bg-gray-100 text-gray-800', red: 'bg-red-100 text-red-800', blue: 'bg-blue-100 text-blue-800'
   };
@@ -616,9 +626,7 @@ function RewardCard({
         )}
         {/* Badges */}
         <div className="absolute top-2 left-2 flex gap-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[statusColor]}`}>
-            {reward.is_active ? 'Activo' : 'Inactivo'}
-          </span>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[statusColor]}`}> {statusLabel} </span>
           {reward.is_featured && ( <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium"> ⭐ Destacado </span> )}
         </div>
       </div>
@@ -764,6 +772,144 @@ function RewardModal({
               {saving ? 'Guardando...' : (isEditing ? 'Actualizar' : 'Crear')}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Modal de detalles de canje
+ */
+function RedemptionModal({ redemption, onUpdateStatus, onClose, saving, getStatusColor }) {
+  const [notes, setNotes] = useState('');
+  const statusColor = getStatusColor(redemption.status);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-lg w-full">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">
+              Detalles del Canje
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <AppIcon name="X" className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Info del usuario */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                {redemption.user?.avatar_url ? (
+                  <img src={redemption.user.avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <AppIcon name="User" className="w-6 h-6 text-gray-400" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="font-semibold text-gray-900">
+                  {redemption.user?.full_name || 'Usuario'}
+                </div>
+                <div className="text-sm text-gray-600">
+                  @{redemption.user?.username}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Info de la recompensa */}
+          <div className="mb-6">
+            <h3 className="font-semibold text-gray-900 mb-2">
+              {redemption.reward?.name}
+            </h3>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <AppIcon name="Coins" className="w-4 h-4" />
+              <span>{redemption.points_spent} puntos canjeados</span>
+            </div>
+          </div>
+
+          {/* Detalles adicionales */}
+          <div className="mb-6 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Fecha de canje:</span>
+              <span className="font-medium">
+                {new Date(redemption.created_at).toLocaleString('es')}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Estado:</span>
+              <span className={`font-medium ${getRedemptionStatusColor(redemption.status)}`}>
+                {redemption.status}
+              </span>
+            </div>
+            {redemption.user_notes && (
+              <div>
+                <span className="text-gray-600">Notas del usuario:</span>
+                <p className="mt-1 p-2 bg-gray-50 rounded text-gray-900">
+                  {redemption.user_notes}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Notas del admin */}
+          {redemption.status === REDEMPTION_STATUS.PENDING && (
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notas (opcional)
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Agregar notas sobre este canje..."
+              />
+            </div>
+          )}
+
+          {/* Acciones */}
+          {redemption.status === REDEMPTION_STATUS.PENDING ? (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => onUpdateStatus(redemption.id, REDEMPTION_STATUS.REJECTED, notes)}
+                disabled={saving}
+                className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+              >
+                Rechazar
+              </button>
+              <button
+                onClick={() => onUpdateStatus(redemption.id, REDEMPTION_STATUS.APPROVED, notes)}
+                disabled={saving}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                Aprobar
+              </button>
+            </div>
+          ) : redemption.status === REDEMPTION_STATUS.APPROVED ? (
+            <button
+              onClick={() => onUpdateStatus(redemption.id, REDEMPTION_STATUS.DELIVERED, notes)}
+              disabled={saving}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              Marcar como Entregado
+            </button>
+          ) : (
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cerrar
+            </button>
+          )}
         </div>
       </div>
     </div>
