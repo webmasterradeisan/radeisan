@@ -1,11 +1,13 @@
+// src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
-// POINTS RULES EDITOR - Editor de Reglas de Puntos
+// POINTS RULES EDITOR - VERSIÓN CORREGIDA E INTEGRADA
 // ============================================================================
-// Componente de administración para configurar todo el sistema de puntos:
-// - Multiplicadores por categoría
-// - Puntos por acción (watch, upload, like, etc.)
-// - Bonos especiales y promociones
-// - Límites y restricciones
+// ✅ INTEGRACIÓN: 'loadData' ahora carga las reglas de "Acciones" desde
+//    la tabla 'public.points_rules' (la misma que usa la app).
+// ✅ INTEGRACIÓN: 'handleSave' ahora guarda las "Acciones" actualizando
+//    'public.points_rules' y el resto de la config en 'system_settings'.
+// ✅ UI DINÁMICA: La pestaña "Acciones" ahora se genera dinámicamente
+//    basándose en las reglas que existen en la tabla 'points_rules'.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -13,22 +15,12 @@ import { supabase } from '../../lib/supabase';
 import AppIcon from '../../components/AppIcon';
 
 // ============================================================================
-// CONFIGURACIÓN POR DEFECTO
+// CONFIGURACIÓN POR DEFECTO (Para Bonos, Límites, General)
 // ============================================================================
 
 const DEFAULT_POINTS_CONFIG = {
-  // Puntos por acciones básicas
-  actions: {
-    watch_video: 5,
-    upload_video: 50,
-    upload_photo: 30,
-    give_like: 2,
-    receive_like: 3,
-    comment: 5,
-    share: 10,
-    follow_user: 5,
-    daily_login: 10
-  },
+  // Las 'actions' ya no se definen aquí, se cargan desde la DB
+  actions: {}, 
   
   // Bonos especiales
   bonuses: {
@@ -68,7 +60,13 @@ export default function PointsRulesEditor() {
   // ============================================================================
 
   const [activeTab, setActiveTab] = useState('actions');
-  const [config, setConfig] = useState(DEFAULT_POINTS_CONFIG);
+  
+  // ✅ INTEGRACIÓN: Nuevo estado para las reglas de 'points_rules'
+  const [actionRules, setActionRules] = useState([]);
+  
+  // Estado para el resto de la config (Bonos, Límites, etc.)
+  const [config, setConfig] = useState(DEFAULT_POINTS_CONFIG); 
+  
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,15 +84,16 @@ export default function PointsRulesEditor() {
   }, []);
 
   // ============================================================================
-  // FUNCIONES DE CARGA
+  // FUNCIONES DE CARGA (CORREGIDA)
   // ============================================================================
 
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
+      setHasChanges(false); // Resetear cambios al cargar
 
-      // Cargar categorías
+      // 1. Cargar categorías (Sin cambios)
       const { data: categoriesData, error: categoriesError } = await supabase
         .from('categories')
         .select('*')
@@ -103,7 +102,16 @@ export default function PointsRulesEditor() {
       if (categoriesError) throw categoriesError;
       setCategories(categoriesData || []);
 
-      // Cargar configuración guardada
+      // 2. ✅ INTEGRACIÓN: Cargar reglas de acción desde 'public.points_rules'
+      const { data: rulesData, error: rulesError } = await supabase
+        .from('points_rules')
+        .select('*')
+        .order('action_name');
+        
+      if (rulesError) throw rulesError;
+      setActionRules(rulesData || []);
+
+      // 3. Cargar el RESTO de la config (Bonos, Límites, General) desde 'system_settings'
       const { data: configData, error: configError } = await supabase
         .from('system_settings')
         .select('setting_value')
@@ -113,7 +121,15 @@ export default function PointsRulesEditor() {
       if (configError && configError.code !== 'PGRST116') throw configError;
 
       if (configData) {
-        setConfig(JSON.parse(configData.setting_value));
+        // Combinar: Cargar bonos/límites/general desde settings
+        const savedConfig = JSON.parse(configData.setting_value);
+        setConfig(prev => ({
+          ...prev,
+          bonuses: savedConfig.bonuses || prev.bonuses,
+          daily_limits: savedConfig.daily_limits || prev.daily_limits,
+          general: savedConfig.general || prev.general,
+          actions: {} // Las acciones se manejan por 'actionRules'
+        }));
       }
 
     } catch (err) {
@@ -125,31 +141,59 @@ export default function PointsRulesEditor() {
   };
 
   // ============================================================================
-  // FUNCIONES DE GUARDADO
+  // FUNCIONES DE GUARDADO (CORREGIDA)
   // ============================================================================
 
-  const saveConfig = async () => {
+  const handleSave = async () => {
     try {
       setSaving(true);
       setError(null);
       setSuccessMessage(null);
 
-      // Guardar en system_settings
+      // 1. Guardar Bonos, Límites, General en 'system_settings'
+      //    (Excluyendo 'actions', que ahora se maneja por 'actionRules')
+      const otherConfig = {
+        bonuses: config.bonuses,
+        daily_limits: config.daily_limits,
+        general: config.general,
+        actions: {} // No guardar acciones aquí
+      };
+      
       const { error: upsertError } = await supabase
         .from('system_settings')
         .upsert({
           setting_key: 'points_rules_config',
-          setting_value: JSON.stringify(config),
+          setting_value: JSON.stringify(otherConfig),
           updated_at: new Date().toISOString()
         });
 
       if (upsertError) throw upsertError;
 
+      // 2. ✅ INTEGRACIÓN: Guardar 'actionRules' actualizando 'public.points_rules'
+      //    Esto crea un array de promesas de 'update'
+      const updates = actionRules.map(rule => 
+        supabase
+          .from('points_rules')
+          .update({ 
+            points_amount: rule.points_amount 
+            // Podrías añadir más campos para actualizar aquí si quisieras
+          })
+          .eq('action_type', rule.action_type)
+      );
+      
+      const results = await Promise.all(updates);
+      
+      // Revisar si algún update falló
+      for (const res of results) {
+        if (res.error) throw res.error;
+      }
+
       setSuccessMessage('Configuración guardada exitosamente');
       setHasChanges(false);
 
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
+    } catch (err)
+ {
       console.error('Error guardando configuración:', err);
       setError(err.message);
     } finally {
@@ -157,28 +201,68 @@ export default function PointsRulesEditor() {
     }
   };
 
-  const resetToDefaults = () => {
-    if (window.confirm('¿Estás seguro de restaurar la configuración por defecto?')) {
-      setConfig(DEFAULT_POINTS_CONFIG);
-      setHasChanges(true);
+  const resetToDefaults = async () => {
+    if (window.confirm('¿Estás seguro de restaurar la configuración por defecto? Esto no se puede deshacer.')) {
+      try {
+        setSaving(true);
+        // Resetear Bonos, Límites, General
+        setConfig(DEFAULT_POINTS_CONFIG);
+
+        // ✅ INTEGRACIÓN: Resetear 'points_rules' a sus valores por defecto
+        // (Estos valores están basados en tu lista de 'points_rules')
+        const defaultRules = [
+          { action_type: 'daily_login', points_amount: 10 },
+          { action_type: 'profile_complete', points_amount: 50 },
+          { action_type: 'email_verified', points_amount: 25 },
+          { action_type: 'video_upload_base', points_amount: 50 },
+          { action_type: 'video_upload_per_minute', points_amount: 10 },
+          { action_type: 'vertical_video_bonus', points_amount: 10 },
+          { action_type: 'video_view', points_amount: 2 },
+          { action_type: 'video_like_received', points_amount: 3 },
+          { action_type: 'video_comment_received', points_amount: 5 },
+          { action_type: 'photo_upload', points_amount: 20 },
+          { action_type: 'photo_like_received', points_amount: 2 },
+          { action_type: 'give_like', points_amount: 1 },
+          { action_type: 'give_comment', points_amount: 2 },
+          { action_type: 'share_content', points_amount: 5 }
+        ];
+
+        // Actualizar el estado local
+        setActionRules(prevRules => 
+          prevRules.map(dbRule => {
+            const defaultRule = defaultRules.find(d => d.action_type === dbRule.action_type);
+            return defaultRule ? { ...dbRule, points_amount: defaultRule.points_amount } : dbRule;
+          })
+        );
+        
+        // Marcar para guardar
+        setHasChanges(true);
+        
+      } catch (e) {
+        setError('Error al restaurar');
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
   // ============================================================================
-  // FUNCIONES DE ACTUALIZACIÓN
+  // FUNCIONES DE ACTUALIZACIÓN (CORREGIDAS)
   // ============================================================================
 
-  const updateAction = (action, value) => {
-    setConfig(prev => ({
-      ...prev,
-      actions: {
-        ...prev.actions,
-        [action]: parseInt(value) || 0
-      }
-    }));
+  // ✅ INTEGRACIÓN: Esta función ahora actualiza el nuevo estado 'actionRules'
+  const updateAction = (actionType, value) => {
+    setActionRules(prev =>
+      prev.map(rule =>
+        rule.action_type === actionType
+          ? { ...rule, points_amount: parseInt(value) || 0 }
+          : rule
+      )
+    );
     setHasChanges(true);
   };
 
+  // (Las siguientes funciones no cambian, ya que manejan 'config')
   const updateBonus = (bonus, value) => {
     setConfig(prev => ({
       ...prev,
@@ -221,7 +305,6 @@ export default function PointsRulesEditor() {
 
       if (error) throw error;
 
-      // Actualizar estado local
       setCategories(prev =>
         prev.map(cat =>
           cat.id === categoryId
@@ -239,26 +322,36 @@ export default function PointsRulesEditor() {
   };
 
   // ============================================================================
-  // FUNCIONES DE PREVIEW
+  // FUNCIONES DE PREVIEW (CORREGIDAS)
   // ============================================================================
+
+  // ✅ INTEGRACIÓN: Helper para obtener el valor de puntos de 'actionRules'
+  const getActionValue = (actionType) => {
+    return actionRules.find(r => r.action_type === actionType)?.points_amount || 0;
+  };
 
   const calculatePreview = () => {
     const category = categories.find(c => c.slug === 'gaming') || categories[0];
     const multiplier = category?.points_multiplier || 1.0;
 
+    // ✅ INTEGRACIÓN: Leer valores desde la función 'getActionValue'
+    const uploadVideoPoints = getActionValue('video_upload_base');
+    const watchVideoPoints = getActionValue('video_view');
+    const giveLikePoints = getActionValue('give_like');
+
     const preview = {
       uploadVideo: {
-        base: config.actions.upload_video,
-        withMultiplier: Math.round(config.actions.upload_video * multiplier),
-        withBonus: Math.round(config.actions.upload_video * multiplier + config.bonuses.first_upload_day)
+        base: uploadVideoPoints,
+        withMultiplier: Math.round(uploadVideoPoints * multiplier),
+        withBonus: Math.round(uploadVideoPoints * multiplier + config.bonuses.first_upload_day)
       },
       watchVideo: {
-        base: config.actions.watch_video,
-        withMultiplier: Math.round(config.actions.watch_video * multiplier),
+        base: watchVideoPoints,
+        withMultiplier: Math.round(watchVideoPoints * multiplier),
         dailyLimit: config.daily_limits.max_watch_points
       },
       giveLike: {
-        base: config.actions.give_like,
+        base: giveLikePoints,
         dailyLimit: config.daily_limits.max_like_points
       },
       category: category?.name || 'Categoría'
@@ -268,10 +361,31 @@ export default function PointsRulesEditor() {
   };
 
   useEffect(() => {
-    if (categories.length > 0) {
+    if (categories.length > 0 && actionRules.length > 0) {
       calculatePreview();
     }
-  }, [config, categories]);
+  }, [config, categories, actionRules]); // Depender de 'actionRules'
+  
+  // ✅ INTEGRACIÓN: Helper para asignar iconos a los action_type de la DB
+  const getIconForAction = (actionType) => {
+    const map = {
+      daily_login: 'LogIn',
+      profile_complete: 'UserCheck',
+      email_verified: 'Mail',
+      video_upload_base: 'Upload',
+      video_upload_per_minute: 'Upload',
+      vertical_video_bonus: 'Upload',
+      video_view: 'Play',
+      video_like_received: 'HeartHandshake',
+      video_comment_received: 'MessageCircle',
+      photo_upload: 'Image',
+      photo_like_received: 'HeartHandshake',
+      give_like: 'Heart',
+      give_comment: 'MessageCircle',
+      share_content: 'Share2'
+    };
+    return map[actionType] || 'Zap';
+  };
 
   // ============================================================================
   // RENDER - LOADING STATE
@@ -320,7 +434,7 @@ export default function PointsRulesEditor() {
             </button>
 
             <button
-              onClick={saveConfig}
+              onClick={handleSave} // Cambiado a 'handleSave'
               disabled={!hasChanges || saving}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
@@ -383,7 +497,9 @@ export default function PointsRulesEditor() {
         </div>
 
         <div className="p-6">
-          {/* Tab: Acciones */}
+          {/* =================================== */}
+          {/* Tab: Acciones (CORREGIDA)           */}
+          {/* =================================== */}
           {activeTab === 'actions' && (
             <div className="space-y-6">
               <div>
@@ -395,94 +511,31 @@ export default function PointsRulesEditor() {
                   Define cuántos puntos gratis ganan los usuarios por cada acción
                 </p>
 
+                {/* ✅ INTEGRACIÓN: Renderizado dinámico desde 'actionRules' */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Ver Video */}
-                  <ActionPointsInput
-                    icon="Play"
-                    label="Ver un video"
-                    description="Completar al menos 30 segundos"
-                    value={config.actions.watch_video}
-                    onChange={(value) => updateAction('watch_video', value)}
-                  />
-
-                  {/* Subir Video */}
-                  <ActionPointsInput
-                    icon="Upload"
-                    label="Subir un video"
-                    description="Video aprobado y publicado"
-                    value={config.actions.upload_video}
-                    onChange={(value) => updateAction('upload_video', value)}
-                    highlight
-                  />
-
-                  {/* Subir Foto */}
-                  <ActionPointsInput
-                    icon="Image"
-                    label="Subir una foto"
-                    description="Foto aprobada y publicada"
-                    value={config.actions.upload_photo}
-                    onChange={(value) => updateAction('upload_photo', value)}
-                  />
-
-                  {/* Dar Like */}
-                  <ActionPointsInput
-                    icon="Heart"
-                    label="Dar un like"
-                    description="Like en video o foto"
-                    value={config.actions.give_like}
-                    onChange={(value) => updateAction('give_like', value)}
-                  />
-
-                  {/* Recibir Like */}
-                  <ActionPointsInput
-                    icon="HeartHandshake"
-                    label="Recibir un like"
-                    description="En tu contenido"
-                    value={config.actions.receive_like}
-                    onChange={(value) => updateAction('receive_like', value)}
-                  />
-
-                  {/* Comentar */}
-                  <ActionPointsInput
-                    icon="MessageCircle"
-                    label="Hacer un comentario"
-                    description="Comentario en contenido"
-                    value={config.actions.comment}
-                    onChange={(value) => updateAction('comment', value)}
-                  />
-
-                  {/* Compartir */}
-                  <ActionPointsInput
-                    icon="Share2"
-                    label="Compartir contenido"
-                    description="Compartir en redes sociales"
-                    value={config.actions.share}
-                    onChange={(value) => updateAction('share', value)}
-                  />
-
-                  {/* Seguir Usuario */}
-                  <ActionPointsInput
-                    icon="UserPlus"
-                    label="Seguir un usuario"
-                    description="Nuevo seguidor"
-                    value={config.actions.follow_user}
-                    onChange={(value) => updateAction('follow_user', value)}
-                  />
-
-                  {/* Login Diario */}
-                  <ActionPointsInput
-                    icon="LogIn"
-                    label="Login diario"
-                    description="Primera vez del día"
-                    value={config.actions.daily_login}
-                    onChange={(value) => updateAction('daily_login', value)}
-                  />
+                  {actionRules.length > 0 ? (
+                    actionRules.map(rule => (
+                      <ActionPointsInput
+                        key={rule.action_type}
+                        icon={getIconForAction(rule.action_type)}
+                        label={rule.action_name} // Título desde la DB
+                        description={rule.description || `ID: ${rule.action_type}`} // Descripción desde la DB
+                        value={rule.points_amount}
+                        onChange={(value) => updateAction(rule.action_type, value)}
+                        highlight={rule.action_type.includes('upload')}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-500">No se encontraron reglas de puntos en la base de datos.</p>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Tab: Multiplicadores */}
+          {/* =================================== */}
+          {/* Tab: Multiplicadores (Sin cambios)  */}
+          {/* =================================== */}
           {activeTab === 'multipliers' && (
             <div className="space-y-6">
               <div>
@@ -500,7 +553,6 @@ export default function PointsRulesEditor() {
                       key={category.id}
                       className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
                     >
-                      {/* Icono y color de categoría */}
                       <div
                         className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ backgroundColor: `${category.color}20` }}
@@ -511,8 +563,6 @@ export default function PointsRulesEditor() {
                           style={{ color: category.color }}
                         />
                       </div>
-
-                      {/* Info de categoría */}
                       <div className="flex-1 min-w-0">
                         <h4 className="font-medium text-gray-900">
                           {category.name}
@@ -521,8 +571,6 @@ export default function PointsRulesEditor() {
                           {category.description}
                         </p>
                       </div>
-
-                      {/* Input de multiplicador */}
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <input
                           type="number"
@@ -535,22 +583,18 @@ export default function PointsRulesEditor() {
                         />
                         <span className="text-gray-600 font-medium">x</span>
                       </div>
-
-                      {/* Preview de puntos */}
                       <div className="text-right flex-shrink-0">
                         <div className="text-sm text-gray-600">
-                          {config.actions.upload_video} pts
+                          {getActionValue('video_upload_base')} pts
                         </div>
                         <div className="text-lg font-bold text-blue-600">
-                          {Math.round(config.actions.upload_video * category.points_multiplier)} pts
+                          {Math.round(getActionValue('video_upload_base') * category.points_multiplier)} pts
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* Info adicional */}
               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex gap-3">
                   <AppIcon name="Info" className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -565,8 +609,10 @@ export default function PointsRulesEditor() {
               </div>
             </div>
           )}
-
-          {/* Tab: Bonos */}
+          
+          {/* =================================== */}
+          {/* Tab: Bonos (Sin cambios)            */}
+          {/* =================================== */}
           {activeTab === 'bonuses' && (
             <div className="space-y-6">
               <div>
@@ -579,7 +625,6 @@ export default function PointsRulesEditor() {
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Primera subida del día */}
                   <BonusPointsInput
                     icon="Sunrise"
                     label="Primera subida del día"
@@ -588,8 +633,6 @@ export default function PointsRulesEditor() {
                     onChange={(value) => updateBonus('first_upload_day', value)}
                     color="orange"
                   />
-
-                  {/* Video trending */}
                   <BonusPointsInput
                     icon="TrendingUp"
                     label="Video trending"
@@ -598,8 +641,6 @@ export default function PointsRulesEditor() {
                     onChange={(value) => updateBonus('trending_video', value)}
                     color="red"
                   />
-
-                  {/* 100 vistas */}
                   <BonusPointsInput
                     icon="Eye"
                     label="100 vistas"
@@ -608,8 +649,6 @@ export default function PointsRulesEditor() {
                     onChange={(value) => updateBonus('video_milestone_100_views', value)}
                     color="blue"
                   />
-
-                  {/* 1,000 vistas */}
                   <BonusPointsInput
                     icon="Eye"
                     label="1,000 vistas"
@@ -618,8 +657,6 @@ export default function PointsRulesEditor() {
                     onChange={(value) => updateBonus('video_milestone_1000_views', value)}
                     color="purple"
                   />
-
-                  {/* 10,000 vistas */}
                   <BonusPointsInput
                     icon="Trophy"
                     label="10,000 vistas"
@@ -628,8 +665,6 @@ export default function PointsRulesEditor() {
                     onChange={(value) => updateBonus('video_milestone_10000_views', value)}
                     color="yellow"
                   />
-
-                  {/* Perfil completo */}
                   <BonusPointsInput
                     icon="UserCheck"
                     label="Perfil completo"
@@ -638,8 +673,6 @@ export default function PointsRulesEditor() {
                     onChange={(value) => updateBonus('complete_profile', value)}
                     color="green"
                   />
-
-                  {/* Email verificado */}
                   <BonusPointsInput
                     icon="Mail"
                     label="Email verificado"
@@ -653,7 +686,9 @@ export default function PointsRulesEditor() {
             </div>
           )}
 
-          {/* Tab: Límites */}
+          {/* =================================== */}
+          {/* Tab: Límites (Sin cambios)          */}
+          {/* =================================== */}
           {activeTab === 'limits' && (
             <div className="space-y-6">
               <div>
@@ -666,49 +701,40 @@ export default function PointsRulesEditor() {
                 </p>
 
                 <div className="space-y-4">
-                  {/* Límite ver videos */}
                   <LimitInput
                     icon="Play"
                     label="Ver videos"
                     description="Máximo de puntos por ver videos al día"
                     value={config.daily_limits.max_watch_points}
                     onChange={(value) => updateDailyLimit('max_watch_points', value)}
-                    basePoints={config.actions.watch_video}
+                    basePoints={getActionValue('video_view')}
                   />
-
-                  {/* Límite dar likes */}
                   <LimitInput
                     icon="Heart"
                     label="Dar likes"
                     description="Máximo de puntos por dar likes al día"
                     value={config.daily_limits.max_like_points}
                     onChange={(value) => updateDailyLimit('max_like_points', value)}
-                    basePoints={config.actions.give_like}
+                    basePoints={getActionValue('give_like')}
                   />
-
-                  {/* Límite comentarios */}
                   <LimitInput
                     icon="MessageCircle"
                     label="Comentarios"
                     description="Máximo de puntos por comentar al día"
                     value={config.daily_limits.max_comment_points}
                     onChange={(value) => updateDailyLimit('max_comment_points', value)}
-                    basePoints={config.actions.comment}
+                    basePoints={getActionValue('give_comment')}
                   />
-
-                  {/* Límite compartir */}
                   <LimitInput
                     icon="Share2"
                     label="Compartir"
                     description="Máximo de puntos por compartir al día"
                     value={config.daily_limits.max_share_points}
                     onChange={(value) => updateDailyLimit('max_share_points', value)}
-                    basePoints={config.actions.share}
+                    basePoints={getActionValue('share_content')}
                   />
                 </div>
               </div>
-
-              {/* Info */}
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex gap-3">
                   <AppIcon name="AlertTriangle" className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -724,7 +750,9 @@ export default function PointsRulesEditor() {
             </div>
           )}
 
-          {/* Tab: General */}
+          {/* =================================== */}
+          {/* Tab: General (Sin cambios)          */}
+          {/* =================================== */}
           {activeTab === 'general' && (
             <div className="space-y-6">
               <div>
@@ -737,7 +765,6 @@ export default function PointsRulesEditor() {
                 </p>
 
                 <div className="space-y-4">
-                  {/* Toggle: Multiplicadores */}
                   <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-900 flex items-center gap-2">
@@ -758,8 +785,6 @@ export default function PointsRulesEditor() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
-
-                  {/* Toggle: Bonos */}
                   <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-900 flex items-center gap-2">
@@ -780,8 +805,6 @@ export default function PointsRulesEditor() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
-
-                  {/* Toggle: Límites */}
                   <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-900 flex items-center gap-2">
@@ -802,8 +825,6 @@ export default function PointsRulesEditor() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
-
-                  {/* Tasa de cambio Premium -> Free */}
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-start gap-3 mb-3">
                       <AppIcon name="RefreshCw" className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
@@ -836,7 +857,9 @@ export default function PointsRulesEditor() {
             </div>
           )}
 
-          {/* Tab: Preview */}
+          {/* =================================== */}
+          {/* Tab: Preview (Corregida)            */}
+          {/* =================================== */}
           {activeTab === 'preview' && (
             <div className="space-y-6">
               <div>
@@ -850,7 +873,6 @@ export default function PointsRulesEditor() {
 
                 {previewData && (
                   <div className="space-y-4">
-                    {/* Ejemplo: Subir Video */}
                     <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
                       <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <AppIcon name="Upload" className="w-5 h-5 text-blue-600" />
@@ -877,8 +899,6 @@ export default function PointsRulesEditor() {
                         </div>
                       </div>
                     </div>
-
-                    {/* Ejemplo: Ver Videos */}
                     <div className="p-6 bg-gradient-to-br from-green-50 to-teal-50 border border-green-200 rounded-lg">
                       <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <AppIcon name="Play" className="w-5 h-5 text-green-600" />
@@ -894,7 +914,7 @@ export default function PointsRulesEditor() {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-700">Videos necesarios para límite diario:</span>
                           <span className="font-semibold text-green-600">
-                            {Math.ceil(previewData.watchVideo.dailyLimit / previewData.watchVideo.base)} videos
+                            {Math.ceil(previewData.watchVideo.dailyLimit / (previewData.watchVideo.base || 1))} videos
                           </span>
                         </div>
                         <div className="flex justify-between items-center pt-3 border-t border-green-200">
@@ -905,8 +925,6 @@ export default function PointsRulesEditor() {
                         </div>
                       </div>
                     </div>
-
-                    {/* Ejemplo: Dar Likes */}
                     <div className="p-6 bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 rounded-lg">
                       <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <AppIcon name="Heart" className="w-5 h-5 text-pink-600" />
@@ -922,7 +940,7 @@ export default function PointsRulesEditor() {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-700">Likes necesarios para límite diario:</span>
                           <span className="font-semibold text-pink-600">
-                            {Math.ceil(previewData.giveLike.dailyLimit / previewData.giveLike.base)} likes
+                            {Math.ceil(previewData.giveLike.dailyLimit / (previewData.giveLike.base || 1))} likes
                           </span>
                         </div>
                         <div className="flex justify-between items-center pt-3 border-t border-pink-200">
@@ -930,39 +948,6 @@ export default function PointsRulesEditor() {
                           <span className="font-bold text-lg text-pink-600">
                             {previewData.giveLike.dailyLimit} pts
                           </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Resumen General */}
-                    <div className="p-6 bg-gradient-to-br from-gray-50 to-slate-50 border-2 border-gray-300 rounded-lg">
-                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <AppIcon name="BarChart3" className="w-5 h-5 text-gray-600" />
-                        Resumen General
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-sm text-gray-600 mb-1">Estado del Sistema</div>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-sm">
-                              <div className={`w-2 h-2 rounded-full ${config.general.enable_multipliers ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                              Multiplicadores: {config.general.enable_multipliers ? 'Activos' : 'Inactivos'}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <div className={`w-2 h-2 rounded-full ${config.general.enable_bonuses ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                              Bonos: {config.general.enable_bonuses ? 'Activos' : 'Inactivos'}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <div className={`w-2 h-2 rounded-full ${config.general.enable_daily_limits ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                              Límites: {config.general.enable_daily_limits ? 'Activos' : 'Inactivos'}
-                            </div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600 mb-1">Acciones Configuradas</div>
-                          <div className="text-2xl font-bold text-gray-900">
-                            {Object.keys(config.actions).length}
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -978,7 +963,7 @@ export default function PointsRulesEditor() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES
+// SUB-COMPONENTES (Sin cambios)
 // ============================================================================
 
 /**
@@ -1068,7 +1053,7 @@ function BonusPointsInput({ icon, label, description, value, onChange, color = '
  * Input para configurar límites diarios
  */
 function LimitInput({ icon, label, description, value, onChange, basePoints }) {
-  const maxActions = Math.ceil(value / basePoints);
+  const maxActions = Math.ceil(value / (basePoints || 1)); // Evitar división por cero
 
   return (
     <div className="p-4 border border-gray-200 rounded-lg hover:border-red-200 transition-colors">
