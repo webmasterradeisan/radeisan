@@ -3,7 +3,7 @@
 // ============================================================================
 // ✅ FIX CRÍTICO: Mapeo de columnas a los nombres de la DB:
 //    - instructions (Form) -> redemption_instructions (DB)
-//    - ELIMINADO del guardado: 'instructions' y 'external_url'.
+//    - external_url (Form) -> ELIMINADA del objeto de guardado.
 // ✅ FIX: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
 // ============================================================================
 
@@ -80,7 +80,7 @@ export default function RewardsManagement() {
     status: REWARD_STATUS.ACTIVE,
     is_featured: false,
     requires_approval: true,
-    // Eliminamos 'external_url' del estado inicial, ya que no existe en la DB
+    external_url: '', // Campo de formulario (se elimina del guardado)
     metadata: {}
   });
 
@@ -138,7 +138,7 @@ export default function RewardsManagement() {
       
       setRewards(mappedRewards);
 
-      // Cargar canjes recientes SIN JOINS (Simplificado)
+      // Cargar canjes recientes SIN JOINS
       const { data: redemptionsData, error: redemptionsError } = await supabase
         .from('reward_redemptions')
         .select('*')
@@ -551,12 +551,9 @@ export default function RewardsManagement() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES
+// SUB-COMPONENTE StatCard
 // ============================================================================
 
-/**
- * Card de estadística
- */
 function StatCard({ icon, label, value, color }) {
   const colorClasses = {
     blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600', purple: 'bg-purple-50 text-purple-600',
@@ -571,9 +568,10 @@ function StatCard({ icon, label, value, color }) {
   );
 }
 
-/**
- * Card de recompensa
- */
+// ============================================================================
+// SUB-COMPONENTE RewardCard
+// ============================================================================
+
 function RewardCard({ 
   reward, onEdit, onDelete, onToggleStatus, onUpdateStock, getCategoryLabel, getCategoryIcon, getStatusColor
 }) {
@@ -656,9 +654,49 @@ function RewardCard({
   );
 }
 
-/**
- * Modal de crear/editar recompensa
- */
+// ============================================================================
+// SUB-COMPONENTE RedemptionCard
+// ============================================================================
+
+function RedemptionCard({ redemption, onClick, getStatusColor }) {
+  const statusColor = getStatusColor(redemption.status);
+  const statusClasses = {
+    yellow: 'bg-yellow-100 text-yellow-800', green: 'bg-green-100 text-green-800', red: 'bg-red-100 text-red-800',
+    blue: 'bg-blue-100 text-blue-800', gray: 'bg-gray-100 text-gray-800'
+  };
+
+  return (
+    <button onClick={onClick} className="w-full p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow text-left" >
+      <div className="flex items-start gap-4">
+        {/* Avatar del usuario */}
+        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {redemption.user?.avatar_url ? ( <img src={redemption.user.avatar_url} alt="" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full flex items-center justify-center"> <AppIcon name="User" className="w-6 h-6 text-gray-400" /> </div> )}
+        </div>
+
+        {/* Info del canje */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <div className="flex-1 min-w-0"> <h4 className="font-semibold text-gray-900 truncate"> {redemption.user?.full_name || redemption.user?.username || 'Usuario'} </h4> <p className="text-sm text-gray-600 truncate"> {redemption.reward?.name} </p> </div>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${statusClasses[statusColor]}`}> {redemption.status} </span>
+          </div>
+
+          <div className="flex items-center gap-4 text-sm text-gray-600">
+            <div className="flex items-center gap-1"> <AppIcon name="Coins" className="w-4 h-4" /> {redemption.points_spent} pts </div>
+            <div className="flex items-center gap-1"> <AppIcon name="Calendar" className="w-4 h-4" /> {new Date(redemption.created_at).toLocaleDateString('es')} </div>
+          </div>
+        </div>
+
+        {/* Flecha */}
+        <AppIcon name="ChevronRight" className="w-5 h-5 text-gray-400 flex-shrink-0" />
+      </div>
+    </button>
+  );
+}
+
+// ============================================================================
+// SUB-COMPONENTE RewardModal
+// ============================================================================
+
 function RewardModal({ 
   isEditing, data, onChange, onSave, onClose, saving, getCategoryLabel, getCategoryIcon
 }) {
