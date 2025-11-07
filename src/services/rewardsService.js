@@ -3,7 +3,7 @@
 // ============================================================================
 // ✅ FIX 6 (FINAL): Eliminada la llamada al RPC 'redeem_reward' (que no existe)
 //    y reemplazada por una inserción directa en 'reward_redemptions'
-//    para registrar el canje.
+// ✅ FIX 7: Corregido error de sintaxis en 'console.error' (comillas anidadas).
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -166,8 +166,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         throw new Error(pointsDeductionResult.error || 'Error al deducir puntos del saldo.');
     }
 
-    // 3. ✅✅✅ FIX: Registrar la Redención usando INSERT (no RPC) ✅✅✅
-    // Esto reemplaza la llamada al RPC 'redeem_reward' que no existía.
+    // 3. Registrar la Redención usando INSERT (no RPC)
     const status = REDEMPTION_STATUS.APPROVED; // Asumimos auto-aprobación
     
     const { data: redemptionData, error: insertError } = await supabase
@@ -186,7 +185,8 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
 
     if (insertError) {
       // Si falla, intentamos devolver los puntos al usuario
-      console.error('Error insertando 'reward_redemptions', revirtiendo puntos...', insertError);
+      // ✅✅✅ FIX AQUÍ: Corregidas las comillas simples anidadas
+      console.error("Error insertando 'reward_redemptions', revirtiendo puntos...", insertError);
       await pointsService.addPoints(
           user.id, 
           costDetails.actualDeduction, 
