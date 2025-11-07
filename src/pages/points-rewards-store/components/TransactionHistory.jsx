@@ -3,6 +3,7 @@
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
 // ✅ FIX: Añadida función 'getTransactionTitle' para traducir 'other'
 // ✅ NUEVO: Añadidos filtros de fecha ('dateFilter', 'onDateFilterChange')
+// ✅ NUEVO: Añadidos campos de calendario 'Desde'/'Hasta'
 // ✅ NUEVO: Añadido botón 'Cargar Más' ('hasMore', 'onLoadMore')
 // ============================================================================
 
@@ -14,11 +15,15 @@ const TransactionHistory = ({
   transactions = [],
   loading = false,
   className = '',
-  // Nuevos props para filtros y paginación
+  // Props para filtros y paginación
   dateFilter,
   onDateFilterChange,
   hasMore,
-  onLoadMore
+  onLoadMore,
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange
 }) => {
   const [filter, setFilter] = useState('all'); // all, earned, spent
 
@@ -38,24 +43,20 @@ const TransactionHistory = ({
     const desc = transaction?.description;
     const points = transaction?.points_change;
 
-    // Si la descripción es útil (ej: "Comentar"), la usamos
     if (desc && desc !== 'other' && desc !== type) {
       return desc;
     }
-    // Si la descripción es 'other' o nula, traducimos el transaction_type
     if (type === 'other') {
-      if (points < 0) return 'Canje de Recompensa'; // 'other' con puntos negativos
-      if (points > 0) return 'Puntos Devueltos'; // 'other' con puntos positivos (reversión)
+      if (points < 0) return 'Canje de Recompensa';
+      if (points > 0) return 'Puntos Devueltos';
     }
     if (type === 'video_like') return 'Like en video';
     if (type === 'admin_adjustment') return 'Ajuste de Administrador';
-    
-    // Fallback para otros tipos de la DB que puedan no tener descripción
     if (type === 'video_view') return 'Vista en video';
     if (type === 'comment') return 'Comentario';
     if (type === 'share') return 'Compartir contenido';
     
-    return type || 'Transacción'; // Fallback
+    return type || 'Transacción';
   };
 
   // Icono basado en 'transaction_type' y 'points_change'
@@ -107,6 +108,17 @@ const TransactionHistory = ({
   const totalSpent = transactions
     ?.filter(t => t?.points_change < 0)
     ?.reduce((sum, t) => sum + Math.abs(t?.points_change || 0), 0);
+  
+  // Helper para convertir fechas para el input
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return '';
+    }
+  };
 
   return (
     <div className={`bg-card ${className}`} id="transaction-history">
@@ -143,7 +155,7 @@ const TransactionHistory = ({
           </div>
         </div>
 
-        {/* ✅ NUEVO: Filtros de Fecha */}
+        {/* ✅ NUEVO: Filtros de Fecha (Rápidos) */}
         <div className="flex space-x-2 mb-4 overflow-x-auto pb-2">
           {['all', 'today', 'week', 'month'].map((filter) => (
             <Button
@@ -160,6 +172,31 @@ const TransactionHistory = ({
             </Button>
           ))}
         </div>
+
+        {/* ✅ NUEVO: Filtros de Fecha (Personalizados) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Desde</label>
+                <input
+                    type="date"
+                    value={formatDateForInput(startDate)}
+                    onChange={(e) => onStartDateChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground text-sm"
+                    max={formatDateForInput(new Date().toISOString())} // No se puede seleccionar fecha futura
+                />
+            </div>
+            <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Hasta</label>
+                <input
+                    type="date"
+                    value={formatDateForInput(endDate)}
+                    onChange={(e) => onEndDateChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground text-sm"
+                    max={formatDateForInput(new Date().toISOString())}
+                />
+            </div>
+        </div>
+
 
         {/* Filter Buttons (Tipo) */}
         <div className="flex space-x-2">
@@ -207,10 +244,11 @@ const TransactionHistory = ({
               {filter === 'all' ?'No hay transacciones'
                 : filter === 'earned' ?'No hay puntos ganados' :'No hay puntos canjeados'
               }
-              {dateFilter !== 'all' && (
+              {dateFilter !== 'all' && dateFilter !== 'custom' && (
                 dateFilter === 'today' ? ' hoy' :
                 dateFilter === 'week' ? ' esta semana' : ' este mes'
               )}
+              {dateFilter === 'custom' && ' en este rango de fechas'}
             </p>
           </div>
         ) : (
