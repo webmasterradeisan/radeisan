@@ -1,10 +1,10 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ FIX CRÍTICO: Mapeo de columnas inexistentes a columnas reales:
+// ✅ FIX CRÍTICO: Mapeo de columnas a los nombres de la DB:
 //    - instructions (Form) -> redemption_instructions (DB)
-//    - cost_free_points (Form) -> points_cost/points_type (DB)
-// ✅ FIX: Eliminada la columna 'external_url' que causaba el error 400.
+//    - ELIMINADO del guardado: 'instructions' y 'external_url'.
+// ✅ FIX: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -76,11 +76,11 @@ export default function RewardsManagement() {
     stock_quantity: 1,
     is_unlimited_stock: false,
     image_url: '',
-    instructions: '', // Mantenido para el input, se mapeará a redemption_instructions
+    instructions: '', // Campo de formulario para redemption_instructions
     status: REWARD_STATUS.ACTIVE,
     is_featured: false,
     requires_approval: true,
-    external_url: '', // Mantenido para el input, se eliminará
+    // Eliminamos 'external_url' del estado inicial, ya que no existe en la DB
     metadata: {}
   });
 
@@ -195,7 +195,7 @@ export default function RewardsManagement() {
       
       stock_quantity: reward.is_unlimited_stock ? 0 : (reward.stock_quantity || 0), 
       is_unlimited_stock: reward.is_unlimited_stock,
-      image_url: reward.image_url || '', instructions: reward.redemption_instructions || '', // ✅ FIX: Usar redemption_instructions
+      image_url: reward.image_url || '', instructions: reward.redemption_instructions || '', // ✅ FIX: Mapear 'redemption_instructions'
       status: reward.status, is_featured: reward.is_featured, requires_approval: reward.requires_approval,
       external_url: reward.external_url || '', metadata: reward.metadata || {}
     });
@@ -218,9 +218,11 @@ export default function RewardsManagement() {
       let finalType = 'free';
 
       if (modalData.cost_premium_points > 0) {
+          // Opción 1: Si hay un valor en PREMIUM, se usa ese valor y tipo.
           finalCost = parseInt(modalData.cost_premium_points);
           finalType = 'premium';
       } else {
+          // Opción 2: Si no, se usa el valor de GRATIS.
           finalCost = parseInt(modalData.cost_free_points);
           finalType = 'free';
       }
@@ -239,7 +241,7 @@ export default function RewardsManagement() {
         is_unlimited_stock: modalData.is_unlimited_stock,
         image_url: modalData.image_url,
         // ✅ FIX FINAL: Mapear 'instructions' a 'redemption_instructions' y eliminar 'external_url'
-        redemption_instructions: modalData.instructions, 
+        redemption_instructions: modalData.instructions, // Columna real
         status: modalData.status,
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
@@ -692,10 +694,10 @@ function RewardModal({
             {/* Costos */}
             <div className="grid grid-cols-2 gap-4">
               <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo en Puntos Gratis </label>
-                <input type="number" min="0" value={data.cost_free_points} onChange={(e) => onChange({ ...data, cost_free_points: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" min="0" value={data.cost_free_points} onChange={(e) => onChange({ ...data, cost_free_points: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div> <label className="block text-sm font-medium text-gray-700 mb-1"> Costo en Puntos Premium </label>
-                <input type="number" min="0" value={data.cost_premium_points} onChange={(e) => onChange({ ...data, cost_premium_points: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" min="0" value={data.cost_premium_points} onChange={(e) => onChange({ ...data, cost_premium_points: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
 
@@ -705,7 +707,7 @@ function RewardModal({
                 <span className="text-sm font-medium text-gray-700"> Stock ilimitado </span>
               </label>
               {!data.is_unlimited_stock && (
-                <input type="number" min="0" value={data.stock_quantity || 0} onChange={(e) => onChange({ ...data, stock_quantity: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cantidad disponible" />
+                <input type="number" min="0" value={data.stock_quantity || 0} onChange={(e) => onChange({ ...data, stock_quantity: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cantidad disponible" />
               )}
             </div>
 
