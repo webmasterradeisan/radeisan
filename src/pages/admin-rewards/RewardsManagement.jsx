@@ -69,7 +69,7 @@ export default function RewardsManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingReward, setEditingReward] = useState(null);
   const [modalData, setModalData] = useState({
-    name: '',
+    name: '', // Mapea a 'title'
     description: '',
     category: REWARD_CATEGORIES.DIGITAL,
     // Inputs temporales para el formulario
@@ -206,7 +206,8 @@ export default function RewardsManagement() {
       instructions: reward.redemption_instructions || '', // ✅ FIX: Mapear 'redemption_instructions'
       status: reward.is_active ? REWARD_STATUS_UI.ACTIVE : REWARD_STATUS_UI.INACTIVE, // ✅ FIX: Mapear 'is_active'
       is_featured: reward.is_featured, 
-      requires_approval: reward.requires_approval,
+      // 'requires_approval' no existe en tu tabla, así que lo quitamos del estado
+      // requires_approval: reward.requires_approval, 
       metadata: reward.metadata || {}
     });
     setShowModal(true);
@@ -255,7 +256,7 @@ export default function RewardsManagement() {
         redemption_instructions: modalData.instructions, 
         is_active: modalData.status === REWARD_STATUS_UI.ACTIVE, // ✅ FIX: Mapear 'status' a 'is_active'
         is_featured: modalData.is_featured,
-        requires_approval: modalData.requires_approval,
+        // 'requires_approval' no existe en tu tabla, así que lo quitamos
         metadata: modalData.metadata,
         updated_at: new Date().toISOString()
       };
@@ -407,7 +408,7 @@ export default function RewardsManagement() {
   const getStatusColor = (reward) => { // ✅ FIX: Recibe el objeto 'reward'
     if (!reward) return 'gray';
     if (reward.is_active) {
-        if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) return 'red'; // Out of stock
+        if (reward.stock_quantity === 0) return 'red'; // Out of stock
         return 'green'; // Active
     }
     return 'gray'; // Inactive
@@ -416,7 +417,7 @@ export default function RewardsManagement() {
   const getStatusLabel = (reward) => { // ✅ FIX: Función para obtener la etiqueta de estado
     if (!reward) return 'Inactivo';
     if (reward.is_active) {
-        if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) return 'Sin Stock';
+        if (reward.stock_quantity === 0) return 'Sin Stock';
         return 'Activo';
     }
     return 'Inactivo';
@@ -611,7 +612,7 @@ function RewardCard({
   const [newStock, setNewStock] = useState(reward.stock_quantity || 0);
 
   const handleStockUpdate = () => { onUpdateStock(newStock); setEditingStock(false); };
-  const statusColor = getStatusColor(reward);
+  const statusColor = getStatusColor(reward); // ✅ FIX: Pasar el objeto reward
   const statusLabel = getStatusLabel(reward);
   const statusClasses = {
     green: 'bg-green-100 text-green-800', gray: 'bg-gray-100 text-gray-800', red: 'bg-red-100 text-red-800', blue: 'bg-blue-100 text-blue-800'
@@ -758,10 +759,7 @@ function RewardModal({
                 <input type="checkbox" checked={data.is_featured} onChange={(e) => onChange({ ...data, is_featured: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
                 <span className="text-sm text-gray-700">Destacar esta recompensa</span>
               </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={data.requires_approval} onChange={(e) => onChange({ ...data, requires_approval: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
-                <span className="text-sm text-gray-700">Requiere aprobación de admin</span>
-              </label>
+              {/* 'requires_approval' no existe en la DB, así que lo quitamos del formulario */}
             </div>
           </div>
 
