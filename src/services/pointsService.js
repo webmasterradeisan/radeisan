@@ -1,10 +1,10 @@
 // src/services/pointsService.js
 // ============================================================================
-// SERVICIO DE PUNTOS - FINAL Y ESTABLE
-// ... (otros fixes)
-// ✅ FIX 5: Modificada la función 'updatePointsBalance' para que envíe
-//    'p_free_points_change' y 'p_premium_points_change' al RPC,
-//    coincidiendo con la definición de la base de datos.
+// SERVICIO DE PUNTOS - FINAL Y CORREGIDO
+// ============================================================================
+// ✅ ESTE ES EL CÓDIGO FINAL:
+//    - Llama al RPC con 'p_transaction_type' para coincidir con la DB.
+//    - Llama al RPC con 'p_free_points_change' y 'p_premium_points_change'.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -15,7 +15,7 @@ import { supabase } from '../lib/supabase';
 export const PREMIUM_POINTS_MULTIPLIER = 2;
 const TRANSACTION_TABLE = 'points_transactions';
 const INIT_POINTS_RPC_NAME = 'ensure_user_points_record'; 
-const UPDATE_POINTS_RPC_NAME = 'update_user_points'; // El RPC que estamos llamando
+const UPDATE_POINTS_RPC_NAME = 'update_user_points';
 
 
 // ============================================================================
@@ -81,7 +81,7 @@ export const getUserPoints = async (userId) => {
 
 
 // ============================================================================
-// REGISTRAR TRANSACCIÓN (Para Historial)
+// REGISTRAR TRANSACCIÓN (Para Historial) - (Esta función ya no se usa por el RPC)
 // ============================================================================
 
 export const trackPointsAction = async (userId, amount, pointType, actionType, referenceId) => {
@@ -92,7 +92,7 @@ export const trackPointsAction = async (userId, amount, pointType, actionType, r
         user_id: userId,
         points_change: amount, 
         point_type: pointType,
-        action_type: actionType,
+        transaction_type: actionType, // Corregido por si se usa
         reference_id: referenceId,
       });
     if (error) {
@@ -110,14 +110,10 @@ export const trackPointsAction = async (userId, amount, pointType, actionType, r
 // SUMAR/RESTAR PUNTOS (FUNCIÓN CORE QUE LLAMA AL RPC)
 // ============================================================================
 
-// ✅✅✅ FIX AQUÍ ✅✅✅
-// Esta función ahora construye el objeto de parámetros correcto
-// que tu función SQL espera.
 export const updatePointsBalance = async (userId, amount, type, actionType, referenceId = null) => {
   try {
     console.log(`📡 Preparando RPC ${UPDATE_POINTS_RPC_NAME}: ${amount} ${type} para ${userId}`);
 
-    // 1. Preparamos los parámetros que el SQL SÍ entiende
     let free_change = 0;
     let premium_change = 0;
 
@@ -127,24 +123,23 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
       premium_change = amount;
     }
 
-    // 2. Creamos el objeto de parámetros correcto
+    // ✅✅✅ ESTA ES LA PARTE IMPORTANTE ✅✅✅
+    // El objeto de parámetros ahora coincide 100% con el SQL
     const rpcParams = {
       p_user_id: userId,
       p_free_points_change: free_change,
       p_premium_points_change: premium_change,
-      p_action: actionType,
+      p_transaction_type: actionType, // <-- Nombre corregido
       p_reference_id: referenceId
     };
     
-    // 3. Llamamos al RPC con los parámetros correctos
     const { data, error } = await supabase.rpc(UPDATE_POINTS_RPC_NAME, rpcParams);
 
     if (error) {
-        throw error; // El error (como el check constraint) vendrá de aquí
+        throw error; 
     }
     
-    // 4. Devolvemos los nuevos saldos (que vienen de 'get_user_points' en tu SQL)
-    return data || { free_points: 0, premium_points: 0 }; // Ajustado al 'jsonb' que devuelve tu SQL
+    return data || { free_points: 0, premium_points: 0 }; 
 
   } catch (error) {
     console.error('❌ Error en RPC update_user_points:', error);
@@ -156,9 +151,9 @@ export const updatePointsBalance = async (userId, amount, type, actionType, refe
 // ALIASES DE INTERFAZ (Exportaciones de uso común)
 // ============================================================================
 
-// Esta función no necesita cambios, solo llama a la de arriba
 export const addPoints = async (userId, amount, type, actionType, referenceId = null) => {
     try {
+        // 'actionType' se pasa a updatePointsBalance
         const balanceResult = await updatePointsBalance(userId, amount, type, actionType, referenceId);
         return { 
             success: true, 
@@ -172,9 +167,9 @@ export const addPoints = async (userId, amount, type, actionType, referenceId = 
     }
 };
 
-// Esta función no necesita cambios, solo llama a la de arriba
 export const deductPoints = async (userId, amount, type, actionType, referenceId = null) => {
     try {
+        // 'actionType' se pasa a updatePointsBalance
         const balanceResult = await updatePointsBalance(userId, -amount, type, actionType, referenceId);
         return { 
             success: true, 
@@ -189,7 +184,6 @@ export const deductPoints = async (userId, amount, type, actionType, referenceId
 };
 
 
-// EXPORTACIÓN NOMBRADA NECESARIA
 export const addFreePoints = async (userId, amount, actionType, referenceId = null) => {
     return addPoints(userId, amount, 'free', actionType, referenceId);
 };
