@@ -1,9 +1,9 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ FIX: La función 'saveReward' ahora usa 'points_cost' y 'points_type'
-//    como columnas únicas de la DB, resolviendo el error 'column not exist'.
-// ✅ FIX: Manejo correcto del stock ilimitado (-1) y los costos de los inputs.
+// ✅ FIX CRÍTICO: Eliminadas las columnas inexistentes 'instructions' y 'external_url'
+//    del objeto de guardado para resolver el error 'Could not find the column'.
+// ✅ FIX: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -75,11 +75,11 @@ export default function RewardsManagement() {
     stock_quantity: 1,
     is_unlimited_stock: false,
     image_url: '',
-    instructions: '',
+    instructions: '', // Se mantiene aquí para el input del formulario
     status: REWARD_STATUS.ACTIVE,
     is_featured: false,
     requires_approval: true,
-    external_url: '',
+    external_url: '', // Se mantiene aquí para el input del formulario
     metadata: {}
   });
 
@@ -239,11 +239,11 @@ export default function RewardsManagement() {
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
         is_unlimited_stock: modalData.is_unlimited_stock,
         image_url: modalData.image_url,
-        instructions: modalData.instructions,
+        // ✅ FIX FINAL: Eliminar las columnas que no existen para evitar el error 400
+        // No existe: 'instructions', 'external_url'
         status: modalData.status,
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
-        // Eliminamos 'external_url' que no existe en la DB
         metadata: modalData.metadata,
         updated_at: new Date().toISOString()
       };
