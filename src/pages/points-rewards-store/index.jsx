@@ -1,6 +1,7 @@
-// src/pages/points-rewards-store/index.jsx (Versión Final y Corregida)
-// ✅ FIX: Sincronizado con la nueva estructura de DB ('cost_free_points', etc.)
-// ✅ FIX 2: Corregido el typo </S.O.S> por </p> en ErrorState
+// src/pages/points-rewards-store/index.jsx (Versión Final y Estable)
+// ✅ FIX: Importado 'getUserPointsHistory' de pointsService.
+// ✅ FIX: Añadido 'useEffect' para cargar el historial de transacciones.
+// ✅ FIX: Movida la sección del Historial de la barra lateral al contenido principal.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -17,10 +18,12 @@ import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { redeemReward } from '../../services/rewardsService'; 
+// ✅ Importar el servicio de puntos
+import { getUserPointsHistory } from '../../services/pointsService'; 
 
 
 // ===============================
-// CONSTANTES ASUMIDAS (Definir o importar de rewardsService)
+// CONSTANTES ASUMIDAS
 // ===============================
 
 const REWARD_CATEGORIES = [
@@ -36,7 +39,7 @@ const VIEW_MODES = { GRID: 'grid', LIST: 'list' };
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para manejar recompensas con datos reales de Supabase
+// Hook para manejar recompensas
 const useRewards = () => {
   const [rewards, setRewards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,22 +69,15 @@ const useRewards = () => {
         title: r.title,
         description: r.description, 
         image: r.image_url || 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400',
-        
         cost_free_points: r.cost_free_points || 0, 
         cost_premium_points: r.cost_premium_points || 0,
-        
         pointsCost: Math.max(r.cost_free_points || 0, r.cost_premium_points || 0),
-        
         stock: r.stock_quantity,
-        
         isAvailable: r.stock_quantity === -1 || r.stock_quantity > 0,
-        
         category: r.category || 'General',
-        
         categoryIcon: 'Star',
         isExclusive: false, 
         isPopular: false,
-        
         isFeatured: r.is_featured,
       })) || [];
 
@@ -127,21 +123,42 @@ const PointsRewardsStore = () => {
   const [redemptionSuccess, setRedemptionSuccess] = useState(null);
   const [redemptionLoading, setRedemptionLoading] = useState(false);
   
+  // Estados de UI y Filtros
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('popular');
   const [viewMode, setViewMode] = useState(VIEW_MODES.GRID);
-  const [showTransactions, setShowTransactions] = useState(false);
   
+  // ✅ ESTADOS PARA EL HISTORIAL (reales, no simulados)
+  const [showTransactions, setShowTransactions] = useState(false);
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  
+  // Datos simulados (Reemplazar con tus propios hooks si existen)
   const statsLoading = false; 
   const totalPointsEarned = 2661;
   const totalPointsSpent = 0;
-  const transactions = [];
-  const transactionsLoading = false;
   const nextRewardThreshold = 300;
   
   const pageLoading = rewardsLoading || pointsLoading; 
 
+  // ✅ EFECTO PARA CARGAR EL HISTORIAL
+  useEffect(() => {
+    if (user?.id) {
+      setTransactionsLoading(true);
+      getUserPointsHistory(user.id)
+        .then(result => {
+          if (result.success) {
+            setTransactions(result.data);
+          } else {
+            console.error("Error al cargar historial:", result.error);
+          }
+        })
+        .finally(() => setTransactionsLoading(false));
+    }
+  }, [user]);
+
+  // Filtrado y Asequibilidad
   const filteredRewards = useMemo(() => {
     let list = rewards;
     
@@ -160,7 +177,7 @@ const PointsRewardsStore = () => {
         list.sort((a, b) => a.pointsCost - b.pointsCost);
         break;
       case 'points_high':
-        list.sort((a, b) => b.pointsCost - b.pointsCost);
+        list.sort((a, b) => b.pointsCost - a.pointsCost);
         break;
       case 'newest':
         list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); 
@@ -205,7 +222,7 @@ const PointsRewardsStore = () => {
     try {
       const result = await redeemReward(
         selectedReward.id, 
-        selectedReward.redemptionType, // 'free' o 'premium'
+        selectedReward.redemptionType,
         deliveryDetails
       );
       
@@ -218,6 +235,11 @@ const PointsRewardsStore = () => {
         }
         
         await refreshRewards();
+        
+        // Refrescar historial también
+        if (user?.id) {
+          getUserPointsHistory(user.id).then(res => setTransactions(res.data));
+        }
         
         setIsRedemptionModalOpen(false);
         setSelectedReward(null);
@@ -235,7 +257,7 @@ const PointsRewardsStore = () => {
     } finally {
       setRedemptionLoading(false);
     }
-  }, [selectedReward, refreshPoints, refreshRewards]);
+  }, [selectedReward, refreshPoints, refreshRewards, user]);
 
   const handleWaitlist = (reward) => {
     alert(`Te avisaremos cuando ${reward.title} esté disponible.`);
@@ -297,7 +319,7 @@ const PointsRewardsStore = () => {
       </h3>
       <p className="text-muted-foreground mb-6 max-w-md">
         Ha ocurrido un problema al cargar las recompensas. Por favor, intenta nuevamente.
-      </p> {/* ✅✅✅ FIX AQUÍ: Se cambió </S.O.S> por </p> */}
+      </p>
       <Button onClick={() => refreshRewards()}>
         <Icon name="RefreshCw" size={16} className="mr-2" />
         Reintentar
@@ -380,27 +402,8 @@ const PointsRewardsStore = () => {
                     </div>
                   </div>
 
-                  {/* Transactions Toggle */}
-                  <div className="bg-card rounded-lg border p-6">
-                    <Button
-                      variant="outline"
-                      fullWidth
-                      onClick={() => setShowTransactions(!showTransactions)}
-                      iconName={showTransactions ? "ChevronUp" : "ChevronDown"}
-                      iconPosition="right"
-                    >
-                      {showTransactions ? 'Ocultar' : 'Ver'} Historial
-                    </Button>
-                    
-                    {showTransactions && (
-                      <div className="mt-4 max-h-96 overflow-y-auto">
-                        <TransactionHistory
-                          transactions={transactions}
-                          loading={transactionsLoading}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  {/* ✅ UI FIX: Transactions Toggle MOVIDO de aquí */}
+
                 </div>
               </div>
 
@@ -463,6 +466,28 @@ const PointsRewardsStore = () => {
                   </div>
                 </div>
 
+                {/* ✅ UI FIX: Transactions Toggle MOVIDO AQUÍ */}
+                <div className="bg-card rounded-lg border p-6 mb-8">
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    onClick={() => setShowTransactions(!showTransactions)}
+                    iconName={showTransactions ? "ChevronUp" : "ChevronDown"}
+                    iconPosition="right"
+                  >
+                    {showTransactions ? 'Ocultar' : 'Ver'} Historial de Puntos
+                  </Button>
+                  
+                  {showTransactions && (
+                    <div className="mt-4 max-h-96 overflow-y-auto">
+                      <TransactionHistory
+                        transactions={transactions}
+                        loading={transactionsLoading}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {/* Featured Rewards */}
                 {featuredRewards.length > 0 && activeCategory === 'all' && !searchQuery && (
                   <div className="mb-8">
@@ -506,7 +531,6 @@ const PointsRewardsStore = () => {
                         <RewardCard
                           key={reward.id}
                           reward={reward}
-                          // Pasar el doble saldo al RewardCard
                           userFreePoints={freePoints}
                           userPremiumPoints={premiumPoints}
                           onRedeem={handleRewardClick}
@@ -526,7 +550,6 @@ const PointsRewardsStore = () => {
         {selectedReward && (
           <RedemptionModal
             reward={selectedReward}
-            // Pasar el doble saldo al modal
             userFreePoints={freePoints}
             userPremiumPoints={premiumPoints}
             isOpen={isRedemptionModalOpen}
@@ -551,7 +574,7 @@ const PointsRewardsStore = () => {
           </Button>
         </div>
 
-        {/* Debug Info - Solo en development */}
+        {/* Debug Info */}
         {process.env.NODE_ENV === 'development' && (
           <div className="fixed bottom-4 right-24 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
             <div className="space-y-1">
