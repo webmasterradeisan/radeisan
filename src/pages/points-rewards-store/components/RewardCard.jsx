@@ -1,6 +1,7 @@
 // src/pages/points-rewards-store/components/RewardCard.jsx
-// ✅ FIX 3 (FINAL): Corregida la lógica de 'isAvailable' para que lea
-//    el valor del 'reward' (que ya entiende el stock ilimitado).
+// ✅ FIX 4 (FINAL): Corregida la lógica de 'canAfford' para que solo
+//    evalúe un tipo de moneda si la recompensa TIENE un costo > 0
+//    en esa moneda.
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -21,24 +22,26 @@ const RewardCard = ({
   const requiredFree = reward?.cost_free_points || 0;
   const requiredPremium = reward?.cost_premium_points || 0;
 
-  // Lógica de asequibilidad (puede pagar con cualquiera de las dos monedas)
-  const canAffordFree = userFreePoints >= requiredFree;
-  const canAffordPremium = userPremiumPoints >= requiredPremium;
+  // ✅✅✅ LÓGICA CORREGIDA AQUÍ ✅✅✅
+  // Solo se puede costear si la recompensa TIENE un costo en esa moneda
+  const canAffordFree = (requiredFree > 0) && (userFreePoints >= requiredFree);
+  const canAffordPremium = (requiredPremium > 0) && (userPremiumPoints >= requiredPremium);
+  
+  // El usuario puede costearlo si puede pagar con CUALQUIERA de las monedas
   const canAfford = canAffordFree || canAffordPremium;
   
-  // ✅✅✅ ¡FIX AQUÍ! ✅✅✅
-  // Leemos el valor 'isAvailable' que nos pasa el 'reward'
-  // (Este valor ya fue calculado correctamente en 'index.jsx')
+  // La disponibilidad viene del componente padre (que ya entiende el stock ilimitado)
   const isAvailable = reward?.isAvailable;
   
-  // Determinar la moneda a usar en el canje (Premium es preferida)
-  const redemptionType = canAffordPremium ? 'premium' : 'free';
+  // Determinar la moneda a usar: Prioriza Premium SOLO SI es costeable
+  const redemptionType = (canAffordPremium) ? 'premium' : 'free';
 
   const handleRedeem = async () => {
     if (!canAfford || !isAvailable) return;
     
     setIsLoading(true);
     try {
+      // Pasa el tipo de moneda correcto ('premium' o 'free')
       await onRedeem(reward, redemptionType); 
     } finally {
       setIsLoading(false);
@@ -50,7 +53,6 @@ const RewardCard = ({
   };
 
   const getStatusBadge = () => {
-    // Esta lógica ahora funciona porque 'isAvailable' es correcto
     if (!isAvailable) {
       return (
         <div className="absolute top-2 right-2 bg-error text-error-foreground px-2 py-1 rounded-full text-xs font-medium">
@@ -89,8 +91,6 @@ const RewardCard = ({
         />
         {getStatusBadge()}
         
-        {/* Overlay for out of stock */}
-        {/* Esta lógica ahora funciona porque 'isAvailable' es correcto */}
         {!isAvailable && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <span className="text-white font-medium text-sm">No Disponible</span>
@@ -117,7 +117,7 @@ const RewardCard = ({
           {reward?.description}
         </p>
 
-        {/* Costo dual de la recompensa (Valor / Beneficio) */}
+        {/* Costo dual */}
         <div className="mb-4">
             <span className="text-xs text-muted-foreground font-medium block mb-1">
                 Costo en Puntos de Valor:
@@ -143,7 +143,7 @@ const RewardCard = ({
                   </div>
                 )}
                 
-                {/* 2. Costo en Puntos GRATIS (Moneda Base) */}
+                {/* 2. Costo en Puntos GRATIS */}
                 {requiredFree > 0 && (
                    <div 
                     className={`flex items-center justify-between text-sm p-1 rounded-md ${
@@ -167,7 +167,6 @@ const RewardCard = ({
 
 
         {/* Stock Info */}
-        {/* Esta lógica ahora funciona porque 'isAvailable' es correcto */}
         {isAvailable && reward?.stock > 0 && reward?.stock <= 10 && (
           <div className="flex items-center space-x-1 mb-3">
             <Icon name="AlertTriangle" size={14} color="var(--color-warning)" />
@@ -179,7 +178,6 @@ const RewardCard = ({
 
         {/* Action Buttons */}
         <div className="space-y-2">
-          {/* Esta lógica ahora funciona porque 'isAvailable' es correcto */}
           {isAvailable ? (
             <Button
               variant={canAfford ? "default" : "outline"}
@@ -190,7 +188,9 @@ const RewardCard = ({
               iconName={canAfford ? "Gift" : "Lock"}
               iconPosition="left"
             >
-              {canAfford ? `Canjear con ${canAffordPremium ? 'Premium' : 'Gratis'}` : "Puntos Insuficientes"}
+              {/* ✅✅✅ LÓGICA DE TEXTO CORREGIDA ✅✅✅ */}
+              {/* El botón ahora muestra la moneda correcta */}
+              {canAfford ? `Canjear con ${redemptionType === 'premium' ? 'Premium' : 'Gratis'}` : "Puntos Insuficientes"}
             </Button>
           ) : (
             <Button
