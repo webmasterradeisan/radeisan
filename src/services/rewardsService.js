@@ -1,10 +1,8 @@
 // ============================================================================
 // REWARDS SERVICE - Servicio de Recompensas (VERSIÓN FINAL)
 // ============================================================================
-// ✅ FIX 7: Eliminada la columna 'processed_at' (que no existe) del
+// ✅ FIX 8 (FINAL): Eliminada la columna 'user_notes' (que no existe) del
 //    'insert' en 'reward_redemptions'.
-// ✅ FIX 8: Corregido el 'action_type' en la lógica de REVERSIÓN a "other"
-//    para que los puntos SÍ se devuelvan si el canje falla.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -154,7 +152,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
     const reward = validation.reward;
     const costDetails = validation.costDetails;
 
-    // 2. Deducir puntos
+    // 2. Deducir puntos (Llama a 'update_user_points' con 'p_transaction_type')
     const pointsDeductionResult = await pointsService.deductPoints(
         user.id,
         costDetails.actualDeduction, 
@@ -177,9 +175,8 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         reward_id: rewardId,
         points_spent: costDetails.actualDeduction,
         points_type: pointsType,
-        status: status,
-        user_notes: userNotes
-        // ✅ FIX: 'processed_at' eliminado porque no existe en tu tabla
+        status: status
+        // ✅ FIX: 'user_notes' eliminado porque no existe en tu tabla
       })
       .select('id')
       .single();
@@ -188,7 +185,6 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
       // Si falla, intentamos devolver los puntos al usuario
       console.error("Error insertando 'reward_redemptions', revirtiendo puntos...", insertError);
       
-      // ✅ FIX: Usamos 'other' para la reversión
       await pointsService.addPoints(
           user.id, 
           costDetails.actualDeduction, 
