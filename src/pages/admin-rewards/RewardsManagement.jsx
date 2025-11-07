@@ -2,9 +2,9 @@
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
 // ✅ FIX CRÍTICO: Mapeo de columnas a los nombres de la DB:
+//    - status (Inexistente) -> is_active (DB)
 //    - instructions (Form) -> redemption_instructions (DB)
-//    - external_url (Form) -> ELIMINADA del objeto de guardado.
-// ✅ FIX: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
+//    - is_unlimited_stock (Form) -> stock_quantity = -1 (DB)
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -74,13 +74,13 @@ export default function RewardsManagement() {
     cost_free_points: 0, 
     cost_premium_points: 0, 
     stock_quantity: 1,
-    is_unlimited_stock: false,
+    is_unlimited_stock: false, // UI: Control de checkbox
     image_url: '',
-    instructions: '', // Campo de formulario para redemption_instructions
-    status: REWARD_STATUS.ACTIVE,
+    instructions: '', // UI: Campo de instrucciones, mapea a redemption_instructions
+    status: REWARD_STATUS.ACTIVE, // UI: Estado (Activo/Inactivo/etc.)
     is_featured: false,
     requires_approval: true,
-    external_url: '', // Campo de formulario (se elimina del guardado)
+    external_url: '', // UI: Campo para URL externa (se elimina en el guardado)
     metadata: {}
   });
 
@@ -133,12 +133,12 @@ export default function RewardsManagement() {
           cost_free_points: r.points_type === 'free' ? r.points_cost : 0, 
           cost_premium_points: r.points_type === 'premium' ? r.points_cost : 0,
           // Mapeamos stock quantity
-          is_unlimited_stock: r.stock_quantity === -1
+          is_unlimited_stock: r.stock_quantity === -1 // Asignamos la propiedad boolean de UI
       })) || [];
       
       setRewards(mappedRewards);
 
-      // Cargar canjes recientes SIN JOINS
+      // Cargar canjes recientes SIN JOINS (Simplificado)
       const { data: redemptionsData, error: redemptionsError } = await supabase
         .from('reward_redemptions')
         .select('*')
@@ -162,7 +162,8 @@ export default function RewardsManagement() {
   const calculateStats = () => {
     setStats({
       totalRewards: rewards.length,
-      activeRewards: rewards.filter(r => r.status === REWARD_STATUS.ACTIVE).length,
+      // ✅ FIX: Usar la columna real 'is_active' para las estadísticas
+      activeRewards: rewards.filter(r => r.is_active).length, 
       totalRedemptions: redemptions.length,
       pendingRedemptions: redemptions.filter(r => r.status === REDEMPTION_STATUS.PENDING).length,
       totalPointsRedeemed: redemptions.reduce((sum, r) => sum + (r.points_spent || 0), 0)
@@ -196,7 +197,8 @@ export default function RewardsManagement() {
       stock_quantity: reward.is_unlimited_stock ? 0 : (reward.stock_quantity || 0), 
       is_unlimited_stock: reward.is_unlimited_stock,
       image_url: reward.image_url || '', instructions: reward.redemption_instructions || '', // ✅ FIX: Mapear 'redemption_instructions'
-      status: reward.status, is_featured: reward.is_featured, requires_approval: reward.requires_approval,
+      status: reward.is_active ? REWARD_STATUS.ACTIVE : REWARD_STATUS.INACTIVE, // ✅ FIX: Mapear is_active a status de UI
+      is_featured: reward.is_featured, requires_approval: reward.requires_approval,
       external_url: reward.external_url || '', metadata: reward.metadata || {}
     });
     setShowModal(true);
@@ -218,11 +220,9 @@ export default function RewardsManagement() {
       let finalType = 'free';
 
       if (modalData.cost_premium_points > 0) {
-          // Opción 1: Si hay un valor en PREMIUM, se usa ese valor y tipo.
           finalCost = parseInt(modalData.cost_premium_points);
           finalType = 'premium';
       } else {
-          // Opción 2: Si no, se usa el valor de GRATIS.
           finalCost = parseInt(modalData.cost_free_points);
           finalType = 'free';
       }
@@ -237,17 +237,21 @@ export default function RewardsManagement() {
         points_cost: finalCost, // Columna numérica
         points_type: finalType, // Columna de tipo de moneda
         
+        // ✅ FIX: Conversión de stock_quantity y is_unlimited_stock
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
-        is_unlimited_stock: modalData.is_unlimited_stock,
+        // is_unlimited_stock NO EXISTE. No la enviamos.
+        
         image_url: modalData.image_url,
         // ✅ FIX FINAL: Mapear 'instructions' a 'redemption_instructions' y eliminar 'external_url'
         redemption_instructions: modalData.instructions, // Columna real
-        status: modalData.status,
+        is_active: modalData.status === REWARD_STATUS.ACTIVE, // ✅ FIX: Mapear status de UI a is_active de DB
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
         metadata: modalData.metadata,
         updated_at: new Date().toISOString()
       };
+      // ⚠️ NOTA: El formulario de React tiene 'is_unlimited_stock' como checkbox.
+      // Ya lo hemos manejado: lo convertimos a -1 en 'stock_quantity' y no lo enviamos como columna separada.
 
       if (editingReward) {
         // 4. Actualizar
@@ -298,8 +302,13 @@ export default function RewardsManagement() {
 
   const toggleRewardStatus = async (rewardId, currentStatus) => {
     try {
-      const newStatus = currentStatus === REWARD_STATUS.ACTIVE ? REWARD_STATUS.INACTIVE : REWARD_STATUS.ACTIVE;
-      const { error } = await supabase.from('rewards').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', rewardId);
+      // ✅ FIX CRÍTICO: Toggle debe actualizar la columna 'is_active'
+      const newActiveState = currentStatus === REWARD_STATUS.ACTIVE ? false : true;
+      const { error } = await supabase
+        .from('rewards')
+        .update({ is_active: newActiveState, updated_at: new Date().toISOString() })
+        .eq('id', rewardId);
+        
       if (error) throw error;
       setSuccessMessage('Estado actualizado');
       await loadData();
@@ -359,7 +368,11 @@ export default function RewardsManagement() {
       }
     }
     if (filters.category !== 'all' && reward.category !== filters.category) { return false; }
-    if (filters.status !== 'all' && reward.status !== filters.status) { return false; }
+    // ✅ FIX: Filtrar por is_active
+    if (filters.status === REWARD_STATUS.ACTIVE && !reward.is_active) { return false; }
+    if (filters.status === REWARD_STATUS.INACTIVE && reward.is_active) { return false; }
+    if (filters.status === REWARD_STATUS.OUT_OF_STOCK && reward.stock_quantity !== 0) { return false; }
+
     return true;
   });
 
@@ -383,12 +396,13 @@ export default function RewardsManagement() {
     return icons[category] || 'Gift';
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      [REWARD_STATUS.ACTIVE]: 'green', [REWARD_STATUS.INACTIVE]: 'gray', [REWARD_STATUS.OUT_OF_STOCK]: 'red',
-      [REWARD_STATUS.COMING_SOON]: 'blue'
-    };
-    return colors[status] || 'gray';
+  const getStatusColor = (reward) => {
+    if (!reward) return 'gray';
+    if (reward.is_active) {
+        if (!reward.is_unlimited_stock && reward.stock_quantity <= 0) return 'red'; // Out of stock
+        return 'green'; // Active
+    }
+    return 'gray'; // Inactive
   };
 
   const getRedemptionStatusColor = (status) => {
@@ -551,9 +565,12 @@ export default function RewardsManagement() {
 }
 
 // ============================================================================
-// SUB-COMPONENTE StatCard
+// SUB-COMPONENTES
 // ============================================================================
 
+/**
+ * Card de estadística
+ */
 function StatCard({ icon, label, value, color }) {
   const colorClasses = {
     blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600', purple: 'bg-purple-50 text-purple-600',
@@ -568,10 +585,9 @@ function StatCard({ icon, label, value, color }) {
   );
 }
 
-// ============================================================================
-// SUB-COMPONENTE RewardCard
-// ============================================================================
-
+/**
+ * Card de recompensa
+ */
 function RewardCard({ 
   reward, onEdit, onDelete, onToggleStatus, onUpdateStock, getCategoryLabel, getCategoryIcon, getStatusColor
 }) {
@@ -654,49 +670,9 @@ function RewardCard({
   );
 }
 
-// ============================================================================
-// SUB-COMPONENTE RedemptionCard
-// ============================================================================
-
-function RedemptionCard({ redemption, onClick, getStatusColor }) {
-  const statusColor = getStatusColor(redemption.status);
-  const statusClasses = {
-    yellow: 'bg-yellow-100 text-yellow-800', green: 'bg-green-100 text-green-800', red: 'bg-red-100 text-red-800',
-    blue: 'bg-blue-100 text-blue-800', gray: 'bg-gray-100 text-gray-800'
-  };
-
-  return (
-    <button onClick={onClick} className="w-full p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow text-left" >
-      <div className="flex items-start gap-4">
-        {/* Avatar del usuario */}
-        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-          {redemption.user?.avatar_url ? ( <img src={redemption.user.avatar_url} alt="" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full flex items-center justify-center"> <AppIcon name="User" className="w-6 h-6 text-gray-400" /> </div> )}
-        </div>
-
-        {/* Info del canje */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-4 mb-2">
-            <div className="flex-1 min-w-0"> <h4 className="font-semibold text-gray-900 truncate"> {redemption.user?.full_name || redemption.user?.username || 'Usuario'} </h4> <p className="text-sm text-gray-600 truncate"> {redemption.reward?.name} </p> </div>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${statusClasses[statusColor]}`}> {redemption.status} </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-1"> <AppIcon name="Coins" className="w-4 h-4" /> {redemption.points_spent} pts </div>
-            <div className="flex items-center gap-1"> <AppIcon name="Calendar" className="w-4 h-4" /> {new Date(redemption.created_at).toLocaleDateString('es')} </div>
-          </div>
-        </div>
-
-        {/* Flecha */}
-        <AppIcon name="ChevronRight" className="w-5 h-5 text-gray-400 flex-shrink-0" />
-      </div>
-    </button>
-  );
-}
-
-// ============================================================================
-// SUB-COMPONENTE RewardModal
-// ============================================================================
-
+/**
+ * Modal de crear/editar recompensa
+ */
 function RewardModal({ 
   isEditing, data, onChange, onSave, onClose, saving, getCategoryLabel, getCategoryIcon
 }) {
