@@ -6,7 +6,9 @@ import Image from '../../../components/AppImage';
 
 const RedemptionModal = ({ 
   reward, 
-  userPoints, 
+  // ✅ CORRECCIÓN 1: Recibe los saldos duales
+  userFreePoints, 
+  userPremiumPoints, 
   isOpen, 
   onClose, 
   onConfirm 
@@ -22,6 +24,19 @@ const RedemptionModal = ({
     postalCode: '',
     specialInstructions: ''
   });
+  
+  // ✅ CORRECCIÓN 2: Lógica para determinar el costo y saldo correcto
+  // Asumimos que reward.redemptionType (pasado desde index.jsx) contiene 'free' o 'premium'
+  const isPremiumRedemption = reward?.redemptionType === 'premium';
+  
+  // Obtiene el costo en la moneda correcta
+  const pointsCost = isPremiumRedemption 
+    ? reward?.cost_premium_points // Costo en Premium (el valor descontado)
+    : reward?.cost_free_points;    // Costo en Gratis (el valor base)
+    
+  // Obtiene el saldo actual en la moneda correcta
+  const currentBalance = isPremiumRedemption ? userPremiumPoints : userFreePoints;
+
 
   if (!isOpen || !reward) return null;
 
@@ -39,8 +54,10 @@ const RedemptionModal = ({
       if (reward?.type === 'physical') {
         setStep(2);
       } else {
-        await onConfirm(reward, deliveryDetails);
-        setStep(3);
+        // La función onConfirm llama a handleRedeemConfirm(deliveryDetails)
+        await onConfirm(deliveryDetails); 
+        // Si el canje fue instantáneo y exitoso, se ejecuta el siguiente paso:
+        // Nota: onConfirm ya maneja la llamada a redeemReward y la actualización de puntos
       }
     } catch (error) {
       console.error('Redemption error:', error);
@@ -53,8 +70,8 @@ const RedemptionModal = ({
     setIsLoading(true);
     
     try {
-      await onConfirm(reward, deliveryDetails);
-      setStep(3);
+      // ✅ FIX: onConfirm ya tiene todos los datos necesarios en el scope
+      await onConfirm(deliveryDetails);
     } catch (error) {
       console.error('Redemption error:', error);
     } finally {
@@ -100,12 +117,17 @@ const RedemptionModal = ({
         <div className="flex-1">
           <h3 className="font-semibold text-foreground mb-1">{reward?.title}</h3>
           <p className="text-sm text-muted-foreground mb-2">{reward?.description}</p>
+          
+          {/* Costo en la moneda utilizada */}
           <div className="flex items-center space-x-1">
-            <Icon name="Star" size={16} color="var(--color-accent)" />
-            <span className="font-mono font-bold text-accent">
-              {reward?.pointsCost?.toLocaleString()}
+            <Icon name={isPremiumRedemption ? "Award" : "Star"} size={16} 
+                  color={isPremiumRedemption ? "var(--color-success)" : "var(--color-accent)"} />
+            <span className={`font-mono font-bold ${isPremiumRedemption ? 'text-success' : 'text-accent'}`}>
+              {pointsCost?.toLocaleString()}
             </span>
-            <span className="text-sm text-muted-foreground">puntos</span>
+            <span className="text-sm text-muted-foreground">
+              {isPremiumRedemption ? 'Puntos Premium' : 'Puntos Gratis'}
+            </span>
           </div>
         </div>
       </div>
@@ -115,20 +137,21 @@ const RedemptionModal = ({
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-muted-foreground">Puntos actuales:</span>
           <span className="font-mono font-medium text-foreground">
-            {userPoints?.toLocaleString()}
+            {currentBalance?.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-muted-foreground">Costo del canje:</span>
           <span className="font-mono font-medium text-accent">
-            -{reward?.pointsCost?.toLocaleString()}
+            -{pointsCost?.toLocaleString()}
           </span>
         </div>
         <div className="border-t border-border pt-2">
           <div className="flex items-center justify-between">
             <span className="font-medium text-foreground">Puntos restantes:</span>
+            {/* ✅ CORRECCIÓN 3: Arreglo de NaN. Resta el costo del saldo correcto. */}
             <span className="font-mono font-bold text-foreground">
-              {(userPoints - reward?.pointsCost)?.toLocaleString()}
+              {(currentBalance - pointsCost)?.toLocaleString()}
             </span>
           </div>
         </div>
@@ -298,7 +321,7 @@ const RedemptionModal = ({
           <div className="text-left">
             <h3 className="font-medium text-foreground">{reward?.title}</h3>
             <p className="text-sm text-muted-foreground">
-              Canjeado por {reward?.pointsCost?.toLocaleString()} puntos
+              Canjeado por {pointsCost?.toLocaleString()} puntos
             </p>
           </div>
         </div>
