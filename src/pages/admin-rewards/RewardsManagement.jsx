@@ -1,9 +1,10 @@
 // ============================================================================
 // REWARDS MANAGEMENT - Gestión de Recompensas (VERSIÓN FINAL Y CORREGIDA)
 // ============================================================================
-// ✅ FIX 1: Eliminadas las columnas inexistentes 'instructions', 'external_url'
-//    del objeto de guardado para resolver el error 'Could not find the column'.
-// ✅ FIX 2: Uso de las columnas reales de costo: 'points_cost' y 'points_type'.
+// ✅ FIX CRÍTICO: Mapeo de columnas inexistentes a columnas reales:
+//    - instructions (Form) -> redemption_instructions (DB)
+//    - cost_free_points (Form) -> points_cost/points_type (DB)
+// ✅ FIX: Eliminada la columna 'external_url' que causaba el error 400.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -75,11 +76,11 @@ export default function RewardsManagement() {
     stock_quantity: 1,
     is_unlimited_stock: false,
     image_url: '',
-    instructions: '', // Se mantiene para el input del formulario
+    instructions: '', // Mantenido para el input, se mapeará a redemption_instructions
     status: REWARD_STATUS.ACTIVE,
     is_featured: false,
     requires_approval: true,
-    external_url: '', // Se mantiene para el input del formulario
+    external_url: '', // Mantenido para el input, se eliminará
     metadata: {}
   });
 
@@ -194,7 +195,7 @@ export default function RewardsManagement() {
       
       stock_quantity: reward.is_unlimited_stock ? 0 : (reward.stock_quantity || 0), 
       is_unlimited_stock: reward.is_unlimited_stock,
-      image_url: reward.image_url || '', instructions: reward.instructions || '',
+      image_url: reward.image_url || '', instructions: reward.redemption_instructions || '', // ✅ FIX: Usar redemption_instructions
       status: reward.status, is_featured: reward.is_featured, requires_approval: reward.requires_approval,
       external_url: reward.external_url || '', metadata: reward.metadata || {}
     });
@@ -237,7 +238,8 @@ export default function RewardsManagement() {
         stock_quantity: modalData.is_unlimited_stock ? -1 : (parseInt(modalData.stock_quantity) || 0),
         is_unlimited_stock: modalData.is_unlimited_stock,
         image_url: modalData.image_url,
-        // ✅ FIX FINAL: Eliminar las columnas que no existen para evitar el error 400
+        // ✅ FIX FINAL: Mapear 'instructions' a 'redemption_instructions' y eliminar 'external_url'
+        redemption_instructions: modalData.instructions, 
         status: modalData.status,
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
