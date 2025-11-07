@@ -26,15 +26,15 @@ const RedemptionModal = ({
   });
   
   // ✅ CORRECCIÓN 2: Lógica para determinar el costo y saldo correcto
-  // Asumimos que reward.redemptionType (pasado desde index.jsx) contiene 'free' o 'premium'
+  // El tipo de canje ('free' o 'premium') se pasa desde el componente padre.
   const isPremiumRedemption = reward?.redemptionType === 'premium';
   
-  // Obtiene el costo en la moneda correcta
+  // Obtiene el costo en la moneda utilizada (usa cost_premium_points o cost_free_points)
   const pointsCost = isPremiumRedemption 
-    ? reward?.cost_premium_points // Costo en Premium (el valor descontado)
-    : reward?.cost_free_points;    // Costo en Gratis (el valor base)
+    ? reward?.cost_premium_points 
+    : reward?.cost_free_points;
     
-  // Obtiene el saldo actual en la moneda correcta
+  // Obtiene el saldo actual en la moneda utilizada
   const currentBalance = isPremiumRedemption ? userPremiumPoints : userFreePoints;
 
 
@@ -51,16 +51,17 @@ const RedemptionModal = ({
     setIsLoading(true);
     
     try {
+      // Si la recompensa es física, pasa a la etapa 2 (Detalles de Envío)
       if (reward?.type === 'physical') {
         setStep(2);
       } else {
-        // La función onConfirm llama a handleRedeemConfirm(deliveryDetails)
+        // Canje directo: llama a onConfirm (que ejecuta redeemReward)
         await onConfirm(deliveryDetails); 
-        // Si el canje fue instantáneo y exitoso, se ejecuta el siguiente paso:
-        // Nota: onConfirm ya maneja la llamada a redeemReward y la actualización de puntos
+        setStep(3); // Solo si es instantáneo y onConfirm fue exitoso (el padre maneja el estado)
       }
     } catch (error) {
       console.error('Redemption error:', error);
+      // El manejo de errores final ocurre en el componente padre
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +71,9 @@ const RedemptionModal = ({
     setIsLoading(true);
     
     try {
-      // ✅ FIX: onConfirm ya tiene todos los datos necesarios en el scope
+      // Envío final de datos de envío y canje
       await onConfirm(deliveryDetails);
+      setStep(3);
     } catch (error) {
       console.error('Redemption error:', error);
     } finally {
@@ -118,7 +120,7 @@ const RedemptionModal = ({
           <h3 className="font-semibold text-foreground mb-1">{reward?.title}</h3>
           <p className="text-sm text-muted-foreground mb-2">{reward?.description}</p>
           
-          {/* Costo en la moneda utilizada */}
+          {/* Costo en la moneda utilizada (Muestra si es Premium o Gratis) */}
           <div className="flex items-center space-x-1">
             <Icon name={isPremiumRedemption ? "Award" : "Star"} size={16} 
                   color={isPremiumRedemption ? "var(--color-success)" : "var(--color-accent)"} />
@@ -184,6 +186,8 @@ const RedemptionModal = ({
           onClick={handleConfirmRedemption}
           iconName="Gift"
           iconPosition="left"
+          // Deshabilitar si el saldo restante es negativo
+          disabled={!currentBalance || (currentBalance - pointsCost < 0)} 
         >
           Confirmar Canje
         </Button>
