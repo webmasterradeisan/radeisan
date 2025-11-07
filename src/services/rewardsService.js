@@ -2,16 +2,16 @@
 // REWARDS SERVICE - Servicio de Recompensas (VERSIÓN COMPLETA Y CORREGIDA)
 // ============================================================================
 // ✅ FIX 1: Sincronizado con la DB real ('is_active', 'cost_free_points', etc.)
-// ✅ FIX 2: Corregida la llamada a 'getUserPoints' (soluciona error 'is not a function')
-// ✅ FIX 3: Usa el 'action_type' = "reward_redemption" (ahora válido en la DB)
-// ✅ FIX 4: Archivo completo para solucionar 'REWARD_CATEGORIES is not defined'
+// ✅ FIX 2: Corregida la llamada a 'getUserPoints'
+// ✅ FIX 3: Cambiado el 'action_type' a "other" para cumplir con la regla
+//    de la base de datos y evitar el error "check constraint".
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 import * as pointsService from './pointsService'; // Importación necesaria
 
 // ============================================================================
-// CONSTANTES Y CONFIGURACIÓN (¡AHORA INCLUIDAS!)
+// CONSTANTES Y CONFIGURACIÓN
 // ============================================================================
 
 export const REWARD_CATEGORIES = {
@@ -164,7 +164,7 @@ export async function redeemReward(rewardId, pointsType = POINTS_TYPE.FREE, opti
         user.id,
         costDetails.actualDeduction, 
         pointsType,                   
-        'reward_redemption', // <-- Ahora usa el tipo correcto
+        'other', // ✅✅✅ FIX AQUÍ: Usamos "other"
         rewardId                    
     );
 
@@ -281,7 +281,7 @@ export function isRewardAvailable(reward) {
 // ============================================================================
 
 export default {
-  // Constantes (¡AHORA INCLUIDAS!)
+  // Constantes
   REWARD_CATEGORIES,
   REDEMPTION_STATUS,
   POINTS_TYPE,
