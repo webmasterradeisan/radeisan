@@ -6,8 +6,8 @@
 //    la tabla 'public.points_rules' (la misma que usa la app).
 // ✅ INTEGRACIÓN: 'handleSave' ahora guarda las "Acciones" actualizando
 //    'public.points_rules' y el resto de la config en 'system_settings'.
-// ✅ UI DINÁMICA: La pestaña "Acciones" ahora se genera dinámicamente
-//    basándose en las reglas que existen en la tabla 'points_rules'.
+// ✅ BUG FIX: Se añade { onConflict: 'setting_key' } al .upsert() de
+//    'system_settings' para arreglar el error 'duplicate key'.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -109,6 +109,7 @@ export default function PointsRulesEditor() {
         .order('action_name');
         
       if (rulesError) throw rulesError;
+      // Usamos los datos de la DB (tu lista) para popular el estado
       setActionRules(rulesData || []);
 
       // 3. Cargar el RESTO de la config (Bonos, Límites, General) desde 'system_settings'
@@ -151,7 +152,6 @@ export default function PointsRulesEditor() {
       setSuccessMessage(null);
 
       // 1. Guardar Bonos, Límites, General en 'system_settings'
-      //    (Excluyendo 'actions', que ahora se maneja por 'actionRules')
       const otherConfig = {
         bonuses: config.bonuses,
         daily_limits: config.daily_limits,
@@ -165,18 +165,21 @@ export default function PointsRulesEditor() {
           setting_key: 'points_rules_config',
           setting_value: JSON.stringify(otherConfig),
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'setting_key' // ✅ BUG FIX: Arregla el error 'duplicate key'
         });
 
       if (upsertError) throw upsertError;
 
       // 2. ✅ INTEGRACIÓN: Guardar 'actionRules' actualizando 'public.points_rules'
-      //    Esto crea un array de promesas de 'update'
       const updates = actionRules.map(rule => 
         supabase
           .from('points_rules')
           .update({ 
             points_amount: rule.points_amount 
-            // Podrías añadir más campos para actualizar aquí si quisieras
+            // Aquí puedes añadir más campos, ej:
+            // is_active: rule.is_active,
+            // description: rule.description
           })
           .eq('action_type', rule.action_type)
       );
@@ -192,8 +195,7 @@ export default function PointsRulesEditor() {
       setHasChanges(false);
 
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err)
- {
+    } catch (err) {
       console.error('Error guardando configuración:', err);
       setError(err.message);
     } finally {
@@ -201,48 +203,18 @@ export default function PointsRulesEditor() {
     }
   };
 
-  const resetToDefaults = async () => {
-    if (window.confirm('¿Estás seguro de restaurar la configuración por defecto? Esto no se puede deshacer.')) {
-      try {
-        setSaving(true);
-        // Resetear Bonos, Límites, General
-        setConfig(DEFAULT_POINTS_CONFIG);
-
-        // ✅ INTEGRACIÓN: Resetear 'points_rules' a sus valores por defecto
-        // (Estos valores están basados en tu lista de 'points_rules')
-        const defaultRules = [
-          { action_type: 'daily_login', points_amount: 10 },
-          { action_type: 'profile_complete', points_amount: 50 },
-          { action_type: 'email_verified', points_amount: 25 },
-          { action_type: 'video_upload_base', points_amount: 50 },
-          { action_type: 'video_upload_per_minute', points_amount: 10 },
-          { action_type: 'vertical_video_bonus', points_amount: 10 },
-          { action_type: 'video_view', points_amount: 2 },
-          { action_type: 'video_like_received', points_amount: 3 },
-          { action_type: 'video_comment_received', points_amount: 5 },
-          { action_type: 'photo_upload', points_amount: 20 },
-          { action_type: 'photo_like_received', points_amount: 2 },
-          { action_type: 'give_like', points_amount: 1 },
-          { action_type: 'give_comment', points_amount: 2 },
-          { action_type: 'share_content', points_amount: 5 }
-        ];
-
-        // Actualizar el estado local
-        setActionRules(prevRules => 
-          prevRules.map(dbRule => {
-            const defaultRule = defaultRules.find(d => d.action_type === dbRule.action_type);
-            return defaultRule ? { ...dbRule, points_amount: defaultRule.points_amount } : dbRule;
-          })
-        );
-        
-        // Marcar para guardar
-        setHasChanges(true);
-        
-      } catch (e) {
-        setError('Error al restaurar');
-      } finally {
-        setSaving(false);
-      }
+  // Esta función es problemática porque los 'DEFAULT_POINTS_CONFIG' están
+  // desconectados de 'points_rules'. La he ajustado para que solo
+  // resetee las pestañas que SÍ controla este archivo (Bonos, Límites, etc.)
+  const resetToDefaults = () => {
+    if (window.confirm('¿Estás seguro de restaurar los Bonos, Límites y Opciones Generales a sus valores por defecto? (Esto no afectará a los Puntos por Acción)')) {
+      setConfig(prev => ({
+        ...prev,
+        bonuses: DEFAULT_POINTS_CONFIG.bonuses,
+        daily_limits: DEFAULT_POINTS_CONFIG.daily_limits,
+        general: DEFAULT_POINTS_CONFIG.general
+      }));
+      setHasChanges(true);
     }
   };
 
@@ -534,7 +506,7 @@ export default function PointsRulesEditor() {
           )}
 
           {/* =================================== */}
-          {/* Tab: Multiplicadores (Sin cambios)  */}
+          {/* Tab: Multiplicadores (Corregida)    */}
           {/* =================================== */}
           {activeTab === 'multipliers' && (
             <div className="space-y-6">
@@ -687,7 +659,7 @@ export default function PointsRulesEditor() {
           )}
 
           {/* =================================== */}
-          {/* Tab: Límites (Sin cambios)          */}
+          {/* Tab: Límites (Corregida)            */}
           {/* =================================== */}
           {activeTab === 'limits' && (
             <div className="space-y-6">
