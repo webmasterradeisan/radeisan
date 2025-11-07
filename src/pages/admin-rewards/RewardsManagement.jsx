@@ -243,7 +243,7 @@ export default function RewardsManagement() {
         status: modalData.status,
         is_featured: modalData.is_featured,
         requires_approval: modalData.requires_approval,
-        external_url: modalData.external_url,
+        // Eliminamos 'external_url' que no existe en la DB
         metadata: modalData.metadata,
         updated_at: new Date().toISOString()
       };
@@ -282,7 +282,7 @@ export default function RewardsManagement() {
   };
 
   const deleteReward = async (rewardId) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta recompensa?')) return;
+    if (!window.confirm('¿Estás seguro de eliminar esta recompensa?')) { return; }
     try {
       setSaving(true); setError(null);
       const { error: deleteError } = await supabase.from('rewards').delete().eq('id', rewardId);
@@ -353,12 +353,10 @@ export default function RewardsManagement() {
   const filteredRewards = rewards.filter(reward => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      if (!reward.name.toLowerCase().includes(searchLower) &&
-          !reward.description?.toLowerCase().includes(searchLower)) {
+      if (!reward.name.toLowerCase().includes(searchLower) && !reward.description?.toLowerCase().includes(searchLower)) {
         return false;
       }
     }
-
     if (filters.category !== 'all' && reward.category !== filters.category) { return false; }
     if (filters.status !== 'all' && reward.status !== filters.status) { return false; }
     return true;
