@@ -1,8 +1,10 @@
 // src/pages/points-rewards-store/index.jsx
 // ============================================================================
-// ✅ FIX: Eliminados los valores 'hardcodeados' de "Cómo ganar más puntos".
-// ✅ NUEVO: Añadido 'useEffect' que carga las reglas desde la tabla 'points_rules'.
-// ✅ FIX: La barra lateral ahora muestra las reglas de puntos reales de la DB.
+// ✅ FIX: Eliminada la sección estática "Cómo ganar más puntos".
+// ✅ FIX: 'fetchPointsRules' ahora carga desde 'points_rules' usando
+//    las columnas correctas ('action_name', 'points_amount', 'metadata').
+// ✅ FIX: La carga de reglas ahora filtra por 'show_in_store = true'
+//    para que solo muestre las que el admin seleccionó.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -138,8 +140,9 @@ const PointsRewardsStore = () => {
   const [stats, setStats] = useState({ earnedToday: 0, earnedAllTime: 0, spentAllTime: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
   
-  // ✅ NUEVO: ESTADO PARA REGLAS DE PUNTOS
+  // ✅ ESTADO PARA REGLAS DE PUNTOS
   const [pointsRules, setPointsRules] = useState([]);
+  const [rulesLoading, setRulesLoading] = useState(true); // <-- Nuevo estado de carga
   
   // ESTADOS PARA FILTRO Y PAGINACIÓN
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month', 'custom'
@@ -150,7 +153,7 @@ const PointsRewardsStore = () => {
   
   const nextRewardThreshold = 300;
   
-  const pageLoading = rewardsLoading || pointsLoading || statsLoading; 
+  const pageLoading = rewardsLoading || pointsLoading || statsLoading || rulesLoading; 
 
   // Carga las estadísticas (Hoy, Total Ganado, Total Gastado)
   useEffect(() => {
@@ -199,33 +202,35 @@ const PointsRewardsStore = () => {
     fetchStats();
   }, [user]);
 
-  // ✅ NUEVO: Carga las reglas de puntos (Cómo ganar más puntos)
+  // ✅ CORREGIDO: Carga las reglas de puntos (Cómo ganar más puntos)
   useEffect(() => {
     const fetchPointsRules = async () => {
+      setRulesLoading(true);
       try {
-        // Asumimos que la tabla es 'points_rules'
-        // Asumimos que las columnas son 'description' y 'points' (o 'points_min'/'points_max')
-        // Asumimos que tiene una columna 'icon_name'
+        // ✅ Carga solo las reglas marcadas para mostrar en la tienda
+        // ✅ Selecciona las columnas correctas ('action_name', 'points_amount', 'metadata')
         const { data, error } = await supabase
-          .from('points_rules') // <-- Usando el nombre de tabla que me diste
-          .select('id, description, points, icon_name') // Ajusta 'points' si se llama 'points_min', 'points_max'
-          .eq('is_active', true) // Asumimos que tienes un toggle
-          .gt('points', 0) // Solo mostrar acciones que dan puntos
-          .order('description', { ascending: true });
+          .from('points_rules') 
+          .select('id, action_name, points_amount, metadata') 
+          .eq('show_in_store', true) // <-- Solo las que marcaste
+          .gt('points_amount', 0) 
+          .order('action_name', { ascending: true });
 
         if (error) throw error;
         
         // Mapea los datos a un formato simple
         const rules = data.map(rule => ({
           id: rule.id,
-          icon: rule.icon_name || 'Check', // Icono por defecto
-          text: rule.description,
-          points: rule.points // O `+${rule.points_min}-${rule.points_max}`
+          icon: rule.metadata?.icon || 'Check', // <-- Lee el ícono desde metadata
+          text: rule.action_name, // <-- Usa 'action_name'
+          points: rule.points_amount // <-- Usa 'points_amount'
         }));
         setPointsRules(rules);
 
       } catch (err) {
         console.error("Error fetching points rules:", err);
+      } finally {
+        setRulesLoading(false);
       }
     };
     
@@ -522,8 +527,12 @@ const PointsRewardsStore = () => {
                   <div className="bg-card rounded-lg border p-6">
                     <h3 className="font-semibold text-foreground mb-4">Cómo ganar más puntos</h3>
                     <div className="space-y-3">
-                      {pointsRules.length === 0 ? (
+                      {rulesLoading ? (
                         <p className="text-sm text-muted-foreground">Cargando reglas...</p>
+                      ) : pointsRules.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Completa acciones como ver videos y comentar para ganar puntos.
+                        </p>
                       ) : (
                         pointsRules.map((rule) => (
                           <div key={rule.id} className="flex items-center justify-between">
@@ -532,7 +541,7 @@ const PointsRewardsStore = () => {
                               <span className="text-sm text-foreground">{rule.text}</span>
                             </div>
                             <span className="text-sm font-medium text-success">
-                              +{rule.points} {rule.points > 1 ? 'puntos' : 'punto'}
+                              +{rule.points}
                             </span>
                           </div>
                         ))
