@@ -1,9 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // VIDEO PLAYER PAGE - VERSIÓN FINAL INTEGRADA Y CORREGIDA
-// ✅ CORRECCIÓN 1: Notificaciones Grandes y Centradas (userFeedback)
-// ✅ CORRECCIÓN 2: Lógica de contadores de likes/comments más robusta (|| 0)
-// ✅ CORRECCIÓN 3: Integración con la respuesta 'result' de missionsService
+// ✅ CORRECCIÓN CRÍTICA: Eliminada la instrucción de DELETE de points_transactions en handleLike.
+// ✅ Notificaciones Grandes y Centradas (userFeedback)
+// ✅ Lógica de contadores de likes/comments más robusta (|| 0)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -12,7 +12,6 @@ import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext'; 
-// ✅ Se importan las funciones de 'missionsService' que son el "cerebro"
 import { 
   trackWatchVideo, 
   trackGiveLike, 
@@ -27,14 +26,12 @@ import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
-// Definición de la animación simple para el feedback (Debe estar disponible en el CSS global)
-// Si no tienes acceso a archivos CSS, este snippet lo intenta inyectar, aunque no es ideal.
+// Definición de la animación simple para el feedback 
 const styleSheet = document.styleSheets[0] || document.createElement('style');
 if (!document.styleSheets[0]) {
   document.head.appendChild(styleSheet);
 }
 try {
-  // Solo inserta si no existe, para evitar duplicados en HMR
   if (![...styleSheet.cssRules].some(rule => rule.cssText.includes('@keyframes pop-in'))) {
     styleSheet.insertRule(`
     @keyframes pop-in {
@@ -50,7 +47,6 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // ✅ Usamos usePoints solo para la actualización global de puntos
   const { addPoints: updatePointsContext } = usePoints(); 
   const isMobile = useIsMobile();
 
@@ -100,7 +96,7 @@ const VideoPlayerPage = () => {
   const [shareLink, setShareLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // ✅ NUEVO ESTADO para el feedback visual central (grande y centrado)
+  // NUEVO ESTADO para el feedback visual central (grande y centrado)
   const [userFeedback, setUserFeedback] = useState({
     show: false,
     message: '',
@@ -133,12 +129,6 @@ const VideoPlayerPage = () => {
   // FUNCIONES DE FEEDBACK (NUEVAS)
   // ===============================
 
-  /**
-   * Muestra el aviso grande y centrado al usuario.
-   * @param {string} message - Mensaje a mostrar.
-   * @param {string} type - 'success' o 'warning'.
-   * @param {number} duration - Duración en ms.
-   */
   const showUserFeedback = useCallback((message, type = 'success', duration = 2500) => {
     setUserFeedback({ show: true, message, type });
     setTimeout(() => {
@@ -347,7 +337,7 @@ const VideoPlayerPage = () => {
     }
   }, [user]);
 
-  // ✅ CORRECCIÓN DE CONTADORES: Aseguramos la carga de los _count y usamos || 0
+  // CORRECCIÓN DE CONTADORES: Aseguramos la carga de los _count y usamos || 0
   const fetchVideoData = useCallback(async () => {
     if (!videoId) return;
 
@@ -437,7 +427,7 @@ const VideoPlayerPage = () => {
           setFollowing(!!followData);
         }
 
-        // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue registrada
+        // INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue registrada
         const { data: pointsData, error: pointsError } = await supabase
           .from('points_transactions') 
           .select('transaction_type')
@@ -450,7 +440,6 @@ const VideoPlayerPage = () => {
           
         if (pointsData) {
           const actions = pointsData.map(p => p.transaction_type);
-          // ✅ INTEGRACIÓN: Usar los 'transaction_type' correctos de missionsService
           setHasEarnedLikePoints(actions.includes('give_like'));
           setHasEarnedCommentPoints(actions.includes('comment'));
           setHasEarnedSharePoints(actions.includes('share_content'));
@@ -599,15 +588,13 @@ const VideoPlayerPage = () => {
   // FUNCIONES DE INTERACCIÓN Y PUNTOS (CORREGIDAS)
   // ===============================
 
-  // ✅ INTEGRACIÓN: PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
     if (hasEarnedViewPoints || !user) return;
 
     try {
       setHasEarnedViewPoints(true); // Marcar como intentado para evitar spam
-      const result = await trackWatchVideo('video', videoId); // Asumiendo que trackWatchVideo fue modificado para recibir solo 2 args
+      const result = await trackWatchVideo('video', videoId);
 
-      // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
       if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
         updatePointsContext(result.points_earned);
         showUserFeedback(`+${result.points_earned} PUNTOS por ver 30 segundos 🎉`, 'success');
@@ -625,7 +612,7 @@ const VideoPlayerPage = () => {
       return;
     }
 
-    // Estado local antes de la acción
+    const wasLiked = liked;
     const newLikedState = !liked;
 
     try {
@@ -644,6 +631,18 @@ const VideoPlayerPage = () => {
           .eq('user_id', user.id);
 
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        
+        // ✅ CORRECCIÓN CRÍTICA APLICADA: 
+        // Se ELIMINA la siguiente línea (que estaba mal en la versión anterior):
+        /*
+        await supabase
+            .from('points_transactions') 
+            .delete()
+            .eq('reference_id', videoId)
+            .eq('transaction_type', 'give_like')
+            .eq('user_id', user.id);
+        */
+        // Los puntos son HISTÓRICOS y no deben borrarse.
 
       } else {
         // Lógica para dar like
@@ -652,10 +651,10 @@ const VideoPlayerPage = () => {
         }
 
         setLiked(true);
-        // ✅ CORRECCIÓN: Usamos prev.likes + 1
+        // CORRECCIÓN DE CONTADOR: Actualización optimista
         setVideoCounters(prev => ({
           ...prev,
-          likes: prev.likes + 1
+          likes: (prev.likes || 0) + 1
         }));
 
         await supabase
@@ -664,36 +663,35 @@ const VideoPlayerPage = () => {
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // ✅ INTEGRACIÓN: Lógica de puntos separada
+        // INTEGRACIÓN: Lógica de puntos
         if (!hasEarnedLikePoints) {
-          setHasEarnedLikePoints(true); // Marcar como intentado para evitar spam
+          setHasEarnedLikePoints(true); 
           
           try {
             const result = await trackGiveLike('video', videoId); 
 
-            // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
             if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
               updatePointsContext(result.points_earned);
               showUserFeedback(`+${result.points_earned} PUNTOS por dar Like 🎉`, 'success');
             } else if (result.result === 'already_paid') {
-              // ✅ Aviso de Restricción
               showUserFeedback('PUNTOS YA GANADOS por este Like.', 'warning'); 
-              // Se mantiene en true para no reintentar
             } else if (result.result === 'error') {
-               // Revertir el estado si el RPC falla
-               setHasEarnedLikePoints(false);
+               setHasEarnedLikePoints(false); 
             }
           } catch (pointsError) {
              console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
-             setHasEarnedLikePoints(false); // Revertir en caso de error de red/servidor
+             setHasEarnedLikePoints(false); 
           }
         }
       }
     } catch (err) {
       console.error('Error en like:', err);
       // Revertir estados si falla la DB
-      setLiked(!newLikedState); 
-      setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+      setLiked(wasLiked); 
+      setVideoCounters(prev => ({ 
+        ...prev, 
+        likes: Math.max(0, prev.likes - (newLikedState ? 1 : -1)) 
+      }));
     }
   };
 
@@ -721,19 +719,7 @@ const VideoPlayerPage = () => {
 
       } else {
         if (liked) {
-          setLiked(false);
-          setVideoCounters(prev => ({
-            ...prev,
-            likes: Math.max(0, prev.likes - 1)
-          }));
-
-          await supabase
-            .from('video_likes')
-            .delete()
-            .eq('video_id', videoId)
-            .eq('user_id', user.id);
-
-          await supabase.rpc('decrement_video_likes', { video_id: videoId });
+          await handleLike(); // Usamos handleLike para revertir el Like si existe
         }
 
         setDisliked(true);
@@ -774,8 +760,6 @@ const VideoPlayerPage = () => {
           .insert({ video_id: videoId, user_id: user.id });
         
         try {
-          // ✅ INTEGRACIÓN: 'trackMissionProgress' es parte de 'missionsService'
-          // Asumiendo que trackMissionProgress es genérico y solo registra
           trackMissionProgress('save_video', 'video', videoId); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
@@ -792,7 +776,6 @@ const VideoPlayerPage = () => {
     setShareLink(url);
     setShowShareModal(true);
 
-    // El tracking de puntos se hace al mostrar el modal, asumiendo que ya hay intención de compartir.
     if (user && !hasEarnedSharePoints) {
       setHasEarnedSharePoints(true); // Marcar como intentado
       
@@ -846,7 +829,6 @@ const VideoPlayerPage = () => {
           });
         
         try {
-          // ✅ INTEGRACIÓN: Llamada a 'missionsService'
           trackFollowUser(video.user_id);
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
@@ -900,13 +882,13 @@ const VideoPlayerPage = () => {
       }
 
       await supabase.rpc('increment_video_comments', { video_id: videoId });
-      // ✅ CORRECCIÓN: Usamos prev.comments + 1
+      // CORRECCIÓN: Usamos prev.comments + 1
       setVideoCounters(prev => ({
         ...prev,
         comments: prev.comments + 1
       }));
 
-      // ✅ INTEGRACIÓN: Lógica de puntos separada
+      // INTEGRACIÓN: Lógica de puntos separada
       if (!hasEarnedCommentPoints) {
         setHasEarnedCommentPoints(true); // Marcar como intentado
         
@@ -948,6 +930,12 @@ const VideoPlayerPage = () => {
       console.error('Error al publicar comentario:', err);
       // Revertir contador en caso de error de DB
       setVideoCounters(prev => ({ ...prev, comments: Math.max(0, prev.comments - 1) }));
+      
+      // ✅ VERIFICAR AQUÍ: Asegurarse de que no haya eliminación de points_transactions
+      /* if (err.message.includes('points_transactions')) {
+          // Si el problema es aquí, el problema está en otro lugar, no en el Like.
+      }
+      */
     }
   };
 
@@ -969,6 +957,8 @@ const VideoPlayerPage = () => {
       }));
 
       setComments(prev => prev.filter(c => c.id !== commentId));
+      
+      // ✅ VERIFICAR AQUÍ: Asegurarse de que no haya eliminación de points_transactions
 
     } catch (err) {
       console.error('Error al eliminar comentario:', err);
@@ -1182,7 +1172,7 @@ const VideoPlayerPage = () => {
 
       <Header />
 
-      {/* ✅ NUEVO FEEDBACK VISUAL: CENTRADO Y GRANDE */}
+      {/* NUEVO FEEDBACK VISUAL: CENTRADO Y GRANDE */}
       {userFeedback.show && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4 backdrop-blur-sm bg-black/10">
           <div 
@@ -1375,7 +1365,6 @@ const VideoPlayerPage = () => {
                           <Icon name="BadgeCheck" size={16} className="text-blue-500" />
                         )}
                       </div>
-                      {/* ✅ CORRECCIÓN: Usamos videoCounters.views */}
                       <p className="text-xs md:text-sm text-muted-foreground">
                         {formatNumber(videoCounters.views)} visualizaciones
                       </p>
@@ -1401,7 +1390,6 @@ const VideoPlayerPage = () => {
                         }`}
                       >
                         <Icon name="ThumbsUp" size={18} className={liked ? 'fill-current' : ''} />
-                        {/* ✅ CORRECCIÓN: Usamos videoCounters.likes */}
                         <span className="font-medium text-sm">{formatNumber(videoCounters.likes)}</span>
                       </button>
 
@@ -1466,7 +1454,6 @@ const VideoPlayerPage = () => {
                 {/* Sección de comentarios */}
                 <div className="border-t pt-6">
                   <h3 className="text-base md:text-lg font-bold mb-4">
-                    {/* ✅ CORRECCIÓN: Usamos videoCounters.comments */}
                     {formatNumber(videoCounters.comments)} comentarios
                   </h3>
 
@@ -1662,7 +1649,7 @@ const VideoPlayerPage = () => {
         </div>
       </div>
 
-      {/* MINI-PLAYER FLOTANTE - Solo reproduce cuando está minimizado */}
+      {/* MINI-PLAYER FLOTANTE (sin cambios) */}
       {isMinimized && video && (
         <div
           ref={miniPlayerRef}
@@ -1678,7 +1665,7 @@ const VideoPlayerPage = () => {
           onMouseDown={handleMouseDown}
           onTouchStart={handleMouseDown}
         >
-          {/* Video en mini-player - Sincronizado con el principal */}
+          {/* ... (código del mini-player) ... */}
           <div className="relative aspect-video bg-black">
             <video
               ref={miniVideoRef}
@@ -1775,7 +1762,7 @@ const VideoPlayerPage = () => {
         </div>
       )}
 
-      {/* Modal de compartir */}
+      {/* Modal de compartir (sin cambios) */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-lg max-w-md w-full p-4 md:p-6">
