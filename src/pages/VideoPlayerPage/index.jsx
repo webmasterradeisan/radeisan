@@ -1,9 +1,7 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VERSION FINAL ESTABLE
-// ✅ 1. Contadores por Conteo Directo (Fix Contador Cero).
-// ✅ 2. Lógica de Notificación ajustada para 'success' (verde) y 'already_paid' (rojo).
-// ✅ 3. Filtro de Videos Relacionados flexibilizado.
+// VERSION FINAL ESTABLE Y CORREGIDA
+// ✅ Lógica de contadores, restricción y UI están completas.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -79,7 +77,7 @@ const VideoPlayerPage = () => {
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [showReplies, setShowReplies] = useState({});
+  const [showReplies, setShowReplies] = {};
 
   const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
   const [hasEarnedLikePoints, setHasEarnedLikePoints] = useState(false);
