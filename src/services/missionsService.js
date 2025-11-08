@@ -1,8 +1,7 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - Sistema de Misiones Diarias (CORREGIDO)
-// ✅ CORRECCIÓN CRÍTICA: Se modificó la devolución del bloque de restricción
-//    de puntos (alreadyPaid) a 'already_paid', forzando la notificación en el frontend.
+// MISSIONS SERVICE - CORRECCIÓN FINAL: La lógica de restricción (Farming) se 
+// basa enteramente en el error de unicidad (23505) de la Base de Datos.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -203,45 +202,17 @@ export async function getMissionProgress(missionId) {
 // FUNCIONES DE TRACKING - Registrar Progreso (CORREGIDA)
 // ============================================================================
 
-/**
- * Función de utilidad para verificar si el usuario ya ganó puntos por esta referencia
- * Es la base de la restricción de "Farming".
- */
-async function hasUserEarnedPointsForAction(userId, transactionType, referenceId) {
-  // Solo aplicamos la restricción a las acciones que solo se pagan una vez por objeto
-  const RESTRICTED_ACTIONS = [
-    MISSION_TYPES.GIVE_LIKE,
-    MISSION_TYPES.COMMENT,
-    MISSION_TYPES.SHARE_CONTENT
-  ];
-
-  if (!referenceId || !RESTRICTED_ACTIONS.includes(transactionType)) {
-    return false;
-  }
-
-  try {
-    // Solo buscamos transacciones positivas (puntos ganados)
-    const { data, error } = await supabase
-      .from('points_transactions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('transaction_type', transactionType)
-      .eq('reference_id', referenceId)
-      .gt('points_change', 0) // Aseguramos que solo revisamos puntos GANADOS, no perdidos
-      .limit(1);
-
-    if (error) throw error;
-
-    return data.length > 0;
-  } catch (error) {
-    console.error('Error verificando earning points restriction:', error);
-    // En caso de error de DB, devolvemos true (precaución para bloquear pagos)
-    return true;
-  }
-}
+// 🛑 hasUserEarnedPointsForAction se elimina del flujo de trackMissionProgress
+// para confiar en la restricción UNIQUE de la DB.
 
 /**
  * Registrar progreso en una misión
+ * @param {string} missionType - Tipo de misión (MISSION_TYPES)
+ * @param {string} referenceType - Tipo de contenido ('video', 'photo')
+ * @param {string} referenceId - ID del objeto (Video ID, Post ID, etc.)
+ * @param {number} amount - Cantidad de progreso (default: 1)
+ * @param {Object} metadata - Metadata adicional (watch_duration, platform, etc.)
+ * @returns {Promise<{result: string, points_earned: number, message?: string}>} Resultado del tracking
  */
 export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
   const userAuth = await supabase.auth.getUser();
@@ -251,25 +222,15 @@ export async function trackMissionProgress(missionType, referenceType, reference
   const userId = userAuth.data.user.id;
 
   try {
-    // 1. RESTRICCIÓN: Verificación de Farming
-    const alreadyPaid = await hasUserEarnedPointsForAction(userId, missionType, referenceId);
-    
-    if (alreadyPaid) {
-        // ✅ CORRECCIÓN APLICADA: Devolver 'already_paid' para que el frontend dispare la notificación.
-        return { 
-          result: 'already_paid', 
-          points_earned: 0, 
-          message: 'Puntos ya ganados por esta acción/referencia.',
-        };
-    }
+    // 🛑 SE OMITE LA VERIFICACIÓN DE alreadyPaid EN JAVASCRIPT
+    // para forzar que la restricción de unicidad de la DB maneje el bloqueo.
 
-    // 2. Ejecución del RPC de la base de datos para registrar el progreso y otorgar puntos
+    // 1. Ejecución del RPC de la base de datos para registrar el progreso y otorgar puntos
     const { data, error } = await supabase
       .rpc('track_mission_progress', {
         p_user_id: userId,
         p_mission_type: missionType,
         p_progress_amount: amount,
-        // Aseguramos que los metadatos incluyen la referencia
         p_metadata: {
             reference_type: referenceType,
             reference_id: referenceId,
@@ -278,21 +239,21 @@ export async function trackMissionProgress(missionType, referenceType, reference
       });
 
     if (error) {
-        // Si el error es una violación de restricción única a nivel de DB (farming concurrente)
-        // Devolvemos 'already_paid' para informar al frontend.
-        if (error.code === '23505') { 
+        // ✅ CORRECCIÓN CRÍTICA: Captura el error de unicidad (23505) y devuelve 'already_paid'.
+        if (error.code === '23505' || error.message.includes('duplicate key')) { 
              return {
                 result: 'already_paid', 
                 points_earned: 0, 
-                message: 'Error concurrente: El pago ya se registró.'
+                message: 'Error de unicidad: Puntos ya ganados.'
              };
         }
+        // Si es cualquier otro error, se propaga
         throw error;
     }
     
-    // 3. Devolver el resultado de los puntos obtenidos
+    // 2. Devolver el resultado de los puntos obtenidos
     if (data && data.points_awarded && data.points_awarded > 0) {
-        // ✅ DEVOLUCIÓN CLARA: Éxito con puntos
+        // ✅ DEVOLUCIÓN: Éxito con puntos (Esto disparará la notificación de éxito)
         return { 
           result: 'success', 
           points_earned: data.points_awarded, 
@@ -300,8 +261,7 @@ export async function trackMissionProgress(missionType, referenceType, reference
         };
     }
 
-    // Devolución si la acción se registró, pero no hubo puntos (ej: misión no completada)
-    // El frontend ignora este caso, pero nos ayuda a saber que la acción se registró.
+    // Devolución si la acción se registró, pero no hubo puntos
     return {
       result: 'registered',
       points_earned: 0,
