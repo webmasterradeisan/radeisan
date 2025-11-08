@@ -1,7 +1,13 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// ✅ FIX CRÍTICO: Asegura que los contadores visuales se actualicen y
-//    que la función de RESTABLECIMIENTO de estados de 'hasEarned...' se ejecute.
+// VIDEO PLAYER PAGE - VERSIÓN FINAL INTEGRADA
+// ============================================================================
+// ✅ INTEGRACIÓN: Eliminadas las llamadas directas a 'addPoints' y los
+//    valores de puntos "quemados" (hard-coded).
+// ✅ CEREBRO: Ahora solo se llama a las funciones de 'missionsService'
+//    (ej. trackGiveLike), que se encargan de la lógica de puntos.
+// ✅ NOTIFICACIÓN: Se leen los puntos devueltos por 'missionsService'
+//    para mostrar la cantidad correcta al usuario.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -9,14 +15,16 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
+// 🛑 No se usa 'usePoints' directamente para 'addPoints'
 import { usePoints } from 'contexts/PointsContext'; 
+// ✅ Se importan las funciones de 'missionsService' que son el "cerebro"
 import { 
   trackWatchVideo, 
   trackGiveLike, 
   trackShareContent, 
   trackComment, 
   trackFollowUser,
-  MISSION_TYPES
+  trackMissionProgress 
 } from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
@@ -28,6 +36,7 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // ✅ 'addPoints' ya no se llama desde esta página, pero se mantiene por si 'usePoints' es usado por otros hooks
   const { addPoints } = usePoints(); 
   const isMobile = useIsMobile();
 
@@ -259,7 +268,7 @@ const VideoPlayerPage = () => {
 
   const handleMaximize = () => {
     const mainVideo = videoRef.current;
-    const miniVideo = miniPlayerRef.current?.querySelector('video');
+    const miniVideo = miniVideoRef.current;
 
     if (!mainVideo || !miniVideo) return;
 
@@ -285,7 +294,6 @@ const VideoPlayerPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-
   // ===============================
   // FUNCIONES DE CARGA DE DATOS
   // ===============================
@@ -308,11 +316,7 @@ const VideoPlayerPage = () => {
   }, [user]);
 
   const fetchVideoData = useCallback(async () => {
-    if (!videoId) {
-        setLoading(false);
-        setError('ID de video no proporcionado.');
-        return;
-    }
+    if (!videoId) return;
 
     try {
       setLoading(true);
@@ -325,13 +329,7 @@ const VideoPlayerPage = () => {
         .eq('is_published', true)
         .single();
 
-      if (videoError || !videoData) {
-          setError(videoError?.message || 'Video no encontrado o no publicado.');
-          setVideo(null);
-          return; 
-      }
-      
-      setVideo(videoData); 
+      if (videoError) throw videoError;
 
       if (videoData?.user_id) {
         const { data: creatorData, error: creatorError } = await supabase
@@ -350,8 +348,11 @@ const VideoPlayerPage = () => {
           };
         }
       }
-      
-      // ✅ FIX: Volver a cargar los contadores de la DB (CRÍTICO)
+
+      setVideo(videoData);
+
+      await supabase.rpc('increment_video_views', { video_id: videoId });
+
       const { data: countersData } = await supabase
         .from('videos')
         .select('likes_count, dislikes_count, views_count, comments_count')
@@ -368,7 +369,6 @@ const VideoPlayerPage = () => {
       }
 
       if (user) {
-        // Estado de Like
         const { data: likeData } = await supabase
           .from('video_likes')
           .select('*')
@@ -377,7 +377,6 @@ const VideoPlayerPage = () => {
           .maybeSingle();
         setLiked(!!likeData);
 
-        // Estado de Dislike
         const { data: dislikeData } = await supabase
           .from('video_dislikes')
           .select('*')
@@ -386,7 +385,6 @@ const VideoPlayerPage = () => {
           .maybeSingle();
         setDisliked(!!dislikeData);
 
-        // Estado de Guardado
         const { data: savedData } = await supabase
           .from('saved_videos')
           .select('*')
@@ -395,7 +393,6 @@ const VideoPlayerPage = () => {
           .maybeSingle();
         setSaved(!!savedData);
 
-        // Estado de Seguimiento
         if (videoData.user_id) {
           const { data: followData } = await supabase
             .from('user_follows')
@@ -406,24 +403,25 @@ const VideoPlayerPage = () => {
           setFollowing(!!followData);
         }
 
-        // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue pagada
+        // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue registrada
+        // por el missionsService (que usa los 'action_type' de MISSION_TYPES)
         const { data: pointsData, error: pointsError } = await supabase
           .from('points_transactions') 
-          .select('transaction_type') // Solo necesitamos el tipo de acción
+          .select('action_type')
           .eq('user_id', user.id)
-          .eq('reference_id', videoId) 
-          .gt('points_change', 0); // Solo transacciones de ganancia
+          .eq('reference_id', videoId); // El videoId se guarda como reference_id
 
         if (pointsError) {
             console.error("Error al verificar puntos ganados: ", pointsError.message);
         }
           
         if (pointsData) {
-          const actions = pointsData.map(p => p.transaction_type);
-          setHasEarnedLikePoints(actions.includes(MISSION_TYPES.GIVE_LIKE));
-          setHasEarnedCommentPoints(actions.includes(MISSION_TYPES.COMMENT));
-          setHasEarnedSharePoints(actions.includes(MISSION_TYPES.SHARE_CONTENT));
-          setHasEarnedViewPoints(actions.includes(MISSION_TYPES.WATCH_VIDEO));
+          const actions = pointsData.map(p => p.action_type);
+          // ✅ INTEGRACIÓN: Usar los 'action_type' correctos de missionsService
+          setHasEarnedLikePoints(actions.includes('give_like'));
+          setHasEarnedCommentPoints(actions.includes('comment'));
+          setHasEarnedSharePoints(actions.includes('share_content'));
+          setHasEarnedViewPoints(actions.includes('watch_video'));
         }
       }
 
@@ -577,18 +575,22 @@ const VideoPlayerPage = () => {
 
   // ✅ INTEGRACIÓN: PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
-    if (hasEarnedViewPoints || !user) return; 
+    if (hasEarnedViewPoints || !user) return;
 
+    // ✅ INTEGRACIÓN: 'addPoints' ya no se usa aquí.
+    // Solo llamamos al "cerebro" de misiones.
     try {
-      setHasEarnedViewPoints(true); 
+      setHasEarnedViewPoints(true); // Marcar como intentado para evitar spam
       const result = await trackWatchVideo(videoId, 30);
 
+      // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
       if (result.completed && result.reward?.points > 0) {
         showPointsNotification(`+${result.reward.points} puntos por ver video 🎉`);
       }
 
     } catch (err) {
       console.error('❌ Error al otorgar puntos/misión por vista:', err);
+      // No revertimos 'hasEarnedViewPoints' para evitar reintentos en un endpoint que falla
     }
   };
 
@@ -598,11 +600,10 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
-    if (!videoId) return; 
 
     try {
       if (liked) {
-        // Lógica para quitar like 
+        // Lógica para quitar like (sin cambios)
         setLiked(false);
         setVideoCounters(prev => ({
           ...prev,
@@ -618,7 +619,7 @@ const VideoPlayerPage = () => {
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
 
       } else {
-        // Lógica para dar like
+        // Lógica para dar like (sin cambios)
         if (disliked) {
           await handleDislike();
         }
@@ -635,25 +636,24 @@ const VideoPlayerPage = () => {
 
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // ✅ INTEGRACIÓN: Lógica de puntos (con restricción)
-        
-        try {
-          const result = await trackGiveLike('video', videoId); 
+        // ✅ INTEGRACIÓN: Lógica de puntos separada
+        if (!hasEarnedLikePoints) {
+          setHasEarnedLikePoints(true); // Marcar como intentado para evitar spam
+          
+          try {
+            // ✅ INTEGRACIÓN: Ya no llamamos a 'addPoints'.
+            // Solo llamamos al "cerebro" de misiones.
+            const result = await trackGiveLike('video', videoId); 
 
-          if (result.completed && result.reward?.points > 0) {
-            showPointsNotification(`+${result.reward.points} puntos por dar like 🎉`);
-          } else if (result.message && result.message.includes('ya ganados')) {
-            showPointsNotification(`Puntos ya ganados por este Like.`);
-          }
-        } catch (pointsError) {
+            // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
+            if (result.completed && result.reward?.points > 0) {
+              showPointsNotification(`+${result.reward.points} puntos por dar like 🎉`);
+            }
+          } catch (pointsError) {
              console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
+          }
         }
       }
-      
-      // ✅ FIX CRÍTICO: Recargar los datos después de la interacción para sincronizar
-      // los contadores y los estados de restricción (hasEarned...).
-      fetchVideoData(); 
-      
     } catch (err) {
       console.error('Error en like:', err);
     }
@@ -664,7 +664,6 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
-    if (!videoId) return; 
 
     try {
       if (disliked) {
@@ -711,10 +710,6 @@ const VideoPlayerPage = () => {
 
         await supabase.rpc('increment_video_dislikes', { video_id: videoId });
       }
-      
-      // ✅ FIX CRÍTICO: Recargar los datos después de la interacción para sincronizar contadores
-      fetchVideoData();
-
     } catch (err) {
       console.error('Error en dislike:', err);
     }
@@ -725,7 +720,6 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
-    if (!videoId) return; 
 
     try {
       if (saved) {
@@ -742,7 +736,8 @@ const VideoPlayerPage = () => {
           .insert({ video_id: videoId, user_id: user.id });
         
         try {
-          // trackMissionProgress(MISSION_TYPES.SAVE_VIDEO, 1, { video_id: videoId }); 
+          // ✅ INTEGRACIÓN: 'trackMissionProgress' es parte de 'missionsService'
+          trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
         }
@@ -754,21 +749,21 @@ const VideoPlayerPage = () => {
   };
 
   const handleShare = async () => {
-    if (!videoId) return; 
     const url = `${window.location.origin}/video/${videoId}`;
     setShareLink(url);
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
+      setHasEarnedSharePoints(true); // Marcar como intentado
       
+      // ✅ INTEGRACIÓN: Ya no llamamos a 'addPoints'.
+      // Solo llamamos al "cerebro" de misiones.
       try {
         const result = await trackShareContent('video', videoId, 'link'); 
 
+        // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
         if (result.completed && result.reward?.points > 0) {
           showPointsNotification(`+${result.reward.points} puntos por compartir 🎉`);
-          setHasEarnedSharePoints(true); 
-        } else if (result.message && result.message.includes('ya ganados')) {
-             showPointsNotification(`Puntos ya ganados por compartir este contenido.`);
         }
       } catch (pointsError) {
         console.error('❌ Error al otorgar puntos/misión por Compartir:', pointsError);
@@ -787,6 +782,7 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
+
     if (!video?.user_id) return;
 
     try {
@@ -807,6 +803,7 @@ const VideoPlayerPage = () => {
           });
         
         try {
+          // ✅ INTEGRACIÓN: Llamada a 'missionsService'
           trackFollowUser(video.user_id);
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
@@ -824,7 +821,7 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
-    if (!videoId) return; 
+
     if (!newComment.trim()) return;
 
     try {
@@ -835,15 +832,6 @@ const VideoPlayerPage = () => {
         parent_comment_id: replyingTo
       };
 
-      // 1. Lógica de Puntos (con restricción)
-      let pointsResult = { completed: false };
-      try {
-        pointsResult = await trackComment('video', videoId); 
-      } catch (pointsError) {
-        console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
-      }
-      
-      // 2. Inserción del comentario (siempre debe ocurrir)
       const { data, error } = await supabase
         .from('video_comments')
         .insert(commentData)
@@ -851,14 +839,6 @@ const VideoPlayerPage = () => {
         .single();
 
       if (error) throw error;
-      
-      // 3. Notificación y actualización de contadores
-      if (pointsResult.message && pointsResult.message.includes('ya ganados')) {
-        showPointsNotification(`Puntos ya ganados por este Comentario.`);
-      } else if (pointsResult.completed && pointsResult.reward?.points > 0) {
-        showPointsNotification(`+${pointsResult.reward.points} puntos por comentar 🎉`);
-        setHasEarnedCommentPoints(true); 
-      }
 
       const { data: userData } = await supabase
         .from('user_profiles')
@@ -882,6 +862,24 @@ const VideoPlayerPage = () => {
         comments: prev.comments + 1
       }));
 
+      // ✅ INTEGRACIÓN: Lógica de puntos separada
+      if (!hasEarnedCommentPoints) {
+        setHasEarnedCommentPoints(true); // Marcar como intentado
+        
+        try {
+          // ✅ INTEGRACIÓN: Ya no llamamos a 'addPoints'.
+          // Solo llamamos al "cerebro" de misiones.
+          const result = await trackComment('video', videoId);
+
+          // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
+          if (result.completed && result.reward?.points > 0) {
+            showPointsNotification(`+${result.reward.points} puntos por comentar 🎉`);
+          }
+        } catch (pointsError) {
+          console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
+        }
+      }
+
       if (replyingTo) {
         setComments(prev => prev.map(comment => {
           if (comment.id === replyingTo) {
@@ -898,9 +896,6 @@ const VideoPlayerPage = () => {
 
       setNewComment('');
       setReplyingTo(null);
-
-      // ✅ FIX CRÍTICO: Recargar los datos después de la interacción para sincronizar contadores
-      fetchVideoData();
 
     } catch (err) {
       console.error('Error al publicar comentario:', err);
@@ -982,8 +977,7 @@ const VideoPlayerPage = () => {
 
     const currentTime = currentVideo.currentTime;
 
-    // Solo pagar puntos si el video tiene duración para 30s
-    if (currentVideo.duration >= 30 && currentTime >= 30 && !hasEarnedViewPoints && user) {
+    if (currentTime >= 30 && !hasEarnedViewPoints && user) {
       handleEarnViewPoints();
     }
   };
@@ -1192,6 +1186,17 @@ const VideoPlayerPage = () => {
                     showControls && !isMinimized ? 'opacity-100' : 'opacity-0'
                   }`}
                 >
+                  {!isPlaying && !isMinimized && (
+                    <button
+                      onClick={togglePlayPause}
+                      className="absolute inset-0 flex items-center justify-center pointer-events-auto"
+                    >
+                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
+                        <Icon name="Play" className="w-10 h-10 text-white ml-1" />
+                      </div>
+                    </button>
+                  )}
+
                   <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
                     <div
                       className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
