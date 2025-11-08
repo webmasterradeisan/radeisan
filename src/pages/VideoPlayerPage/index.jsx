@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Helmet } from 'lib/supabase'; // Asegúrate de que 'lib/supabase' sea la ruta correcta
+import { Helmet } from 'react-helmet'; // ✅ FIX: Corregido el origen de la importación
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext'; 
@@ -15,7 +15,7 @@ import {
   trackShareContent, 
   trackComment, 
   trackFollowUser,
-  MISSION_TYPES
+  MISSION_TYPES // ✅ Necesario para la restricción de farming
 } from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
@@ -324,14 +324,13 @@ const VideoPlayerPage = () => {
         .eq('is_published', true)
         .single();
 
-      // ✅ FIX: Si el video no existe o no está publicado, establece el error.
       if (videoError || !videoData) {
           setError(videoError?.message || 'Video no encontrado o no publicado.');
           setVideo(null);
-          return; // Detener la ejecución aquí
+          return; 
       }
       
-      setVideo(videoData); // Establecer el video
+      setVideo(videoData); 
 
       if (videoData?.user_id) {
         const { data: creatorData, error: creatorError } = await supabase
@@ -638,6 +637,7 @@ const VideoPlayerPage = () => {
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
         // ✅ INTEGRACIÓN: Lógica de puntos (con restricción)
+        
         try {
           // ✅ FIX: trackGiveLike ahora verifica si ya pagó por ESTE video
           const result = await trackGiveLike('video', videoId); 
@@ -1185,17 +1185,6 @@ const VideoPlayerPage = () => {
                     showControls && !isMinimized ? 'opacity-100' : 'opacity-0'
                   }`}
                 >
-                  {!isPlaying && !isMinimized && (
-                    <button
-                      onClick={togglePlayPause}
-                      className="absolute inset-0 flex items-center justify-center pointer-events-auto"
-                    >
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
-                        <Icon name="Play" className="w-10 h-10 text-white ml-1" />
-                      </div>
-                    </button>
-                  )}
-
                   <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
                     <div
                       className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
