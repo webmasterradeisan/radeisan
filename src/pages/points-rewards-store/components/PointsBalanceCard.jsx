@@ -1,25 +1,28 @@
+// src/pages/points-rewards-store/components/PointsBalanceCard.jsx
+// ============================================================================
+// ✅ FIX: Eliminada la sección "Cómo ganar más puntos" (earningTips)
+//    ya que ahora se maneja dinámicamente en el componente padre.
+// ============================================================================
+
 import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import { Link } from 'react-router-dom';
 
 const PointsBalanceCard = ({ 
-  // ✅ CORRECCIÓN 1: Recibe saldos separados y el estado de carga
   freePoints = 0,
   premiumPoints = 0,
   pointsEarnedToday = 0, 
   nextRewardThreshold,
-  loading = false, // Estado de carga
+  loading = false,
   className = '' 
 }) => {
-  // ✅ CORRECCIÓN 2: Calcula el total disponible (Free + Premium)
   const totalDisplayValue = freePoints + premiumPoints;
   
   const [displayPoints, setDisplayPoints] = useState(totalDisplayValue);
   const [showEarnedAnimation, setShowEarnedAnimation] = useState(false);
 
   useEffect(() => {
-    // Actualizar el estado local cuando los puntos carguen o cambien
     setDisplayPoints(totalDisplayValue);
   }, [totalDisplayValue]);
 
@@ -30,7 +33,6 @@ const PointsBalanceCard = ({
     }
   }, [pointsEarnedToday]);
 
-  // Si los puntos aún no cargan y son cero, mostrar un spinner
   if (loading && totalDisplayValue === 0 && freePoints === 0 && premiumPoints === 0) {
      return (
       <div className={`flex flex-col items-center justify-center p-6 bg-card border border-border rounded-lg shadow-elevation-1 min-h-[250px] ${className}`}>
@@ -46,28 +48,7 @@ const PointsBalanceCard = ({
   const pointsNeeded = nextRewardThreshold ? 
     Math.max(nextRewardThreshold - totalDisplayValue, 0) : 0;
 
-  const earningTips = [
-    {
-      icon: "Play",
-      text: "Ver videos completos",
-      points: "+5-15 puntos"
-    },
-    {
-      icon: "Heart",
-      text: "Dar me gusta y comentar",
-      points: "+2-5 puntos"
-    },
-    {
-      icon: "Calendar",
-      text: "Iniciar sesión diariamente",
-      points: "+10-50 puntos"
-    },
-    {
-      icon: "Share2",
-      text: "Compartir contenido",
-      points: "+3-8 puntos"
-    }
-  ];
+  // ✅ FIX: 'earningTips' ha sido eliminado de este archivo.
 
   return (
     <div className={`bg-gradient-to-br from-primary/5 to-accent/5 border border-border rounded-lg p-6 ${className}`}>
@@ -103,7 +84,7 @@ const PointsBalanceCard = ({
         <p className="text-lg font-medium text-foreground mt-1">puntos disponibles</p>
       </div>
 
-      {/* ✅ CORRECCIÓN 3: Mostrar el saldo dual por separado (Diferenciación UX) */}
+      {/* Mostrar el saldo dual por separado */}
       <div className="flex justify-around border-b border-border pb-4 mb-4">
           <div className="text-center">
               <span className="text-xl font-bold text-orange-400 block">
@@ -138,7 +119,7 @@ const PointsBalanceCard = ({
       )}
       
       {/* Progress to Next Reward */}
-      {nextRewardThreshold && (
+      {nextRewardThreshold > 0 && ( // <-- Añadida comprobación
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-foreground">
@@ -157,7 +138,7 @@ const PointsBalanceCard = ({
         </div>
       )}
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-2 gap-3"> {/* ✅ FIX: Eliminado mb-6 */}
         <Link to="/video-feed-dashboard">
           <Button variant="outline" size="sm" fullWidth iconName="Play" iconPosition="left">
             Ver Videos
@@ -179,24 +160,9 @@ const PointsBalanceCard = ({
           Historial
         </Button>
       </div>
-      {/* Earning Tips */}
-      <div className="border-t border-border pt-4">
-        <h3 className="text-sm font-medium text-foreground mb-3 flex items-center space-x-2">
-          <Icon name="Lightbulb" size={16} />
-          <span>Cómo ganar más puntos</span>
-        </h3>
-        <div className="space-y-2">
-          {earningTips?.map((tip, index) => (
-            <div key={index} className="flex items-center justify-between text-xs">
-              <div className="flex items-center space-x-2">
-                <Icon name={tip?.icon} size={12} color="var(--color-muted-foreground)" />
-                <span className="text-muted-foreground">{tip?.text}</span>
-              </div>
-              <span className="font-mono font-medium text-accent">{tip?.points}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      
+      {/* ✅ FIX: Sección "Earning Tips" eliminada de aquí */}
+      
     </div>
   );
 };
