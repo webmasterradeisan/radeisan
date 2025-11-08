@@ -1,12 +1,12 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// ✅ VERSIÓN FINAL: CORREGIDA LÓGICA DE FARMING Y BUGS DE CARGA
-// ✅ FIX CRÍTICO: Corregida la ruta de importación de Helmet (soluciona el deploy)
+// ✅ FIX CRÍTICO: Asegura que los contadores visuales se actualicen y
+//    que la función de RESTABLECIMIENTO de estados de 'hasEarned...' se ejecute.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet'; // ✅ FIX: Corregido el origen de la importación
+import { Helmet } from 'react-helmet';
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext'; 
@@ -16,7 +16,7 @@ import {
   trackShareContent, 
   trackComment, 
   trackFollowUser,
-  MISSION_TYPES // ✅ Necesario para la restricción de farming
+  MISSION_TYPES
 } from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
@@ -351,7 +351,7 @@ const VideoPlayerPage = () => {
         }
       }
       
-      // ✅ FIX: Volver a cargar los contadores de la DB
+      // ✅ FIX: Volver a cargar los contadores de la DB (CRÍTICO)
       const { data: countersData } = await supabase
         .from('videos')
         .select('likes_count, dislikes_count, views_count, comments_count')
@@ -409,10 +409,10 @@ const VideoPlayerPage = () => {
         // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue pagada
         const { data: pointsData, error: pointsError } = await supabase
           .from('points_transactions') 
-          .select('transaction_type')
+          .select('transaction_type') // Solo necesitamos el tipo de acción
           .eq('user_id', user.id)
           .eq('reference_id', videoId) 
-          .gt('points_change', 0);
+          .gt('points_change', 0); // Solo transacciones de ganancia
 
         if (pointsError) {
             console.error("Error al verificar puntos ganados: ", pointsError.message);
@@ -642,7 +642,6 @@ const VideoPlayerPage = () => {
 
           if (result.completed && result.reward?.points > 0) {
             showPointsNotification(`+${result.reward.points} puntos por dar like 🎉`);
-            // setHasEarnedLikePoints(true) se actualiza en el re-fetch de fetchVideoData
           } else if (result.message && result.message.includes('ya ganados')) {
             showPointsNotification(`Puntos ya ganados por este Like.`);
           }
@@ -650,6 +649,11 @@ const VideoPlayerPage = () => {
              console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
         }
       }
+      
+      // ✅ FIX CRÍTICO: Recargar los datos después de la interacción para sincronizar
+      // los contadores y los estados de restricción (hasEarned...).
+      fetchVideoData(); 
+      
     } catch (err) {
       console.error('Error en like:', err);
     }
@@ -707,6 +711,10 @@ const VideoPlayerPage = () => {
 
         await supabase.rpc('increment_video_dislikes', { video_id: videoId });
       }
+      
+      // ✅ FIX CRÍTICO: Recargar los datos después de la interacción para sincronizar contadores
+      fetchVideoData();
+
     } catch (err) {
       console.error('Error en dislike:', err);
     }
@@ -830,7 +838,6 @@ const VideoPlayerPage = () => {
       // 1. Lógica de Puntos (con restricción)
       let pointsResult = { completed: false };
       try {
-        // ✅ FIX: trackComment ahora verifica si ya pagó por ESTE video
         pointsResult = await trackComment('video', videoId); 
       } catch (pointsError) {
         console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
@@ -891,6 +898,9 @@ const VideoPlayerPage = () => {
 
       setNewComment('');
       setReplyingTo(null);
+
+      // ✅ FIX CRÍTICO: Recargar los datos después de la interacción para sincronizar contadores
+      fetchVideoData();
 
     } catch (err) {
       console.error('Error al publicar comentario:', err);
