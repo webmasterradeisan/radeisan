@@ -1,10 +1,7 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN ESTABLE Y FINAL
-// ✅ 1. Conteo de Likes/Comments/Dislikes directo de tablas de eventos (Fix Contador Cero).
-// ✅ 2. Eliminación de llamadas a RPC fallidas (increment_video_likes).
-// ✅ 3. Lógica para detectar el estado 'already_paid' del RPC corregido.
-// ✅ 4. Filtro de Videos Relacionados flexibilizado.
+// VIDEO PLAYER PAGE - VERSIÓN FINAL CON LÓGICA DE NOTIFICACIÓN AJUSTADA
+// ✅ La notificación de restricción ahora usa 'warning'.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -27,7 +24,7 @@ import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
-// Definición de la animación simple para el feedback (Mantener si es necesario)
+// Definición de la animación simple para el feedback 
 const styleSheet = document.styleSheets[0] || document.createElement('style');
 if (!document.styleSheets[0]) {
   document.head.appendChild(styleSheet);
@@ -632,8 +629,7 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('decrement_video_likes', { video_id: videoId });
-
+        // 🛑 LÍNEAS ELIMINADAS: RPC de decremento
       } else {
         if (disliked) {
           await handleDislike();
@@ -649,7 +645,7 @@ const VideoPlayerPage = () => {
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('increment_video_likes', { video_id: videoId });
+        // 🛑 LÍNEAS ELIMINADAS: RPC de incremento
 
         if (!hasEarnedLikePoints) {
           setHasEarnedLikePoints(true); 
@@ -660,9 +656,11 @@ const VideoPlayerPage = () => {
             console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
 
             if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
+              // ✅ NOTIFICACIÓN DE ÉXITO: Esto se dispara cuando el RPC inserta el pago.
               updatePointsContext(result.points_earned);
               showUserFeedback(`+${result.points_earned} PUNTOS por dar Like 🎉`, 'success');
             } else if (result.result === 'already_paid') {
+              // 🛑 NOTIFICACIÓN DE RESTRICCIÓN: Esto se dispara cuando la DB bloquea el pago.
               showUserFeedback('PUNTOS YA GANADOS por este Like.', 'warning'); 
             } else if (result.result === 'error') {
                setHasEarnedLikePoints(false); 
@@ -703,8 +701,7 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
-
+        // 🛑 LÍNEA ELIMINADA: RPC de decremento
       } else {
         if (liked) {
           await handleLike(); 
@@ -720,7 +717,7 @@ const VideoPlayerPage = () => {
           .from('video_dislikes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('increment_video_dislikes', { video_id: videoId });
+        // 🛑 LÍNEA ELIMINADA: RPC de incremento
       }
     } catch (err) {
       console.error('Error en dislike:', err);
@@ -760,11 +757,16 @@ const VideoPlayerPage = () => {
   };
 
   const handleShare = async () => {
+    if (!user) {
+        navigate('/login');
+        return;
+    }
+    
     const url = `${window.location.origin}/video/${videoId}`;
     setShareLink(url);
     setShowShareModal(true);
 
-    if (user && !hasEarnedSharePoints) {
+    if (!hasEarnedSharePoints) {
       setHasEarnedSharePoints(true); 
       
       try {
