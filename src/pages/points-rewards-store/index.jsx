@@ -1,10 +1,8 @@
 // src/pages/points-rewards-store/index.jsx
 // ============================================================================
-// ✅ FIX: Eliminados los valores 'hardcodeados' (2661, 0) de estadísticas.
-// ✅ NUEVO: Añadido 'useEffect' que carga las estadísticas reales del usuario
-//    (ganado hoy, ganado total, gastado total) desde la DB.
-// ✅ FIX: Los componentes 'PointsBalanceCard' y 'Estadísticas' ahora
-//    muestran los datos reales.
+// ✅ FIX: Eliminados los valores 'hardcodeados' de "Cómo ganar más puntos".
+// ✅ NUEVO: Añadido 'useEffect' que carga las reglas desde la tabla 'points_rules'.
+// ✅ FIX: La barra lateral ahora muestra las reglas de puntos reales de la DB.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -136,9 +134,12 @@ const PointsRewardsStore = () => {
   const [transactions, setTransactions] = useState([]);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
   
-  // ✅ NUEVO: ESTADO PARA ESTADÍSTICAS (reemplaza los valores hardcodeados)
+  // ESTADO PARA ESTADÍSTICAS
   const [stats, setStats] = useState({ earnedToday: 0, earnedAllTime: 0, spentAllTime: 0 });
-  const [statsLoading, setStatsLoading] = useState(true); // Ahora es un estado real
+  const [statsLoading, setStatsLoading] = useState(true);
+  
+  // ✅ NUEVO: ESTADO PARA REGLAS DE PUNTOS
+  const [pointsRules, setPointsRules] = useState([]);
   
   // ESTADOS PARA FILTRO Y PAGINACIÓN
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month', 'custom'
@@ -147,13 +148,11 @@ const PointsRewardsStore = () => {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   
-  // Datos simulados (Reemplazar con tus propios hooks si existen)
   const nextRewardThreshold = 300;
   
-  // ✅ CORREGIDO: 'statsLoading' ahora es parte de la carga de la página
   const pageLoading = rewardsLoading || pointsLoading || statsLoading; 
 
-  // ✅ NUEVO: Carga las estadísticas (Hoy, Total Ganado, Total Gastado)
+  // Carga las estadísticas (Hoy, Total Ganado, Total Gastado)
   useEffect(() => {
     if (!user?.id) return;
 
@@ -163,7 +162,6 @@ const PointsRewardsStore = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // 1. Fetch de todas las transacciones del usuario
         const { data, error } = await supabase
           .from('points_transactions')
           .select('points_change, created_at')
@@ -171,7 +169,6 @@ const PointsRewardsStore = () => {
 
         if (error) throw error;
 
-        // 2. Calcular todo
         let earnedToday = 0;
         let earnedAllTime = 0;
         let spentAllTime = 0;
@@ -200,13 +197,45 @@ const PointsRewardsStore = () => {
     };
     
     fetchStats();
-  }, [user]); // Se ejecuta solo una vez cuando el usuario carga
+  }, [user]);
+
+  // ✅ NUEVO: Carga las reglas de puntos (Cómo ganar más puntos)
+  useEffect(() => {
+    const fetchPointsRules = async () => {
+      try {
+        // Asumimos que la tabla es 'points_rules'
+        // Asumimos que las columnas son 'description' y 'points' (o 'points_min'/'points_max')
+        // Asumimos que tiene una columna 'icon_name'
+        const { data, error } = await supabase
+          .from('points_rules') // <-- Usando el nombre de tabla que me diste
+          .select('id, description, points, icon_name') // Ajusta 'points' si se llama 'points_min', 'points_max'
+          .eq('is_active', true) // Asumimos que tienes un toggle
+          .gt('points', 0) // Solo mostrar acciones que dan puntos
+          .order('description', { ascending: true });
+
+        if (error) throw error;
+        
+        // Mapea los datos a un formato simple
+        const rules = data.map(rule => ({
+          id: rule.id,
+          icon: rule.icon_name || 'Check', // Icono por defecto
+          text: rule.description,
+          points: rule.points // O `+${rule.points_min}-${rule.points_max}`
+        }));
+        setPointsRules(rules);
+
+      } catch (err) {
+        console.error("Error fetching points rules:", err);
+      }
+    };
+    
+    fetchPointsRules();
+  }, []); // Se ejecuta solo una vez al cargar la página
 
 
   // FUNCIÓN PARA CARGAR EL HISTORIAL (PAGINADO)
   const loadHistory = useCallback(async (pageNum, reset = false) => {
     if (!user?.id) return;
-
     setTransactionsLoading(true);
 
     let startDate = null;
@@ -248,7 +277,7 @@ const PointsRewardsStore = () => {
     setTransactionsLoading(false);
   }, [user, dateFilter, customStartDate, customEndDate]);
 
-  // EFECTO PARA CARGAR EL HISTORIAL (se activa con el usuario y los filtros)
+  // EFECTO PARA CARGAR EL HISTORIAL
   useEffect(() => {
     setPage(1); 
     loadHistory(1, true);
@@ -484,12 +513,32 @@ const PointsRewardsStore = () => {
                     currentPoints={totalPoints}
                     freePoints={freePoints}
                     premiumPoints={premiumPoints}
-                    // ✅ CORREGIDO: Usar el estado 'stats'
                     pointsEarnedToday={stats.earnedToday}
-                    pointsEarnedThisWeek={stats.earnedToday} // (temporalmente usa 'hoy')
                     nextRewardThreshold={nextRewardThreshold}
-                    loading={pointsLoading || statsLoading} // ✅ CORREGIDO
+                    loading={pointsLoading || statsLoading}
                   />
+
+                  {/* ✅ CORREGIDO: Sección "Cómo ganar más puntos" */}
+                  <div className="bg-card rounded-lg border p-6">
+                    <h3 className="font-semibold text-foreground mb-4">Cómo ganar más puntos</h3>
+                    <div className="space-y-3">
+                      {pointsRules.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Cargando reglas...</p>
+                      ) : (
+                        pointsRules.map((rule) => (
+                          <div key={rule.id} className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <Icon name={rule.icon} size={16} className="text-muted-foreground" />
+                              <span className="text-sm text-foreground">{rule.text}</span>
+                            </div>
+                            <span className="text-sm font-medium text-success">
+                              +{rule.points} {rule.points > 1 ? 'puntos' : 'punto'}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
 
                   {/* Quick Stats */}
                   <div className="bg-card rounded-lg border p-6">
@@ -510,12 +559,10 @@ const PointsRewardsStore = () => {
                       <div className="h-px bg-border my-2" />
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Total ganado</span>
-                        {/* ✅ CORREGIDO: Usar el estado 'stats' */}
                         <span className="font-medium text-green-600">{stats.earnedAllTime.toLocaleString()}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Total gastado</span>
-                        {/* ✅ CORREGIDO: Usar el estado 'stats' */}
                         <span className="font-medium text-red-600">{stats.spentAllTime.toLocaleString()}</span>
                       </div>
                     </div>
