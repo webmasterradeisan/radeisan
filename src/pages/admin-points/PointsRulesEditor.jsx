@@ -1,13 +1,9 @@
 // src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
-// POINTS RULES EDITOR - VERSIÓN CORREGIDA E INTEGRADA
-// ============================================================================
-// ✅ INTEGRACIÓN: 'loadData' ahora carga las reglas de "Acciones" desde
-//    la tabla 'public.points_rules' (la misma que usa la app).
-// ✅ INTEGRACIÓN: 'handleSave' ahora guarda las "Acciones" actualizando
-//    'public.points_rules' y el resto de la config en 'system_settings'.
-// ✅ BUG FIX: Se añade { onConflict: 'setting_key' } al .upsert() de
-//    'system_settings' para arreglar el error 'duplicate key'.
+// ✅ CHECKLIST AÑADIDO: Integrado el checklist 'show_in_store'
+//    - 'handleSave' ahora guarda 'show_in_store'.
+//    - 'ActionPointsInput' ahora renderiza el checklist.
+//    - Añadida 'updateActionShowInStore' para manejar el estado del checklist.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -61,10 +57,8 @@ export default function PointsRulesEditor() {
 
   const [activeTab, setActiveTab] = useState('actions');
   
-  // ✅ INTEGRACIÓN: Nuevo estado para las reglas de 'points_rules'
   const [actionRules, setActionRules] = useState([]);
   
-  // Estado para el resto de la config (Bonos, Límites, etc.)
   const [config, setConfig] = useState(DEFAULT_POINTS_CONFIG); 
   
   const [categories, setCategories] = useState([]);
@@ -91,9 +85,9 @@ export default function PointsRulesEditor() {
     try {
       setLoading(true);
       setError(null);
-      setHasChanges(false); // Resetear cambios al cargar
+      setHasChanges(false);
 
-      // 1. Cargar categorías (Sin cambios)
+      // 1. Cargar categorías
       const { data: categoriesData, error: categoriesError } = await supabase
         .from('categories')
         .select('*')
@@ -102,14 +96,14 @@ export default function PointsRulesEditor() {
       if (categoriesError) throw categoriesError;
       setCategories(categoriesData || []);
 
-      // 2. ✅ INTEGRACIÓN: Cargar reglas de acción desde 'public.points_rules'
+      // 2. Cargar reglas de acción desde 'public.points_rules'
+      // ✅ 'select('*')' cargará la nueva columna 'show_in_store'
       const { data: rulesData, error: rulesError } = await supabase
         .from('points_rules')
-        .select('*')
+        .select('*') 
         .order('action_name');
         
       if (rulesError) throw rulesError;
-      // Usamos los datos de la DB (tu lista) para popular el estado
       setActionRules(rulesData || []);
 
       // 3. Cargar el RESTO de la config (Bonos, Límites, General) desde 'system_settings'
@@ -122,14 +116,13 @@ export default function PointsRulesEditor() {
       if (configError && configError.code !== 'PGRST116') throw configError;
 
       if (configData) {
-        // Combinar: Cargar bonos/límites/general desde settings
         const savedConfig = JSON.parse(configData.setting_value);
         setConfig(prev => ({
           ...prev,
           bonuses: savedConfig.bonuses || prev.bonuses,
           daily_limits: savedConfig.daily_limits || prev.daily_limits,
           general: savedConfig.general || prev.general,
-          actions: {} // Las acciones se manejan por 'actionRules'
+          actions: {}
         }));
       }
 
@@ -151,12 +144,12 @@ export default function PointsRulesEditor() {
       setError(null);
       setSuccessMessage(null);
 
-      // 1. Guardar Bonos, Límites, General en 'system_settings'
+      // 1. Guardar Bonos, Límites, General en 'system_settings' (Sin cambios)
       const otherConfig = {
         bonuses: config.bonuses,
         daily_limits: config.daily_limits,
         general: config.general,
-        actions: {} // No guardar acciones aquí
+        actions: {}
       };
       
       const { error: upsertError } = await supabase
@@ -166,27 +159,24 @@ export default function PointsRulesEditor() {
           setting_value: JSON.stringify(otherConfig),
           updated_at: new Date().toISOString()
         }, {
-          onConflict: 'setting_key' // ✅ BUG FIX: Arregla el error 'duplicate key'
+          onConflict: 'setting_key'
         });
 
       if (upsertError) throw upsertError;
 
-      // 2. ✅ INTEGRACIÓN: Guardar 'actionRules' actualizando 'public.points_rules'
+      // 2. ✅ CHECKLIST AÑADIDO: Guardar 'actionRules' (incluyendo 'show_in_store')
       const updates = actionRules.map(rule => 
         supabase
           .from('points_rules')
           .update({ 
-            points_amount: rule.points_amount 
-            // Aquí puedes añadir más campos, ej:
-            // is_active: rule.is_active,
-            // description: rule.description
+            points_amount: rule.points_amount,
+            show_in_store: rule.show_in_store // <-- Guarda el estado del checkbox
           })
           .eq('action_type', rule.action_type)
       );
       
       const results = await Promise.all(updates);
       
-      // Revisar si algún update falló
       for (const res of results) {
         if (res.error) throw res.error;
       }
@@ -203,9 +193,6 @@ export default function PointsRulesEditor() {
     }
   };
 
-  // Esta función es problemática porque los 'DEFAULT_POINTS_CONFIG' están
-  // desconectados de 'points_rules'. La he ajustado para que solo
-  // resetee las pestañas que SÍ controla este archivo (Bonos, Límites, etc.)
   const resetToDefaults = () => {
     if (window.confirm('¿Estás seguro de restaurar los Bonos, Límites y Opciones Generales a sus valores por defecto? (Esto no afectará a los Puntos por Acción)')) {
       setConfig(prev => ({
@@ -222,7 +209,7 @@ export default function PointsRulesEditor() {
   // FUNCIONES DE ACTUALIZACIÓN (CORREGIDAS)
   // ============================================================================
 
-  // ✅ INTEGRACIÓN: Esta función ahora actualiza el nuevo estado 'actionRules'
+  // Esta función actualiza el input de puntos
   const updateAction = (actionType, value) => {
     setActionRules(prev =>
       prev.map(rule =>
@@ -234,7 +221,19 @@ export default function PointsRulesEditor() {
     setHasChanges(true);
   };
 
-  // (Las siguientes funciones no cambian, ya que manejan 'config')
+  // ✅ CHECKLIST AÑADIDO: Nueva función para manejar el estado del checkbox
+  const updateActionShowInStore = (actionType, isChecked) => {
+    setActionRules(prev =>
+      prev.map(rule =>
+        rule.action_type === actionType
+          ? { ...rule, show_in_store: isChecked }
+          : rule
+      )
+    );
+    setHasChanges(true);
+  };
+  
+  // (Las siguientes funciones no cambian)
   const updateBonus = (bonus, value) => {
     setConfig(prev => ({
       ...prev,
@@ -297,7 +296,6 @@ export default function PointsRulesEditor() {
   // FUNCIONES DE PREVIEW (CORREGIDAS)
   // ============================================================================
 
-  // ✅ INTEGRACIÓN: Helper para obtener el valor de puntos de 'actionRules'
   const getActionValue = (actionType) => {
     return actionRules.find(r => r.action_type === actionType)?.points_amount || 0;
   };
@@ -306,7 +304,6 @@ export default function PointsRulesEditor() {
     const category = categories.find(c => c.slug === 'gaming') || categories[0];
     const multiplier = category?.points_multiplier || 1.0;
 
-    // ✅ INTEGRACIÓN: Leer valores desde la función 'getActionValue'
     const uploadVideoPoints = getActionValue('video_upload_base');
     const watchVideoPoints = getActionValue('video_view');
     const giveLikePoints = getActionValue('give_like');
@@ -336,10 +333,16 @@ export default function PointsRulesEditor() {
     if (categories.length > 0 && actionRules.length > 0) {
       calculatePreview();
     }
-  }, [config, categories, actionRules]); // Depender de 'actionRules'
+  }, [config, categories, actionRules]);
   
-  // ✅ INTEGRACIÓN: Helper para asignar iconos a los action_type de la DB
   const getIconForAction = (actionType) => {
+    // Leemos el ícono desde la metadata si existe, si no, usamos el mapa
+    const rule = actionRules.find(r => r.action_type === actionType);
+    if (rule?.metadata?.icon) {
+      return rule.metadata.icon;
+    }
+    
+    // Mapa de fallback
     const map = {
       daily_login: 'LogIn',
       profile_complete: 'UserCheck',
@@ -406,7 +409,7 @@ export default function PointsRulesEditor() {
             </button>
 
             <button
-              onClick={handleSave} // Cambiado a 'handleSave'
+              onClick={handleSave}
               disabled={!hasChanges || saving}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
@@ -483,18 +486,21 @@ export default function PointsRulesEditor() {
                   Define cuántos puntos gratis ganan los usuarios por cada acción
                 </p>
 
-                {/* ✅ INTEGRACIÓN: Renderizado dinámico desde 'actionRules' */}
+                {/* ✅ CHECKLIST AÑADIDO: Renderizado dinámico desde 'actionRules' */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {actionRules.length > 0 ? (
                     actionRules.map(rule => (
                       <ActionPointsInput
                         key={rule.action_type}
                         icon={getIconForAction(rule.action_type)}
-                        label={rule.action_name} // Título desde la DB
-                        description={rule.description || `ID: ${rule.action_type}`} // Descripción desde la DB
+                        label={rule.action_name}
+                        description={rule.description || `ID: ${rule.action_type}`}
                         value={rule.points_amount}
                         onChange={(value) => updateAction(rule.action_type, value)}
                         highlight={rule.action_type.includes('upload')}
+                        // ✅ CHECKLIST AÑADIDO: Pasar los nuevos props
+                        showInStore={rule.show_in_store}
+                        onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
                       />
                     ))
                   ) : (
@@ -935,13 +941,23 @@ export default function PointsRulesEditor() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES (Sin cambios)
+// SUB-COMPONENTES (✅ CHECKLIST AÑADIDO)
 // ============================================================================
 
 /**
  * Input para configurar puntos de una acción
  */
-function ActionPointsInput({ icon, label, description, value, onChange, highlight = false }) {
+function ActionPointsInput({ 
+  icon, 
+  label, 
+  description, 
+  value, 
+  onChange, 
+  highlight = false,
+  // ✅ CHECKLIST AÑADIDO: Nuevos props
+  showInStore,
+  onShowInStoreChange
+}) {
   return (
     <div className={`p-4 border rounded-lg transition-colors ${
       highlight ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:border-blue-200'
@@ -969,6 +985,20 @@ function ActionPointsInput({ icon, label, description, value, onChange, highligh
             />
             <span className="text-sm text-gray-600 font-medium">puntos</span>
           </div>
+
+          {/* ✅ CHECKLIST AÑADIDO: Renderizado del checkbox */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!showInStore} // Asegurarse de que sea un booleano
+                onChange={(e) => onShowInStoreChange(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Mostrar en la Tienda</span>
+            </label>
+          </div>
+
         </div>
       </div>
     </div>
