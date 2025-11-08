@@ -1,7 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN FINAL CON LÓGICA DE NOTIFICACIÓN AJUSTADA
-// ✅ La notificación de restricción ahora usa 'warning'.
+// VERSION FINAL ESTABLE
+// ✅ 1. Contadores por Conteo Directo (Fix Contador Cero).
+// ✅ 2. Lógica de Notificación ajustada para 'success' (verde) y 'already_paid' (rojo).
+// ✅ 3. Filtro de Videos Relacionados flexibilizado.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -123,8 +125,9 @@ const VideoPlayerPage = () => {
     }, duration);
   }, []);
   
-  // ... (Controles y handlers de UI sin cambios) ...
-
+  // ===============================
+  // CONTROLES DE TECLADO (sin cambios)
+  // ===============================
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -181,6 +184,9 @@ const VideoPlayerPage = () => {
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [volume, isMinimized]);
 
+  // ===============================
+  // FUNCIONES DE DRAG & DROP (sin cambios)
+  // ===============================
   const handleMouseDown = (e) => {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
     
@@ -515,7 +521,6 @@ const VideoPlayerPage = () => {
   };
 
   const loadComments = useCallback(async () => {
-    // ... (Lógica de comentarios sin cambios)
     if (!videoId) return;
 
     try {
@@ -629,7 +634,7 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // 🛑 LÍNEAS ELIMINADAS: RPC de decremento
+        // 🛑 LÍNEA ELIMINADA: RPC de decremento
       } else {
         if (disliked) {
           await handleDislike();
@@ -656,12 +661,12 @@ const VideoPlayerPage = () => {
             console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
 
             if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
-              // ✅ NOTIFICACIÓN DE ÉXITO: Esto se dispara cuando el RPC inserta el pago.
+              // ✅ NOTIFICACIÓN DE ÉXITO REAL
               updatePointsContext(result.points_earned);
               showUserFeedback(`+${result.points_earned} PUNTOS por dar Like 🎉`, 'success');
             } else if (result.result === 'already_paid') {
-              // 🛑 NOTIFICACIÓN DE RESTRICCIÓN: Esto se dispara cuando la DB bloquea el pago.
-              showUserFeedback('PUNTOS YA GANADOS por este Like.', 'warning'); 
+              // 🛑 CORRECCIÓN: Notificación de restricción (Bloqueado por DB)
+              showUserFeedback('PUNTOS YA GANADOS por este Like.', 'restriction'); 
             } else if (result.result === 'error') {
                setHasEarnedLikePoints(false); 
             }
@@ -776,7 +781,7 @@ const VideoPlayerPage = () => {
           updatePointsContext(result.points_earned);
           showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
         } else if (result.result === 'already_paid') {
-          showUserFeedback('PUNTOS YA GANADOS por compartir este contenido.', 'warning');
+          showUserFeedback('PUNTOS YA GANADOS por compartir este contenido.', 'restriction');
         } else if (result.result === 'error') {
            setHasEarnedSharePoints(false);
         }
@@ -889,7 +894,7 @@ const VideoPlayerPage = () => {
             updatePointsContext(result.points_earned);
             showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
           } else if (result.result === 'already_paid') {
-            showUserFeedback('PUNTOS YA GANADOS por este Comentario.', 'warning');
+            showUserFeedback('PUNTOS YA GANADOS por este Comentario.', 'restriction');
           } else if (result.result === 'error') {
              setHasEarnedCommentPoints(false);
           }
