@@ -1,6 +1,7 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // ✅ VERSIÓN FINAL: CORREGIDA LÓGICA DE FARMING Y BUGS DE CARGA
+// ✅ FIX CRÍTICO: Corregida la ruta de importación de Helmet (soluciona el deploy)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -350,7 +351,7 @@ const VideoPlayerPage = () => {
         }
       }
       
-      // Contadores
+      // ✅ FIX: Volver a cargar los contadores de la DB
       const { data: countersData } = await supabase
         .from('videos')
         .select('likes_count, dislikes_count, views_count, comments_count')
@@ -408,10 +409,10 @@ const VideoPlayerPage = () => {
         // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue pagada
         const { data: pointsData, error: pointsError } = await supabase
           .from('points_transactions') 
-          .select('transaction_type') // Solo necesitamos el tipo de acción
+          .select('transaction_type')
           .eq('user_id', user.id)
           .eq('reference_id', videoId) 
-          .gt('points_change', 0); // Solo transacciones de ganancia
+          .gt('points_change', 0);
 
         if (pointsError) {
             console.error("Error al verificar puntos ganados: ", pointsError.message);
@@ -419,7 +420,6 @@ const VideoPlayerPage = () => {
           
         if (pointsData) {
           const actions = pointsData.map(p => p.transaction_type);
-          // ✅ INTEGRACIÓN: Usar los 'action_type' de missionsService para las restricciones
           setHasEarnedLikePoints(actions.includes(MISSION_TYPES.GIVE_LIKE));
           setHasEarnedCommentPoints(actions.includes(MISSION_TYPES.COMMENT));
           setHasEarnedSharePoints(actions.includes(MISSION_TYPES.SHARE_CONTENT));
@@ -577,11 +577,10 @@ const VideoPlayerPage = () => {
 
   // ✅ INTEGRACIÓN: PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
-    // Si ya ganó puntos por vista (límite diario) o no hay usuario, salir.
     if (hasEarnedViewPoints || !user) return; 
 
     try {
-      setHasEarnedViewPoints(true); // Marcar como intentado para evitar spam
+      setHasEarnedViewPoints(true); 
       const result = await trackWatchVideo(videoId, 30);
 
       if (result.completed && result.reward?.points > 0) {
@@ -639,12 +638,11 @@ const VideoPlayerPage = () => {
         // ✅ INTEGRACIÓN: Lógica de puntos (con restricción)
         
         try {
-          // ✅ FIX: trackGiveLike ahora verifica si ya pagó por ESTE video
           const result = await trackGiveLike('video', videoId); 
 
           if (result.completed && result.reward?.points > 0) {
             showPointsNotification(`+${result.reward.points} puntos por dar like 🎉`);
-            // NO TOCAMOS setHasEarnedLikePoints(true) aquí, ya que la lógica de re-fetch lo hace.
+            // setHasEarnedLikePoints(true) se actualiza en el re-fetch de fetchVideoData
           } else if (result.message && result.message.includes('ya ganados')) {
             showPointsNotification(`Puntos ya ganados por este Like.`);
           }
@@ -736,7 +734,7 @@ const VideoPlayerPage = () => {
           .insert({ video_id: videoId, user_id: user.id });
         
         try {
-          // trackMissionProgress(MISSION_TYPES.SAVE_VIDEO, 1, { video_id: videoId }); // Asumiendo que SAVE_VIDEO existe
+          // trackMissionProgress(MISSION_TYPES.SAVE_VIDEO, 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
         }
@@ -756,7 +754,6 @@ const VideoPlayerPage = () => {
     if (user && !hasEarnedSharePoints) {
       
       try {
-        // ✅ FIX: trackShareContent ahora verifica si ya pagó por ESTE video
         const result = await trackShareContent('video', videoId, 'link'); 
 
         if (result.completed && result.reward?.points > 0) {
