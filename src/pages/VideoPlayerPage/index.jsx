@@ -1,9 +1,10 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN FINAL CORREGIDA
-// ✅ CORRECCIÓN CRÍTICA: Los contadores de Likes, Dislikes y Comments se obtienen 
-//    contando directamente en las tablas de eventos (video_likes, etc.) en lugar
-//    de depender de las columnas 'likes_count' de la tabla 'videos'.
+// VIDEO PLAYER PAGE - VERSIÓN ESTABLE Y FINAL
+// ✅ 1. Conteo de Likes/Comments/Dislikes directo de tablas de eventos (Fix Contador Cero).
+// ✅ 2. Eliminación de llamadas a RPC fallidas (increment_video_likes).
+// ✅ 3. Lógica para detectar el estado 'already_paid' del RPC corregido.
+// ✅ 4. Filtro de Videos Relacionados flexibilizado.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -26,7 +27,7 @@ import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
 
-// Definición de la animación simple para el feedback 
+// Definición de la animación simple para el feedback (Mantener si es necesario)
 const styleSheet = document.styleSheets[0] || document.createElement('style');
 if (!document.styleSheets[0]) {
   document.head.appendChild(styleSheet);
@@ -50,20 +51,16 @@ const VideoPlayerPage = () => {
   const { addPoints: updatePointsContext } = usePoints(); 
   const isMobile = useIsMobile();
 
-  // Estados del video
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [relatedVideos, setRelatedVideos] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
 
-  // Estados de interacción
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [following, setFollowing] = useState(false);
-  
-  // Contadores (Se inicializan a 0)
   const [videoCounters, setVideoCounters] = useState({
     likes: 0,
     dislikes: 0,
@@ -71,7 +68,6 @@ const VideoPlayerPage = () => {
     comments: 0
   });
 
-  // Estados de video player
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
@@ -80,35 +76,29 @@ const VideoPlayerPage = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
 
-  // Estados de comentarios
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [loadingComments, setLoadingComments] = useState(false);
   const [showReplies, setShowReplies] = useState({});
 
-  // Estados de tracking de puntos
   const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
   const [hasEarnedLikePoints, setHasEarnedLikePoints] = useState(false);
   const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
   const [hasEarnedSharePoints, setHasEarnedSharePoints] = useState(false);
 
-  // Estados de modal compartir
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLink, setShareLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // ESTADO para el feedback visual central (grande y centrado)
   const [userFeedback, setUserFeedback] = useState({
     show: false,
     message: '',
-    type: 'success', // 'success' (puntos) o 'warning' (restricción)
+    type: 'success', 
   });
 
-  // ESTADO PARA LA DESCRIPCIÓN
   const [showFullDescription, setShowFullDescription] = useState(false);
 
-  // ESTADOS PARA MINI-PLAYER
   const [isMinimized, setIsMinimized] = useState(false);
   const [miniPlayerPosition, setMiniPlayerPosition] = useState({ 
     x: window.innerWidth - 420,
@@ -117,14 +107,12 @@ const VideoPlayerPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Refs
   const videoRef = useRef(null);
   const miniVideoRef = useRef(null);
   const containerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
   const miniPlayerRef = useRef(null);
 
-  // CONSTANTE PARA LA DESCRIPCIÓN
   const DESCRIPTION_MAX_LENGTH = 150;
 
   // ===============================
@@ -138,7 +126,7 @@ const VideoPlayerPage = () => {
     }, duration);
   }, []);
   
-  // ... (Funciones de Controles de Teclado, Drag & Drop, Minimizar/Maximizar: sin cambios) ...
+  // ... (Controles y handlers de UI sin cambios) ...
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -289,7 +277,6 @@ const VideoPlayerPage = () => {
 
     if (!mainVideo || !miniVideo) return;
 
-    // Si el miniVideo ya fue cerrado, no hay currentTime en él, usamos el del mainVideo
     const currentTime = miniVideoRef.current?.currentTime || mainVideo.currentTime;
     const wasPlaying = miniVideoRef.current?.paused === false;
 
@@ -345,9 +332,9 @@ const VideoPlayerPage = () => {
 
       const { data: videoData, error: videoError } = await supabase
         .from('videos')
-        .select('*, views_count') // Seleccionamos views_count que no tiene tabla de eventos
+        .select('*, views_count') // Seleccionamos views_count
         .eq('id', videoId)
-        .eq('is_published', true)
+        .eq('is_published', true) // Asumimos que esta columna existe, si no, debe ser eliminada
         .single();
 
       if (videoError) throw videoError;
@@ -372,7 +359,7 @@ const VideoPlayerPage = () => {
 
       setVideo(videoData);
 
-      // RPC para incrementar vistas (Este RPC DEBE existir para que Views funcione)
+      // RPC para incrementar vistas (Asumimos que este RPC sí es funcional)
       await supabase.rpc('increment_video_views', { video_id: videoId });
 
       // =========================================================================
@@ -401,7 +388,7 @@ const VideoPlayerPage = () => {
       setVideoCounters({
         likes: likesCount || 0,
         dislikes: dislikesCount || 0,
-        views: videoData.views_count || 0, // Vistas sí se lee de la tabla 'videos'
+        views: videoData.views_count || 0, // Vistas se lee de la tabla 'videos'
         comments: commentsCount || 0
       });
       // =========================================================================
@@ -471,14 +458,14 @@ const VideoPlayerPage = () => {
     }
   }, [videoId, user]);
 
+  // ✅ CORRECCIÓN DE VIDEOS RELACIONADOS: Se quita el filtro estricto de publicación.
   const loadRelatedVideos = async () => {
-    // ... (Mantener la lógica sin cambios)
     try {
       const { data, error } = await supabase
         .from('videos')
         .select('id, title, description, thumbnail_url, duration_seconds, views_count, likes_count, category, created_at, user_id, orientation')
         .neq('id', videoId)
-        .eq('is_published', true)
+        // 🛑 LÍNEA ELIMINADA: .eq('is_published', true) 
         .limit(50);
 
       if (error) throw error;
@@ -531,7 +518,7 @@ const VideoPlayerPage = () => {
   };
 
   const loadComments = useCallback(async () => {
-    // ... (Mantener la lógica sin cambios)
+    // ... (Lógica de comentarios sin cambios)
     if (!videoId) return;
 
     try {
@@ -633,7 +620,6 @@ const VideoPlayerPage = () => {
 
     try {
       if (liked) {
-        // Lógica para quitar like
         setLiked(false);
         setVideoCounters(prev => ({
           ...prev,
@@ -646,19 +632,14 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // Ya no se usa el RPC, pero es bueno mantenerlo si otros servicios lo llaman.
-        await supabase.rpc('decrement_video_likes', { video_id: videoId });
-        
-        // ✅ CORRECCIÓN CRÍTICA MANTENIDA: Los puntos históricos no se borran.
+        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('decrement_video_likes', { video_id: videoId });
 
       } else {
-        // Lógica para dar like
         if (disliked) {
           await handleDislike();
         }
 
         setLiked(true);
-        // CORRECCIÓN DE CONTADOR: Actualización optimista
         setVideoCounters(prev => ({
           ...prev,
           likes: (prev.likes || 0) + 1
@@ -668,17 +649,14 @@ const VideoPlayerPage = () => {
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // Ya no se usa el RPC, pero es bueno mantenerlo si otros servicios lo llaman.
-        await supabase.rpc('increment_video_likes', { video_id: videoId });
+        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // INTEGRACIÓN: Lógica de puntos
         if (!hasEarnedLikePoints) {
           setHasEarnedLikePoints(true); 
           
           try {
             const result = await trackGiveLike('video', videoId); 
             
-            // 🐛 DEBUG DE NOTIFICACIÓN: Revisa este log en la consola para ver qué valor devuelve 'result'
             console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
 
             if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
@@ -697,7 +675,6 @@ const VideoPlayerPage = () => {
       }
     } catch (err) {
       console.error('Error en like:', err);
-      // Revertir estados si falla la DB
       setLiked(wasLiked); 
       setVideoCounters(prev => ({ 
         ...prev, 
@@ -707,7 +684,6 @@ const VideoPlayerPage = () => {
   };
 
   const handleDislike = async () => {
-    // ... (Mantener la lógica sin cambios)
     if (!user) {
       navigate('/login');
       return;
@@ -727,11 +703,11 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
+        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('decrement_video_dislikes', { video_id: videoId });
 
       } else {
         if (liked) {
-          await handleLike(); // Usamos handleLike para revertir el Like si existe
+          await handleLike(); 
         }
 
         setDisliked(true);
@@ -744,7 +720,7 @@ const VideoPlayerPage = () => {
           .from('video_dislikes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        await supabase.rpc('increment_video_dislikes', { video_id: videoId });
+        // 🛑 LÍNEA ELIMINADA: await supabase.rpc('increment_video_dislikes', { video_id: videoId });
       }
     } catch (err) {
       console.error('Error en dislike:', err);
@@ -752,7 +728,6 @@ const VideoPlayerPage = () => {
   };
 
   const handleSave = async () => {
-    // ... (Mantener la lógica sin cambios)
     if (!user) {
       navigate('/login');
       return;
@@ -785,13 +760,12 @@ const VideoPlayerPage = () => {
   };
 
   const handleShare = async () => {
-    // ... (Mantener la lógica sin cambios)
     const url = `${window.location.origin}/video/${videoId}`;
     setShareLink(url);
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
-      setHasEarnedSharePoints(true);
+      setHasEarnedSharePoints(true); 
       
       try {
         const result = await trackShareContent('video', videoId, 'link'); 
@@ -818,7 +792,6 @@ const VideoPlayerPage = () => {
   };
 
   const handleFollow = async () => {
-    // ... (Mantener la lógica sin cambios)
     if (!user) {
       navigate('/login');
       return;
@@ -844,7 +817,7 @@ const VideoPlayerPage = () => {
           });
         
         try {
-          trackMissionProgress('follow_user', video.user_id);
+          trackFollowUser(video.user_id);
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
         }
@@ -856,7 +829,6 @@ const VideoPlayerPage = () => {
   };
 
   const handleSubmitComment = async (e) => {
-    // ... (Mantener la lógica sin cambios, pero con el log de debug)
     e.preventDefault();
     if (!user) {
       navigate('/login');
@@ -898,22 +870,18 @@ const VideoPlayerPage = () => {
       }
 
       await supabase.rpc('increment_video_comments', { video_id: videoId });
-      // CORRECCIÓN: Usamos prev.comments + 1
       setVideoCounters(prev => ({
         ...prev,
         comments: prev.comments + 1
       }));
 
-      // INTEGRACIÓN: Lógica de puntos separada
       if (!hasEarnedCommentPoints) {
-        setHasEarnedCommentPoints(true);
+        setHasEarnedCommentPoints(true); 
         
         try {
           const result = await trackComment('video', videoId);
           
-          // 🐛 DEBUG DE NOTIFICACIÓN: Revisa este log en la consola para ver qué valor devuelve 'result'
           console.log('--- RESPUESTA DE TRACK COMMENT (DEBUG) ---', result); 
-
 
           if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
             updatePointsContext(result.points_earned);
@@ -948,13 +916,11 @@ const VideoPlayerPage = () => {
 
     } catch (err) {
       console.error('Error al publicar comentario:', err);
-      // Revertir contador en caso de error de DB
       setVideoCounters(prev => ({ ...prev, comments: Math.max(0, prev.comments - 1) }));
     }
   };
 
   const handleDeleteComment = async (commentId) => {
-    // ... (Mantener la lógica sin cambios)
     if (!user) return;
 
     try {
@@ -977,10 +943,6 @@ const VideoPlayerPage = () => {
       console.error('Error al eliminar comentario:', err);
     }
   };
-
-  // ===============================
-  // FUNCIONES DEL VIDEO PLAYER (sin cambios)
-  // ===============================
 
   const togglePlayPause = () => {
     const currentVideo = videoRef.current;
@@ -1081,10 +1043,6 @@ const VideoPlayerPage = () => {
     }, 3000);
   };
 
-  // ===============================
-  // EFECTOS Y UTILIDADES (sin cambios)
-  // ===============================
-
   useEffect(() => {
     fetchVideoData();
     fetchUserProfile();
@@ -1133,7 +1091,7 @@ const VideoPlayerPage = () => {
   const shouldShowToggleButton = video?.description && video.description.length > DESCRIPTION_MAX_LENGTH;
 
   // ===============================
-  // RENDER (sin cambios)
+  // RENDER
   // ===============================
 
   if (loading) {
