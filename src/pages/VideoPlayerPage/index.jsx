@@ -1,12 +1,13 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// ✅ FIX CRÍTICO: Asegura que los contadores visuales se actualicen y
-//    que la función de RESTABLECIMIENTO de estados de 'hasEarned...' se ejecute.
+// ✅ VERSIÓN FINAL: CORREGIDA LÓGICA DE FARMING Y BUGS DE CARGA
+//    - Asegura que el contador de likes/comentarios se actualiza de la DB (fetchVideoData()).
+//    - Aplica la restricción de farming (una sola ganancia por video) para Like, Comentario y Compartir.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet'; // Importación correcta
 import { supabase } from 'lib/supabase';
 import { useAuth } from 'contexts/AuthContext';
 import { usePoints } from 'contexts/PointsContext'; 
@@ -16,7 +17,7 @@ import {
   trackShareContent, 
   trackComment, 
   trackFollowUser,
-  MISSION_TYPES
+  MISSION_TYPES // Necesario para la restricción de farming
 } from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
@@ -409,10 +410,10 @@ const VideoPlayerPage = () => {
         // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue pagada
         const { data: pointsData, error: pointsError } = await supabase
           .from('points_transactions') 
-          .select('transaction_type') // Solo necesitamos el tipo de acción
+          .select('transaction_type')
           .eq('user_id', user.id)
           .eq('reference_id', videoId) 
-          .gt('points_change', 0); // Solo transacciones de ganancia
+          .gt('points_change', 0);
 
         if (pointsError) {
             console.error("Error al verificar puntos ganados: ", pointsError.message);
@@ -742,7 +743,7 @@ const VideoPlayerPage = () => {
           .insert({ video_id: videoId, user_id: user.id });
         
         try {
-          // trackMissionProgress(MISSION_TYPES.SAVE_VIDEO, 1, { video_id: videoId }); 
+          // trackMissionProgress(MISSION_TYPES.SAVE_VIDEO, 1, { video_id: videoId }); // Asumiendo que SAVE_VIDEO existe
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
         }
