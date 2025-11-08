@@ -2,7 +2,7 @@
 // ============================================================================
 // MISSIONS SERVICE - Sistema de Misiones Diarias (CORREGIDO)
 // ✅ CORRECCIÓN CRÍTICA: Se modificó la devolución del bloque de restricción
-//    de puntos (alreadyPaid) de 'registered' a 'already_paid'.
+//    de puntos (alreadyPaid) a 'already_paid', forzando la notificación en el frontend.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -235,7 +235,7 @@ async function hasUserEarnedPointsForAction(userId, transactionType, referenceId
     return data.length > 0;
   } catch (error) {
     console.error('Error verificando earning points restriction:', error);
-    // En caso de error de DB, devolvemos true (precaución)
+    // En caso de error de DB, devolvemos true (precaución para bloquear pagos)
     return true;
   }
 }
@@ -301,7 +301,7 @@ export async function trackMissionProgress(missionType, referenceType, reference
     }
 
     // Devolución si la acción se registró, pero no hubo puntos (ej: misión no completada)
-    // El frontend ignora este caso.
+    // El frontend ignora este caso, pero nos ayuda a saber que la acción se registró.
     return {
       result: 'registered',
       points_earned: 0,
@@ -775,7 +775,7 @@ export async function reorderMissions(missionOrders) {
 export async function canCompleteMissionToday(missionId) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (!user) throw new Error('Usuario no autenticado');
 
     const { data, error } = await supabase
       .from('user_mission_progress')
