@@ -1,8 +1,8 @@
+// src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - Sistema de Misiones Diarias
-// ============================================================================
-// ✅ FIX 10 (CRÍTICO): Corregida la sintaxis de 'hasUserEarnedPointsForAction'
-//    para que sea una función async válida, solucionando el error de pantalla blanca.
+// MISSIONS SERVICE - Sistema de Misiones Diarias (CORREGIDO)
+// ✅ FIX: Lógica de restricción de puntos para prevenir Farming.
+// ✅ FIX: Devuelve objetos de resultado claros (success, already_paid) para el frontend.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -205,114 +205,136 @@ export async function getMissionProgress(missionId) {
 
 /**
  * Función de utilidad para verificar si el usuario ya ganó puntos por esta referencia
+ * Es la base de la restricción de "Farming".
  * @param {string} userId - ID del usuario
- * @param {string} actionType - Tipo de acción (GIVE_LIKE, COMMENT, SHARE_CONTENT)
+ * @param {string} transactionType - Tipo de acción (GIVE_LIKE, COMMENT, SHARE_CONTENT)
  * @param {string} referenceId - ID del objeto (Video ID, Post ID, etc.)
  * @returns {Promise<boolean>} - True si ya ganó puntos, False si no
  */
-async function hasUserEarnedPointsForAction(userId, actionType, referenceId) { // ✅ FIX: Ahora es una función async
-    if (!referenceId) return false; 
-    
+async function hasUserEarnedPointsForAction(userId, transactionType, referenceId) {
+  // Solo aplicamos la restricción a las acciones que solo se pagan una vez por objeto
+  const RESTRICTED_ACTIONS = [
+    MISSION_TYPES.GIVE_LIKE,
+    MISSION_TYPES.COMMENT,
+    MISSION_TYPES.SHARE_CONTENT
+  ];
+
+  if (!referenceId || !RESTRICTED_ACTIONS.includes(transactionType)) {
+    return false;
+  }
+
+  try {
     // Solo buscamos transacciones positivas (puntos ganados)
     const { data, error } = await supabase
-        .from('points_transactions')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('transaction_type', actionType)
-        .eq('reference_id', referenceId)
-        .gt('points_change', 0) // Aseguramos que solo revisamos puntos GANADOS, no perdidos
-        .limit(1);
-    
-    if (error) {
-        console.error('Error verificando earning points restriction:', error);
-        return false;
-    }
+      .from('points_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('transaction_type', transactionType)
+      .eq('reference_id', referenceId)
+      .gt('points_change', 0) // Aseguramos que solo revisamos puntos GANADOS, no perdidos
+      .limit(1);
+
+    if (error) throw error;
 
     return data.length > 0;
+  } catch (error) {
+    console.error('Error verificando earning points restriction:', error);
+    // En caso de error de DB, devolvemos true (precaución)
+    return true;
+  }
 }
 
 /**
  * Registrar progreso en una misión
  * @param {string} missionType - Tipo de misión (MISSION_TYPES)
+ * @param {string} referenceType - Tipo de contenido ('video', 'photo')
+ * @param {string} referenceId - ID del objeto (Video ID, Post ID, etc.)
  * @param {number} amount - Cantidad de progreso (default: 1)
- * @param {Object} metadata - Metadata adicional (debe contener content_id para likes/comments)
- * @returns {Promise<Object>} Resultado del tracking
+ * @param {Object} metadata - Metadata adicional (watch_duration, platform, etc.)
+ * @returns {Promise<{result: string, points_earned: number, message?: string}>} Resultado del tracking
  */
-export async function trackMissionProgress(missionType, amount = 1, metadata = {}) {
+export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
+  const userAuth = await supabase.auth.getUser();
+  if (!userAuth.data.user) {
+    return { result: 'error', points_earned: 0, message: 'Usuario no autenticado' };
+  }
+  const userId = userAuth.data.user.id;
+
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Usuario no autenticado');
-
-    // RESTRICCIÓN: Definir las acciones que solo dan puntos una vez por objeto
-    const RESTRICTED_ACTIONS = [
-        MISSION_TYPES.GIVE_LIKE, 
-        MISSION_TYPES.COMMENT,
-        MISSION_TYPES.SHARE_CONTENT
-    ];
-
-    const referenceId = metadata.content_id || metadata.video_id; // Obtener el ID del objeto
-
-    if (RESTRICTED_ACTIONS.includes(missionType) && referenceId) {
-        
-        // Verificamos si el usuario YA RECIBIÓ puntos por esta acción en este objeto
-        const alreadyPaid = await hasUserEarnedPointsForAction(user.id, missionType, referenceId);
-        
-        if (alreadyPaid) {
-            // Si ya ganó puntos, detenemos el proceso y devolvemos un mensaje.
-            return {
-                success: true,
-                completed: false,
-                message: `Puntos por ${missionType} ya ganados para este contenido.`
-            };
-        }
+    // 1. RESTRICCIÓN: Verificación de Farming
+    const alreadyPaid = await hasUserEarnedPointsForAction(userId, missionType, referenceId);
+    
+    if (alreadyPaid) {
+        // ✅ DEVOLUCIÓN CLARA: Puntos ya ganados por esta acción/referencia
+        return { 
+          result: 'already_paid', 
+          points_earned: 0, 
+          message: 'Puntos ya ganados por esta acción/referencia.',
+        };
     }
-    // FIN DE RESTRICCIÓN DE FARMING
 
-    // Llamar a la función SQL que maneja el tracking automático
+    // 2. Ejecución del RPC de la base de datos para registrar el progreso y otorgar puntos
     const { data, error } = await supabase
       .rpc('track_mission_progress', {
-        p_user_id: user.id,
+        p_user_id: userId,
         p_mission_type: missionType,
         p_progress_amount: amount,
-        p_metadata: metadata
+        // Aseguramos que los metadatos incluyen la referencia
+        p_metadata: {
+            reference_type: referenceType,
+            reference_id: referenceId,
+            ...metadata
+        }
       });
 
-    if (error) throw error;
-
-    // Si la misión se completó, data contendrá info de la recompensa
-    if (data && data.completed) {
-      return {
-        success: true,
-        completed: true,
-        mission: data.mission,
-        reward: {
-          points: data.points_awarded,
-          type: data.points_type || 'free'
-        },
-        message: `¡Misión completada! +${data.points_awarded} puntos`
-      };
+    if (error) {
+        // Si el error es una violación de restricción única a nivel de DB (farming concurrente)
+        // Devolvemos 'already_paid' para informar al frontend.
+        if (error.code === '23505') { 
+             return {
+                result: 'already_paid', 
+                points_earned: 0, 
+                message: 'Error concurrente: El pago ya se registró.'
+             };
+        }
+        throw error;
+    }
+    
+    // 3. Devolver el resultado de los puntos obtenidos
+    if (data && data.points_awarded && data.points_awarded > 0) {
+        // ✅ DEVOLUCIÓN CLARA: Éxito con puntos
+        return { 
+          result: 'success', 
+          points_earned: data.points_awarded, 
+          message: `¡Misión completada! +${data.points_awarded} puntos` 
+        };
     }
 
+    // Devolución si la acción se registró, pero no hubo puntos (ej: misión no completada)
     return {
-      success: true,
-      completed: false,
-      progress: data
+      result: 'registered',
+      points_earned: 0,
+      message: 'Acción registrada, pero no hubo recompensa inmediata.'
     };
+
   } catch (error) {
     console.error('Error tracking misión:', error);
     return {
-      success: false,
-      error: error.message
+      result: 'error',
+      points_earned: 0,
+      message: error.message
     };
   }
 }
 
 /**
- * Tracking automático cuando el usuario ve un video (Sin cambios)
+ * Tracking automático cuando el usuario ve un video
+ * @param {string} referenceType - 'video'
+ * @param {string} referenceId - ID del video
+ * @param {number} watchDuration - Duración vista (ej: 30 segundos)
  */
-export async function trackWatchVideo(videoId, watchDuration) {
-  return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, 1, {
-    video_id: videoId,
+export async function trackWatchVideo(referenceType, referenceId, watchDuration = 30) {
+  return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, referenceType, referenceId, 1, {
     watch_duration: watchDuration
   });
 }
@@ -320,32 +342,25 @@ export async function trackWatchVideo(videoId, watchDuration) {
 /**
  * Tracking automático cuando el usuario sube un video (Sin cambios)
  */
-export async function trackUploadVideo(videoId) {
-  return trackMissionProgress(MISSION_TYPES.UPLOAD_VIDEO, 1, {
-    video_id: videoId
-  });
+export async function trackUploadVideo(referenceId) {
+  return trackMissionProgress(MISSION_TYPES.UPLOAD_VIDEO, 'video', referenceId, 1, {});
 }
 
 /**
  * Tracking automático cuando el usuario da like
- * @param {string} contentType - Tipo de contenido ('video', 'photo')
- * @param {string} contentId - ID del contenido
+ * @param {string} referenceType - Tipo de contenido ('video', 'photo')
+ * @param {string} referenceId - ID del contenido
  * @returns {Promise<Object>}
  */
-export async function trackGiveLike(contentType, contentId) {
-  return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, 1, {
-    content_type: contentType,
-    content_id: contentId
-  });
+export async function trackGiveLike(referenceType, referenceId) {
+  return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, referenceType, referenceId);
 }
 
 /**
  * Tracking automático cuando el usuario comparte contenido
  */
-export async function trackShareContent(contentType, contentId, platform) {
-  return trackMissionProgress(MISSION_TYPES.SHARE_CONTENT, 1, {
-    content_type: contentType,
-    content_id: contentId,
+export async function trackShareContent(referenceType, referenceId, platform = 'link') {
+  return trackMissionProgress(MISSION_TYPES.SHARE_CONTENT, referenceType, referenceId, 1, {
     platform: platform
   });
 }
@@ -354,7 +369,7 @@ export async function trackShareContent(contentType, contentId, platform) {
  * Tracking automático cuando el usuario dona puntos (Sin cambios)
  */
 export async function trackDonatePoints(recipientId, pointsAmount) {
-  return trackMissionProgress(MISSION_TYPES.DONATE_POINTS, 1, {
+  return trackMissionProgress(MISSION_TYPES.DONATE_POINTS, 'donation', recipientId, 1, {
     recipient_id: recipientId,
     points_amount: pointsAmount
   });
@@ -363,18 +378,15 @@ export async function trackDonatePoints(recipientId, pointsAmount) {
 /**
  * Tracking automático cuando el usuario comenta
  */
-export async function trackComment(contentType, contentId) {
-  return trackMissionProgress(MISSION_TYPES.COMMENT, 1, {
-    content_type: contentType,
-    content_id: contentId
-  });
+export async function trackComment(referenceType, referenceId) {
+  return trackMissionProgress(MISSION_TYPES.COMMENT, referenceType, referenceId);
 }
 
 /**
  * Tracking automático cuando el usuario sigue a alguien (Sin cambios)
  */
 export async function trackFollowUser(followedUserId) {
-  return trackMissionProgress(MISSION_TYPES.FOLLOW_USER, 1, {
+  return trackMissionProgress(MISSION_TYPES.FOLLOW_USER, 'user', followedUserId, 1, {
     followed_user_id: followedUserId
   });
 }
@@ -383,14 +395,13 @@ export async function trackFollowUser(followedUserId) {
  * Tracking de login diario (Sin cambios)
  */
 export async function trackDailyLogin() {
-  return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 1, {
+  return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 'system', 'daily_login', 1, {
     login_timestamp: new Date().toISOString()
   });
 }
 
-// ... (El resto del servicio de misiones no requiere cambios) ...
 // ============================================================================
-// FUNCIONES DE COMPLETADO - Marcar como Completada
+// FUNCIONES DE COMPLETADO - Marcar como Completada (Sin cambios sustanciales)
 // ============================================================================
 export async function completeMission(missionId, options = {}) {
   try {
