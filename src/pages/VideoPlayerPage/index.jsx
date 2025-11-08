@@ -1,13 +1,7 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSIÓN FINAL INTEGRADA
-// ============================================================================
-// ✅ INTEGRACIÓN: Eliminadas las llamadas directas a 'addPoints' y los
-//    valores de puntos "quemados" (hard-coded).
-// ✅ CEREBRO: Ahora solo se llama a las funciones de 'missionsService'
-//    (ej. trackGiveLike), que se encargan de la lógica de puntos.
-// ✅ NOTIFICACIÓN: Se leen los puntos devueltos por 'missionsService'
-//    para mostrar la cantidad correcta al usuario.
+// ✅ FIX FINAL: Aseguramos que contentId y reference_id siempre sea el videoId
+//    para que la restricción de farming funcione.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -36,7 +30,6 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // ✅ 'addPoints' ya no se llama desde esta página, pero se mantiene por si 'usePoints' es usado por otros hooks
   const { addPoints } = usePoints(); 
   const isMobile = useIsMobile();
 
@@ -268,7 +261,7 @@ const VideoPlayerPage = () => {
 
   const handleMaximize = () => {
     const mainVideo = videoRef.current;
-    const miniVideo = miniVideoRef.current;
+    const miniVideo = miniPlayerRef.current?.querySelector('video'); // Usar selector si miniVideoRef no está adjunto directamente al video
 
     if (!mainVideo || !miniVideo) return;
 
@@ -293,6 +286,7 @@ const VideoPlayerPage = () => {
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
 
   // ===============================
   // FUNCIONES DE CARGA DE DATOS
@@ -351,7 +345,8 @@ const VideoPlayerPage = () => {
 
       setVideo(videoData);
 
-      await supabase.rpc('increment_video_views', { video_id: videoId });
+      // Incremento de vistas (descomentar si aplica)
+      // await supabase.rpc('increment_video_views', { video_id: videoId });
 
       const { data: countersData } = await supabase
         .from('videos')
@@ -369,6 +364,7 @@ const VideoPlayerPage = () => {
       }
 
       if (user) {
+        // Estado de Like
         const { data: likeData } = await supabase
           .from('video_likes')
           .select('*')
@@ -377,6 +373,7 @@ const VideoPlayerPage = () => {
           .maybeSingle();
         setLiked(!!likeData);
 
+        // Estado de Dislike
         const { data: dislikeData } = await supabase
           .from('video_dislikes')
           .select('*')
@@ -385,6 +382,7 @@ const VideoPlayerPage = () => {
           .maybeSingle();
         setDisliked(!!dislikeData);
 
+        // Estado de Guardado
         const { data: savedData } = await supabase
           .from('saved_videos')
           .select('*')
@@ -393,6 +391,7 @@ const VideoPlayerPage = () => {
           .maybeSingle();
         setSaved(!!savedData);
 
+        // Estado de Seguimiento
         if (videoData.user_id) {
           const { data: followData } = await supabase
             .from('user_follows')
@@ -403,25 +402,25 @@ const VideoPlayerPage = () => {
           setFollowing(!!followData);
         }
 
-        // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue registrada
-        // por el missionsService (que usa los 'action_type' de MISSION_TYPES)
+        // ✅ INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue pagada
         const { data: pointsData, error: pointsError } = await supabase
           .from('points_transactions') 
-          .select('action_type')
+          .select('transaction_type') // Solo necesitamos el tipo de acción
           .eq('user_id', user.id)
-          .eq('reference_id', videoId); // El videoId se guarda como reference_id
+          .eq('reference_id', videoId) 
+          .gt('points_change', 0); // Solo transacciones de ganancia
 
         if (pointsError) {
             console.error("Error al verificar puntos ganados: ", pointsError.message);
         }
           
         if (pointsData) {
-          const actions = pointsData.map(p => p.action_type);
-          // ✅ INTEGRACIÓN: Usar los 'action_type' correctos de missionsService
-          setHasEarnedLikePoints(actions.includes('give_like'));
-          setHasEarnedCommentPoints(actions.includes('comment'));
-          setHasEarnedSharePoints(actions.includes('share_content'));
-          setHasEarnedViewPoints(actions.includes('watch_video'));
+          const actions = pointsData.map(p => p.transaction_type);
+          // ✅ INTEGRACIÓN: Usar los 'action_type' de missionsService para las restricciones
+          setHasEarnedLikePoints(actions.includes(MISSION_TYPES.GIVE_LIKE));
+          setHasEarnedCommentPoints(actions.includes(MISSION_TYPES.COMMENT));
+          setHasEarnedSharePoints(actions.includes(MISSION_TYPES.SHARE_CONTENT));
+          setHasEarnedViewPoints(actions.includes(MISSION_TYPES.WATCH_VIDEO));
         }
       }
 
@@ -575,22 +574,19 @@ const VideoPlayerPage = () => {
 
   // ✅ INTEGRACIÓN: PUNTOS POR VISTA (30 SEGS)
   const handleEarnViewPoints = async () => {
-    if (hasEarnedViewPoints || !user) return;
+    // Si ya ganó puntos por vista (límite diario) o no hay usuario, salir.
+    if (hasEarnedViewPoints || !user) return; 
 
-    // ✅ INTEGRACIÓN: 'addPoints' ya no se usa aquí.
-    // Solo llamamos al "cerebro" de misiones.
     try {
       setHasEarnedViewPoints(true); // Marcar como intentado para evitar spam
       const result = await trackWatchVideo(videoId, 30);
 
-      // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
       if (result.completed && result.reward?.points > 0) {
         showPointsNotification(`+${result.reward.points} puntos por ver video 🎉`);
       }
 
     } catch (err) {
       console.error('❌ Error al otorgar puntos/misión por vista:', err);
-      // No revertimos 'hasEarnedViewPoints' para evitar reintentos en un endpoint que falla
     }
   };
 
@@ -600,6 +596,7 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
+    if (!videoId) return; // ✅ Seguridad
 
     try {
       if (liked) {
@@ -616,6 +613,7 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
+        // ✅ Corregir contador en base de datos
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
 
       } else {
@@ -634,24 +632,22 @@ const VideoPlayerPage = () => {
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
+        // ✅ Corregir contador en base de datos
         await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // ✅ INTEGRACIÓN: Lógica de puntos separada
-        if (!hasEarnedLikePoints) {
-          setHasEarnedLikePoints(true); // Marcar como intentado para evitar spam
-          
-          try {
-            // ✅ INTEGRACIÓN: Ya no llamamos a 'addPoints'.
-            // Solo llamamos al "cerebro" de misiones.
-            const result = await trackGiveLike('video', videoId); 
+        // ✅ INTEGRACIÓN: Lógica de puntos separada (con restricción)
+        
+        try {
+          // ✅ FIX: trackGiveLike ahora verifica si ya pagó por ESTE video
+          const result = await trackGiveLike('video', videoId); 
 
-            // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
-            if (result.completed && result.reward?.points > 0) {
-              showPointsNotification(`+${result.reward.points} puntos por dar like 🎉`);
-            }
-          } catch (pointsError) {
-             console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
+          if (result.completed && result.reward?.points > 0) {
+            showPointsNotification(`+${result.reward.points} puntos por dar like 🎉`);
+          } else if (result.message && result.message.includes('ya ganados')) {
+            showPointsNotification(`Puntos ya ganados por este Like.`);
           }
+        } catch (pointsError) {
+             console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
         }
       }
     } catch (err) {
@@ -664,6 +660,7 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
+    if (!videoId) return; // ✅ Seguridad
 
     try {
       if (disliked) {
@@ -720,6 +717,7 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
+    if (!videoId) return; // ✅ Seguridad
 
     try {
       if (saved) {
@@ -736,7 +734,6 @@ const VideoPlayerPage = () => {
           .insert({ video_id: videoId, user_id: user.id });
         
         try {
-          // ✅ INTEGRACIÓN: 'trackMissionProgress' es parte de 'missionsService'
           trackMissionProgress('save_video', 1, { video_id: videoId }); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
@@ -749,21 +746,22 @@ const VideoPlayerPage = () => {
   };
 
   const handleShare = async () => {
+    if (!videoId) return; // ✅ Seguridad
     const url = `${window.location.origin}/video/${videoId}`;
     setShareLink(url);
     setShowShareModal(true);
 
     if (user && !hasEarnedSharePoints) {
-      setHasEarnedSharePoints(true); // Marcar como intentado
+      // ✅ INTEGRACIÓN: trackShareContent ahora verifica si ya pagó por ESTE video
       
-      // ✅ INTEGRACIÓN: Ya no llamamos a 'addPoints'.
-      // Solo llamamos al "cerebro" de misiones.
       try {
         const result = await trackShareContent('video', videoId, 'link'); 
 
-        // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
         if (result.completed && result.reward?.points > 0) {
           showPointsNotification(`+${result.reward.points} puntos por compartir 🎉`);
+          setHasEarnedSharePoints(true); // Actualiza el estado si recibió puntos
+        } else if (result.message && result.message.includes('ya ganados')) {
+            showPointsNotification(`Puntos ya ganados por compartir este contenido.`);
         }
       } catch (pointsError) {
         console.error('❌ Error al otorgar puntos/misión por Compartir:', pointsError);
@@ -782,7 +780,6 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
-
     if (!video?.user_id) return;
 
     try {
@@ -803,7 +800,6 @@ const VideoPlayerPage = () => {
           });
         
         try {
-          // ✅ INTEGRACIÓN: Llamada a 'missionsService'
           trackFollowUser(video.user_id);
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
@@ -821,7 +817,7 @@ const VideoPlayerPage = () => {
       navigate('/login');
       return;
     }
-
+    if (!videoId) return; // ✅ Seguridad
     if (!newComment.trim()) return;
 
     try {
@@ -832,6 +828,24 @@ const VideoPlayerPage = () => {
         parent_comment_id: replyingTo
       };
 
+      // 1. Lógica de Puntos (con restricción)
+      let pointsResult = { completed: false };
+      try {
+        // ✅ FIX: trackComment ahora verifica si ya pagó por ESTE video
+        pointsResult = await trackComment('video', videoId); 
+      } catch (pointsError) {
+        console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
+      }
+      
+      if (pointsResult.message && pointsResult.message.includes('ya ganados')) {
+        showPointsNotification(`Puntos ya ganados por este Comentario.`);
+        // Continuar con la inserción del comentario, pero sin dar puntos
+      } else if (pointsResult.completed && pointsResult.reward?.points > 0) {
+        showPointsNotification(`+${pointsResult.reward.points} puntos por comentar 🎉`);
+        setHasEarnedCommentPoints(true); // Actualiza el estado si recibió puntos
+      }
+      
+      // 2. Inserción del comentario (siempre debe ocurrir)
       const { data, error } = await supabase
         .from('video_comments')
         .insert(commentData)
@@ -861,24 +875,6 @@ const VideoPlayerPage = () => {
         ...prev,
         comments: prev.comments + 1
       }));
-
-      // ✅ INTEGRACIÓN: Lógica de puntos separada
-      if (!hasEarnedCommentPoints) {
-        setHasEarnedCommentPoints(true); // Marcar como intentado
-        
-        try {
-          // ✅ INTEGRACIÓN: Ya no llamamos a 'addPoints'.
-          // Solo llamamos al "cerebro" de misiones.
-          const result = await trackComment('video', videoId);
-
-          // ✅ INTEGRACIÓN: Mostrar notificación si el servicio de misiones nos devolvió puntos
-          if (result.completed && result.reward?.points > 0) {
-            showPointsNotification(`+${result.reward.points} puntos por comentar 🎉`);
-          }
-        } catch (pointsError) {
-          console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
-        }
-      }
 
       if (replyingTo) {
         setComments(prev => prev.map(comment => {
@@ -977,7 +973,8 @@ const VideoPlayerPage = () => {
 
     const currentTime = currentVideo.currentTime;
 
-    if (currentTime >= 30 && !hasEarnedViewPoints && user) {
+    // Solo pagar puntos si el video tiene duración para 30s
+    if (currentVideo.duration >= 30 && currentTime >= 30 && !hasEarnedViewPoints && user) {
       handleEarnViewPoints();
     }
   };
