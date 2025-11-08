@@ -1,8 +1,8 @@
 // src/services/missionsService.js
 // ============================================================================
 // MISSIONS SERVICE - Sistema de Misiones Diarias (CORREGIDO)
-// ✅ FIX: Lógica de restricción de puntos para prevenir Farming.
-// ✅ FIX: Devuelve objetos de resultado claros (success, already_paid) para el frontend.
+// ✅ CORRECCIÓN CRÍTICA: Se modificó la devolución del bloque de restricción
+//    de puntos (alreadyPaid) de 'registered' a 'already_paid'.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -206,10 +206,6 @@ export async function getMissionProgress(missionId) {
 /**
  * Función de utilidad para verificar si el usuario ya ganó puntos por esta referencia
  * Es la base de la restricción de "Farming".
- * @param {string} userId - ID del usuario
- * @param {string} transactionType - Tipo de acción (GIVE_LIKE, COMMENT, SHARE_CONTENT)
- * @param {string} referenceId - ID del objeto (Video ID, Post ID, etc.)
- * @returns {Promise<boolean>} - True si ya ganó puntos, False si no
  */
 async function hasUserEarnedPointsForAction(userId, transactionType, referenceId) {
   // Solo aplicamos la restricción a las acciones que solo se pagan una vez por objeto
@@ -246,12 +242,6 @@ async function hasUserEarnedPointsForAction(userId, transactionType, referenceId
 
 /**
  * Registrar progreso en una misión
- * @param {string} missionType - Tipo de misión (MISSION_TYPES)
- * @param {string} referenceType - Tipo de contenido ('video', 'photo')
- * @param {string} referenceId - ID del objeto (Video ID, Post ID, etc.)
- * @param {number} amount - Cantidad de progreso (default: 1)
- * @param {Object} metadata - Metadata adicional (watch_duration, platform, etc.)
- * @returns {Promise<{result: string, points_earned: number, message?: string}>} Resultado del tracking
  */
 export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
   const userAuth = await supabase.auth.getUser();
@@ -265,7 +255,7 @@ export async function trackMissionProgress(missionType, referenceType, reference
     const alreadyPaid = await hasUserEarnedPointsForAction(userId, missionType, referenceId);
     
     if (alreadyPaid) {
-        // ✅ DEVOLUCIÓN CLARA: Puntos ya ganados por esta acción/referencia
+        // ✅ CORRECCIÓN APLICADA: Devolver 'already_paid' para que el frontend dispare la notificación.
         return { 
           result: 'already_paid', 
           points_earned: 0, 
@@ -311,6 +301,7 @@ export async function trackMissionProgress(missionType, referenceType, reference
     }
 
     // Devolución si la acción se registró, pero no hubo puntos (ej: misión no completada)
+    // El frontend ignora este caso.
     return {
       result: 'registered',
       points_earned: 0,
@@ -329,9 +320,6 @@ export async function trackMissionProgress(missionType, referenceType, reference
 
 /**
  * Tracking automático cuando el usuario ve un video
- * @param {string} referenceType - 'video'
- * @param {string} referenceId - ID del video
- * @param {number} watchDuration - Duración vista (ej: 30 segundos)
  */
 export async function trackWatchVideo(referenceType, referenceId, watchDuration = 30) {
   return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, referenceType, referenceId, 1, {
@@ -348,9 +336,6 @@ export async function trackUploadVideo(referenceId) {
 
 /**
  * Tracking automático cuando el usuario da like
- * @param {string} referenceType - Tipo de contenido ('video', 'photo')
- * @param {string} referenceId - ID del contenido
- * @returns {Promise<Object>}
  */
 export async function trackGiveLike(referenceType, referenceId) {
   return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, referenceType, referenceId);
@@ -401,7 +386,7 @@ export async function trackDailyLogin() {
 }
 
 // ============================================================================
-// FUNCIONES DE COMPLETADO - Marcar como Completada (Sin cambios sustanciales)
+// FUNCIONES DE COMPLETADO (Sin cambios)
 // ============================================================================
 export async function completeMission(missionId, options = {}) {
   try {
@@ -489,7 +474,7 @@ export async function claimMissionReward(missionId) {
 }
 
 // ============================================================================
-// FUNCIONES DE RACHAS (STREAKS) (Sin cambios)
+// FUNCIONES DE RACHAS, ESTADÍSTICAS Y ADMIN (Sin cambios)
 // ============================================================================
 
 export async function getUserStreak() {
@@ -614,10 +599,6 @@ export async function getStreakHistory(limit = 30) {
   }
 }
 
-// ============================================================================
-// FUNCIONES DE ESTADÍSTICAS (Sin cambios)
-// ============================================================================
-
 export async function getMissionStats() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -666,10 +647,6 @@ export async function getTopMissions(limit = 10) {
     };
   }
 }
-
-// ============================================================================
-// FUNCIONES ADMIN - Gestión de Misiones (Sin cambios)
-// ============================================================================
 
 export async function createMission(missionData) {
   try {
@@ -794,10 +771,6 @@ export async function reorderMissions(missionOrders) {
     };
   }
 }
-
-// ============================================================================
-// FUNCIONES UTILIDADES (Sin cambios)
-// ============================================================================
 
 export async function canCompleteMissionToday(missionId) {
   try {
