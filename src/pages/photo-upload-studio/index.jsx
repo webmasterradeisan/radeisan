@@ -58,9 +58,9 @@ const usePhotoForm = () => {
     tags: [],
     category: 'general',
     privacy: 'public',
-    location: '',
-    allowComments: true, // Se mantiene en el estado, pero se ignora en la inserción
-    allowDownloads: false // Se mantiene en el estado, pero se ignora en la inserción
+    location: '', // Se mantiene en el estado, pero se ignora en la inserción
+    allowComments: true, 
+    allowDownloads: false
   });
 
   // Añadir archivos
@@ -204,9 +204,8 @@ const usePhotoUpload = () => {
                     category: metadata.category,
                     tags: metadata.tags,
                     privacy: metadata.privacy,
-                    location: metadata.location,
-                    // ✅ CORRECCIÓN DEFINITIVA: Se eliminan las columnas faltantes del INSERT
-                    // 'allow_comments' (anterior) y 'allow_downloads' (actual)
+                    // ✅ CORRECCIÓN FINAL: Eliminamos 'location', 'allow_comments', y 'allow_downloads'
+                    // Ya que no existen en la tabla 'photos' según los errores de log.
                 })
                 .select()
                 .single();
