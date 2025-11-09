@@ -25,6 +25,7 @@ const VERTICAL_BONUS_RULE = 'video_vertical_bonus';
 /**
  * Calcula los puntos totales ganados por un video subido,
  * basándose en la duración, categoría y orientación (dinámico de BD).
+ * Esta función reemplaza a la versión simple anterior.
  */
 export const calculateVideoPointsFull = async (durationSeconds, categorySlug, orientation) => {
     
@@ -46,7 +47,7 @@ export const calculateVideoPointsFull = async (durationSeconds, categorySlug, or
     }, {});
 
     // Obtener multiplicadores de categoría (ASUMIMOS QUE points_rules TIENE SLUGS DE CATEGORÍA)
-    // Buscamos una regla con el slug de la categoría, si no existe, el multiplicador es 1.0
+    // Buscamos una regla con el slug de la categoría. Si no existe, el multiplicador es 1.0
     const categoryRule = rules.find(r => r.slug === `category_${categorySlug}`);
     const categoryMultiplier = categoryRule?.multiplier || 1.0;
     const categoryName = categoryRule?.name || categorySlug;
@@ -87,12 +88,8 @@ export const calculatePremiumValue = (premiumPoints) => {
 };
 
 // ============================================================================
-// INICIALIZACIÓN DE PUNTOS (RESTO DEL ARCHIVO SIN CAMBIOS)
+// INICIALIZACIÓN DE PUNTOS
 // ============================================================================
-// ... (initializeUserPoints, getUserPoints, trackPointsAction, updatePointsBalance,
-//      addPoints, deductPoints, addFreePoints, getUserPointsHistory, y default export sin cambios,
-//      excepto que calculateVideoPoints ya no se exporta ni aparece en el default)
-// ...
 
 export const initializeUserPoints = async (userId) => {
   if (!userId) return false;
@@ -306,7 +303,7 @@ export default {
   initializeUserPoints, 
   trackPointsAction,
   updatePointsBalance,
-  calculateVideoPoints: calculateVideoPointsFull, // Exportamos la versión completa
+  calculateVideoPoints: calculateVideoPointsFull, // Exportamos la versión completa con alias
   addPoints, 
   deductPoints,
   calculatePremiumValue,
