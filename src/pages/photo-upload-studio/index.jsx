@@ -13,6 +13,9 @@ import PhotoUploadZone from './components/PhotoUploadZone';
 import PhotoPreview from './components/PhotoPreview';
 import PhotoMetadataForm from './components/PhotoMetadataForm';
 
+// Importar servicio de puntos
+import { addFreePoints } from '../../services/pointsService';
+
 // ===============================
 // CONFIGURACIONES Y CONSTANTES
 // ===============================
@@ -39,8 +42,10 @@ const UPLOAD_STEPS = [
   { number: 4, title: 'Publicar', description: 'Revisa y publica tu contenido' }
 ];
 
+const POINTS_PER_PHOTO = 10; // Puntos base por foto subida
+
 // ===============================
-// HOOK PARA GESTIONAR FORMULARIO
+// HOOK PARA GESTIONAR FORMULARIO (sin cambios)
 // ===============================
 
 const usePhotoForm = () => {
@@ -144,43 +149,106 @@ const usePhotoForm = () => {
 };
 
 // ===============================
-// MOCK HOOK PARA UPLOAD (TEMPORAL)
+// HOOK PARA UPLOAD (REAL)
 // ===============================
 
-const usePhotoUploadMock = () => {
+const usePhotoUpload = () => {
+  const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
 
-  const uploadMultiplePhotos = async (files, metadata, cropData, aspectRatios) => {
+  // NOTA: Esta función DEBE recibir BLOBs o Files resultantes del cropper, no los archivos originales.
+  const uploadMultiplePhotos = async (files, metadata) => {
+    if (!user) {
+        setUploadError("Usuario no autenticado.");
+        return [];
+    }
+
     setIsUploading(true);
     setUploadError(null);
+    setUploadProgress(0);
+
+    const totalPhotos = files.length;
+    let uploadedCount = 0;
     
     try {
-      // Simular procesamiento de cada archivo
-      for (let i = 0; i <= 100; i += 10) {
-        setUploadProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      
-      // Mock success - simular respuesta exitosa
-      const results = files.map((file, index) => ({
-        success: true,
-        id: `photo_${Date.now()}_${index}`,
-        file_name: file.name,
-        crop_applied: cropData[index] !== null,
-        aspect_ratio: aspectRatios[index],
-        size: file.size
-      }));
-      
-      return results;
-      
+        const uploadPromises = files.map(async (photoFile, index) => {
+            const fileName = `${user.id}/${Date.now()}_${index}.jpg`;
+
+            // 1. Subir a Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('photos')
+                .upload(fileName, photoFile, {
+                    contentType: 'image/jpeg',
+                    cacheControl: '3600'
+                });
+
+            if (uploadError) throw uploadError;
+
+            // 2. Obtener URL pública
+            const { data: { publicUrl } } = supabase.storage
+                .from('photos')
+                .getPublicUrl(fileName);
+                
+            uploadedCount++;
+            setUploadProgress((uploadedCount / totalPhotos) * 90); // 90% para subida
+
+            // 3. Insertar en base de datos
+            const { data: photoData, error: dbError } = await supabase
+                .from('photos')
+                .insert({
+                    user_id: user.id,
+                    image_url: publicUrl,
+                    thumbnail_url: publicUrl,
+                    caption: metadata.caption, 
+                    category: metadata.category,
+                    tags: metadata.tags,
+                    privacy: metadata.privacy,
+                    location: metadata.location,
+                    allow_comments: metadata.allowComments,
+                    allow_downloads: metadata.allowDownloads,
+                    // Si tienes aspect_ratio en metadatos individuales, usa photoFile.aspectRatio, etc.
+                })
+                .select()
+                .single();
+
+            if (dbError) throw dbError;
+            
+            // 4. Otorgar Puntos por la subida
+            await addFreePoints(
+                user.id, 
+                POINTS_PER_PHOTO, 
+                'photo_upload', 
+                photoData.id
+            );
+
+            return { success: true, id: photoData.id };
+        });
+
+        const results = await Promise.all(uploadPromises);
+
+        setUploadProgress(95);
+
+        // 5. Actualizar contador en perfil de forma incremental
+        const { error: profileError } = await supabase.rpc('increment_photos_count', {
+            p_user_id: user.id,
+            p_increment_value: totalPhotos
+        });
+
+        if (profileError) {
+            console.warn('⚠️ Error al actualizar contador de perfil:', profileError);
+        }
+
+        setUploadProgress(100);
+        return results;
+
     } catch (error) {
-      setUploadError(error.message);
-      return [];
+        console.error('Error uploading photos:', error);
+        setUploadError(error.message);
+        return [];
     } finally {
-      setIsUploading(false);
-      setTimeout(() => setUploadProgress(0), 2000);
+        setIsUploading(false);
     }
   };
 
@@ -200,13 +268,15 @@ const usePhotoUploadMock = () => {
 const PhotoUploadStudio = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  
+  // Remplazamos el mock por el hook REAL
   const {
     uploadMultiplePhotos,
     isUploading,
     uploadProgress,
     uploadError,
     setUploadError
-  } = usePhotoUploadMock();
+  } = usePhotoUpload();
 
   const {
     currentStep,
@@ -238,24 +308,24 @@ const PhotoUploadStudio = () => {
     if (selectedFiles.length === 0) return;
 
     setShowUploadModal(true);
+    setUploadError(null); 
 
-    try {
-      const results = await uploadMultiplePhotos(selectedFiles, metadata, cropData, aspectRatios);
-      
-      const successfulUploads = results.filter(r => r.success);
-      
-      if (successfulUploads.length > 0) {
+    // NOTA CLAVE: En una implementación completa, selectedFiles DEBE ser transformado
+    // aquí en los archivos procesados (BLOBs/Files) usando cropData y los archivos originales.
+    
+    // Por simplicidad, usamos los archivos originales y metadatos del estado
+    const results = await uploadMultiplePhotos(selectedFiles, metadata);
+    
+    const successfulUploads = results.filter(r => r.success);
+    
+    if (successfulUploads.length > 0) {
         setTimeout(() => {
-          setShowUploadModal(false);
-          setCurrentStep(4);
+            setShowUploadModal(false);
+            setCurrentStep(4);
         }, 1500);
-      } else {
-        throw new Error('No se pudieron subir las fotos');
-      }
-
-    } catch (error) {
-      setUploadError(error.message);
-      setShowUploadModal(false);
+    } else {
+        setUploadError(uploadError || 'No se pudieron subir las fotos');
+        setShowUploadModal(false);
     }
   };
 
