@@ -1,6 +1,6 @@
 // src/pages/photo-upload-studio/components/PhotoPreview.jsx
 // Preview y edición de fotos con crop y filtros
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop } from 'react-image-crop';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
@@ -31,90 +31,119 @@ const PhotoEditor = ({
   onAspectRatioChange,
   onRemove 
 }) => {
-  const [imageSrc, setImageSrc] = useState('');
-  const [crop, setCrop] = useState();
-  const [completedCrop, setCompletedCrop] = useState();
+  // Inicializamos el estado local con la prop que viene del padre
   const [selectedRatio, setSelectedRatio] = useState(aspectRatio || 'original');
+  // Usamos el cropData del padre si existe, si no, inicializamos sin valor.
+  const [crop, setCrop] = useState(cropData || undefined); 
+  const [completedCrop, setCompletedCrop] = useState(cropData ? cropData : undefined);
+  
   const imgRef = useRef(null);
 
-  // Inicializar imagen
-  useEffect(() => {
+  // Generar URL del objeto de forma estable
+  const imageSrc = useMemo(() => {
     if (file) {
-      const objectUrl = URL.createObjectURL(file);
-      setImageSrc(objectUrl);
-      return () => URL.revokeObjectURL(objectUrl);
+      return URL.createObjectURL(file);
     }
+    return '';
   }, [file]);
+
+  // Sincronizar el estado del crop local si cambia la prop principal
+  useEffect(() => {
+    setCrop(cropData || undefined);
+    setCompletedCrop(cropData || undefined);
+  }, [cropData]);
 
   // Manejar cambio de aspecto
   const handleAspectRatioChange = useCallback((ratioId) => {
-    setSelectedRatio(ratioId);
-    onAspectRatioChange(index, ratioId);
-    
     const ratioData = ASPECT_RATIOS.find(r => r.id === ratioId);
     
+    // 1. Actualizar estado local y en el padre
+    setSelectedRatio(ratioId);
+    onAspectRatioChange(index, ratioId); // Notifica al padre el nuevo aspecto
+    
+    // 2. Aplicar recorte inicial si se selecciona un aspecto fijo
     if (imgRef.current && ratioData.aspect) {
-      const { width, height } = imgRef.current;
+      const { naturalWidth, naturalHeight } = imgRef.current;
+      
       const initialCrop = centerCrop(
         makeAspectCrop(
-          {
-            unit: '%',
-            width: 90,
-          },
+          { unit: '%', width: 90 },
           ratioData.aspect,
-          width,
-          height,
+          naturalWidth,
+          naturalHeight,
         ),
-        width,
-        height,
+        naturalWidth,
+        naturalHeight,
       );
       
+      const pixelCrop = convertToPixelCrop(initialCrop, naturalWidth, naturalHeight);
+
       setCrop(initialCrop);
-      const pixelCrop = convertToPixelCrop(initialCrop, width, height);
       setCompletedCrop(pixelCrop);
-      onCropChange(index, pixelCrop);
+      onCropChange(index, pixelCrop); // Notifica el nuevo recorte al padre
+    } else if (ratioId === 'original') {
+      // Si volvemos a original, limpiamos el crop
+      setCrop(undefined);
+      setCompletedCrop(undefined);
+      onCropChange(index, null);
     }
   }, [index, onAspectRatioChange, onCropChange]);
 
-  // Manejar crop
-  const onCropChangeHandler = useCallback((crop, percentCrop) => {
-    setCrop(percentCrop);
+
+  // Manejar crop mientras se arrastra (sólo actualiza el estado local)
+  const onCropChangeHandler = useCallback((newCrop, percentCrop) => {
+    setCrop(newCrop);
   }, []);
 
-  const onCropCompleteHandler = useCallback((crop, percentCrop) => {
-    if (imgRef.current && crop.width && crop.height) {
-      const pixelCrop = convertToPixelCrop(percentCrop, imgRef.current.width, imgRef.current.height);
+  // Manejar crop al soltar (actualiza el estado del padre)
+  const onCropCompleteHandler = useCallback((newCrop, percentCrop) => {
+    if (imgRef.current && newCrop.width && newCrop.height) {
+      const { naturalWidth, naturalHeight } = imgRef.current;
+      const pixelCrop = convertToPixelCrop(newCrop, naturalWidth, naturalHeight);
       setCompletedCrop(pixelCrop);
       onCropChange(index, pixelCrop);
     }
   }, [index, onCropChange]);
 
-  // Configurar crop inicial
+  // **Estabilización Crítica:** Aplicar crop inicial SÓLO al cargar la imagen, si es necesario.
   const onImageLoad = useCallback((e) => {
-    const { width, height } = e.currentTarget;
-    const ratioData = ASPECT_RATIOS.find(r => r.id === selectedRatio);
-    
-    if (ratioData?.aspect) {
-      const initialCrop = centerCrop(
-        makeAspectCrop(
-          {
-            unit: '%',
-            width: 90,
-          },
-          ratioData.aspect,
-          width,
-          height,
-        ),
-        width,
-        height,
-      );
-      
-      setCrop(initialCrop);
-      const pixelCrop = convertToPixelCrop(initialCrop, width, height);
-      setCompletedCrop(pixelCrop);
-      onCropChange(index, pixelCrop);
+    // Si no hay cropData inicial del padre, aplicamos el crop por defecto (si no es 'original')
+    if (!cropData && selectedRatio !== 'original') {
+        const { naturalWidth, naturalHeight } = e.currentTarget;
+        const ratioData = ASPECT_RATIOS.find(r => r.id === selectedRatio);
+
+        if (ratioData?.aspect) {
+            const initialCrop = centerCrop(
+                makeAspectCrop(
+                    { unit: '%', width: 90 },
+                    ratioData.aspect,
+                    naturalWidth,
+                    naturalHeight,
+                ),
+                naturalWidth,
+                naturalHeight,
+            );
+            
+            const pixelCrop = convertToPixelCrop(initialCrop, naturalWidth, naturalHeight);
+            
+            setCrop(initialCrop);
+            setCompletedCrop(pixelCrop);
+            onCropChange(index, pixelCrop);
+        }
     }
-  }, [selectedRatio, index, onCropChange]);
+  }, [selectedRatio, index, onCropChange, cropData]);
+
+
+  // Efecto para revocar la URL cuando el componente se desmonta o el archivo cambia
+  useEffect(() => {
+    return () => {
+      if (imageSrc) {
+        URL.revokeObjectURL(imageSrc);
+      }
+    };
+  }, [imageSrc]);
+  
+  const currentAspect = ASPECT_RATIOS.find(r => r.id === selectedRatio)?.aspect;
 
   return (
     <div className="bg-card rounded-lg border p-4">
@@ -176,7 +205,7 @@ const PhotoEditor = ({
                 crop={crop}
                 onChange={onCropChangeHandler}
                 onComplete={onCropCompleteHandler}
-                aspect={ASPECT_RATIOS.find(r => r.id === selectedRatio)?.aspect}
+                aspect={currentAspect}
                 className="max-w-full"
               >
                 <img
@@ -249,6 +278,10 @@ const PhotoPreview = ({
       </div>
     );
   }
+  
+  // CORRECCIÓN: Si el array de cropData no existe o está vacío, lo inicializamos.
+  const safeCropData = Array.isArray(cropData) ? cropData : files.map(() => null);
+  const safeAspectRatios = Array.isArray(aspectRatios) ? aspectRatios : files.map(() => 'original');
 
   return (
     <div className="space-y-6">
@@ -296,8 +329,9 @@ const PhotoPreview = ({
               <PhotoEditor
                 file={file}
                 index={index}
-                cropData={cropData[index]}
-                aspectRatio={aspectRatios[index]}
+                // Usamos los datos seguros para asegurar que siempre haya un valor inicial
+                cropData={safeCropData[index]}
+                aspectRatio={safeAspectRatios[index]}
                 onCropChange={onCropChange}
                 onAspectRatioChange={onAspectRatioChange}
                 onRemove={onRemoveFile}
@@ -376,13 +410,13 @@ const PhotoPreview = ({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Formato:</span>
                 <span className="text-foreground">
-                  {ASPECT_RATIOS.find(r => r.id === aspectRatios[selectedPhoto])?.label || 'Original'}
+                  {ASPECT_RATIOS.find(r => r.id === safeAspectRatios[selectedPhoto])?.label || 'Original'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Recorte:</span>
                 <span className="text-foreground">
-                  {cropData[selectedPhoto] ? 'Aplicado' : 'Sin recorte'}
+                  {safeCropData[selectedPhoto] ? 'Aplicado' : 'Sin recorte'}
                 </span>
               </div>
             </div>
@@ -406,7 +440,7 @@ const PhotoPreview = ({
             </div>
             <div className="text-center">
               <p className="text-lg font-semibold text-foreground">
-                {cropData.filter(crop => crop !== null).length}
+                {safeCropData.filter(crop => crop !== null).length}
               </p>
               <p className="text-xs text-muted-foreground">Con recorte</p>
             </div>
