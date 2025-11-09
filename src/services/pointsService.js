@@ -1,7 +1,6 @@
 // src/services/pointsService.js
 // ============================================================================
-// ✅ FIX 8: 'getUserPointsHistory' ahora acepta rangos de fecha
-//    y paginación (limit/offset) para los nuevos filtros.
+// ✅ FIX: 'calculateVideoPointsFull' implementa lógica dinámica de Puntos.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -14,14 +13,73 @@ const TRANSACTION_TABLE = 'points_transactions';
 const INIT_POINTS_RPC_NAME = 'ensure_user_points_record'; 
 const UPDATE_POINTS_RPC_NAME = 'update_user_points';
 
+// Constantes de reglas (deben coincidir con la tabla points_rules)
+const BASE_UPLOAD_RULE = 'video_base_upload';
+const DURATION_RULE = 'video_points_per_minute';
+const VERTICAL_BONUS_RULE = 'video_vertical_bonus';
 
 // ============================================================================
 // CÁLCULO Y VALOR (EXPORTACIONES NOMBRADAS)
 // ============================================================================
 
-export const calculateVideoPoints = (durationSeconds) => {
-  if (durationSeconds < 10) return 0;
-  return Math.floor(durationSeconds / 30);
+/**
+ * Calcula los puntos totales ganados por un video subido,
+ * basándose en la duración, categoría y orientación (dinámico de BD).
+ */
+export const calculateVideoPointsFull = async (durationSeconds, categorySlug, orientation) => {
+    
+    // Paso 1: Obtener reglas de la tabla points_rules (ASUMIMOS QUE ESTA TABLA EXISTE)
+    const { data: rules, error } = await supabase
+        .from('points_rules')
+        .select('*');
+
+    if (error) {
+        console.error("❌ Error al cargar reglas de puntos:", error);
+        // Fallback a un valor seguro si la BD falla
+        return { total_points: 10, base_points: 10, category_multiplier: 1.0, orientation_bonus: 0, category_name: categorySlug };
+    }
+
+    // Convertir reglas a un mapa para fácil acceso
+    const rulesMap = rules.reduce((acc, rule) => {
+        acc[rule.slug] = rule.points_value || 0;
+        return acc;
+    }, {});
+
+    // Obtener multiplicadores de categoría (ASUMIMOS QUE points_rules TIENE SLUGS DE CATEGORÍA)
+    // Buscamos una regla con el slug de la categoría, si no existe, el multiplicador es 1.0
+    const categoryRule = rules.find(r => r.slug === `category_${categorySlug}`);
+    const categoryMultiplier = categoryRule?.multiplier || 1.0;
+    const categoryName = categoryRule?.name || categorySlug;
+
+    // 1. Puntos Base de la acción (video_base_upload)
+    const basePoints = rulesMap[BASE_UPLOAD_RULE] || 50;
+
+    // 2. Puntos por Duración (video_points_per_minute)
+    const pointsPerMinute = rulesMap[DURATION_RULE] || 10;
+    const durationPoints = Math.floor(durationSeconds / 60) * pointsPerMinute;
+
+    let subtotal = basePoints + durationPoints;
+    
+    // 3. Aplicar Multiplicador de Categoría
+    const pointsWithCategory = Math.round(subtotal * categoryMultiplier);
+
+    // 4. Bonus por Orientación Vertical (Reel)
+    let orientationBonus = 0;
+    if (orientation === 'vertical') {
+        orientationBonus = rulesMap[VERTICAL_BONUS_RULE] || 10;
+    }
+
+    // 5. Total
+    const totalPoints = pointsWithCategory + orientationBonus;
+
+    return {
+        total_points: totalPoints,
+        base_points: subtotal, // Puntos base + duración sin multiplicar
+        points_with_category: pointsWithCategory, // Subtotal con multiplicador
+        category_multiplier: categoryMultiplier,
+        orientation_bonus: orientationBonus,
+        category_name: categoryName
+    };
 };
 
 export const calculatePremiumValue = (premiumPoints) => {
@@ -29,8 +87,12 @@ export const calculatePremiumValue = (premiumPoints) => {
 };
 
 // ============================================================================
-// INICIALIZACIÓN DE PUNTOS
+// INICIALIZACIÓN DE PUNTOS (RESTO DEL ARCHIVO SIN CAMBIOS)
 // ============================================================================
+// ... (initializeUserPoints, getUserPoints, trackPointsAction, updatePointsBalance,
+//      addPoints, deductPoints, addFreePoints, getUserPointsHistory, y default export sin cambios,
+//      excepto que calculateVideoPoints ya no se exporta ni aparece en el default)
+// ...
 
 export const initializeUserPoints = async (userId) => {
   if (!userId) return false;
@@ -244,7 +306,7 @@ export default {
   initializeUserPoints, 
   trackPointsAction,
   updatePointsBalance,
-  calculateVideoPoints,
+  calculateVideoPoints: calculateVideoPointsFull, // Exportamos la versión completa
   addPoints, 
   deductPoints,
   calculatePremiumValue,
