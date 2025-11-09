@@ -157,7 +157,7 @@ const useUserVideos = (userId) => {
           duration_seconds,
           file_size_bytes,
           views_count,
-          likes_count,
+          /* CORRECCIÓN: 'likes_count' ELIMINADO ya que no existe en BD */
           comments_count,
           points_earned,
           is_published,
@@ -203,7 +203,8 @@ const useUserVideos = (userId) => {
         (acc, video) => ({
           totalVideos: acc.totalVideos + 1,
           totalViews: acc.totalViews + (video.views_count || 0),
-          totalLikes: acc.totalLikes + (video.likes_count || 0),
+          // MODIFICADO: Usar 0 en lugar de video.likes_count hasta que se agregue la columna
+          totalLikes: acc.totalLikes + 0, 
           totalComments: acc.totalComments + (video.comments_count || 0)
         }),
         { totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
@@ -282,7 +283,7 @@ const useUserReels = (userId) => {
           duration_seconds,
           file_size_bytes,
           views_count,
-          likes_count,
+          /* CORRECCIÓN: 'likes_count' ELIMINADO ya que no existe en BD */
           comments_count,
           points_earned,
           is_published,
@@ -328,7 +329,8 @@ const useUserReels = (userId) => {
         (acc, reel) => ({
           totalReels: acc.totalReels + 1,
           totalViews: acc.totalViews + (reel.views_count || 0),
-          totalLikes: acc.totalLikes + (reel.likes_count || 0),
+          // MODIFICADO: Usar 0 en lugar de reel.likes_count hasta que se agregue la columna
+          totalLikes: acc.totalLikes + 0, 
           totalComments: acc.totalComments + (reel.comments_count || 0)
         }),
         { totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
@@ -681,7 +683,7 @@ const VideoGridComponent = ({
       id: videos[0].id,
       title: videos[0].title,
       views: videos[0].views_count,
-      likes: videos[0].likes_count,
+      // likes: videos[0].likes_count, // <- Removido de la muestra por corrección
       duration: videos[0].duration_seconds,
       orientation: videos[0].orientation,
       aspect_ratio: videos[0].aspect_ratio,
@@ -801,12 +803,15 @@ const VideoGridComponent = ({
                     <span>{video.views_count}</span>
                   </div>
                 )}
+                {/* CORRECCIÓN: Se elimina la muestra de likes_count ya que la columna fue eliminada */}
+                {/*
                 {video.likes_count !== null && video.likes_count !== undefined && (
                   <div className="flex items-center space-x-1">
                     <Icon name="Heart" size={14} />
                     <span>{video.likes_count}</span>
                   </div>
                 )}
+                */}
                 <span>{new Date(video.created_at).toLocaleDateString()}</span>
               </div>
 
@@ -866,7 +871,7 @@ const ReelsGridComponent = ({
       id: reels[0].id,
       title: reels[0].title,
       views: reels[0].views_count,
-      likes: reels[0].likes_count,
+      // likes: reels[0].likes_count, // <- Removido de la muestra por corrección
       duration: reels[0].duration_seconds,
       orientation: reels[0].orientation,
       aspect_ratio: reels[0].aspect_ratio,
@@ -988,12 +993,15 @@ const ReelsGridComponent = ({
                       <span>{reel.views_count}</span>
                     </div>
                   )}
+                  {/* CORRECCIÓN: Se elimina la muestra de likes_count ya que la columna fue eliminada */}
+                  {/*
                   {reel.likes_count !== null && reel.likes_count !== undefined && (
                     <div className="flex items-center space-x-1">
                       <Icon name="Heart" size={12} />
                       <span>{reel.likes_count}</span>
                     </div>
                   )}
+                  */}
                 </div>
               </div>
 
@@ -1098,7 +1106,9 @@ const UserProfileSettings = () => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    const totalLikes = (videoStats.totalLikes || 0) + (reelStats.totalLikes || 0) + 
+    // CORRECCIÓN: Usar 0 en lugar de videoStats.totalLikes y reelStats.totalLikes 
+    // hasta que la columna se agregue a la tabla 'videos'.
+    const totalLikes = (0) + (0) + 
                       photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
     const totalComments = (videoStats.totalComments || 0) + (reelStats.totalComments || 0);
 
