@@ -57,7 +57,7 @@ const useUserProfile = () => {
       setLoading(true);
       setError(null);
 
-      // ✅ CORRECCIÓN PRINCIPAL: Eliminamos la relación fallida 'user_points(...)'
+      // ✅ CORRECCIÓN PRINCIPAL: Eliminamos la relación fallida 'user_points(...)' y solo pedimos campos directos.
       const { data: profile, error: fetchError } = await supabase
         .from('user_profiles')
         .select(`*`)
@@ -124,8 +124,6 @@ const useUserProfile = () => {
     updateProfile
   };
 };
-
-// ... (Resto de Hooks: useUserVideos, useUserReels, useUserPhotos, usePointsHistory, usePurchaseHistory sin cambios)
 
 // Hook para videos horizontales
 const useUserVideos = (userId) => {
@@ -679,7 +677,7 @@ const UserProfileSettings = () => {
   const { totalPoints: contextTotalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   const { user, isAuthenticated, signOut } = useAuth();
   
-  const [activeTab, setActiveTab] = useState(PAGE_TABS.VIDEOS);
+  const [activeTab, setActiveTab] = useState(PAGE_TABS.PHOTOS);
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
   const [showImageEditor, setShowImageEditor] = useState(false);
@@ -729,8 +727,9 @@ const UserProfileSettings = () => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
+    // Usamos el campo 'likes_count' del esquema que el usuario confirmó que existe en photos
     const totalLikes = (0) + (0) + 
-                      photos.reduce((acc, photo) => acc + (photo.likes_count || 0), 0); // Usamos likes_count si existe
+                      photos.reduce((acc, photo) => acc + (photo.likes_count || 0), 0); 
     const totalComments = (0) + (0); 
 
     // ✅ Usamos los puntos del contexto (más fiables y actualizados)
