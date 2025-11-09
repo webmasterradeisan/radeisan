@@ -13,18 +13,21 @@ import * as pointsService from './pointsService';
 
 /**
  * Tipos de misiones disponibles
+ * ¡CORREGIDO! Estos nombres ahora coinciden con la columna 'mission_type'
+ * de la tabla 'daily_missions' que nos mostraste.
  */
 export const MISSION_TYPES = {
-  WATCH_VIDEO: 'watch_video',
-  UPLOAD_VIDEO: 'upload_video',
-  GIVE_LIKE: 'give_like',
-  SHARE_CONTENT: 'share_content',
-  DONATE_POINTS: 'donate_points',
-  COMMENT: 'comment',
-  FOLLOW_USER: 'follow_user',
-  COMPLETE_PROFILE: 'complete_profile',
-  LOGIN_DAILY: 'login_daily',
-  WATCH_REELS: 'watch_reels'
+  WATCH_VIDEO: 'watch_videos',      // Corregido (antes 'watch_video')
+  UPLOAD_VIDEO: 'upload_video',       // Coincidía (según tu lista)
+  GIVE_LIKE: 'like_videos',         // Corregido (antes 'give_like')
+  SHARE_CONTENT: 'share_video',       // Corregido (antes 'share_content')
+  DONATE_POINTS: 'donate_points',     // (No estaba en tu lista, se mantiene por si acaso)
+  COMMENT: 'comment_videos',      // Corregido (antes 'comment')
+  FOLLOW_USER: 'follow_user',       // (No estaba en tu lista, se mantiene por si acaso)
+  COMPLETE_PROFILE: 'complete_profile', // Coincidía (según tu lista)
+  LOGIN_DAILY: 'login_daily',       // (No estaba en tu lista, se mantiene por si acaso)
+  WATCH_REELS: 'watch_reels',       // (No estaba en tu lista, se mantiene por si acaso)
+  INVITE_FRIEND: 'invite_friend'      // Añadido (estaba en tu lista)
 };
 
 /**
@@ -252,16 +255,26 @@ export async function trackMissionProgress(missionType, referenceType, reference
     }
     
     // 2. Devolver el resultado de los puntos obtenidos
-    if (data && data.points_awarded && data.points_awarded > 0) {
+    // (Esta 'data' viene del 'RETURN' en la función SQL 'track_mission_progress')
+    if (data && data.result === 'success') {
         // ✅ DEVOLUCIÓN: Éxito con puntos (Esto disparará la notificación de éxito)
         return { 
           result: 'success', 
-          points_earned: data.points_awarded, 
-          message: `¡Misión completada! +${data.points_awarded} puntos` 
+          points_earned: data.points_earned, 
+          message: `¡Misión completada! +${data.points_earned} puntos` 
+        };
+    }
+    
+    // ✅ DEVOLUCIÓN: Esto se activa si la función SQL devuelve 'already_paid'
+    if (data && data.result === 'already_paid') {
+        return {
+          result: 'already_paid',
+          points_earned: 0,
+          message: 'Puntos ya ganados por esta acción.'
         };
     }
 
-    // Devolución si la acción se registró, pero no hubo puntos
+    // Devolución si la acción se registró, pero no hubo puntos (ej: 'mission_not_found_or_no_points')
     return {
       result: 'registered',
       points_earned: 0,
