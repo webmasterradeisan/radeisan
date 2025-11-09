@@ -1,16 +1,14 @@
 // src/components/PhotoQuickUpload.jsx
 // Sistema simple para subir fotos rápidamente, similar al ProfileImageEditor
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop } from 'react-image-crop';
 import imageCompression from 'browser-image-compression';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import Icon from './AppIcon';
 import Button from './ui/Button';
+import { addFreePoints } from '../services/pointsService'; // Importar servicio de puntos
 import 'react-image-crop/dist/ReactCrop.css';
-
-// Importar servicio de puntos (asumiendo que tiene la función para sumar puntos)
-import { addFreePoints } from '../services/pointsService'; // Importar addFreePoints
 
 // ===============================
 // CONFIGURACIONES
@@ -41,7 +39,7 @@ const COMPRESSION_CONFIG = {
 const POINTS_PER_PHOTO = 10; // Puntos base por foto subida
 
 // ===============================
-// EDITOR DE FOTO INDIVIDUAL (sin cambios)
+// EDITOR DE FOTO INDIVIDUAL (sin cambios significativos)
 // ===============================
 
 const PhotoCropEditor = ({ 
@@ -244,7 +242,7 @@ const PhotoQuickUpload = ({
   onSuccess 
 }) => {
   const { user } = useAuth();
-  const [step, setStep] = useState('select'); // 'select' | 'crop' | 'metadata' | 'uploading'
+  const [step, setStep] = useState('select'); 
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [processedPhotos, setProcessedPhotos] = useState([]);
   const [currentEditIndex, setCurrentEditIndex] = useState(0);
@@ -254,6 +252,7 @@ const PhotoQuickUpload = ({
   });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState(null); // Añadimos estado de error
   const fileInputRef = useRef(null);
 
   // Reset al abrir
@@ -265,6 +264,7 @@ const PhotoQuickUpload = ({
       setCurrentEditIndex(0);
       setMetadata({ caption: '', category: 'general' });
       setUploadProgress(0);
+      setUploadError(null); // Limpiamos errores
     }
   }, [isOpen]);
 
@@ -311,23 +311,27 @@ const PhotoQuickUpload = ({
 
     setIsUploading(true);
     setStep('uploading');
+    setUploadError(null); // Limpiamos errores
 
-    let uploadedCount = 0;
     const totalPhotos = processedPhotos.length;
+    let uploadedCount = 0;
     
     try {
       const uploadPromises = processedPhotos.map(async (photo, index) => {
-        const fileName = `${user.id}/${Date.now()}_${index}.jpg`;
+        const fileExtension = photo.file.name.split('.').pop() || 'jpg';
+        const fileName = `${user.id}/${Date.now()}_${index}.${fileExtension}`;
         
         // 1. Subir a Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('photos') // Asegúrate de que el bucket 'photos' existe y tiene RLS de INSERT
+        const { error: uploadError } = await supabase.storage
+          .from('photos') 
           .upload(fileName, photo.file, {
             contentType: 'image/jpeg',
             cacheControl: '3600'
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+             throw new Error(`STORAGE_FAIL: ${uploadError.message}. Verifica RLS y bucket.`); // Error explícito
+        }
 
         // 2. Obtener URL pública
         const { data: { publicUrl } } = supabase.storage
@@ -335,7 +339,7 @@ const PhotoQuickUpload = ({
           .getPublicUrl(fileName);
           
         uploadedCount++;
-        setUploadProgress((uploadedCount / totalPhotos) * 90); // 90% para subida, 10% para DB/Puntos
+        setUploadProgress((uploadedCount / totalPhotos) * 80); // 80% para subida
 
         // 3. Insertar en base de datos
         const { data: photoData, error: dbError } = await supabase
@@ -343,35 +347,39 @@ const PhotoQuickUpload = ({
           .insert({
             user_id: user.id,
             image_url: publicUrl,
-            thumbnail_url: publicUrl, // Por ahora usar la misma
+            thumbnail_url: publicUrl, 
             caption: metadata.caption,
             category: metadata.category,
             aspect_ratio: photo.preset,
             file_size: photo.file.size,
-            created_at: new Date().toISOString()
           })
           .select()
           .single();
 
-        if (dbError) throw dbError;
+        if (dbError) {
+             throw new Error(`DB_FAIL: ${dbError.message}. Verifica el esquema de la tabla.`); // Error explícito
+        }
         
         // 4. Otorgar Puntos por la subida
-        await addFreePoints(
+        const pointsResult = await addFreePoints(
             user.id, 
             POINTS_PER_PHOTO, 
-            'photo_upload', 
+            'photo_quick_upload', 
             photoData.id
         );
+        
+        if (!pointsResult.success) {
+            console.warn("⚠️ Fallo al otorgar puntos. Verifica el RPC.");
+        }
 
+
+        setUploadProgress((uploadedCount / totalPhotos) * 100); // Mueve el progreso final
         return photoData;
       });
 
       await Promise.all(uploadPromises);
 
-      setUploadProgress(95);
-      
-      // 5. Actualizar contador en perfil de forma transaccional (RPC)
-      // Usamos RPC o un UPDATE seguro para sumar, en lugar de solo establecer el valor
+      // 5. Actualizar contador en perfil (Llamada al RPC que falla)
       const { error: profileError } = await supabase.rpc('increment_photos_count', {
         p_user_id: user.id,
         p_increment_value: totalPhotos
@@ -379,11 +387,9 @@ const PhotoQuickUpload = ({
 
       if (profileError) {
           console.warn('⚠️ Error al actualizar contador de perfil:', profileError);
-          // Fallback simple:
-          await supabase.from('user_profiles').update({ photos_count: totalPhotos }).eq('id', user.id);
+          // Permite que la subida continúe, pero muestra el error.
       }
 
-      setUploadProgress(100);
 
       // Éxito
       setTimeout(() => {
@@ -392,14 +398,12 @@ const PhotoQuickUpload = ({
       }, 1000);
 
     } catch (error) {
-      console.error('Error uploading photos:', error);
+      console.error('❌ Error uploading photos:', error);
+      setUploadError(error.message); // Muestra el error específico (STORAGE_FAIL, DB_FAIL, etc.)
       setIsUploading(false);
-      setStep('metadata');
+      setStep('metadata'); // Regresa al paso de metadatos para que el usuario pueda reintentar
     }
   };
-  
-  // ... (El resto del componente, sin cambios en el renderizado)
-// ... (omitted remaining part of component for brevity, assuming only handleUpload was changed)
 
   if (!isOpen) return null;
 
@@ -424,6 +428,13 @@ const PhotoQuickUpload = ({
               <Icon name="X" size={20} />
             </Button>
           </div>
+          
+          {/* Muestra el error de subida */}
+          {uploadError && (
+              <div className="p-3 mb-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+                  <p className="text-sm text-destructive font-medium">Error: {uploadError}</p>
+              </div>
+          )}
 
           {/* PASO 1: Selección */}
           {step === 'select' && (
@@ -542,8 +553,12 @@ const PhotoQuickUpload = ({
                 <Button variant="outline" onClick={() => setStep('crop')}>
                   Volver
                 </Button>
-                <Button onClick={handleUpload}>
-                  <Icon name="Upload" size={16} className="mr-2" />
+                <Button onClick={handleUpload} disabled={isUploading}>
+                  {isUploading ? (
+                     <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                  ) : (
+                    <Icon name="Upload" size={16} className="mr-2" />
+                  )}
                   Subir {processedPhotos.length} foto{processedPhotos.length !== 1 ? 's' : ''}
                 </Button>
               </div>
