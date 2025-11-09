@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - ✅ CORREGIDO: Eliminada la consulta anidada fallida (user_points) y sintaxis JSX balanceada.
+// UserProfileSettings - ✅ CORREGIDO: Eliminada la consulta anidada fallida (user_points) y sintaxis de SELECT corregida.
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -383,22 +383,12 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 Fetching photos for user:', userId);
 
+      // ✅ CORRECCIÓN 1: Convertimos la selección a una cadena compacta y segura para evitar errores de parseo (PGRST100).
+      const selectFields = "id,image_url,thumbnail_url,caption,category,tags,likes_count,comments_count,aspect_ratio,file_size,created_at,user_id";
+
       const { data, error: fetchError } = await supabase
         .from('photos')
-        .select(`
-          id,
-          image_url,
-          thumbnail_url,
-          caption,
-          category,
-          tags,
-          likes_count,  // ✅ CORREGIDO: Usamos likes_count en lugar de likes
-          comments_count,
-          aspect_ratio,
-          file_size,
-          created_at,
-          user_id
-        `)
+        .select(selectFields) // Usamos la cadena segura
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -652,6 +642,31 @@ const PhotoGrid = ({
           </div>
         </div>
       );
+};
+
+
+// ✅ COMPONENTE: VideoGridComponent (Faltante, añadido como placeholder funcional)
+const VideoGridComponent = (props) => {
+    if (props.loading) return <div>Cargando videos...</div>;
+    if (props.videos.length === 0) return <div>{props.emptyMessage || 'No hay videos para mostrar.'}</div>;
+    return (
+        <div className="space-y-6">
+            <p className="text-sm text-muted-foreground">Videos cargados ({props.videos.length})</p>
+            {/* Aquí iría el renderizado real de la grilla de videos */}
+        </div>
+    );
+};
+
+// ✅ COMPONENTE: ReelsGridComponent (Faltante, añadido como placeholder funcional)
+const ReelsGridComponent = (props) => {
+    if (props.loading) return <div>Cargando reels...</div>;
+    if (props.reels.length === 0) return <div>{props.emptyMessage || 'No hay reels para mostrar.'}</div>;
+    return (
+        <div className="space-y-6">
+            <p className="text-sm text-muted-foreground">Reels cargados ({props.reels.length})</p>
+            {/* Aquí iría el renderizado real de la grilla de reels */}
+        </div>
+    );
 };
 
 
