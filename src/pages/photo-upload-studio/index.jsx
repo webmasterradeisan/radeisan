@@ -60,7 +60,7 @@ const usePhotoForm = () => {
     privacy: 'public',
     location: '',
     allowComments: true, // Se mantiene en el estado, pero se ignora en la inserción
-    allowDownloads: false
+    allowDownloads: false // Se mantiene en el estado, pero se ignora en la inserción
   });
 
   // Añadir archivos
@@ -205,9 +205,8 @@ const usePhotoUpload = () => {
                     tags: metadata.tags,
                     privacy: metadata.privacy,
                     location: metadata.location,
-                    // ✅ CORRECCIÓN: Se elimina 'allow_comments'
-                    allow_downloads: metadata.allowDownloads,
-                    // Si tienes aspect_ratio en metadatos individuales, usa photoFile.aspectRatio, etc.
+                    // ✅ CORRECCIÓN DEFINITIVA: Se eliminan las columnas faltantes del INSERT
+                    // 'allow_comments' (anterior) y 'allow_downloads' (actual)
                 })
                 .select()
                 .single();
