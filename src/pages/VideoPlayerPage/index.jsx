@@ -1,9 +1,8 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // VERSION FINAL ESTABLE
-// ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' y 'comments_count' (Arregla el crash/recarga).
-// ✅ 2. (VERIFICADO) handleLike: No borra de 'points_transactions' (Arregla el Farming).
-// ✅ 3. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
+// ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
+// ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -1789,7 +1788,7 @@ const VideoPlayerPage = () => {
               </a>
 
               <a
-                href={`httpsG://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
+                href={`https://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
