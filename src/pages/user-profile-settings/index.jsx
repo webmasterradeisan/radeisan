@@ -199,12 +199,6 @@ const useUserVideos = (userId) => {
         return isHorizontal;
       });
 
-      console.log('✅ Filtrado de videos horizontales completado:', {
-        total: allVideos.length,
-        horizontal: horizontalVideos.length,
-        filtered_out: allVideos.length - horizontalVideos.length
-      });
-
       setVideos(horizontalVideos);
 
       const videoStats = horizontalVideos.reduce(
@@ -324,12 +318,6 @@ const useUserReels = (userId) => {
         return isVertical;
       });
 
-      console.log('✅ Filtrado de reels completado:', {
-        total: allVideos.length,
-        vertical: verticalVideos.length,
-        filtered_out: allVideos.length - verticalVideos.length
-      });
-
       setReels(verticalVideos);
 
       const reelStats = verticalVideos.reduce(
@@ -375,7 +363,7 @@ const useUserReels = (userId) => {
   };
 };
 
-// Hook para fotos del usuario
+// Hook para fotos del usuario (CORREGIDO)
 const useUserPhotos = (userId) => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -404,7 +392,7 @@ const useUserPhotos = (userId) => {
           caption,
           category,
           tags,
-          likes_count,
+          likes_count,  // ✅ CORREGIDO: Usamos likes_count en lugar de likes
           comments_count,
           aspect_ratio,
           file_size,
@@ -447,7 +435,7 @@ const useUserPhotos = (userId) => {
 
 // Hook para historial de puntos REAL
 const usePointsHistory = (userId) => {
-  const { totalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
+  const { totalPoints: contextTotalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
     currentBalance: 0,
@@ -569,7 +557,6 @@ const PhotoGrid = ({
   isOwner = false,
   showUploadButton = true 
 }) => {
-    // ... (El código de PhotoGrid se mantiene igual)
     if (loading) {
         return (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -677,7 +664,7 @@ const UserProfileSettings = () => {
   const { totalPoints: contextTotalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   const { user, isAuthenticated, signOut } = useAuth();
   
-  const [activeTab, setActiveTab] = useState(PAGE_TABS.PHOTOS);
+  const [activeTab, setActiveTab] = useState(PAGE_TABS.VIDEOS);
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
   const [showImageEditor, setShowImageEditor] = useState(false);
