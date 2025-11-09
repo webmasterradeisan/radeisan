@@ -59,7 +59,7 @@ const usePhotoForm = () => {
     category: 'general',
     privacy: 'public',
     location: '',
-    allowComments: true,
+    allowComments: true, // Se mantiene en el estado, pero se ignora en la inserción
     allowDownloads: false
   });
 
@@ -158,7 +158,6 @@ const usePhotoUpload = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
 
-  // NOTA: Esta función DEBE recibir BLOBs o Files resultantes del cropper, no los archivos originales.
   const uploadMultiplePhotos = async (files, metadata) => {
     if (!user) {
         setUploadError("Usuario no autenticado.");
@@ -206,7 +205,7 @@ const usePhotoUpload = () => {
                     tags: metadata.tags,
                     privacy: metadata.privacy,
                     location: metadata.location,
-                    allow_comments: metadata.allowComments,
+                    // ✅ CORRECCIÓN: Se elimina 'allow_comments'
                     allow_downloads: metadata.allowDownloads,
                     // Si tienes aspect_ratio en metadatos individuales, usa photoFile.aspectRatio, etc.
                 })
@@ -262,14 +261,13 @@ const usePhotoUpload = () => {
 };
 
 // ===============================
-// COMPONENTE PRINCIPAL
+// COMPONENTE PRINCIPAL (sin cambios en el render)
 // ===============================
 
 const PhotoUploadStudio = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
-  // Remplazamos el mock por el hook REAL
   const {
     uploadMultiplePhotos,
     isUploading,
@@ -310,10 +308,6 @@ const PhotoUploadStudio = () => {
     setShowUploadModal(true);
     setUploadError(null); 
 
-    // NOTA CLAVE: En una implementación completa, selectedFiles DEBE ser transformado
-    // aquí en los archivos procesados (BLOBs/Files) usando cropData y los archivos originales.
-    
-    // Por simplicidad, usamos los archivos originales y metadatos del estado
     const results = await uploadMultiplePhotos(selectedFiles, metadata);
     
     const successfulUploads = results.filter(r => r.success);
