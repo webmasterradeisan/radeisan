@@ -24,6 +24,9 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
+// ✅ NUEVA IMPORTACIÓN DE FOTOS
+import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
+
 // ✅ PÁGINAS REALES DE USUARIO
 import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
@@ -256,6 +259,18 @@ const Routes = () => {
                   <ProtectedRoute>
                     <MobileLayoutWrapper>
                       <VideoUploadStudio />
+                    </MobileLayoutWrapper>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* ✅ RUTA CORREGIDA: Photo Upload Studio */}
+              <Route 
+                path="/photo-upload" 
+                element={
+                  <ProtectedRoute>
+                    <MobileLayoutWrapper>
+                      <PhotoUploadStudio />
                     </MobileLayoutWrapper>
                   </ProtectedRoute>
                 } 
