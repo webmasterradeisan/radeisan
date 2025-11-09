@@ -219,15 +219,13 @@ const usePhotoUpload = () => {
                     .insert({
                         user_id: user.id,
                         image_url: publicUrl,
-                        thumbnail_url: publicUrl, // Por ahora, la misma URL. Podrías generar un thumbnail real aquí.
+                        thumbnail_url: publicUrl, // Por ahora, la misma URL.
                         caption: metadata.caption, 
                         category: metadata.category,
                         tags: metadata.tags,
                         privacy: metadata.privacy,
-                        // ✅ CAMPOS ELIMINADOS DE LA INSERCIÓN POR NO EXISTIR EN TU ESQUEMA
-                        // location: metadata.location, 
-                        // allow_comments: metadata.allowComments, 
-                        // allow_downloads: metadata.allowDownloads, 
+                        // ✅ CORRECCIÓN FINAL: Eliminamos 'location', 'allow_comments', y 'allow_downloads'
+                        // ya que no existen en la tabla 'photos' según los errores de log.
                     })
                     .select()
                     .single();
@@ -248,7 +246,7 @@ const usePhotoUpload = () => {
 
             } catch (innerError) {
                 console.error(`Error procesando foto ${i+1} (${photoFile.name}):`, innerError);
-                setUploadError(`Error en foto ${i+1}: ${innerError.message}`);
+                setUploadError(prev => prev ? prev : `Error procesando foto ${i+1}: ${innerError.message}`);
                 // Continúa con la siguiente foto incluso si una falla
             }
         }
@@ -492,14 +490,15 @@ const PhotoUploadStudio = () => {
                       onCropChange={updateCropData}
                       onAspectRatioChange={updateAspectRatio}
                       onRemoveFile={removeFile}
+                      onNext={nextStep} // Pasa el handler de avance a PhotoPreview
                     />
                     
+                    {/* ✅ CORRECCIÓN UI: Dejamos solo los botones de navegación generales */}
                     <div className="flex justify-between">
                       <Button variant="outline" onClick={prevStep}>
                         <Icon name="ArrowLeft" size={16} className="mr-2" />
                         Anterior
                       </Button>
-                      {/* ✅ CORRECCIÓN UI: Un solo botón para avanzar al siguiente paso */}
                       <Button onClick={nextStep}> 
                         <Icon name="ArrowRight" size={16} className="mr-2" />
                         Configurar metadatos
@@ -525,7 +524,6 @@ const PhotoUploadStudio = () => {
                         <Icon name="ArrowLeft" size={16} className="mr-2" />
                         Anterior
                       </Button>
-                      {/* El botón de Publicar Fotos ya está dentro de PhotoMetadataForm, no es necesario aquí */}
                     </div>
                   </div>
                 )}
@@ -542,7 +540,7 @@ const PhotoUploadStudio = () => {
                         ¡Fotos publicadas exitosamente!
                       </h2>
                       <p className="text-muted-foreground">
-                        Tus {successfulUploads.length} fotos han sido subidas y están disponibles en tu perfil
+                        Tus {selectedFiles.length} fotos han sido subidas y están disponibles en tu perfil
                       </p>
                     </div>
 
