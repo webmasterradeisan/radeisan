@@ -143,7 +143,7 @@ const useUserVideos = (userId) => {
 
       console.log('🎬 Fetching HORIZONTAL videos for user ID:', userId);
 
-      // CORRECCIÓN: Eliminado 'likes_count' y comentarios internos
+      // CORRECCIÓN: Eliminado 'likes_count' y 'comments_count'
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -158,7 +158,6 @@ const useUserVideos = (userId) => {
           duration_seconds,
           file_size_bytes,
           views_count,
-          comments_count,
           points_earned,
           is_published,
           featured_until,
@@ -203,9 +202,9 @@ const useUserVideos = (userId) => {
         (acc, video) => ({
           totalVideos: acc.totalVideos + 1,
           totalViews: acc.totalViews + (video.views_count || 0),
-          // MODIFICADO: Usar 0 para likes hasta que se agregue la columna
+          // CORRECCIÓN: Usar 0 ya que estas columnas no existen en BD
           totalLikes: acc.totalLikes + 0, 
-          totalComments: acc.totalComments + (video.comments_count || 0)
+          totalComments: acc.totalComments + 0
         }),
         { totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
       );
@@ -269,7 +268,7 @@ const useUserReels = (userId) => {
 
       console.log('📱 Fetching VERTICAL videos (reels) for user ID:', userId);
 
-      // CORRECCIÓN: Eliminado 'likes_count' y comentarios internos
+      // CORRECCIÓN: Eliminado 'likes_count' y 'comments_count'
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -284,7 +283,6 @@ const useUserReels = (userId) => {
           duration_seconds,
           file_size_bytes,
           views_count,
-          comments_count,
           points_earned,
           is_published,
           featured_until,
@@ -329,9 +327,9 @@ const useUserReels = (userId) => {
         (acc, reel) => ({
           totalReels: acc.totalReels + 1,
           totalViews: acc.totalViews + (reel.views_count || 0),
-          // MODIFICADO: Usar 0 para likes hasta que se agregue la columna
+          // CORRECCIÓN: Usar 0 ya que estas columnas no existen en BD
           totalLikes: acc.totalLikes + 0, 
-          totalComments: acc.totalComments + (reel.comments_count || 0)
+          totalComments: acc.totalComments + 0
         }),
         { totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
       );
@@ -802,7 +800,7 @@ const VideoGridComponent = ({
                     <span>{video.views_count}</span>
                   </div>
                 )}
-                {/* Nota: Se ha eliminado la referencia a likes_count del render por no existir en BD */}
+                {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
                 <span>{new Date(video.created_at).toLocaleDateString()}</span>
               </div>
 
@@ -983,7 +981,7 @@ const ReelsGridComponent = ({
                       <span>{reel.views_count}</span>
                     </div>
                   )}
-                  {/* Nota: Se ha eliminado la referencia a likes_count del render por no existir en BD */}
+                  {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
                 </div>
               </div>
 
@@ -1021,6 +1019,10 @@ const ReelsGridComponent = ({
     </div>
   );
 };
+
+// Hook para fotos del usuario, usePointsHistory, usePurchaseHistory y PhotoGrid
+// ... (omitted for brevity, they remain as provided in the last complete corrected version)
+
 
 // ===============================
 // COMPONENTE PRINCIPAL
@@ -1086,10 +1088,10 @@ const UserProfileSettings = () => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    // Usar 0 para likes de videos/reels para evitar errores de columna
+    // CORRECCIÓN FINAL: Usar 0 para likes y comments de videos/reels para evitar errores de columna
     const totalLikes = (0) + (0) + 
                       photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
-    const totalComments = (videoStats.totalComments || 0) + (reelStats.totalComments || 0);
+    const totalComments = (0) + (0); // Usar 0 ya que no existe comments_count
 
     return {
       id: profileData.id,
@@ -1140,7 +1142,7 @@ const UserProfileSettings = () => {
   // ===============================
   // EVENT HANDLERS
   // ===============================
-
+  
   const handleEditProfile = useCallback(() => {
     setActiveTab('settings');
     setEditingProfile(true);
@@ -1267,18 +1269,7 @@ const UserProfileSettings = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'videos':
-        console.log('🎬 Rendering HORIZONTAL videos tab with:', { 
-          videosCount: videos.length, 
-          loading: videosLoading,
-          error: videosError,
-          hasData: videos.length > 0,
-          sampleVideo: videos[0] ? {
-            title: videos[0].title,
-            orientation: videos[0].orientation,
-            aspect_ratio: videos[0].aspect_ratio
-          } : null
-        });
-        
+        // ... (omitted rendering logic)
         if (videosError) {
           return (
             <div className="text-center py-16">
@@ -1309,18 +1300,7 @@ const UserProfileSettings = () => {
         );
 
       case 'reels':
-        console.log('📱 Rendering VERTICAL reels tab with:', { 
-          reelsCount: reels.length, 
-          loading: reelsLoading,
-          error: reelsError,
-          hasData: reels.length > 0,
-          sampleReel: reels[0] ? {
-            title: reels[0].title,
-            orientation: reels[0].orientation,
-            aspect_ratio: reels[0].aspect_ratio
-          } : null
-        });
-        
+        // ... (omitted rendering logic)
         if (reelsError) {
           return (
             <div className="text-center py-16">
