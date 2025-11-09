@@ -19,7 +19,7 @@ const ASPECT_RATIOS = [
 ];
 
 // ===============================
-// COMPONENTE DE EDICIÓN INDIVIDUAL
+// COMPONENTE DE EDICIÓN INDIVIDUAL (sin cambios)
 // ===============================
 
 const PhotoEditor = ({ 
@@ -269,6 +269,11 @@ const PhotoPreview = ({
       });
     }
   };
+  
+  // Saneamiento de datos
+  const safeCropData = Array.isArray(cropData) ? cropData : files.map(() => null);
+  const safeAspectRatios = Array.isArray(aspectRatios) ? aspectRatios : files.map(() => 'original');
+
 
   if (!files || files.length === 0) {
     return (
@@ -278,10 +283,6 @@ const PhotoPreview = ({
       </div>
     );
   }
-  
-  // CORRECCIÓN: Si el array de cropData no existe o está vacío, lo inicializamos.
-  const safeCropData = Array.isArray(cropData) ? cropData : files.map(() => null);
-  const safeAspectRatios = Array.isArray(aspectRatios) ? aspectRatios : files.map(() => 'original');
 
   return (
     <div className="space-y-6">
@@ -424,7 +425,7 @@ const PhotoPreview = ({
         </div>
       </div>
 
-      {/* Resumen y Navegación */}
+      {/* Resumen y Navegación (INFERIOR - A ELIMINAR O SIMPLIFICAR) */}
       <div className="bg-muted/50 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -446,10 +447,13 @@ const PhotoPreview = ({
             </div>
           </div>
           
-          <Button onClick={onNext}>
+          {/* ❌ ESTE BOTÓN FUE ELIMINADO EN LA LÓGICA DE index.jsx PERO EXISTE AQUÍ */}
+          {/* Lo eliminamos para que solo funcione el botón "Configurar metadatos" del marco general */}
+          {/* <Button onClick={onNext}>
             <Icon name="ArrowRight" size={16} className="mr-2" />
             Continuar con metadatos
-          </Button>
+          </Button> */}
+          
         </div>
       </div>
 
