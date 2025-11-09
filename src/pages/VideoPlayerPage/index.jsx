@@ -1,9 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // VERSION FINAL ESTABLE
-// ✅ 1. Contadores por Conteo Directo (Fix Contador Cero).
-// ✅ 2. Lógica de Notificación ajustada para 'success' (verde) y 'already_paid' (rojo).
-// ✅ 3. Filtro de Videos Relacionados flexibilizado (Arregla crash/recarga).
+// ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' y 'comments_count' (Arregla el crash/recarga).
+// ✅ 2. (VERIFICADO) handleLike: No borra de 'points_transactions' (Arregla el Farming).
+// ✅ 3. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
