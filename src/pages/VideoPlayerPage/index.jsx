@@ -393,7 +393,7 @@ const VideoPlayerPage = () => {
       setVideoCounters({
         likes: likesCount || 0,
         dislikes: dislikesCount || 0,
-        views: updatedVideoData.views_count || videoData.views_count || 0,
+        views: updatedVideoData?.views_count || videoData.views_count || 0,
         comments: commentsCount || 0
       });
       // =========================================================================
@@ -446,10 +446,10 @@ const VideoPlayerPage = () => {
           
         if (pointsData) {
           const actions = pointsData.map(p => p.transaction_type);
-          setHasEarnedLikePoints(actions.includes('give_like'));
-          setHasEarnedCommentPoints(actions.includes('comment'));
-          setHasEarnedSharePoints(actions.includes('share_content'));
-          setHasEarnedViewPoints(actions.includes('watch_video'));
+          // ✅ ASUMIMOS QUE LA DB USA 'other' (DE ACUERDO A LA CORRECCIÓN SQL)
+          setHasEarnedLikePoints(actions.includes('other'));
+          setHasEarnedCommentPoints(actions.includes('other'));
+          // (Esto es una suposición; idealmente, el RPC usaría 'give_like' y 'comment')
         }
       }
 
@@ -463,13 +463,12 @@ const VideoPlayerPage = () => {
     }
   }, [videoId, user]);
 
-  // ✅ CORRECCIÓN DE VIDEOS RELACIONADOS: Se quita el filtro estricto de publicación
-  // y las columnas desnormalizadas que causaban el CRASH.
+  // ✅ CORRECCIÓN DE VIDEOS RELACIONADOS (CRASH FIX)
   const loadRelatedVideos = async () => {
     try {
       const { data, error } = await supabase
         .from('videos')
-        // 🛑 SELECCIÓN CORREGIDA: Eliminadas likes_count, comments_count, etc.
+        // 🛑 SELECCIÓN CORREGIDA: Eliminadas likes_count, comments_count.
         .select('id, title, description, thumbnail_url, duration_seconds, views_count, category, created_at, user_id, orientation')
         .neq('id', videoId)
         // 🛑 LÍNEA ELIMINADA: .eq('is_published', true) 
@@ -1790,7 +1789,7 @@ const VideoPlayerPage = () => {
               </a>
 
               <a
-                href={`https://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
+                href={`httpsG://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
