@@ -45,7 +45,7 @@ const UPLOAD_STEPS = [
 const POINTS_PER_PHOTO = 10; // Puntos base por foto subida
 
 // ===============================
-// HOOK PARA GESTIONAR FORMULARIO (sin cambios)
+// HOOK PARA GESTIONAR FORMULARIO
 // ===============================
 
 const usePhotoForm = () => {
@@ -58,7 +58,7 @@ const usePhotoForm = () => {
     tags: [],
     category: 'general',
     privacy: 'public',
-    location: '', // Se mantiene en el estado, pero se ignora en la inserción
+    location: '', 
     allowComments: true, 
     allowDownloads: false
   });
@@ -149,7 +149,7 @@ const usePhotoForm = () => {
 };
 
 // ===============================
-// HOOK PARA UPLOAD (REAL)
+// HOOK PARA UPLOAD (REFORZADO)
 // ===============================
 
 const usePhotoUpload = () => {
@@ -158,9 +158,36 @@ const usePhotoUpload = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
 
+  const uploadFileToSupabase = useCallback(async (file, filePath) => {
+    const { data, error } = await supabase.storage
+      .from('photos') // Asegúrate que 'photos' es el nombre correcto de tu bucket
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false // No sobrescribir si ya existe
+      });
+
+    if (error) {
+      console.error('Supabase Storage Upload Error:', error);
+      throw new Error(`Error al subir archivo a Storage: ${error.message}`);
+    }
+    return data;
+  }, []);
+
+  const getPublicUrl = useCallback((filePath) => {
+    const { data } = supabase.storage
+      .from('photos')
+      .getPublicUrl(filePath);
+    return data.publicUrl;
+  }, []);
+
+
   const uploadMultiplePhotos = async (files, metadata) => {
     if (!user) {
         setUploadError("Usuario no autenticado.");
+        return [];
+    }
+    if (files.length === 0) {
+        setUploadError("No hay fotos seleccionadas para subir.");
         return [];
     }
 
@@ -170,78 +197,82 @@ const usePhotoUpload = () => {
 
     const totalPhotos = files.length;
     let uploadedCount = 0;
+    let successfulUploads = [];
     
     try {
-        const uploadPromises = files.map(async (photoFile, index) => {
-            const fileName = `${user.id}/${Date.now()}_${index}.jpg`;
+        for (let i = 0; i < files.length; i++) {
+            const photoFile = files[i];
+            const fileExtension = photoFile.name.split('.').pop();
+            const fileName = `${user.id}/${Date.now()}_${i}.${fileExtension}`; // Nombre único con extensión
 
-            // 1. Subir a Storage
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('photos')
-                .upload(fileName, photoFile, {
-                    contentType: 'image/jpeg',
-                    cacheControl: '3600'
-                });
-
-            if (uploadError) throw uploadError;
-
-            // 2. Obtener URL pública
-            const { data: { publicUrl } } = supabase.storage
-                .from('photos')
-                .getPublicUrl(fileName);
+            try {
+                // 1. Subir a Supabase Storage
+                await uploadFileToSupabase(photoFile, fileName);
+                const publicUrl = getPublicUrl(fileName);
                 
-            uploadedCount++;
-            setUploadProgress((uploadedCount / totalPhotos) * 90); // 90% para subida
+                uploadedCount++;
+                setUploadProgress((uploadedCount / totalPhotos) * 90); // 90% para subida a storage
 
-            // 3. Insertar en base de datos
-            const { data: photoData, error: dbError } = await supabase
-                .from('photos')
-                .insert({
-                    user_id: user.id,
-                    image_url: publicUrl,
-                    thumbnail_url: publicUrl,
-                    caption: metadata.caption, 
-                    category: metadata.category,
-                    tags: metadata.tags,
-                    privacy: metadata.privacy,
-                    // ✅ CORRECCIÓN FINAL: Eliminamos 'location', 'allow_comments', y 'allow_downloads'
-                    // Ya que no existen en la tabla 'photos' según los errores de log.
-                })
-                .select()
-                .single();
+                // 2. Insertar metadatos en la tabla 'photos'
+                const { data: photoData, error: dbError } = await supabase
+                    .from('photos')
+                    .insert({
+                        user_id: user.id,
+                        image_url: publicUrl,
+                        thumbnail_url: publicUrl, // Por ahora, la misma URL. Podrías generar un thumbnail real aquí.
+                        caption: metadata.caption, 
+                        category: metadata.category,
+                        tags: metadata.tags,
+                        privacy: metadata.privacy,
+                        // ✅ CAMPOS ELIMINADOS DE LA INSERCIÓN POR NO EXISTIR EN TU ESQUEMA
+                        // location: metadata.location, 
+                        // allow_comments: metadata.allowComments, 
+                        // allow_downloads: metadata.allowDownloads, 
+                    })
+                    .select()
+                    .single();
 
-            if (dbError) throw dbError;
-            
-            // 4. Otorgar Puntos por la subida
-            await addFreePoints(
-                user.id, 
-                POINTS_PER_PHOTO, 
-                'photo_upload', 
-                photoData.id
-            );
+                if (dbError) {
+                    console.error('Supabase DB Insert Error:', dbError);
+                    throw new Error(`Error al insertar metadatos: ${dbError.message}`);
+                }
+                
+                // 3. Otorgar Puntos por la subida
+                await addFreePoints(
+                    user.id, 
+                    POINTS_PER_PHOTO, 
+                    'photo_upload', 
+                    photoData.id
+                );
+                successfulUploads.push({ success: true, id: photoData.id });
 
-            return { success: true, id: photoData.id };
-        });
-
-        const results = await Promise.all(uploadPromises);
+            } catch (innerError) {
+                console.error(`Error procesando foto ${i+1} (${photoFile.name}):`, innerError);
+                setUploadError(`Error en foto ${i+1}: ${innerError.message}`);
+                // Continúa con la siguiente foto incluso si una falla
+            }
+        }
 
         setUploadProgress(95);
 
-        // 5. Actualizar contador en perfil de forma incremental
-        const { error: profileError } = await supabase.rpc('increment_photos_count', {
-            p_user_id: user.id,
-            p_increment_value: totalPhotos
-        });
+        // 4. Actualizar contador en perfil de forma incremental (solo por las subidas exitosas)
+        if (successfulUploads.length > 0) {
+            const { error: profileError } = await supabase.rpc('increment_photos_count', {
+                p_user_id: user.id,
+                p_increment_value: successfulUploads.length
+            });
 
-        if (profileError) {
-            console.warn('⚠️ Error al actualizar contador de perfil:', profileError);
+            if (profileError) {
+                console.warn('⚠️ Error al actualizar contador de perfil:', profileError);
+                setUploadError(prev => (prev ? prev + `; Error perfil: ${profileError.message}` : `Error perfil: ${profileError.message}`));
+            }
         }
 
         setUploadProgress(100);
-        return results;
+        return successfulUploads;
 
-    } catch (error) {
-        console.error('Error uploading photos:', error);
+    } catch (error) { // Este catch es para errores globales o inesperados
+        console.error('Error general en uploadMultiplePhotos:', error);
         setUploadError(error.message);
         return [];
     } finally {
@@ -259,7 +290,7 @@ const usePhotoUpload = () => {
 };
 
 // ===============================
-// COMPONENTE PRINCIPAL (sin cambios en el render)
+// COMPONENTE PRINCIPAL
 // ===============================
 
 const PhotoUploadStudio = () => {
@@ -301,22 +332,24 @@ const PhotoUploadStudio = () => {
 
   // Manejar upload de múltiples fotos
   const handleBatchUpload = async () => {
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0) {
+        setUploadError("Por favor, selecciona al menos una foto para subir.");
+        return;
+    }
 
     setShowUploadModal(true);
     setUploadError(null); 
 
     const results = await uploadMultiplePhotos(selectedFiles, metadata);
     
-    const successfulUploads = results.filter(r => r.success);
-    
-    if (successfulUploads.length > 0) {
+    if (results.length > 0) {
         setTimeout(() => {
             setShowUploadModal(false);
-            setCurrentStep(4);
+            setCurrentStep(4); // Solo avanzamos al paso 4 si hubo al menos una subida exitosa
         }, 1500);
     } else {
-        setUploadError(uploadError || 'No se pudieron subir las fotos');
+        // Si no hubo subidas exitosas, mostramos el error si no hay uno específico
+        setUploadError(uploadError || 'No se pudieron subir las fotos.');
         setShowUploadModal(false);
     }
   };
@@ -334,7 +367,7 @@ const PhotoUploadStudio = () => {
     }
   };
 
-  // Publicar fotos
+  // Publicar fotos (al finalizar)
   const handlePublish = () => {
     navigate('/profile');
   };
@@ -454,8 +487,8 @@ const PhotoUploadStudio = () => {
                   <div className="space-y-6">
                     <PhotoPreview
                       files={selectedFiles}
-                      cropData={cropData}
-                      aspectRatios={aspectRatios}
+                      cropData={Object.values(cropData)} // Pasa un array
+                      aspectRatios={Object.values(aspectRatios)} // Pasa un array
                       onCropChange={updateCropData}
                       onAspectRatioChange={updateAspectRatio}
                       onRemoveFile={removeFile}
@@ -466,7 +499,8 @@ const PhotoUploadStudio = () => {
                         <Icon name="ArrowLeft" size={16} className="mr-2" />
                         Anterior
                       </Button>
-                      <Button onClick={nextStep}>
+                      {/* ✅ CORRECCIÓN UI: Un solo botón para avanzar al siguiente paso */}
+                      <Button onClick={nextStep}> 
                         <Icon name="ArrowRight" size={16} className="mr-2" />
                         Configurar metadatos
                       </Button>
@@ -491,6 +525,7 @@ const PhotoUploadStudio = () => {
                         <Icon name="ArrowLeft" size={16} className="mr-2" />
                         Anterior
                       </Button>
+                      {/* El botón de Publicar Fotos ya está dentro de PhotoMetadataForm, no es necesario aquí */}
                     </div>
                   </div>
                 )}
@@ -507,7 +542,7 @@ const PhotoUploadStudio = () => {
                         ¡Fotos publicadas exitosamente!
                       </h2>
                       <p className="text-muted-foreground">
-                        Tus {selectedFiles.length} fotos han sido subidas y están disponibles en tu perfil
+                        Tus {successfulUploads.length} fotos han sido subidas y están disponibles en tu perfil
                       </p>
                     </div>
 
