@@ -224,8 +224,7 @@ const usePhotoUpload = () => {
                         category: metadata.category,
                         tags: metadata.tags,
                         privacy: metadata.privacy,
-                        // ✅ CORRECCIÓN FINAL: Eliminamos 'location', 'allow_comments', y 'allow_downloads'
-                        // ya que no existen en la tabla 'photos' según los errores de log.
+                        // ✅ CAMPOS ELIMINADOS DE LA INSERCIÓN POR NO EXISTIR EN TU ESQUEMA
                     })
                     .select()
                     .single();
@@ -246,8 +245,8 @@ const usePhotoUpload = () => {
 
             } catch (innerError) {
                 console.error(`Error procesando foto ${i+1} (${photoFile.name}):`, innerError);
+                // Si hay un error, lo registramos pero continuamos
                 setUploadError(prev => prev ? prev : `Error procesando foto ${i+1}: ${innerError.message}`);
-                // Continúa con la siguiente foto incluso si una falla
             }
         }
 
@@ -319,6 +318,8 @@ const PhotoUploadStudio = () => {
   } = usePhotoForm();
 
   const [showUploadModal, setShowUploadModal] = useState(false);
+  // Variable para almacenar el número de subidas exitosas para el Paso 4
+  const [successfulUploads, setSuccessfulUploads] = useState(0); 
 
   // Verificar autenticación
   useEffect(() => {
@@ -341,9 +342,10 @@ const PhotoUploadStudio = () => {
     const results = await uploadMultiplePhotos(selectedFiles, metadata);
     
     if (results.length > 0) {
+        setSuccessfulUploads(results.length); // Guardar el conteo exitoso
         setTimeout(() => {
             setShowUploadModal(false);
-            setCurrentStep(4); // Solo avanzamos al paso 4 si hubo al menos una subida exitosa
+            setCurrentStep(4); // Avanzamos al paso 4
         }, 1500);
     } else {
         // Si no hubo subidas exitosas, mostramos el error si no hay uno específico
@@ -490,7 +492,7 @@ const PhotoUploadStudio = () => {
                       onCropChange={updateCropData}
                       onAspectRatioChange={updateAspectRatio}
                       onRemoveFile={removeFile}
-                      onNext={nextStep} // Pasa el handler de avance a PhotoPreview
+                      onNext={nextStep} // Pasa el handler de avance a PhotoPreview (para el botón de resumen)
                     />
                     
                     {/* ✅ CORRECCIÓN UI: Dejamos solo los botones de navegación generales */}
@@ -540,7 +542,7 @@ const PhotoUploadStudio = () => {
                         ¡Fotos publicadas exitosamente!
                       </h2>
                       <p className="text-muted-foreground">
-                        Tus {selectedFiles.length} fotos han sido subidas y están disponibles en tu perfil
+                        Tus {successfulUploads} fotos han sido subidas y están disponibles en tu perfil
                       </p>
                     </div>
 
