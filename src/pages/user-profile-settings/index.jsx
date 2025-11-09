@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePoints } from '../../contexts/PointsContext'; // ✅ NUEVO: Importar usePoints
+import { usePoints } from '../../contexts/PointsContext'; 
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import ProfileTabs from './components/ProfileTabs';
@@ -143,6 +143,7 @@ const useUserVideos = (userId) => {
 
       console.log('🎬 Fetching HORIZONTAL videos for user ID:', userId);
 
+      // CORRECCIÓN: Eliminado 'likes_count' y el comentario interno
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -157,7 +158,6 @@ const useUserVideos = (userId) => {
           duration_seconds,
           file_size_bytes,
           views_count,
-          /* CORRECCIÓN: 'likes_count' ELIMINADO ya que no existe en BD */
           comments_count,
           points_earned,
           is_published,
@@ -203,7 +203,7 @@ const useUserVideos = (userId) => {
         (acc, video) => ({
           totalVideos: acc.totalVideos + 1,
           totalViews: acc.totalViews + (video.views_count || 0),
-          // MODIFICADO: Usar 0 en lugar de video.likes_count hasta que se agregue la columna
+          // MODIFICADO: Usar 0 para likes hasta que se agregue la columna
           totalLikes: acc.totalLikes + 0, 
           totalComments: acc.totalComments + (video.comments_count || 0)
         }),
@@ -269,6 +269,7 @@ const useUserReels = (userId) => {
 
       console.log('📱 Fetching VERTICAL videos (reels) for user ID:', userId);
 
+      // CORRECCIÓN: Eliminado 'likes_count' y el comentario interno
       const { data, error: fetchError } = await supabase
         .from('videos')
         .select(`
@@ -283,7 +284,6 @@ const useUserReels = (userId) => {
           duration_seconds,
           file_size_bytes,
           views_count,
-          /* CORRECCIÓN: 'likes_count' ELIMINADO ya que no existe en BD */
           comments_count,
           points_earned,
           is_published,
@@ -329,7 +329,7 @@ const useUserReels = (userId) => {
         (acc, reel) => ({
           totalReels: acc.totalReels + 1,
           totalViews: acc.totalViews + (reel.views_count || 0),
-          // MODIFICADO: Usar 0 en lugar de reel.likes_count hasta que se agregue la columna
+          // MODIFICADO: Usar 0 para likes hasta que se agregue la columna
           totalLikes: acc.totalLikes + 0, 
           totalComments: acc.totalComments + (reel.comments_count || 0)
         }),
@@ -683,7 +683,6 @@ const VideoGridComponent = ({
       id: videos[0].id,
       title: videos[0].title,
       views: videos[0].views_count,
-      // likes: videos[0].likes_count, // <- Removido de la muestra por corrección
       duration: videos[0].duration_seconds,
       orientation: videos[0].orientation,
       aspect_ratio: videos[0].aspect_ratio,
@@ -803,15 +802,7 @@ const VideoGridComponent = ({
                     <span>{video.views_count}</span>
                   </div>
                 )}
-                {/* CORRECCIÓN: Se elimina la muestra de likes_count ya que la columna fue eliminada */}
-                {/*
-                {video.likes_count !== null && video.likes_count !== undefined && (
-                  <div className="flex items-center space-x-1">
-                    <Icon name="Heart" size={14} />
-                    <span>{video.likes_count}</span>
-                  </div>
-                )}
-                */}
+                {/* Nota: Se ha eliminado la referencia a likes_count del render por no existir en BD */}
                 <span>{new Date(video.created_at).toLocaleDateString()}</span>
               </div>
 
@@ -871,7 +862,6 @@ const ReelsGridComponent = ({
       id: reels[0].id,
       title: reels[0].title,
       views: reels[0].views_count,
-      // likes: reels[0].likes_count, // <- Removido de la muestra por corrección
       duration: reels[0].duration_seconds,
       orientation: reels[0].orientation,
       aspect_ratio: reels[0].aspect_ratio,
@@ -993,15 +983,7 @@ const ReelsGridComponent = ({
                       <span>{reel.views_count}</span>
                     </div>
                   )}
-                  {/* CORRECCIÓN: Se elimina la muestra de likes_count ya que la columna fue eliminada */}
-                  {/*
-                  {reel.likes_count !== null && reel.likes_count !== undefined && (
-                    <div className="flex items-center space-x-1">
-                      <Icon name="Heart" size={12} />
-                      <span>{reel.likes_count}</span>
-                    </div>
-                  )}
-                  */}
+                  {/* Nota: Se ha eliminado la referencia a likes_count del render por no existir en BD */}
                 </div>
               </div>
 
@@ -1039,6 +1021,301 @@ const ReelsGridComponent = ({
     </div>
   );
 };
+
+// ===============================
+// [SECCIÓN DE OTROS HOOKS OMITIDA PARA BREVEDAD, SIN CAMBIOS]
+// ===============================
+// Nota: useUserPhotos, usePointsHistory, usePurchaseHistory sin cambios desde la versión anterior.
+
+const useUserPhotos = (userId) => {
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchPhotos = useCallback(async () => {
+    if (!userId) {
+      console.log('📸 No userId provided, skipping photos fetch');
+      setPhotos([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('📸 Fetching photos for user:', userId);
+
+      const { data, error: fetchError } = await supabase
+        .from('photos')
+        .select(`
+          id,
+          image_url,
+          thumbnail_url,
+          caption,
+          category,
+          tags,
+          likes,
+          comments_count,
+          aspect_ratio,
+          file_size,
+          created_at,
+          user_id
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (fetchError) {
+        console.error('❌ Error fetching photos:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('✅ Photos fetched successfully:', data?.length || 0);
+      setPhotos(data || []);
+
+    } catch (err) {
+      console.error('💥 Error in fetchPhotos:', err);
+      setError(err.message);
+      setPhotos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchPhotos();
+  }, [fetchPhotos]);
+
+  return {
+    photos,
+    loading,
+    error,
+    totalCount: photos.length,
+    refresh: fetchPhotos
+  };
+};
+
+const usePointsHistory = (userId) => {
+  const [transactions, setTransactions] = useState([]);
+  const [summary, setSummary] = useState({
+    currentBalance: 0,
+    totalEarned: 0,
+    totalSpent: 0,
+    freePoints: 0,
+    premiumPoints: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchPointsHistory = useCallback(async () => {
+    if (!userId) {
+      console.log('💰 No userId provided for points history');
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('💰 Fetching points history for user:', userId);
+
+      // Obtener transacciones
+      const { data: transactionsData, error: transError } = await supabase
+        .from('points_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (transError) {
+        console.error('❌ Error fetching transactions:', transError);
+        throw transError;
+      }
+
+      // Obtener balance actual
+      const { data: pointsData, error: pointsError } = await supabase
+        .from('points_types')
+        .select('free_points, premium_points')
+        .eq('user_id', userId)
+        .single();
+
+      if (pointsError && pointsError.code !== 'PGRST116') {
+        console.error('❌ Error fetching points balance:', pointsError);
+      }
+
+      const freePoints = pointsData?.free_points || 0;
+      const premiumPoints = pointsData?.premium_points || 0;
+      const currentBalance = freePoints + premiumPoints;
+
+      // Calcular totales
+      const totalEarned = transactionsData
+        ?.filter(t => t.points_change > 0)
+        .reduce((sum, t) => sum + t.points_change, 0) || 0;
+
+      const totalSpent = Math.abs(
+        transactionsData
+          ?.filter(t => t.points_change < 0)
+          .reduce((sum, t) => sum + t.points_change, 0) || 0
+      );
+
+      console.log('✅ Points history fetched:', {
+        transactions: transactionsData?.length || 0,
+        currentBalance,
+        totalEarned,
+        totalSpent
+      });
+
+      setTransactions(transactionsData || []);
+      setSummary({
+        currentBalance,
+        totalEarned,
+        totalSpent,
+        freePoints,
+        premiumPoints
+      });
+
+    } catch (err) {
+      console.error('💥 Error in fetchPointsHistory:', err);
+      setError(err.message);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchPointsHistory();
+  }, [fetchPointsHistory]);
+
+  return {
+    transactions,
+    summary,
+    loading,
+    error,
+    refresh: fetchPointsHistory
+  };
+};
+
+const usePurchaseHistory = () => {
+  const [purchases] = useState([]);
+  
+  return {
+    purchases,
+    loading: false,
+    error: null
+  };
+};
+
+const PhotoGrid = ({ 
+  photos = [], 
+  loading = false, 
+  onQuickUpload,
+  isOwner = false,
+  showUploadButton = true 
+}) => {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (photos.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="ImagePlus" size={32} className="text-primary" />
+        </div>
+        <h3 className="text-xl font-semibold text-foreground mb-3">
+          {isOwner ? 'Comparte tus primeras fotos' : 'No hay fotos publicadas'}
+        </h3>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+          {isOwner 
+            ? 'Sube fotos rápidamente y comparte tus mejores momentos con la comunidad'
+            : 'Este usuario no ha compartido fotos aún'
+          }
+        </p>
+        {isOwner && showUploadButton && (
+          <div className="flex justify-center gap-4">
+            <Button onClick={onQuickUpload} size="lg">
+              <Icon name="Zap" size={20} className="mr-2" />
+              Subida Rápida
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg"
+              onClick={() => window.location.href = '/photo-upload'}
+            >
+              <Icon name="Settings" size={20} className="mr-2" />
+              Studio Avanzado
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {isOwner && showUploadButton && (
+        <div className="flex justify-end gap-3">
+          <Button onClick={onQuickUpload}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Subir Más
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => window.location.href = '/photo-upload'}
+          >
+            <Icon name="Settings" size={16} className="mr-2" />
+            Studio
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {photos.map((photo) => (
+          <div key={photo.id} className="group relative aspect-square">
+            <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
+              <img
+                src={photo.thumbnail_url || photo.image_url}
+                alt={photo.caption || 'Foto'}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+            </div>
+            
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex flex-col justify-end p-4">
+              <div className="text-white">
+                {photo.caption && (
+                  <p className="text-sm font-medium mb-1 truncate">{photo.caption}</p>
+                )}
+                <div className="flex items-center justify-between text-xs opacity-90">
+                  <span>{new Date(photo.created_at).toLocaleDateString()}</span>
+                  {photo.category && photo.category !== 'general' && (
+                    <span className="bg-black/50 px-2 py-1 rounded-full capitalize">
+                      {photo.category}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// [FIN DE SECCIÓN DE OTROS HOOKS OMITIDA PARA BREVEDAD, SIN CAMBIOS]
+// ===============================
+
 
 // ===============================
 // COMPONENTE PRINCIPAL
@@ -1106,8 +1383,7 @@ const UserProfileSettings = () => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    // CORRECCIÓN: Usar 0 en lugar de videoStats.totalLikes y reelStats.totalLikes 
-    // hasta que la columna se agregue a la tabla 'videos'.
+    // CORRECCIÓN: Usar 0 para likes en videos/reels ya que la columna fue eliminada temporalmente.
     const totalLikes = (0) + (0) + 
                       photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
     const totalComments = (videoStats.totalComments || 0) + (reelStats.totalComments || 0);
