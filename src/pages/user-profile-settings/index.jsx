@@ -19,6 +19,9 @@ import Button from '../../components/ui/Button';
 // 🚨 IMPORTACIÓN DEL MODAL REAL
 import PhotoDetailModal from '../../components/PhotoDetailModal';
 
+// ⭐️ IMPORTACIÓN REQUERIDA PARA EL SISTEMA DE PUNTOS ⭐️
+import { trackUploadVideo } from '../../services/missionsService';
+
 // ===============================
 // CONSTANTES
 // ===============================
@@ -1376,12 +1379,32 @@ const UserProfileSettings = () => {
     setShowQuickUpload(true);
   }, []);
 
+  // ⭐️ LÓGICA DE TRACKING DE PUNTOS POR SUBIDA DE FOTOS (IMPLEMENTACIÓN) ⭐️
   const handleQuickUploadSuccess = useCallback(async (uploadedPhotoData) => {
-    // Lógica de tracking de puntos (Asumida en pasos anteriores)
+    const photoId = uploadedPhotoData?.id; // Asumimos que el componente de subida devuelve el ID
 
     // 1. Refrescar datos del perfil y fotos (Esto soluciona la no visibilidad de la foto)
     await Promise.all([refreshPhotos(), refreshProfile()]); 
     console.log('✅ Photos uploaded successfully and profile/photos refreshed');
+    
+    if (photoId) {
+      try {
+        // 2. LLAMADA AL SISTEMA DE PUNTOS
+        const trackingResult = await trackUploadVideo(photoId); 
+
+        // 3. Manejo de la Respuesta y Notificación
+        if (trackingResult.result === 'success') {
+          console.log(`¡Foto subida! Puntos ganados: ${trackingResult.points_earned}`);
+          // Aquí se podría añadir la notificación al usuario
+        } else if (trackingResult.result === 'already_paid') {
+          console.log('Ya ganaste puntos por subir este contenido o la misión no estaba activa.');
+        } else {
+          console.error('Tracking de puntos fallido o inesperado:', trackingResult);
+        }
+      } catch (error) {
+        console.error('Error en el tracking de puntos durante la subida de foto:', error);
+      }
+    }
   }, [refreshPhotos, refreshProfile]);
 
 
@@ -1933,8 +1956,6 @@ const UserProfileSettings = () => {
                     { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
                     { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
-                    // ❌ Eliminado: { id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' },
-                    // ❌ Eliminado: { id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists, color: 'text-purple-600' },
                     { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' },
                     { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
                     { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
