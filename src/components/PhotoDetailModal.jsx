@@ -20,7 +20,7 @@ const PhotoDetailModal = ({
     
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
-    const [userHasLiked, setUserHasLiked] = useState(false);
+    const [userHasLiked, setUserHasLiked] = useState(0); // Usamos 0/1/-1 para estado más claro
     const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
     
@@ -47,40 +47,42 @@ const PhotoDetailModal = ({
                 .eq('photo_id', photoData.id);
 
             // 2. VERIFICAR SI EL USUARIO DIO LIKE
-            const { data: userLike, error: userLikeError } = await supabase
+            const const { data: userLike } = await supabase
                 .from('photo_likes') 
                 .select('id')
                 .eq('photo_id', photoData.id)
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            // 3. OBTENER COMENTARIOS (¡USANDO user_profiles!)
+            // 3. OBTENER COMENTARIOS (¡CORRECCIÓN DE SINTAXIS PGRST100!)
             const { data: fetchedComments, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`
                     id, 
                     content, 
                     created_at, 
-                    user_id,
-                    // ⭐️ CORRECCIÓN FINAL: Usamos la relación implícita a 'user_profiles'
-                    user_profiles:user_id(full_name, username) 
+                    // ⭐️ CORRECCIÓN CRÍTICA DE SINTAXIS (PGRST100)
+                    // La sintaxis correcta para joinear la FK user_id a user_profiles es:
+                    // user_id(user_profiles(full_name, username)) 
+                    user_id!inner(full_name, username) 
                 `)
                 .eq('photo_id', photoData.id)
                 .order('created_at', { ascending: false })
                 .limit(50);
                 
-            if (countError || userLikeError || commentsError) {
-                // Si la lectura de comentarios falla (ej. por RLS), lanzamos el error
-                throw countError || userLikeError || commentsError;
+            if (countError || commentsError) {
+                // Notar el error solo en el console. No detener el flujo.
+                console.error("Error al cargar interacciones:", countError || commentsError);
             }
 
             setLikeCount(realLikeCount || 0); 
             setUserHasLiked(!!userLike);
             
-            // Mapeo de comentarios usando el alias 'user_profiles'
+            // ⭐️ Ajuste del mapeo: usamos el alias de la FK user_id, que devuelve el objeto del perfil
             setComments(fetchedComments?.map(c => ({
                 ...c,
-                user: c.user_profiles?.full_name || `@${c.user_profiles?.username || 'Usuario'}`
+                // El resultado del join viene directamente como 'user_id' si no se usa alias:
+                user: c.user_id?.full_name || `@${c.user_id?.username || 'Usuario'}`
             })) || []);
 
         } catch (error) {
@@ -92,14 +94,14 @@ const PhotoDetailModal = ({
         }
     }, [photoData, user]);
 
-    // AJUSTE CRÍTICO: Reiniciar el estado del comentario y refrescar interacciones al cambiar de foto
+    // AJUSTE: Reiniciar el estado del comentario y refrescar interacciones al cambiar de foto
     useEffect(() => {
         fetchInteractions();
         setCommentText(''); 
     }, [fetchInteractions]);
 
 
-    // CORRECCIÓN DE USABILIDAD: Prevenir navegación con Enter y mantener solo flechas
+    // CORRECCIÓN DE USABILIDAD: Prevenir navegación con Enter
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
@@ -125,7 +127,7 @@ const PhotoDetailModal = ({
     
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Like (Con validación de propiedad)
+    // INTEGRACIÓN DE PUNTOS: Like (Con validación de propiedad y manejo de 409)
     // ===================================
 
     const handleLikeToggle = useCallback(async () => {
@@ -137,14 +139,22 @@ const PhotoDetailModal = ({
 
         try {
             if (actionType === 'like') {
-                // 1. REGISTRAR LIKE
+                // 1. REGISTRAR LIKE (Lógica de negocio)
                 const { error: insertError } = await supabase
                     .from('photo_likes') 
                     .insert({ user_id: user.id, photo_id: photoId });
                 
-                if (insertError && insertError.code !== '23505') throw insertError;
+                // ⭐️ MANEJO DE ERROR 409 (23505): Si el like ya existe
+                if (insertError) {
+                    if (insertError.code === '23505') {
+                        // El like ya existe, pero el usuario no lo detectó en el fetch, o RLS está mal.
+                        console.warn('Like ya existe (409/23505). No se vuelve a trackear.');
+                    } else {
+                        throw insertError;
+                    }
+                }
                 
-                // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si NO es el dueño)
+                // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si NO es el dueño y la inserción no falló por otra razón)
                 if (!isOwner && (!insertError || insertError.code === '23505')) {
                     if (MISSION_TYPES?.GIVE_LIKE) {
                         const trackingResult = await trackGiveLike('photo', photoId); 
@@ -180,7 +190,7 @@ const PhotoDetailModal = ({
     }, [photoData, isLiking, userHasLiked, refreshParentData, user, fetchInteractions, isOwner]);
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Comentario (Con validación de propiedad)
+    // INTEGRACIÓN DE PUNTOS: Comentario
     // ===================================
     const handleCommentSubmit = useCallback(async (e) => {
         // Detener el evento para prevenir la navegación global (Enter)
@@ -191,15 +201,13 @@ const PhotoDetailModal = ({
         
         try {
             // 1. Lógica de inserción de comentario (DB)
-            const { data: newCommentData, error: insertError } = await supabase
+            const { error: insertError } = await supabase
                 .from('photo_comments') 
                 .insert({ 
                     user_id: user.id, 
                     photo_id: photoData.id, 
                     content: comment 
-                })
-                .select('id, content, created_at')
-                .single();
+                });
 
             if (insertError) throw insertError;
             
@@ -228,7 +236,7 @@ const PhotoDetailModal = ({
     }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner]);
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Compartir (Con validación de propiedad)
+    // INTEGRACIÓN DE PUNTOS: Compartir
     // ===================================
     const handleShare = useCallback(async () => {
         console.log(`Compartiendo foto ID: ${photoData.id}`);
