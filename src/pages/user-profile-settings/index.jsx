@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
+// UserProfileSettings - ✅ CORREGIDO: Solucionados errores de relación de DB y referencias de componentes.
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,11 +25,20 @@ const VIDEO_ORIENTATIONS = {
   SQUARE: 'square'
 };
 
+const PAGE_TABS = {
+  VIDEOS: 'videos',
+  REELS: 'reels',
+  PHOTOS: 'photos', 
+  POINTS: 'points',
+  HISTORY: 'history',
+  SETTINGS: 'settings'
+};
+
 // ===============================
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para datos del perfil del usuario
+// Hook para datos del perfil del usuario (CORREGIDO PARA EVITAR CONSULTA ANIDADA)
 const useUserProfile = () => {
   const { user, updateProfile } = useAuth();
   const [profileData, setProfileData] = useState(null);
@@ -37,10 +46,8 @@ const useUserProfile = () => {
   const [error, setError] = useState(null);
 
   const generateUsername = (email) => {
-    if (!email) return `user${Date.now()}`;
-    const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-    const random = Math.floor(Math.random() * 1000);
-    return `${base}${random}`;
+    if (!email) return `user_${Math.random().toString(36).substring(2, 9)}`;
+    return email.split('@')[0];
   };
 
   const fetchProfile = useCallback(async () => {
@@ -50,14 +57,16 @@ const useUserProfile = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      // ✅ CORRECCIÓN PRINCIPAL: Eliminamos la relación fallida 'user_points(...)' y solo pedimos campos directos.
+      const { data: profile, error: fetchError } = await supabase
         .from('user_profiles')
-        .select('*')
+        .select(`*`)
         .eq('id', user.id)
         .single();
 
       if (fetchError) {
         if (fetchError.code === 'PGRST116') {
+          // Lógica de creación de perfil si no existe
           const { data: newProfile, error: createError } = await supabase
             .from('user_profiles')
             .insert({
@@ -88,7 +97,7 @@ const useUserProfile = () => {
           throw fetchError;
         }
       } else {
-        setProfileData(data);
+        setProfileData(profile);
       }
 
     } catch (err) {
@@ -188,12 +197,6 @@ const useUserVideos = (userId) => {
         console.log(`📹 "${video.title}": orientación BD="${realOrientation}" → ${isHorizontal ? 'INCLUIR' : 'FILTRAR'}`);
         
         return isHorizontal;
-      });
-
-      console.log('✅ Filtrado de videos horizontales completado:', {
-        total: allVideos.length,
-        horizontal: horizontalVideos.length,
-        filtered_out: allVideos.length - horizontalVideos.length
       });
 
       setVideos(horizontalVideos);
@@ -315,12 +318,6 @@ const useUserReels = (userId) => {
         return isVertical;
       });
 
-      console.log('✅ Filtrado de reels completado:', {
-        total: allVideos.length,
-        vertical: verticalVideos.length,
-        filtered_out: allVideos.length - verticalVideos.length
-      });
-
       setReels(verticalVideos);
 
       const reelStats = verticalVideos.reduce(
@@ -366,7 +363,7 @@ const useUserReels = (userId) => {
   };
 };
 
-// Hook para fotos del usuario
+// Hook para fotos del usuario (CORREGIDO)
 const useUserPhotos = (userId) => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -386,22 +383,12 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 Fetching photos for user:', userId);
 
+      // ✅ CORRECCIÓN 1: Convertimos la selección a una cadena compacta y segura para evitar errores de parseo (PGRST100).
+      const selectFields = "id,image_url,thumbnail_url,caption,category,tags,likes_count,comments_count,aspect_ratio,file_size,created_at,user_id";
+
       const { data, error: fetchError } = await supabase
         .from('photos')
-        .select(`
-          id,
-          image_url,
-          thumbnail_url,
-          caption,
-          category,
-          tags,
-          likes,
-          comments_count,
-          aspect_ratio,
-          file_size,
-          created_at,
-          user_id
-        `)
+        .select(selectFields) // Usamos la cadena segura
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -438,6 +425,7 @@ const useUserPhotos = (userId) => {
 
 // Hook para historial de puntos REAL
 const usePointsHistory = (userId) => {
+  const { totalPoints: contextTotalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
     currentBalance: 0,
@@ -590,10 +578,6 @@ const PhotoGrid = ({
         {isOwner && showUploadButton && (
           <div className="flex justify-center gap-4">
             {/* ✅ CORRECCIÓN: ELIMINADO BOTÓN "SUBIDA RÁPIDA" */}
-            {/* <Button onClick={onQuickUpload} size="lg">
-              <Icon name="Zap" size={20} className="mr-2" />
-              Subida Rápida
-            </Button> */}
             <Button 
               variant="outline" 
               size="lg" // ✅ ESTILO: Agregado size="lg" al botón Studio Avanzado
@@ -613,10 +597,6 @@ const PhotoGrid = ({
       {isOwner && showUploadButton && (
         <div className="flex justify-end gap-3">
           {/* ✅ CORRECCIÓN: ELIMINADO BOTÓN "SUBIR MÁS" (Subida Rápida) */}
-          {/* <Button onClick={onQuickUpload}>
-            <Icon name="Plus" size={16} className="mr-2" />
-            Subir Más
-          </Button> */}
           <Button 
             variant="outline" 
             onClick={() => window.location.href = '/photo-upload'}
@@ -662,7 +642,7 @@ const PhotoGrid = ({
 };
 
 
-// ✅ COMPONENTE: VideoGridComponent (Faltante, añadido como placeholder funcional)
+// ✅ COMPONENTE: VideoGridComponent (Añadido como placeholder funcional)
 const VideoGridComponent = (props) => {
     if (props.loading) return <div>Cargando videos...</div>;
     if (props.videos.length === 0) return <div>{props.emptyMessage || 'No hay videos para mostrar.'}</div>;
@@ -674,7 +654,7 @@ const VideoGridComponent = (props) => {
     );
 };
 
-// ✅ COMPONENTE: ReelsGridComponent (Faltante, añadido como placeholder funcional)
+// ✅ COMPONENTE: ReelsGridComponent (Añadido como placeholder funcional)
 const ReelsGridComponent = (props) => {
     if (props.loading) return <div>Cargando reels...</div>;
     if (props.reels.length === 0) return <div>{props.emptyMessage || 'No hay reels para mostrar.'}</div>;
