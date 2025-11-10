@@ -565,8 +565,8 @@ const PhotoGrid = ({
   onPhotoAction, // Nuevo prop para acciones (Editar/Eliminar)
   isOwner = false,
   showUploadButton = true,
-  fetchError = null,
-  onPhotoClick
+  fetchError = null, // Se añade el error del fetcher para mostrarlo
+  onPhotoClick // Nuevo prop para manejar el click
 }) => {
   if (loading) {
     return (
@@ -644,8 +644,8 @@ const PhotoGrid = ({
         {photos.map((photo) => (
           <div 
             key={photo.id} 
-            className="group relative aspect-square cursor-pointer" 
-            onClick={() => onPhotoClick(photo.id)}
+            className="group relative aspect-square cursor-pointer" // Añadir cursor-pointer
+            onClick={() => onPhotoClick(photo.id)} // Añadir manejador de clic
           >
             <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
               <img
@@ -1089,8 +1089,11 @@ const UserProfileSettings = () => {
 
   // 🚨 ESTADOS PARA EL MODAL DE DETALLE DE FOTO
   const [showPhotoModal, setShowPhotoModal] = useState(false);
-  // Usamos el índice para facilitar la navegación del carrusel
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
+  
+  // 🚨 ESTADOS PARA EL MODAL DE EDICIÓN
+  const [showPhotoEditModal, setShowPhotoEditModal] = useState(false);
+  const [photoToEditData, setPhotoToEditData] = useState(null); 
 
   // Hooks de datos
   const {
@@ -1133,7 +1136,7 @@ const UserProfileSettings = () => {
   
   const { purchases } = usePurchaseHistory();
 
-  // 🚨 OBTENER LOS DATOS COMPLETOS DE LA FOTO SELECCIONADA
+  // 🚨 OBTENER LOS DATOS COMPLETOS DE LA FOTO ACTUAL (PARA EL MODAL DE DETALLE)
   const currentPhotoData = useMemo(() => {
     if (selectedPhotoIndex === null || !photos || selectedPhotoIndex >= photos.length) return null;
     return photos[selectedPhotoIndex];
@@ -1198,7 +1201,7 @@ const UserProfileSettings = () => {
   // EVENT HANDLERS
   // ===============================
 
-  // MANEJADOR DE CLIC DE FOTO
+  // MANEJADOR DE CLIC DE FOTO (ABRIR DETALLE)
   const handlePhotoClick = useCallback((photoId) => {
     // Busca el índice de la foto seleccionada
     const index = photos.findIndex(p => p.id === photoId);
@@ -1214,7 +1217,48 @@ const UserProfileSettings = () => {
     refreshProfile(); 
   }, [refreshProfile]);
 
-  // 🚨 MANEJADOR DE NAVEGACIÓN ENTRE FOTOS
+  // 🚨 NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
+  const handlePhotoAction = useCallback(async (action, photo) => {
+    try {
+      switch (action) {
+        case 'edit':
+          console.log('Abriendo edición de foto:', photo.id);
+          setPhotoToEditData(photo);
+          setShowPhotoEditModal(true); // Abrir el modal de edición
+          break;
+        case 'delete':
+          if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
+            const { error } = await supabase
+              .from('photos')
+              .delete()
+              .eq('id', photo.id);
+            
+            if (!error) {
+              await refreshPhotos();
+              await refreshProfile();
+              console.log('✅ Foto eliminada exitosamente:', photo.id);
+            } else {
+              console.error('❌ Error eliminando foto:', error);
+              alert(`Error al eliminar la foto: ${error.message}`);
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error con la acción de foto:', error);
+    }
+  }, [refreshPhotos, refreshProfile]);
+
+  // CIERRE DEL MODAL DE EDICIÓN
+  const handleClosePhotoEditModal = useCallback(() => {
+    setShowPhotoEditModal(false);
+    setPhotoToEditData(null);
+    refreshPhotos(); // Refrescar la lista si se hizo una edición
+  }, [refreshPhotos]);
+
+  // MANEJADOR DE NAVEGACIÓN ENTRE FOTOS
   const handleNavigatePhoto = useCallback((direction) => {
     if (photos.length === 0 || selectedPhotoIndex === null) return;
 
@@ -1249,40 +1293,6 @@ const UserProfileSettings = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
-
-  // 🚨 NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
-  const handlePhotoAction = useCallback(async (action, photo) => {
-    try {
-      switch (action) {
-        case 'edit':
-          console.log('Editando foto:', photo.id);
-          // Asumimos una ruta de edición similar a la de videos
-          window.location.href = `/photo-edit/${photo.id}`;
-          break;
-        case 'delete':
-          if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
-            const { error } = await supabase
-              .from('photos')
-              .delete()
-              .eq('id', photo.id);
-            
-            if (!error) {
-              await refreshPhotos();
-              await refreshProfile();
-              console.log('✅ Foto eliminada exitosamente:', photo.id);
-            } else {
-              console.error('❌ Error eliminando foto:', error);
-              alert(`Error al eliminar la foto: ${error.message}`);
-            }
-          }
-          break;
-        default:
-          break;
-      }
-    } catch (error) {
-      console.error('Error con la acción de foto:', error);
-    }
-  }, [refreshPhotos, refreshProfile]);
 
 
   // [Resto de event handlers sin cambios funcionales]
@@ -1920,6 +1930,43 @@ const UserProfileSettings = () => {
           />
       )}
       
+      {/* 🚨 MODAL DE EDICIÓN DE FOTO (Placeholder) */}
+      {showPhotoEditModal && photoToEditData && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-lg border max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold">Editar Metadatos de Foto</h2>
+              <Button variant="ghost" size="sm" onClick={handleClosePhotoEditModal}>
+                <Icon name="X" size={20} />
+              </Button>
+            </div>
+            
+            <p className="text-sm text-muted-foreground mb-4">
+              {`Editando foto ID: ${photoToEditData.id.slice(0, 8)}...`}
+            </p>
+            
+            {/* Aquí irían los campos de formulario para Title, Caption, Tags, etc. */}
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Título/Caption"
+                defaultValue={photoToEditData.caption || ''}
+                className="w-full border p-2 rounded"
+              />
+              <textarea
+                placeholder="Descripción"
+                rows="3"
+                className="w-full border p-2 rounded"
+              />
+              <Button onClick={handleClosePhotoEditModal} className="w-full">
+                Guardar Cambios
+              </Button>
+            </div>
+            
+          </div>
+        </div>
+      )}
+
       {/* Debug Info (omitido) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
