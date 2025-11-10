@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Sin PhotoDetailPage)
+// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Solucionado error de importación y path)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -26,7 +26,6 @@ import NotFound from "pages/NotFound";
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
-// 🚫 ELIMINADA: import PhotoDetailPage from './pages/PhotoDetailPage.jsx';
 
 // ✅ PÁGINAS REALES DE USUARIO
 import UserProfileSettings from './pages/user-profile-settings';
@@ -36,8 +35,7 @@ import PointsRewardsStore from './pages/points-rewards-store';
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/purchase-points';
 
-// 🚨 CORRECCIÓN - Importación asumida para el Perfil Público
-import PublicProfilePage from './pages/public-profile-page';
+// 🚫 ELIMINADA: Importación de PublicProfilePage
 
 // ADMIN PANEL
 import AdminDashboard from "pages/admin-panel/AdminDashboard";
@@ -98,19 +96,8 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚫 RUTA ELIMINADA: La página de detalle de foto fue eliminada para resolver el error de build. */}
-              {/* <Route path="/photo/:photoId" element={<PhotoDetailPage />} /> */} 
-
-              {/* 🚨 CORRECCIÓN CLAVE: 1. PERFIL PÚBLICO (/profile/pedro) */}
-              <Route 
-                path="/profile/:username" 
-                element={
-                  <UniversalRoute>
-                    <PublicProfilePage />
-                  </UniversalRoute>
-                } 
-              />
-
+              {/* 🚫 RUTA ELIMINADA: La ruta de perfil público /profile/:username fue eliminada para evitar el 404. */}
+              
               {/* =================== RUTAS PROTEGIDAS (Requiere login) =================== */}
 
               <Route path="/upload" element={
@@ -143,15 +130,16 @@ const Routes = () => {
                 </ProtectedRoute>
               } />
 
-              {/* 🚨 CORRECCIÓN CLAVE: 2. PERFIL DEL PROPIETARIO / CONFIGURACIÓN (/user/profile) */}
-              <Route path="/user/profile" element={
+              {/* 🚨 CORRECCIÓN CLAVE: PERFIL DEL PROPIETARIO / CONFIGURACIÓN (/profile) */}
+              <Route path="/profile" element={
                 <ProtectedRoute>
                   <UserProfileSettings />
                 </ProtectedRoute>
               } />
               
-              {/* Redirect de la ruta antigua a la nueva para evitar errores en otros archivos */}
-              <Route path="/user-profile-settings" element={<Navigate to="/user/profile" replace />} />
+              {/* Redirect de rutas antiguas de perfil a la nueva /profile */}
+              <Route path="/user-profile-settings" element={<Navigate to="/profile" replace />} />
+              <Route path="/user/profile" element={<Navigate to="/profile" replace />} />
 
 
               {/* =================== RUTAS ADMIN =================== */}
