@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Solucionado error de importación y path)
+// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Rutas de Perfil Definidas)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -35,7 +35,8 @@ import PointsRewardsStore from './pages/points-rewards-store';
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/purchase-points';
 
-// 🚫 ELIMINADA: Importación de PublicProfilePage
+// 🚨 COMPONENTE NUEVO: Perfil Público
+import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
 import AdminDashboard from "pages/admin-panel/AdminDashboard";
@@ -96,8 +97,16 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚫 RUTA ELIMINADA: La ruta de perfil público /profile/:username fue eliminada para evitar el 404. */}
-              
+              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
+              <Route 
+                path="/profile/:username" 
+                element={
+                  <UniversalRoute>
+                    <PublicProfilePage />
+                  </UniversalRoute>
+                } 
+              />
+
               {/* =================== RUTAS PROTEGIDAS (Requiere login) =================== */}
 
               <Route path="/upload" element={
@@ -130,16 +139,17 @@ const Routes = () => {
                 </ProtectedRoute>
               } />
 
-              {/* 🚨 CORRECCIÓN CLAVE: PERFIL DEL PROPIETARIO / CONFIGURACIÓN (/profile) */}
-              <Route path="/profile" element={
+              {/* 🚨 PERFIL DEL DUEÑO: Ruta estática para la configuración del usuario logueado */}
+              <Route path="/settings/profile" element={
                 <ProtectedRoute>
                   <UserProfileSettings />
                 </ProtectedRoute>
               } />
               
-              {/* Redirect de rutas antiguas de perfil a la nueva /profile */}
-              <Route path="/user-profile-settings" element={<Navigate to="/profile" replace />} />
-              <Route path="/user/profile" element={<Navigate to="/profile" replace />} />
+              {/* Redirects de rutas antiguas o comunes a /settings/profile */}
+              <Route path="/user-profile-settings" element={<Navigate to="/settings/profile" replace />} />
+              <Route path="/user/profile" element={<Navigate to="/settings/profile" replace />} />
+              <Route path="/profile" element={<Navigate to="/settings/profile" replace />} />
 
 
               {/* =================== RUTAS ADMIN =================== */}
