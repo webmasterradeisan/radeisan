@@ -1,58 +1,91 @@
 // src/components/PhotoDetailModal.jsx
-import React, { useState, useEffect, useCallback } from 'react'; 
-import Icon from './AppIcon'; // Se mantiene la ruta relativa
-import Button from './ui/Button'; // Se mantiene la ruta relativa
-import { supabase } from '../lib/supabase'; // Se mantiene la ruta relativa
-// 🚨 Nota: La ruta de missionsService.js se asume correcta como '../services/missionsService'
+import React, { useState, useEffect, useCallback } from 'react'; // <-- CORREGIDO: "react-react" a "react"
+import Icon from './AppIcon'; // Asumiendo que AppIcon es el componente de iconos
+import Button from './ui/Button'; // Asumiendo que Button es el componente UI
+import { supabase } from '../lib/supabase'; // Para cargar los datos de la foto
+// 🚨 INTEGRACIÓN DE PUNTOS: Importar las funciones de tracking
 import { trackGiveLike, MISSION_TYPES } from '../services/missionsService'; 
-import { useAuth } from '../contexts/AuthContext'; // Se mantiene la ruta relativa
+import { useAuth } from '../contexts/AuthContext'; // Para obtener el user.id
 
-// El componente ahora recibe photoData en lugar de solo photoId
-const PhotoDetailModal = ({ photoData, onClose, refreshParentData }) => {
+const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
     const { user } = useAuth();
+    const [photoData, setPhotoData] = useState(null);
     const [isLiking, setIsLiking] = useState(false);
-    // 🚨 Usamos un estado mock para los likes. DEBE SER REEMPLAZADO por un fetch real.
-    const [likeCount, setLikeCount] = useState(12); // Mock: '12' es el valor inicial de la simulación
-    const [loading, setLoading] = useState(false); 
+    const [likeCount, setLikeCount] = useState(0); // Debe ser cargado desde BD o tabla separada
+    const [loading, setLoading] = useState(true);
 
-    // **VALIDACIÓN CRÍTICA**
-    if (!photoData) {
-        console.error("PhotoDetailModal: photoData es null o undefined.");
-        return null;
-    }
+    // ===================================
+    // LÓGICA DE CARGA DE DATOS (MOCK)
+    // ===================================
 
-    // Asignamos datos para la UI
-    const photoId = photoData.id;
-    // Usamos la URL real
-    const photoUrl = photoData.image_url; 
-    // Usamos profileData (si está disponible) o el usuario autenticado
-    const userDisplayName = photoData.username || user?.user_metadata?.full_name || `@UsuarioDetalle`;
-    const photoDate = new Date(photoData.created_at).toLocaleDateString();
+    useEffect(() => {
+        if (!photoId) return;
+
+        // 🚨 NOTA: La carga de datos REAL debería hacerse aquí.
+        // Por ahora, simulamos los datos para que el modal se vea funcional.
+        setLoading(true);
+        setTimeout(() => {
+            // Simular datos obtenidos (deberías hacer un fetch JOIN en la tabla photos y photo_likes)
+            setPhotoData({
+                id: photoId,
+                // Usamos una URL genérica para simular la carga de imagen
+                image_url: `https://picsum.photos/id/${Math.floor(Math.random() * 100)}/800/1200`,
+                caption: "Foto de mi perfil subida hoy.",
+                user_name: user?.user_metadata?.full_name || "@UsuarioDetalle",
+                created_at: new Date().toLocaleDateString(),
+                // Estos valores DEBEN ser obtenidos de las tablas separadas (photo_likes)
+                initial_likes: 12, 
+                user_liked: false, 
+            });
+            setLikeCount(12);
+            setLoading(false);
+        }, 500);
+
+        // Si necesitas datos reales, el fetch sería:
+        /*
+        const fetchPhoto = async () => {
+             const { data, error } = await supabase
+                 .from('photos')
+                 // Aquí deberías usar una función RPC para contar likes
+                 .select(`*, likes_count:photo_likes(count)`) 
+                 .eq('id', photoId)
+                 .single();
+             if (data) {
+                 setPhotoData(data);
+                 setLikeCount(data.likes_count?.[0]?.count || 0);
+             }
+             setLoading(false);
+        };
+        fetchPhoto();
+        */
+        
+    }, [photoId, user]);
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Like
     // ===================================
 
     const handleLike = useCallback(async () => {
-        // Validación de existencia de MISSION_TYPES antes de usarlo
-        if (!MISSION_TYPES?.GIVE_LIKE) {
-            console.error("MISSION_TYPES no está disponible. No se puede trackear el like.");
-            return;
-        }
-        if (isLiking) return;
+        if (!photoData || isLiking || !MISSION_TYPES.GIVE_LIKE) return;
 
         setIsLiking(true);
 
         try {
+            // Asumimos que trackGiveLike maneja la inserción/eliminación del like
+            // y el tracking de puntos en la base de datos (PostgreSQL RPC)
             const trackingResult = await trackGiveLike('photo', photoId);
 
             if (trackingResult.result === 'success') {
+                // Si el like fue nuevo y otorgó puntos
                 setLikeCount(prev => prev + 1);
                 console.log(`Puntos ganados por like: ${trackingResult.points_earned}`);
             } else if (trackingResult.result === 'already_paid') {
+                // Si ya había dado like, la lógica real debería hacer un UNLIKE y decrementar
+                // Por ahora, solo informamos que no ganó puntos (Anti-Farming)
                 console.log('Ya se habían otorgado puntos por este like (Anti-Farming).');
             }
             
+            // Refrescar el perfil principal (para actualizar el total de puntos)
             refreshParentData(); 
 
         } catch (error) {
@@ -60,10 +93,11 @@ const PhotoDetailModal = ({ photoData, onClose, refreshParentData }) => {
         } finally {
             setIsLiking(false);
         }
-    }, [photoId, isLiking, refreshParentData]);
+    }, [photoData, photoId, isLiking, refreshParentData]);
 
     const handleComment = () => {
         // Lógica de comentarios aquí...
+        // Aquí se llamaría a trackComment('photo', photoId)
         alert('Comentario enviado! (Llamar a trackComment)');
     };
 
@@ -75,6 +109,7 @@ const PhotoDetailModal = ({ photoData, onClose, refreshParentData }) => {
         );
     }
     
+    if (!photoData) return null;
 
     // Estructura del Modal (Similar a la imagen de Facebook)
     return (
@@ -94,9 +129,9 @@ const PhotoDetailModal = ({ photoData, onClose, refreshParentData }) => {
                 {/* Columna Izquierda: Imagen (Ocupa el espacio restante) */}
                 <div className="flex-1 flex items-center justify-center relative bg-black">
                     <img 
-                        // Usamos la URL REAL de la foto seleccionada
-                        src={photoUrl}
-                        alt={`Foto de ${userDisplayName}`}
+                        // Usar la URL real de la imagen completa
+                        src={photoData.image_url}
+                        alt={`Foto de ${photoData.user_name}`}
                         className="max-h-full max-w-full object-contain"
                     />
                 </div>
@@ -106,11 +141,10 @@ const PhotoDetailModal = ({ photoData, onClose, refreshParentData }) => {
                     
                     {/* Header del Post/Usuario */}
                     <div className="p-4 border-b border-border flex items-center space-x-3">
-                        {/* Avatar */}
-                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" /> 
+                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground truncate">@{userDisplayName}</h4>
-                            <p className="text-xs text-muted-foreground">{photoDate}</p>
+                            <h4 className="font-semibold text-foreground truncate">{photoData.user_name}</h4>
+                            <p className="text-xs text-muted-foreground">{photoData.created_at}</p>
                         </div>
                         {/* Aquí iría el botón de 'Seguir' o acciones del dueño del post */}
                     </div>
