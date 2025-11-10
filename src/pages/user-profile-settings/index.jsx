@@ -628,17 +628,16 @@ const PhotoGrid = ({
     <div className="space-y-6">
       {isOwner && showUploadButton && (
         <div className="flex justify-end gap-3">
-          <Button onClick={onQuickUpload}>
-            <Icon name="Plus" size={16} className="mr-2" />
-            Subir Más
-          </Button>
+          {/* INICIO DE MODIFICACIÓN: Se elimina "Subir Más" y se estiliza "Studio" */}
           <Button 
-            variant="outline" 
-            onClick={() => window.location.href = '/photo-upload'}
+            onClick={() => window.location.href = '/photo-upload'} 
+            // Usamos el estilo principal y el ícono de subida
+            size="sm" // Opcional, mantener el tamaño del botón
           >
-            <Icon name="Settings" size={16} className="mr-2" />
-            Studio
+            <Icon name="Plus" size={16} className="mr-2" />
+            Subir Fotos
           </Button>
+          {/* FIN DE MODIFICACIÓN */}
         </div>
       )}
 
