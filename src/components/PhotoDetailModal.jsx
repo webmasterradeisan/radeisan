@@ -20,7 +20,7 @@ const PhotoDetailModal = ({
     
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
-    const [userHasLiked, setUserHasLiked] = useState(0); // Usamos 0/1/-1 para estado más claro
+    const [userHasLiked, setUserHasLiked] = useState(false); // Usamos booleano para el estado del like
     const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
     
@@ -47,23 +47,22 @@ const PhotoDetailModal = ({
                 .eq('photo_id', photoData.id);
 
             // 2. VERIFICAR SI EL USUARIO DIO LIKE
-            const const { data: userLike } = await supabase
+            // ⭐️ CORRECCIÓN DE SINTAXIS: Eliminado el 'const' duplicado ⭐️
+            const { data: userLike } = await supabase
                 .from('photo_likes') 
                 .select('id')
                 .eq('photo_id', photoData.id)
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            // 3. OBTENER COMENTARIOS (¡CORRECCIÓN DE SINTAXIS PGRST100!)
+            // 3. OBTENER COMENTARIOS (Sintaxis corregida para PGRST100)
             const { data: fetchedComments, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`
                     id, 
                     content, 
                     created_at, 
-                    // ⭐️ CORRECCIÓN CRÍTICA DE SINTAXIS (PGRST100)
-                    // La sintaxis correcta para joinear la FK user_id a user_profiles es:
-                    // user_id(user_profiles(full_name, username)) 
+                    // Usamos el nombre de la FK 'user_id' para el join implícito
                     user_id!inner(full_name, username) 
                 `)
                 .eq('photo_id', photoData.id)
@@ -78,10 +77,9 @@ const PhotoDetailModal = ({
             setLikeCount(realLikeCount || 0); 
             setUserHasLiked(!!userLike);
             
-            // ⭐️ Ajuste del mapeo: usamos el alias de la FK user_id, que devuelve el objeto del perfil
+            // Mapeo de comentarios: el resultado del join viene como 'user_id'
             setComments(fetchedComments?.map(c => ({
                 ...c,
-                // El resultado del join viene directamente como 'user_id' si no se usa alias:
                 user: c.user_id?.full_name || `@${c.user_id?.username || 'Usuario'}`
             })) || []);
 
@@ -127,7 +125,7 @@ const PhotoDetailModal = ({
     
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Like (Con validación de propiedad y manejo de 409)
+    // INTEGRACIÓN DE PUNTOS: Like
     // ===================================
 
     const handleLikeToggle = useCallback(async () => {
@@ -144,17 +142,16 @@ const PhotoDetailModal = ({
                     .from('photo_likes') 
                     .insert({ user_id: user.id, photo_id: photoId });
                 
-                // ⭐️ MANEJO DE ERROR 409 (23505): Si el like ya existe
+                // MANEJO DE ERROR 409 (23505): Si el like ya existe
                 if (insertError) {
                     if (insertError.code === '23505') {
-                        // El like ya existe, pero el usuario no lo detectó en el fetch, o RLS está mal.
                         console.warn('Like ya existe (409/23505). No se vuelve a trackear.');
                     } else {
                         throw insertError;
                     }
                 }
                 
-                // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si NO es el dueño y la inserción no falló por otra razón)
+                // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si NO es el dueño)
                 if (!isOwner && (!insertError || insertError.code === '23505')) {
                     if (MISSION_TYPES?.GIVE_LIKE) {
                         const trackingResult = await trackGiveLike('photo', photoId); 
