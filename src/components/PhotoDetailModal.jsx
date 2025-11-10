@@ -30,12 +30,13 @@ const PhotoDetailModal = ({
     const isOwner = user?.id === photoData?.user_id;
 
     // ===================================
-    // FUNCIÓN DE NOTIFICACIÓN TOAST
+    // FUNCIÓN DE NOTIFICACIÓN TOAST (DURACIÓN AUMENTADA A 5 SEGUNDOS)
     // ===================================
 
-    const showTemporaryToast = useCallback((message, type = 'success', duration = 3000) => {
+    const showTemporaryToast = useCallback((message, type = 'success', duration = 5000) => {
         setToastMessage(message);
         setShowToast(true);
+        // 🚨 CAMBIO: Aumento de 3000ms a 5000ms
         setTimeout(() => {
             setShowToast(false);
             setToastMessage('');
@@ -156,7 +157,7 @@ const PhotoDetailModal = ({
     // MANEJADORES DE ACCIONES
     // ===================================
 
-    // 🚨 FIX: LIKE CON ANTI-FARMING Y AVISOS SWEET ALERT
+    // FIX: LIKE CON ANTI-FARMING Y AVISOS SWEET ALERT
     const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
@@ -205,7 +206,7 @@ const PhotoDetailModal = ({
                             const trackingResult = await trackGiveLike('photo', photoId); 
                             
                             if (trackingResult.result === 'success') {
-                                showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 'success', 2000);
+                                showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 'success');
                             } else if (trackingResult.result === 'already_paid') {
                                 // ⭐️ AVISO TIPO SWEET ALERT POR ANTI-FARMING ⭐️
                                 warningMessage = 'Ya ganaste puntos por darle "Me Gusta" a esta foto anteriormente.';
@@ -217,7 +218,7 @@ const PhotoDetailModal = ({
 
             // Mostrar el aviso si se generó alguno (por owned content o anti-farming)
             if (warningMessage) {
-                showTemporaryToast(warningMessage, 'info', 3000);
+                showTemporaryToast(warningMessage, 'info');
             }
 
             // Refrescar para asegurar consistencia
@@ -254,21 +255,21 @@ const PhotoDetailModal = ({
             
             // 2. Actualizar UI localmente y refrescar
             setCommentText(''); 
-            await fetchInteractions(); 
+            await fetchInteractions(); // Refrescar para ver el nuevo comentario
 
             // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
             if (!isOwner) {
                 if (MISSION_TYPES?.COMMENT) {
                     const trackingResult = await trackComment('photo', photoData.id); 
                     if (trackingResult.result === 'success') {
-                         showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success', 2000);
+                         showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success');
                         refreshParentData(); 
                     } else if (trackingResult.result === 'already_paid') {
-                        showTemporaryToast("Ya ganaste puntos por este comentario.", 'info', 2000);
+                        showTemporaryToast("Ya ganaste puntos por este comentario.", 'info');
                     }
                 }
             } else {
-                 showTemporaryToast("Comentario publicado (No ganas puntos por tu contenido).", 'info', 2000);
+                 showTemporaryToast("Comentario publicado (No ganas puntos por tu contenido).", 'info');
             }
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
@@ -286,14 +287,14 @@ const PhotoDetailModal = ({
                 if (MISSION_TYPES?.SHARE_CONTENT) {
                     const trackingResult = await trackShareContent('photo', photoData.id, platform); 
                     if (trackingResult.result === 'success') {
-                         showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 'success', 3000);
+                         showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 'success');
                         refreshParentData(); 
                     } else if (trackingResult.result === 'already_paid') {
-                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 'info', 3000);
+                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 'info');
                     }
                 }
             } else {
-                showTemporaryToast("Compartiendo foto (No ganas puntos por tu contenido).", 'info', 3000);
+                showTemporaryToast("Compartiendo foto (No ganas puntos por tu contenido).", 'info');
             }
         };
 
@@ -308,7 +309,7 @@ const PhotoDetailModal = ({
             } catch (error) {
                 if (error.name !== 'AbortError') { 
                      console.error('Web Share API falló:', error);
-                     showTemporaryToast('Error al abrir el diálogo de compartir.', 'error', 3000);
+                     showTemporaryToast('Error al abrir el diálogo de compartir.', 'error');
                 }
             }
         } else {
@@ -319,7 +320,7 @@ const PhotoDetailModal = ({
                 
             } catch (error) {
                 console.error('Error al copiar al portapapeles:', error);
-                showTemporaryToast('Error al copiar el enlace.', 'error', 3000);
+                showTemporaryToast('Error al copiar el enlace.', 'error');
             }
         }
     }, [photoData, refreshParentData, isOwner, showTemporaryToast]);
@@ -362,7 +363,6 @@ const PhotoDetailModal = ({
                 </Button>
 
                 <div className="flex-1 flex items-center justify-center relative bg-black">
-                    {/* 🚨 ASUMO QUE photoUrl AHORA ES CORRECTO */}
                     <img 
                         src={photoUrl}
                         alt={`Foto de ${userDisplayName}`}
