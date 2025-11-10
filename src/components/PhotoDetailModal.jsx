@@ -1,5 +1,5 @@
 // src/components/PhotoDetailModal.jsx
-import React, { useState, useEffect, useCallback } from 'react-react';
+import React, { useState, useEffect, useCallback } from 'react'; // <-- CORREGIDO: "react-react" a "react"
 import Icon from './AppIcon'; // Asumiendo que AppIcon es el componente de iconos
 import Button from './ui/Button'; // Asumiendo que Button es el componente UI
 import { supabase } from '../lib/supabase'; // Para cargar los datos de la foto
@@ -28,6 +28,7 @@ const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
             // Simular datos obtenidos (deberías hacer un fetch JOIN en la tabla photos y photo_likes)
             setPhotoData({
                 id: photoId,
+                // Usamos una URL genérica para simular la carga de imagen
                 image_url: `https://picsum.photos/id/${Math.floor(Math.random() * 100)}/800/1200`,
                 caption: "Foto de mi perfil subida hoy.",
                 user_name: user?.user_metadata?.full_name || "@UsuarioDetalle",
