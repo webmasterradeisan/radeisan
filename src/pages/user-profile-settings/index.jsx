@@ -339,7 +339,7 @@ const useUserReels = (userId) => {
       );
 
       setStats(reelStats);
-      console.log('📊 Reel stats calculated:', reelStats);
+      console.log('📊 Video stats calculated:', videoStats);
 
     } catch (err) {
       console.error('💥 Error in fetchReels:', {
@@ -390,8 +390,7 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
 
-      // 🚨 CORRECCIÓN FINAL DE LA CONSULTA:
-      // Se añade 'description' para la edición y 'caption' para la visualización.
+      // 🚨 SELECCIÓN CORREGIDA: Incluimos 'description' ya que asumimos que se creó en la BD.
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -404,7 +403,7 @@ const useUserPhotos = (userId) => {
           aspect_ratio,
           created_at,
           user_id,
-          description
+          description 
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -1230,7 +1229,7 @@ const UserProfileSettings = () => {
   // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO (CORREGIDO)
   const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
     try {
-      // 🚨 CORRECCIÓN CLAVE: La columna 'description' DEBE existir ahora.
+      // 🚨 ASUMIMOS que la columna 'description' existe tras el paso 5.
       const updates = {
         caption: newCaption,
         description: newDescription, 
@@ -1252,7 +1251,7 @@ const UserProfileSettings = () => {
       handleClosePhotoEditModal(); // Cerrar y refrescar lista
     } catch (error) {
       console.error('❌ Error al guardar cambios de foto:', error);
-      alert(`Error al guardar cambios: ${error.message}. Asegúrese de que la columna 'description' se haya agregado correctamente.`);
+      alert(`Error al guardar cambios: ${error.message}. Si el error indica "column description does not exist", es necesario eliminar el campo 'description' en el modal.`);
     }
   }, [handleClosePhotoEditModal]);
 
@@ -1633,9 +1632,9 @@ const UserProfileSettings = () => {
 
   // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
   const PhotoEditModal = ({ photo, onClose, onSave }) => {
-    // 🚨 CORRECCIÓN 1: Usar valores iniciales de la foto
+    // 🚨 CORRECCIÓN: Usar valores iniciales de la foto
     const [caption, setCaption] = useState(photo.caption || '');
-    // 🚨 CORRECCIÓN 2: Usamos el valor real de la columna 'description' para iniciar el estado.
+    // 🚨 CORRECCIÓN 2: Usamos el valor real de la columna 'description'
     const [description, setDescription] = useState(photo.description || ''); 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -1649,7 +1648,7 @@ const UserProfileSettings = () => {
       }
       
       setIsSaving(true);
-      // 🚨 Llamamos a la función de guardado con los estados actuales
+      // Llamamos a la función de guardado con los estados actuales
       await onSave(photo.id, caption, description);
       // La función onSave se encarga de cerrar el modal y refrescar la lista.
     };
