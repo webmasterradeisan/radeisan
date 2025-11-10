@@ -1226,10 +1226,10 @@ const UserProfileSettings = () => {
     refreshPhotos(); // Refrescar la lista si se hizo una edición
   }, [refreshPhotos]);
 
-  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO
+  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO (CORREGIDO)
   const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
     try {
-      // ASUMIMOS que la columna 'description' existe tras el paso anterior.
+      // 🚨 CORRECCIÓN CLAVE: La columna 'description' DEBE existir ahora.
       const updates = {
         caption: newCaption,
         description: newDescription, 
@@ -1996,4 +1996,69 @@ const UserProfileSettings = () => {
                 <div>
                   <h2 className="text-xl font-semibold text-foreground">
                     Editar Imágenes de Perfil
-                  </
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Cambia tu imagen de perfil o portada
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowImageEditor(false)}
+                >
+                  <Icon name="X" size={20} />
+                </Button>
+              </div>
+
+              {/* Profile Image Editor dentro del Modal */}
+              <ProfileImageEditor
+                currentAvatar={userData?.avatar}
+                currentCover={userData?.coverImage}
+                onAvatarChange={handleAvatarUpload}
+                onCoverChange={handleCoverUpload}
+                onClose={() => setShowImageEditor(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 MODAL DE DETALLE DE FOTO */}
+      {showPhotoModal && currentPhotoData && (
+          <PhotoDetailModal
+              photos={photos} // Array completo para navegación
+              currentPhotoIndex={selectedPhotoIndex} // Índice actual
+              photoData={currentPhotoData} // Objeto de datos de la foto actual
+              onClose={handleClosePhotoModal}
+              onNavigate={handleNavigatePhoto} // Manjeador de navegación
+              refreshParentData={refreshProfile}
+              totalPhotos={photos.length}
+          />
+      )}
+      
+      {/* 🚨 MODAL DE EDICIÓN DE FOTO (Implementación Funcional) */}
+      {showPhotoEditModal && photoToEditData && (
+          <PhotoEditModal
+              photo={photoToEditData}
+              onClose={handleClosePhotoEditModal}
+              onSave={handleSaveChanges}
+          />
+      )}
+
+      {/* Debug Info (omitido) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
+          <div className="space-y-1">
+            <div>Videos H: {videos.length}</div>
+            <div>Reels V: {reels.length}</div>
+            <div>Fotos: {photos.length}</div>
+            <div>Puntos: {totalPoints}</div>
+            <div>Tab: {activeTab}</div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default UserProfileSettings;
