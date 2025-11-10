@@ -378,7 +378,7 @@ const useUserPhotos = (userId) => {
 
   const fetchPhotos = useCallback(async () => {
     if (!userId) {
-      console.log('📸 DIAGNÓSTICO FOTOS: No userId provided, skipping photos fetch');
+      console.log('📸 No userId provided, skipping photos fetch');
       setPhotos([]);
       setLoading(false);
       return;
@@ -413,7 +413,7 @@ const useUserPhotos = (userId) => {
         setError(`Error de Supabase: ${fetchError.message}`);
         setPhotos([]);
       } else {
-        console.log(`✅ DIAGNÓSTICO FOTOS: Fotos obtenidas exitosamente. Cantidad: ${data?.length || 0}`);
+        console.log(`✅ Fotos obtenidas exitosamente. Cantidad: ${data?.length || 0}`);
         setPhotos(data || []);
       }
 
@@ -1184,8 +1184,8 @@ const UserProfileSettings = () => {
     photos: photos.length,
     purchases: purchases.length,
     points: transactions.length,
-    // Eliminamos las pestañas "Me Gusta" y "Listas"
-    // liked: 0, 
+    // Eliminamos las pestañas "Me Gusta" y "Listas" del conteo.
+    // liked: 0,
     // playlists: 0
   }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
 
@@ -1238,8 +1238,9 @@ const UserProfileSettings = () => {
   }, []);
 
   const handleQuickUploadSuccess = useCallback(async () => {
-    await Promise.all([refreshPhotos(), refreshProfile()]);
-    console.log('✅ Photos uploaded successfully');
+    // Es crucial que refreshPhotos recargue la lista de fotos tras la subida
+    await Promise.all([refreshPhotos(), refreshProfile()]); 
+    console.log('✅ Photos uploaded successfully and profile/photos refreshed');
   }, [refreshPhotos, refreshProfile]);
 
   const handleVideoAction = useCallback(async (action, video) => {
@@ -1386,23 +1387,12 @@ const UserProfileSettings = () => {
             photos={photos}
             loading={photosLoading}
             onQuickUpload={handleQuickUploadOpen}
-            onPhotoAction={handlePhotoAction} // PASAMOS EL HANDLER DE ACCIONES
             isOwner={true}
             fetchError={photosError} // Pasa el error para visualización
-            onPhotoClick={handlePhotoClick} // Pasa el manejador de clic
           />
         );
 
-      // 🚨 PESTAÑAS ELIMINADAS (Me Gusta y Listas)
-      /*
-      case 'liked':
-        return ( // ...
-        );
-      case 'playlists':
-        return ( // ...
-        );
-      */
-      
+      // Eliminadas las pestañas "Me Gusta" y "Listas"
       case 'purchases':
         return <PurchaseHistory purchases={purchases} />;
 
@@ -1466,80 +1456,6 @@ const UserProfileSettings = () => {
       </div>
     );
   }
-
-  // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
-  const PhotoEditModal = ({ photo, onClose, onSave }) => {
-    // Usar valores iniciales de la foto
-    const [caption, setCaption] = useState(photo.caption || '');
-    // Usamos el valor real de la columna 'description'
-    const [description, setDescription] = useState(photo.description || ''); 
-    const [isSaving, setIsSaving] = useState(false);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      
-      // Validar si los datos realmente cambiaron antes de guardar (Opcional)
-      if (caption === (photo.caption || '') && description === (photo.description || '')) {
-        onClose();
-        return;
-      }
-      
-      setIsSaving(true);
-      // Llamamos a la función de guardado con los estados actuales
-      await onSave(photo.id, caption, description);
-      // La función onSave se encarga de cerrar el modal y refrescar la lista.
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-card rounded-lg border max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold">Editar Metadatos de Foto</h2>
-            <Button variant="ghost" size="sm" onClick={onClose} disabled={isSaving}>
-              <Icon name="X" size={20} />
-            </Button>
-          </div>
-          
-          <p className="text-sm text-muted-foreground mb-4">
-            {`Editando foto ID: ${photo.id.slice(0, 8)}...`}
-          </p>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Campo Título/Caption */}
-            <input
-              type="text"
-              placeholder="Título/Caption"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              className="w-full border p-2 rounded bg-input text-foreground"
-              maxLength={150}
-            />
-            {/* Campo Descripción */}
-            <textarea
-              placeholder="Descripción (Opcional)"
-              rows="3"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border p-2 rounded bg-input text-foreground"
-              maxLength={500}
-            />
-            <Button type="submit" className="w-full" disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                'Guardar Cambios'
-              )}
-            </Button>
-          </form>
-          
-        </div>
-      </div>
-    );
-  };
-
 
   return (
     <>
@@ -1766,12 +1682,11 @@ const UserProfileSettings = () => {
                   {[
                     { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
-                    { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
-                    // 🚨 PESTAÑAS ELIMINADAS (Me Gusta y Listas)
-                    /*{ id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' },
-                    { id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists, color: 'text-purple-600' },*/
-                    { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' },
-                    { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
+                    { id: 'fotos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' }, // Usamos 'fotos' aquí
+                    //{ id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' }, // ELIMINADO
+                    //{ id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists, color: 'text-purple-600' }, // ELIMINADO
+                    { id: 'compras', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' }, // Usamos 'compras'
+                    { id: 'puntos', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' }, // Usamos 'puntos'
                     { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
                   ].map((tab) => (
                     <button
