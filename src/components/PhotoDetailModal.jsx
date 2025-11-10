@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase';
 import { trackGiveLike, trackComment, trackShareContent, MISSION_TYPES } from '../services/missionsService'; 
 import { useAuth } from '../contexts/AuthContext'; 
 
-// El componente ahora recibe el array de fotos completo y el índice actual.
 const PhotoDetailModal = ({ 
     photos,
     currentPhotoIndex,
@@ -25,225 +24,294 @@ const PhotoDetailModal = ({
     const [isLiking, setIsLiking] = useState(false);
     const [userHasLiked, setUserHasLiked] = useState(false);
     const [commentText, setCommentText] = useState('');
-    // 🚨 COMENTARIOS: Nuevo estado para la lista de comentarios
     const [comments, setComments] = useState([]);
-    const [isLoadingComments, setIsLoadingComments] = useState(true);
-
-    // 🚨 COMPARTIR/TOAST: Estado para la notificación tipo Sweet Alert
+    
+    // 🚨 NOTIFICACIÓN (TOAST)
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
 
-    const isFirstPhoto = currentPhotoIndex === 0;
-    const isLastPhoto = currentPhotoIndex === totalPhotos - 1;
+    const isOwner = user?.id === photoData?.user_id;
 
     // ===================================
-    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES
+    // FUNCIÓN DE NOTIFICACIÓN TOAST
     // ===================================
 
-    const showTemporaryToast = useCallback((message) => {
+    const showTemporaryToast = useCallback((message, duration = 3000) => {
         setToastMessage(message);
         setShowToast(true);
-        // Ocultar después de 3 segundos
         setTimeout(() => {
             setShowToast(false);
             setToastMessage('');
-        }, 3000);
+        }, duration);
     }, []);
 
-    const fetchInitialInteractions = useCallback(async (photoId) => {
-        if (!photoId || !user?.id) return;
 
-        setIsLiking(true); // Bloquea la acción de like durante la carga
-        setIsLoadingComments(true);
+    // ===================================
+    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (FETCH)
+    // ⭐️ SOLUCIÓN AL ERROR PGRST100 (JOIN SINTAXIS)
+    // ===================================
+    
+    const fetchInteractions = useCallback(async () => {
+        if (!photoData?.id || !user?.id) {
+            setLikeCount(photoData?.likes_count || 0);
+            setComments([]);
+            setUserHasLiked(false);
+            return;
+        }
 
         try {
-            // --- 1. Cargar Likes (Conteo y estado del usuario)
-            const { count: totalLikes, error: countError } = await supabase
-                .from('photo_likes')
+            // 1. OBTENER CONTEO DE LIKES
+            const { count: realLikeCount } = await supabase
+                .from('photo_likes') 
                 .select('*', { count: 'exact', head: true })
-                .eq('photo_id', photoId);
+                .eq('photo_id', photoData.id);
 
-            if (countError) throw countError;
-            setLikeCount(totalLikes || 0);
-
-            // Verificar si el usuario actual ha dado like
-            const { data: userLikeData, error: userLikeError } = await supabase
-                .from('photo_likes')
+            // 2. VERIFICAR SI EL USUARIO DIO LIKE
+            const { data: userLike } = await supabase
+                .from('photo_likes') 
                 .select('id')
-                .eq('photo_id', photoId)
+                .eq('photo_id', photoData.id)
                 .eq('user_id', user.id)
-                .single();
+                .maybeSingle(); 
             
-            // PGRST116: No rows found, que es el caso esperado si no ha dado like
-            if (userLikeError && userLikeError.code !== 'PGRST116') throw userLikeError; 
-            setUserHasLiked(!!userLikeData);
-
-            // --- 2. Cargar Comentarios
-            const { data: commentsData, error: commentsError } = await supabase
-                .from('photo_comments')
+            // 3. OBTENER COMENTARIOS (Sintaxis limpia para el JOIN con user_profiles)
+            const { data: fetchedComments, error: commentsError } = await supabase
+                .from('photo_comments') 
                 .select(`
                     id, 
                     content, 
                     created_at, 
-                    user_id,
-                    profiles (username) 
+                    // ⭐️ CORRECCIÓN A: Usamos la sintaxis de PostgREST más robusta
+                    // Asumimos que la FK user_id apunta a user_profiles, la tabla clave.
+                    user_profiles:user_id(full_name, username) 
                 `)
-                .eq('photo_id', photoId)
-                .order('created_at', { ascending: false }); 
+                .eq('photo_id', photoData.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+                
+            if (commentsError) {
+                // Registrar error PGRST100 si ocurre, pero no detener el flujo.
+                console.error("Error al cargar comentarios (RLS/JOIN):", commentsError);
+                throw commentsError; 
+            }
 
-            if (commentsError) throw commentsError;
-            setComments(commentsData || []);
+            setLikeCount(realLikeCount || 0); 
+            setUserHasLiked(!!userLike);
+            
+            // ⭐️ CORRECCIÓN B: Mapeo de comentarios
+            setComments(fetchedComments?.map(c => ({
+                ...c,
+                // c.user_profiles es el objeto de perfil según el nuevo alias
+                user: c.user_profiles?.full_name || `@${c.user_profiles?.username || 'Usuario'}`
+            })) || []);
 
         } catch (error) {
-            console.error('Error al cargar interacciones:', error);
-            // No hacemos reset de estados, se mantienen en 0 o vacíos
-        } finally {
-            setIsLiking(false);
-            setIsLoadingComments(false);
+            console.error("Error fetching photo interactions (Final Catch):", error);
+            setLikeCount(photoData?.likes_count || 0);
+            setUserHasLiked(false);
+            setComments([]);
         }
-    }, [user?.id]);
+    }, [photoData, user]);
 
     useEffect(() => {
-        if (photoData?.id) {
-            fetchInitialInteractions(photoData.id);
-        }
-    }, [photoData?.id, fetchInitialInteractions]);
+        fetchInteractions();
+        setCommentText(''); 
+    }, [fetchInteractions]);
 
+
+    // ===================================
+    // CORRECCIÓN CRÍTICA: TECLA ENTER
+    // ===================================
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+            
+            // Permitir navegación solo con flechas y solo si no estamos escribiendo
+            if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                 if (event.key === 'ArrowRight') {
+                    onNavigate('next');
+                } else if (event.key === 'ArrowLeft') {
+                    onNavigate('prev');
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onNavigate, onClose]);
+    
 
     // ===================================
     // MANEJADORES DE ACCIONES
     // ===================================
 
     // 🚨 "LIKE" NO FUNCIONA (FIX)
-    const handleLike = useCallback(async () => {
+    const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
-        const newLikedState = !userHasLiked;
-        const newLikeCount = newLikedState ? likeCount + 1 : likeCount - 1;
-        const previousLikedState = userHasLiked;
-        const previousLikeCount = likeCount;
-
-        // 1. Optimistic UI Update
-        setUserHasLiked(newLikedState);
-        setLikeCount(newLikeCount);
         setIsLiking(true);
+        const photoId = photoData.id;
+        const previousLikedState = userHasLiked;
 
         try {
-            if (newLikedState) {
-                // Agregar Like
-                const { error } = await supabase
-                    .from('photo_likes')
-                    .insert([{ user_id: user.id, photo_id: photoData.id }]);
-
-                if (error) throw error;
-                // 3. Mission Tracking
-                await trackGiveLike(user.id, photoData.id);
-
-            } else {
-                // Quitar Like
-                const { error } = await supabase
-                    .from('photo_likes')
+            if (userHasLiked) { 
+                // UNLIKE
+                const { error: deleteError } = await supabase
+                    .from('photo_likes') 
                     .delete()
                     .eq('user_id', user.id)
-                    .eq('photo_id', photoData.id);
+                    .eq('photo_id', photoId);
+
+                if (deleteError) throw deleteError;
                 
-                if (error) throw error;
+                setUserHasLiked(false);
+                setLikeCount(prevCount => Math.max(0, prevCount - 1));
+
+            } else { 
+                // LIKE
+                const { error: insertError } = await supabase
+                    .from('photo_likes') 
+                    .insert({ user_id: user.id, photo_id: photoId });
+                
+                if (insertError && insertError.code !== '23505') throw insertError;
+                
+                if (!insertError || insertError.code === '23505') {
+                    setUserHasLiked(true);
+                    setLikeCount(prevCount => prevCount + 1);
+
+                    // Lógica de tracking de puntos (Solo si NO es el dueño)
+                    if (!isOwner) {
+                        if (MISSION_TYPES?.GIVE_LIKE) {
+                            const trackingResult = await trackGiveLike('photo', photoId); 
+                            if (trackingResult.result === 'success') {
+                                showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 2000);
+                            }
+                        }
+                    }
+                }
             }
 
+            // Refrescar para asegurar consistencia
+            await fetchInteractions(); 
+            refreshParentData(); 
+
         } catch (error) {
-            console.error('Error al manejar el like:', error);
-            // 4. Revert UI on error
+            console.error('💥 Error al dar like:', error);
+            alert(`Error de interacción: ${error.message}`);
+            // Revertir estado y forzar fetch
             setUserHasLiked(previousLikedState);
-            setLikeCount(previousLikeCount);
-            showTemporaryToast('Error: No se pudo registrar el Like.');
-            
+            await fetchInteractions();
         } finally {
             setIsLiking(false);
         }
-    }, [user?.id, photoData?.id, userHasLiked, likeCount, isLiking, showTemporaryToast]);
+    }, [photoData, isLiking, userHasLiked, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
-    // 🚨 COMENTARIOS NO SE VEN (FIX: Lógica de envío)
-    const handleCommentSubmit = useCallback(async () => {
-        const content = commentText.trim();
-        if (!user?.id || !photoData?.id || content === '') return;
 
-        const temporaryText = commentText;
-        setCommentText(''); // Clear input optimistically
+    const handleCommentSubmit = useCallback(async (e) => {
+        e?.preventDefault(); 
+        
+        const comment = commentText.trim();
+        if (comment === '' || !user?.id) return;
+        
+        const tempComment = commentText;
 
         try {
-            // 1. Insertar en la BD
-            const { data, error } = await supabase
-                .from('photo_comments')
-                .insert([
-                    { user_id: user.id, photo_id: photoData.id, content: content }
-                ])
-                .select(`
-                    id, 
-                    content, 
-                    created_at, 
-                    user_id,
-                    profiles (username)
-                `)
-                .single();
+            // 1. Lógica de inserción
+            const { error: insertError } = await supabase
+                .from('photo_comments') 
+                .insert({ user_id: user.id, photo_id: photoData.id, content: comment });
 
-            if (error) throw error;
+            if (insertError) throw insertError;
+            
+            // 2. Actualizar UI localmente y refrescar
+            setCommentText(''); 
+            await fetchInteractions(); 
 
-            // 2. Mission Tracking
-            await trackComment(user.id, photoData.id);
-
-            // 3. Prepend el nuevo comentario al estado local
-            setComments(prevComments => [data, ...prevComments]);
-
+            // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
+            if (!isOwner) {
+                if (MISSION_TYPES?.COMMENT) {
+                    const trackingResult = await trackComment('photo', photoData.id); 
+                    if (trackingResult.result === 'success') {
+                         showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 2000);
+                        refreshParentData(); 
+                    }
+                }
+            }
         } catch (error) {
-            console.error('Error al enviar el comentario:', error);
-            setCommentText(temporaryText); // Revertir el texto
+            console.error('💥 Error al insertar o trackear comentario:', error);
+            setCommentText(tempComment); // Revertir texto si falla
             showTemporaryToast('Error al enviar el comentario.');
         }
-    }, [user?.id, photoData?.id, commentText, showTemporaryToast]);
+    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
-
-    // 🚨 AVISO DE COMPARTIR (FIX: Notificación tipo Sweet Alert)
+    // 🚨 FUNCIÓN COMPARTIR (FIX: Notificación Toast)
     const handleShare = useCallback(async () => {
-        if (!user?.id || !photoData?.id) return;
+        const shareUrl = `${window.location.origin}/photo/${photoData.id}`; 
+        const shareTitle = photoData.caption || "Mira esta foto!";
         
-        const shareUrl = `${window.location.origin}/photo/${photoData.id}`;
-        
-        try {
-            if (navigator.share) {
-                // Usar la API nativa de Web Share si está disponible
+        const callTracking = async (platform) => {
+             if (!isOwner) {
+                if (MISSION_TYPES?.SHARE_CONTENT) {
+                    const trackingResult = await trackShareContent('photo', photoData.id, platform); 
+                    if (trackingResult.result === 'success') {
+                         showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 3000);
+                        refreshParentData(); 
+                    } else if (trackingResult.result === 'already_paid') {
+                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 3000);
+                    }
+                }
+            } else {
+                showTemporaryToast("Compartiendo foto (No ganas puntos por tu contenido).", 3000);
+            }
+        };
+
+        if (navigator.share) {
+            try {
                 await navigator.share({
-                    title: `Mira esta foto de ${photoData.profile_username}`,
+                    title: shareTitle,
                     url: shareUrl,
                 });
-                showTemporaryToast('¡Enlace de la foto compartido!');
-            } else {
-                // Fallback: Copiar al portapapeles
-                await navigator.clipboard.writeText(shareUrl);
-                showTemporaryToast('¡Enlace de la foto copiado! (Comparte)');
-            }
-            
-            // Mission Tracking
-            await trackShareContent(user.id, photoData.id);
+                await callTracking('web_share_api'); 
 
-        } catch (error) {
-            // Manejar si el usuario cancela (AbortError) o si hay otro error
-            if (error.name !== 'AbortError') { 
-                console.error('Error al compartir/copiar:', error);
-                showTemporaryToast('Error al compartir el contenido.');
+            } catch (error) {
+                if (error.name !== 'AbortError') { 
+                     console.error('Web Share API falló:', error);
+                     showTemporaryToast('Error al abrir el diálogo de compartir.', 3000);
+                }
+            }
+        } else {
+            // Fallback: Copiar al portapapeles
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+                await callTracking('clipboard_share');
+                
+            } catch (error) {
+                console.error('Error al copiar al portapapeles:', error);
+                showTemporaryToast('Error al copiar el enlace.', 3000);
             }
         }
-    }, [user?.id, photoData?.id, showTemporaryToast]);
+    }, [photoData, refreshParentData, isOwner, showTemporaryToast]);
 
 
-    // ===================================
-    // RENDERIZADO
-    // ===================================
+    // Asignamos datos para la UI usando photoData real
+    const photoUrl = photoData?.image_url || photoData?.thumbnail_url; 
+    const photoCaption = photoData?.caption || 'Foto sin descripción';
+    const photoDescription = photoData?.description; 
+    
+    const userDisplayName = user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
+    const photoDate = new Date(photoData?.created_at).toLocaleDateString();
 
-    // ... (rest of the component structure)
+    const isFirstPhoto = currentPhotoIndex === 0;
+    const isLastPhoto = currentPhotoIndex === totalPhotos - 1;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-95">
-            {/* ... Flecha Izquierda (Existente) ... */}
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-0 sm:p-4">
+            
             {!isFirstPhoto && (
                 <Button
                     variant="ghost"
@@ -255,113 +323,101 @@ const PhotoDetailModal = ({
                 </Button>
             )}
 
-            {/* Contenedor principal del modal (Flex para foto y sidebar) */}
-            <div className="flex max-w-[90vw] max-h-[90vh] w-full h-full bg-background md:rounded-lg overflow-hidden">
-                {/* 1. Área de la Foto (Izquierda) */}
-                <div className="relative flex-1 flex items-center justify-center bg-black min-w-[50%]">
+            <div className="flex w-full max-w-7xl h-full sm:h-[95vh] bg-card sm:rounded-lg overflow-hidden shadow-2xl">
+                
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-0 left-0 m-4 text-white hover:bg-white/20 z-50"
+                    onClick={onClose}
+                >
+                    <Icon name="X" size={24} />
+                </Button>
+
+                <div className="flex-1 flex items-center justify-center relative bg-black">
                     <img 
-                        src={photoData.url} 
-                        alt={photoData.caption || 'Detalle de la foto'}
-                        className="max-w-full max-h-full object-contain"
+                        src={photoUrl}
+                        alt={`Foto de ${userDisplayName}`}
+                        className="max-h-full max-w-full object-contain"
                     />
                 </div>
+                
+                <div className="w-96 flex flex-col border-l border-border bg-background flex-shrink-0">
+                    
+                    <div className="p-4 border-b border-border flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" /> 
+                        <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-foreground truncate">{userDisplayName}</h4>
+                            <p className="text-xs text-muted-foreground">{photoDate}</p>
+                        </div>
+                    </div>
 
-                {/* 2. Sidebar de Interacciones (Derecha) */}
-                <div className="w-[380px] flex flex-col bg-background border-l border-border/50">
-                    {/* Header: Info del usuario y Toolbar */}
-                    <div className="p-4 border-b border-border/50 flex flex-col">
-                        <div className="flex items-center justify-between">
-                            {/* Info de Usuario */}
-                            <div className="flex items-center space-x-3">
-                                <div className="w-10 h-10 rounded-full bg-primary/70">
-                                    {/* Avatar del usuario (Placeholder) */}
-                                </div>
-                                <span className="text-white font-semibold">{photoData.profile_username}</span>
-                            </div>
-                            
-                            {/* Toolbar de Acciones */}
-                            <div className="flex items-center space-x-1">
-                                {/* Botón de Like (FIX) */}
-                                <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className={userHasLiked ? "text-red-500 hover:text-red-600" : "text-white hover:bg-white/20"}
-                                    onClick={handleLike} 
-                                    disabled={isLiking || !user?.id}
-                                >
-                                    <Icon name="Heart" fill={userHasLiked ? "currentColor" : "none"} size={20} />
-                                </Button>
-                                <span className="text-sm font-medium text-white/90 mr-2">{likeCount}</span>
-                                
-                                {/* Botón de Comentarios */}
-                                <Button size="icon" variant="ghost" className="text-white hover:bg-white/20">
-                                    <Icon name="MessageCircle" size={20} />
-                                </Button>
-                                
-                                {/* Botón de Compartir (FIX: llama a handleShare) */}
-                                <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="text-white hover:bg-white/20"
-                                    onClick={handleShare}
-                                >
-                                    <Icon name="Share2" size={20} />
-                                </Button>
-
-                                {/* Botón de Cerrar */}
-                                <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="text-white hover:bg-white/20" 
-                                    onClick={onClose}
-                                >
-                                    <Icon name="X" size={20} />
-                                </Button>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        
+                        {photoCaption && (
+                            <p className="font-semibold text-sm text-foreground">{photoCaption}</p> 
+                        )}
+                        
+                        {photoDescription && photoDescription !== photoCaption && (
+                            <p className="text-sm text-foreground mt-1">{photoDescription}</p>
+                        )}
+                        
+                        <div className="text-sm text-muted-foreground border-t border-border pt-4 mt-4">
+                            <p className="font-semibold mb-2 text-foreground">Comentarios:</p>
+                            <div className="space-y-3">
+                                {comments.length === 0 ? (
+                                    <p className="text-xs italic text-muted-foreground">Sé el primero en comentar.</p>
+                                ) : (
+                                    comments.map((c) => (
+                                        <div key={c.id} className="flex items-start space-x-2">
+                                            {/* Usamos el alias user_profiles que está configurado en el fetch */}
+                                            <span className="font-semibold text-foreground">{c.user || 'Usuario'}</span>
+                                            <span className="text-muted-foreground">{c.content}</span>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
-                        {/* Pie de foto */}
-                        {photoData.caption && (
-                            <p className="text-sm text-white/90 mt-2">{photoData.caption}</p>
-                        )}
                     </div>
                     
-                    {/* Área de Comentarios (FIX: Mapeo para que se vean) */}
-                    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                        {isLoadingComments ? (
-                            <p className="text-center text-sm text-muted-foreground">Cargando comentarios...</p>
-                        ) : comments.length > 0 ? (
-                            comments.map((comment, index) => (
-                                <div key={comment.id || index} className="flex items-start space-x-3">
-                                    <div className="w-8 h-8 rounded-full bg-gray-600 flex-shrink-0">
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-white/90">
-                                            {comment.profiles?.username || 'Usuario Desconocido'}
-                                            <span className="text-xs font-normal text-muted-foreground ml-2">
-                                                {new Date(comment.created_at).toLocaleDateString()}
-                                            </span>
-                                        </p>
-                                        <p className="text-sm text-white/80 break-words">{comment.content}</p>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-center text-sm text-muted-foreground">Sé el primero en comentar.</p>
-                        )}
-                    </div>
+                    <div className="p-4 border-t border-border">
+                        <div className="flex justify-between items-center mb-4">
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className={`
+                                    ${userHasLiked ? 'text-red-500 hover:bg-red-500/10' : 'text-muted-foreground hover:text-red-500 hover:bg-red-500/10'}
+                                    ${isLiking ? 'opacity-50' : ''}
+                                `}
+                                onClick={handleLikeToggle}
+                                disabled={isLiking}
+                            >
+                                <Icon name={userHasLiked ? "Heart" : "Heart"} fill={userHasLiked ? "currentColor" : "none"} size={18} className="mr-2" />
+                                Me Gusta ({likeCount})
+                            </Button>
 
-                    {/* Footer: Input de Comentarios */}
-                    <div className="p-4 border-t border-border/50">
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="text"
+                            <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={handleShare}
+                            >
+                                <Icon name="Share2" size={18} className="mr-2" />
+                                Compartir
+                            </Button>
+                        </div>
+                        
+                        <div className="flex space-x-2">
+                            <input 
+                                type="text" 
                                 placeholder="Añade un comentario..."
                                 value={commentText}
                                 onChange={(e) => setCommentText(e.target.value)}
                                 className="flex-1 bg-muted/50 border border-border rounded-full px-4 py-2 text-sm focus:ring-primary focus:border-primary"
                                 onKeyDown={(e) => {
+                                    // CORRECCIÓN: Prevenir la propagación de la tecla Enter
                                     if (e.key === 'Enter' && commentText.trim() !== '') {
-                                        handleCommentSubmit();
+                                        e.preventDefault(); 
+                                        handleCommentSubmit(e);
                                     }
                                 }}
                             />
@@ -378,7 +434,6 @@ const PhotoDetailModal = ({
                 </div>
             </div>
 
-            {/* Botones de Navegación (Existentes) */}
              {!isLastPhoto && (
                 <Button
                     variant="ghost"
@@ -390,10 +445,10 @@ const PhotoDetailModal = ({
                 </Button>
             )}
             
-            {/* 🚨 TOAST/SWEET ALERT para COMPARTIR (FIX: Notificación) */}
+            {/* 🚨 TOAST NOTIFICATION COMPONENT */}
             {showToast && (
                 <div 
-                    className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-[100] p-3 rounded-lg bg-primary text-primary-foreground shadow-xl transition-all duration-500"
+                    className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] p-3 rounded-lg bg-primary text-primary-foreground shadow-xl transition-all duration-500 opacity-100"
                     style={{ animation: 'slideUp 0.3s forwards' }}
                 >
                     <p className="text-sm font-medium">{toastMessage}</p>
