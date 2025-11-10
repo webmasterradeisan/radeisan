@@ -1,29 +1,28 @@
-// src/Routes.jsx - VERSIÓN FINAL CON PERFIL PÚBLICO (Mínimas modificaciones a la base que funciona)
+// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Solucionado el error de resolución de módulo 'pages/...')
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
-import ScrollToTop from "components/ScrollToTop";
-import ErrorBoundary from "components/ErrorBoundary";
-import { AuthProvider } from "contexts/AuthContext";
-import { PointsProvider } from "contexts/PointsContext";
+import ScrollToTop from "./components/ScrollToTop.jsx"; // Corregida
+import ErrorBoundary from "./components/ErrorBoundary.jsx"; // Corregida
+import { AuthProvider } from "./contexts/AuthContext";
+import { PointsProvider } from "./contexts/PointsContext";
 
 // SISTEMA ORIGINAL MANTENIDO
-// 🚨 FIX NECESARIO: Agregamos ProtectedAdminRoute, ya que es usado en las rutas admin.
-import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "components/ProtectedRoute";
+import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "./components/ProtectedRoute.jsx"; // Corregida
 
 // MOBILE LAYOUT PARA APLICAR GRADUALMENTE
-import MobileLayout from "components/ui/MobileLayout";
+import MobileLayout from "./components/ui/MobileLayout.jsx"; // Corregida
 
 // ===============================
 // PÁGINAS DE APLICACIÓN
 // ===============================
-import LandingPage from './pages/LandingPage';
+import LandingPage from './pages/LandingPage.jsx'; // Añadida extensión
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import VideoFeedDashboard from './pages/video-feed-dashboard';
 import VideoUploadStudio from './pages/video-upload-studio';
 import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
-import NotFound from "pages/NotFound";
+import NotFound from "./pages/NotFound.jsx"; // Corregida
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
@@ -34,25 +33,23 @@ import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
-// 🚨 FIX DE BUILD: Usamos el nombre de archivo correcto
 import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
 // 🚨 COMPONENTE NUEVO: Perfil Público
-// 🚨 NUEVA IMPORTACIÓN: Usamos el path que ya funcionó
 import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
-import AdminDashboard from "pages/admin-panel/AdminDashboard";
-import AdminUsers from "pages/admin-panel/AdminUsers";
-import AdminVideos from "pages/admin-panel/AdminVideos";
-import AdminPoints from "pages/admin-panel/AdminPoints";
-import AdminBlogs from "pages/admin-panel/AdminBlogs";
+// 🚨 FIX: Convertir a rutas relativas explícitas (asumiendo que están en src/pages/admin-panel)
+import AdminDashboard from "./pages/admin-panel/AdminDashboard.jsx";
+import AdminUsers from "./pages/admin-panel/AdminUsers.jsx";
+import AdminVideos from "./pages/admin-panel/AdminVideos.jsx";
+import AdminPoints from "./pages/admin-panel/AdminPoints.jsx";
+import AdminBlogs from "./pages/admin-panel/AdminBlogs.jsx";
 
 // Otras Páginas (asumidas)
-// 🚫 Eliminada la importación de PricingPage
-import PrivacyPolicy from "pages/PrivacyPolicy";
-import TermsOfService from "pages/TermsOfService";
-import Unauthorized from "pages/Unauthorized";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx"; // Corregida
+import TermsOfService from "./pages/TermsOfService.jsx"; // Corregida
+import Unauthorized from "./pages/Unauthorized.jsx"; // Corregida
 
 
 const Routes = () => {
@@ -97,13 +94,13 @@ const Routes = () => {
               <Route path="/video/:videoId" element={<VideoPlayerPage />} />
               <Route path="/reels" element={<ReelsPage />} />
               
-              {/* 🚨 FIX: Redirige /pricing a la página de compra de puntos, ya que PricingPage no existe */}
+              {/* FIX: Redirige /pricing a la página de compra de puntos */}
               <Route path="/pricing" element={<Navigate to="/purchase-points" replace />} />
               
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚨 NUEVA RUTA: PERFIL PÚBLICO (Accesible por cualquiera) */}
+              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
               <Route 
                 path="/profile/:username" 
                 element={
@@ -145,15 +142,14 @@ const Routes = () => {
                 </ProtectedRoute>
               } />
 
-              {/* RUTA DE CONFIGURACIÓN DEL USUARIO LOGUEADO */}
-              {/* 🚨 FIX DE CONFLICTO: Movida a /settings/profile para evitar choque con /profile/:username */}
+              {/* 🚨 PERFIL DEL DUEÑO: Ruta estática para la configuración del usuario logueado */}
               <Route path="/settings/profile" element={
                 <ProtectedRoute>
                   <UserProfileSettings />
                 </ProtectedRoute>
               } />
               
-              {/* Redirects para rutas antiguas y el link base del usuario logueado */}
+              {/* Redirects de rutas antiguas o comunes a /settings/profile */}
               <Route path="/user-profile-settings" element={<Navigate to="/settings/profile" replace />} />
               <Route path="/user/profile" element={<Navigate to="/settings/profile" replace />} />
               <Route path="/profile" element={<Navigate to="/settings/profile" replace />} />
