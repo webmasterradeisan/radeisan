@@ -378,7 +378,7 @@ const useUserPhotos = (userId) => {
 
   const fetchPhotos = useCallback(async () => {
     if (!userId) {
-      console.log('📸 DIAGNÓSTICO FOTOS: No userId proporcionado al hook.');
+      console.log('📸 DIAGNÓSTICO FOTOS: No userId provided, skipping photos fetch');
       setPhotos([]);
       setLoading(false);
       return;
@@ -388,9 +388,8 @@ const useUserPhotos = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
+      console.log('📸 Fetching photos for user:', userId);
 
-      // 🚨 SELECCIÓN CORREGIDA: Incluimos 'description' y 'caption'
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -410,7 +409,7 @@ const useUserPhotos = (userId) => {
         .limit(50);
 
       if (fetchError) {
-        console.error('❌ DIAGNÓSTICO FOTOS: Error al obtener fotos:', fetchError);
+        console.error('❌ Error fetching photos:', fetchError);
         setError(`Error de Supabase: ${fetchError.message}`);
         setPhotos([]);
       } else {
@@ -419,7 +418,7 @@ const useUserPhotos = (userId) => {
       }
 
     } catch (err) {
-      console.error('💥 DIAGNÓSTICO FOTOS: Error inesperado en fetchPhotos:', err);
+      console.error('💥 Error in fetchPhotos:', err);
       setError(err.message);
       setPhotos([]);
     } finally {
@@ -1086,7 +1085,8 @@ const UserProfileSettings = () => {
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
-  const [showImageEditor, setShowImageEditor] = useState(false);
+  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto
+  const [showImageEditor, setShowImageEditor] = useState(false); 
 
   // 🚨 ESTADOS PARA EL MODAL DE DETALLE DE FOTO
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -1226,10 +1226,10 @@ const UserProfileSettings = () => {
     refreshPhotos(); // Refrescar la lista si se hizo una edición
   }, [refreshPhotos]);
 
-  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO (CORREGIDO)
+  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO 
   const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
     try {
-      // 🚨 CORRECCIÓN CLAVE: La columna 'description' DEBE existir ahora.
+      // 🚨 CORRECCIÓN: Si la columna 'description' existe, se guarda.
       const updates = {
         caption: newCaption,
         description: newDescription, 
@@ -1326,7 +1326,7 @@ const UserProfileSettings = () => {
     };
   }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
 
-
+  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto (mantener por compatibilidad)
   // [Resto de event handlers sin cambios funcionales]
   
   const handleEditProfile = useCallback(() => {
@@ -1349,11 +1349,14 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile, refreshProfile]);
 
+  // 🚨 OPTIMIZACIÓN DE HANDLERS DE IMAGEN DE PERFIL/PORTADA
   const handleEditAvatar = useCallback(() => {
+    // Abrir el editor de imágenes general
     setShowImageEditor(true);
   }, []);
 
   const handleEditCover = useCallback(() => {
+    // Abrir el editor de imágenes general
     setShowImageEditor(true);
   }, []);
 
@@ -1922,7 +1925,7 @@ const UserProfileSettings = () => {
               </div>
             </div>
 
-            {/* Profile Tabs (omitido) */}
+            {/* Profile Tabs */}
             <div className="mb-8">
               <div className="border-b border-border">
                 <nav className="flex space-x-8 overflow-x-auto">
