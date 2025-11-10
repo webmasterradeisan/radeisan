@@ -390,7 +390,7 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
 
-      // Eliminadas las referencias a 'likes', 'comments_count' y 'file_size'
+      // Eliminadas las referencias a 'likes', 'comments_count' y 'file_size' (CORRECCIÓN FINAL)
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -859,8 +859,6 @@ const VideoGridComponent = ({
   );
 };
 
-// ... (omitted ReelsGridComponent, etc.)
-
 // ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
@@ -1186,7 +1184,7 @@ const UserProfileSettings = () => {
         );
 
       case 'reels':
-        // ... (omitted rendering logic)
+        // 🚨 MANEJO DE ERRORES ROBUSTO PARA REELS
         if (reelsError) {
           return (
             <div className="text-center py-16">
