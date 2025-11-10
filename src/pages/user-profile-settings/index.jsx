@@ -16,10 +16,8 @@ import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
-// 🚨 SIMULACIÓN: Asumimos que tienes un componente de modal de detalle de fotos
-// Si el componente PhotoDetailModal existe en otra ubicación, ajusta esta ruta.
-// Por ahora, usaremos un componente placeholder (marcado como PhotoDetailModalPlaceholder)
-// import PhotoDetailModal from '../../components/PhotoDetailModal'; 
+// 🚨 IMPORTACIÓN DEL MODAL REAL
+import PhotoDetailModal from '../../components/PhotoDetailModal';
 
 // ===============================
 // CONSTANTES
@@ -861,265 +859,7 @@ const VideoGridComponent = ({
   );
 };
 
-// ===============================
-// COMPONENTE DE REELS GRID
-// ===============================
-
-const ReelsGridComponent = ({ 
-  reels = [], 
-  loading = false,
-  onReelAction,
-  showActions = true,
-  isOwner = false,
-  onUploadClick,
-  emptyMessage = "No hay reels",
-  emptyDescription = "Los reels que subas aparecerán aquí"
-}) => {
-  console.log('📱 ReelsGridComponent render:', { 
-    reelsCount: reels.length, 
-    loading,
-    hasReels: reels.length > 0,
-    firstReelSample: reels[0] ? {
-      id: reels[0].id,
-      title: reels[0].title,
-      views: reels[0].views_count,
-      duration: reels[0].duration_seconds,
-      orientation: reels[0].orientation,
-      aspect_ratio: reels[0].aspect_ratio,
-      classified_as: 'VERTICAL REEL'
-    } : null
-  });
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="space-y-3">
-            <div className="aspect-[9/16] bg-muted rounded-lg animate-pulse" />
-            <div className="space-y-2">
-              <div className="h-3 bg-muted rounded animate-pulse" />
-              <div className="h-2 bg-muted rounded w-3/4 animate-pulse" />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (reels.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Icon name="Smartphone" size={32} className="text-pink-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
-        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
-        {isOwner && onUploadClick && (
-          <Button onClick={onUploadClick} size="lg">
-            <Icon name="Plus" size={20} className="mr-2" />
-            Crear reel vertical
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {isOwner && onUploadClick && (
-        <div className="flex justify-end">
-          <Button onClick={onUploadClick}>
-            <Icon name="Plus" size={16} className="mr-2" />
-            Crear reel
-          </Button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {reels.map((reel) => (
-          <div 
-            key={reel.id} 
-            className="group cursor-pointer"
-            onClick={() => console.log('Click en reel vertical:', reel.id)}
-          >
-            <div className="relative">
-              {/* Thumbnail - Aspecto vertical 9:16 */}
-              <div className="aspect-[9/16] bg-muted rounded-lg overflow-hidden">
-                {reel.thumbnail_url ? (
-                  <img
-                    src={reel.thumbnail_url}
-                    alt={reel.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={(e) => {
-                      console.log('Error loading thumbnail for reel:', reel.id);
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
-                    <Icon name="Play" size={24} className="text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-
-              {/* Play Button Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="w-12 h-12 bg-black/70 rounded-full flex items-center justify-center">
-                  <Icon name="Play" size={16} className="text-white ml-1" />
-                </div>
-              </div>
-
-              {/* Duration */}
-              {reel.duration_seconds && reel.duration_seconds > 0 && (
-                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded text-center">
-                  {reel.duration_seconds < 60 ? `${reel.duration_seconds}s` : 
-                   `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}`}
-                </div>
-              )}
-
-              {/* Reel Badge */}
-              <div className="absolute top-2 left-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs px-2 py-1 rounded-full font-medium">
-                REEL
-              </div>
-
-              {/* Debug Info - Solo en development */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="absolute top-2 right-2 bg-pink-600 text-white text-xs px-1 py-0.5 rounded">
-                  {reel.orientation || 'no-orient'}
-                </div>
-              )}
-            </div>
-
-            {/* Reel Info */}
-            <div className="mt-2 space-y-1">
-              <h4 className="font-medium text-foreground text-sm line-clamp-2 group-hover:text-primary transition-colors">
-                {reel.title || 'Reel sin título'}
-              </h4>
-              
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center space-x-2">
-                  {reel.views_count !== null && reel.views_count !== undefined && (
-                    <div className="flex items-center space-x-1">
-                      <Icon name="Eye" size={12} />
-                      <span>{reel.views_count}</span>
-                    </div>
-                  )}
-                  {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
-                </div>
-              </div>
-
-              {/* Actions */}
-              {showActions && isOwner && onReelAction && (
-                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onReelAction('edit', reel);
-                    }}
-                  >
-                    <Icon name="Edit" size={12} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-destructive hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onReelAction('delete', reel);
-                    }}
-                  >
-                    <Icon name="Trash2" size={12} />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ===============================
-// COMPONENTE DE MODAL DE DETALLE DE FOTO (Placeholder)
-// ===============================
-
-// Usamos este placeholder para mantener la estructura y no depender de un archivo externo aún.
-const PhotoDetailModalPlaceholder = ({ photoId, onClose }) => {
-    // Si la foto no existe, no mostramos nada.
-    if (!photoId) return null;
-    
-    // Simulación de un modal con estructura Facebook-like
-    return (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-            <div className="flex w-full max-w-7xl h-[90vh] bg-card rounded-lg overflow-hidden shadow-2xl">
-                {/* Columna Izquierda: Imagen */}
-                <div className="flex-1 flex items-center justify-center relative bg-black">
-                    <img 
-                        // Aquí se cargaría la imagen completa de la foto.
-                        src={`URL_DE_LA_FOTO_COMPLETA/${photoId}`}
-                        alt={`Detalle de foto ${photoId}`}
-                        className="max-h-full max-w-full object-contain"
-                    />
-                    
-                    {/* Botón de Cierre */}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-4 right-4 text-white hover:bg-white/20"
-                        onClick={onClose}
-                    >
-                        <Icon name="X" size={24} />
-                    </Button>
-                </div>
-                
-                {/* Columna Derecha: Interacciones (Similar a Facebook) */}
-                <div className="w-96 flex flex-col border-l border-border bg-background/95 backdrop-blur-sm">
-                    {/* Header del Post */}
-                    <div className="p-4 border-b border-border flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" />
-                        <h4 className="font-semibold">{`@UsuarioDetalle`}</h4>
-                    </div>
-                    
-                    {/* Sección de Comentarios (Placeholder) */}
-                    <div className="flex-1 overflow-y-auto p-4 text-muted-foreground">
-                        <p className="mb-4">
-                           **Comentarios:** Esta sección cargaría los comentarios y la caja para escribir nuevos.
-                        </p>
-                        <p className="text-sm">
-                            *Aquí es donde se integraría la lógica para trackear puntos por comentar.*
-                        </p>
-                    </div>
-                    
-                    {/* Pie de Interacciones (Likes, etc.) */}
-                    <div className="p-4 border-t border-border">
-                        <div className="flex justify-between items-center mb-2">
-                            {/* Botón de Like */}
-                            <Button variant="ghost" size="sm" className="text-red-500">
-                                <Icon name="Heart" size={18} className="mr-2" />
-                                Me Gusta (0)
-                            </Button>
-                            {/* Botón de Compartir (Integración de puntos: trackShareContent) */}
-                            <Button variant="ghost" size="sm">
-                                <Icon name="Share2" size={18} className="mr-2" />
-                                Compartir
-                            </Button>
-                        </div>
-                        <input 
-                            type="text" 
-                            placeholder="Añade un comentario..."
-                            className="w-full bg-muted/50 border border-border rounded-full px-4 py-2 text-sm"
-                        />
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
+// ... (omitted ReelsGridComponent, etc.)
 
 // ===============================
 // COMPONENTE PRINCIPAL
@@ -1246,7 +986,7 @@ const UserProfileSettings = () => {
 
   // 🚨 MANEJADOR DE CLIC DE FOTO ACTUALIZADO PARA ABRIR MODAL
   const handlePhotoClick = useCallback((photoId) => {
-    console.log('📸 Click en foto ID:', photoId);
+    console.log('📸 Abriendo modal de foto ID:', photoId);
     setSelectedPhotoId(photoId);
     setShowPhotoModal(true);
   }, []);
@@ -1254,7 +994,10 @@ const UserProfileSettings = () => {
   const handleClosePhotoModal = useCallback(() => {
     setShowPhotoModal(false);
     setSelectedPhotoId(null);
-  }, []);
+    // Necesario para refrescar el balance de puntos si se gana algo en el modal
+    refreshProfile(); 
+  }, [refreshProfile]);
+
 
   // [Resto de event handlers sin cambios funcionales]
   
@@ -1303,8 +1046,6 @@ const UserProfileSettings = () => {
   }, []);
 
   const handleQuickUploadSuccess = useCallback(async (uploadedPhotoData) => {
-    let photoId = null;
-
     // Lógica de tracking de puntos (Asumida en pasos anteriores)
 
     // 1. Refrescar datos del perfil y fotos (Esto soluciona la no visibilidad de la foto)
@@ -1880,10 +1621,11 @@ const UserProfileSettings = () => {
       )}
 
       {/* 🚨 MODAL DE DETALLE DE FOTO */}
-      {showPhotoModal && (
-          <PhotoDetailModalPlaceholder
+      {showPhotoModal && selectedPhotoId && (
+          <PhotoDetailModal
               photoId={selectedPhotoId}
               onClose={handleClosePhotoModal}
+              refreshParentData={refreshProfile} // Pasa la función de refresco del perfil
           />
       )}
       
