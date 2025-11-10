@@ -2,8 +2,7 @@
 // UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
-// CAMBIO CRÍTICO: Revertida la ruta de importación para evitar el error de Rollup
-import { useAuth } from '../../contexts/AuthContext'; 
+import { useAuth } from '../../contexts/AuthContext';
 import { usePoints } from '../../contexts/PointsContext'; 
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
@@ -375,7 +374,7 @@ const useUserPhotos = (userId) => {
 
   const fetchPhotos = useCallback(async () => {
     if (!userId) {
-      console.log('📸 DIAGNÓSTICO FOTOS: No userId proporcionado al hook.');
+      console.log('📸 No userId provided, skipping photos fetch');
       setPhotos([]);
       setLoading(false);
       return;
@@ -385,7 +384,7 @@ const useUserPhotos = (userId) => {
       setLoading(true);
       setError(null);
 
-      console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
+      console.log('📸 Fetching photos for user:', userId);
 
       const { data, error: fetchError } = await supabase
         .from('photos')
@@ -408,16 +407,15 @@ const useUserPhotos = (userId) => {
         .limit(50);
 
       if (fetchError) {
-        console.error('❌ DIAGNÓSTICO FOTOS: Error al obtener fotos:', fetchError);
-        setError(`Error de Supabase: ${fetchError.message}`);
-        setPhotos([]);
-      } else {
-        console.log(`✅ DIAGNÓSTICO FOTOS: Fotos obtenidas exitosamente. Cantidad: ${data?.length || 0}`);
-        setPhotos(data || []);
+        console.error('❌ Error fetching photos:', fetchError);
+        throw fetchError;
       }
 
+      console.log('✅ Photos fetched successfully:', data?.length || 0);
+      setPhotos(data || []);
+
     } catch (err) {
-      console.error('💥 DIAGNÓSTICO FOTOS: Error inesperado en fetchPhotos:', err);
+      console.error('💥 Error in fetchPhotos:', err);
       setError(err.message);
       setPhotos([]);
     } finally {
@@ -562,8 +560,7 @@ const PhotoGrid = ({
   loading = false, 
   onQuickUpload,
   isOwner = false,
-  showUploadButton = true,
-  fetchError = null // Se añade el error del fetcher para mostrarlo
+  showUploadButton = true 
 }) => {
   if (loading) {
     return (
@@ -575,23 +572,6 @@ const PhotoGrid = ({
     );
   }
 
-  // Nuevo bloque para mostrar error si existe
-  if (fetchError) {
-    return (
-      <div className="text-center py-16">
-        <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar las fotos</h3>
-        <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded max-w-lg mx-auto">
-          {fetchError}
-        </p>
-        <Button onClick={() => window.location.reload()}>
-          <Icon name="RefreshCw" size={16} className="mr-2" />
-          Reintentar Carga
-        </Button>
-      </div>
-    );
-  }
-  
   if (photos.length === 0) {
     return (
       <div className="text-center py-16">
@@ -609,6 +589,7 @@ const PhotoGrid = ({
         </p>
         {isOwner && showUploadButton && (
           <div className="flex justify-center gap-4">
+            {/* MODIFICACIÓN SOLICITADA: Eliminado Subida Rápida y estilizado Studio Avanzado como botón principal */}
             <Button 
               onClick={() => window.location.href = '/photo-upload'} 
               size="lg"
@@ -626,6 +607,7 @@ const PhotoGrid = ({
     <div className="space-y-6">
       {isOwner && showUploadButton && (
         <div className="flex justify-end gap-3">
+          {/* Mantenemos Subir Más como Subida Rápida para coherencia de UX al tener ya fotos */}
           <Button onClick={onQuickUpload}>
             <Icon name="Plus" size={16} className="mr-2" />
             Subir Más
@@ -1086,8 +1068,7 @@ const UserProfileSettings = () => {
   const {
     photos,
     loading: photosLoading,
-    refresh: refreshPhotos,
-    error: photosError // Captura el error de fotos
+    refresh: refreshPhotos
   } = useUserPhotos(user?.id);
 
   const { 
@@ -1354,7 +1335,6 @@ const UserProfileSettings = () => {
             loading={photosLoading}
             onQuickUpload={handleQuickUploadOpen}
             isOwner={true}
-            fetchError={photosError} // Pasa el error para visualización
           />
         );
 
