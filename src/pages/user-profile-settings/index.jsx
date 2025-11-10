@@ -186,7 +186,6 @@ const useUserVideos = (userId) => {
       
       const allVideos = data || [];
       const horizontalVideos = allVideos.filter(video => {
-        // Hacemos el filtro robusto
         const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
         const isHorizontal = realOrientation === VIDEO_ORIENTATIONS.HORIZONTAL;
         
@@ -312,7 +311,6 @@ const useUserReels = (userId) => {
 
       const allVideos = data || [];
       const verticalVideos = allVideos.filter(video => {
-        // Hacemos el filtro robusto
         const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
         const isVertical = realOrientation === VIDEO_ORIENTATIONS.VERTICAL;
         
@@ -1203,6 +1201,27 @@ const UserProfileSettings = () => {
     }
     setSelectedPhotoIndex(newIndex);
   }, [photos, selectedPhotoIndex]);
+
+  // ⭐️ INTEGRACIÓN DE TECLADO ⭐️
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (showPhotoModal) {
+        if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') {
+          handleNavigatePhoto('next');
+        } else if (event.key === 'ArrowLeft') {
+          handleNavigatePhoto('prev');
+        } else if (event.key === 'Escape') {
+          handleClosePhotoModal();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
 
 
   // [Resto de event handlers sin cambios funcionales]
