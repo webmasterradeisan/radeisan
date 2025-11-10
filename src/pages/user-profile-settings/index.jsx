@@ -1089,6 +1089,7 @@ const UserProfileSettings = () => {
 
   // 🚨 ESTADOS PARA EL MODAL DE DETALLE DE FOTO
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  // Usamos el índice para facilitar la navegación del carrusel
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
   
   // 🚨 ESTADOS PARA EL MODAL DE EDICIÓN
@@ -1217,14 +1218,48 @@ const UserProfileSettings = () => {
     refreshProfile(); 
   }, [refreshProfile]);
 
-  // 🚨 NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
+  // CIERRE DEL MODAL DE EDICIÓN
+  const handleClosePhotoEditModal = useCallback(() => {
+    setShowPhotoEditModal(false);
+    setPhotoToEditData(null);
+    refreshPhotos(); // Refrescar la lista si se hizo una edición
+  }, [refreshPhotos]);
+
+  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO
+  const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
+    try {
+      const updates = {
+        caption: newCaption,
+        // Asumiendo que 'bio' o 'description' en la tabla es 'description'
+        // Si no tienes una columna 'description' en 'photos', usa solo 'caption'
+        // description: newDescription, 
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('photos')
+        .update(updates)
+        .eq('id', photoId);
+
+      if (error) throw error;
+
+      console.log(`✅ Metadatos de foto ${photoId} guardados exitosamente.`);
+      handleClosePhotoEditModal(); // Cerrar y refrescar lista
+    } catch (error) {
+      console.error('❌ Error al guardar cambios de foto:', error);
+      alert(`Error al guardar cambios: ${error.message}`);
+    }
+  }, [handleClosePhotoEditModal]);
+
+
+  // NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
   const handlePhotoAction = useCallback(async (action, photo) => {
     try {
       switch (action) {
         case 'edit':
           console.log('Abriendo edición de foto:', photo.id);
-          setPhotoToEditData(photo);
-          setShowPhotoEditModal(true); // Abrir el modal de edición
+          setPhotoToEditData(photo); // Carga los datos de la foto en el estado
+          setShowPhotoEditModal(true); // Abre el modal de edición
           break;
         case 'delete':
           if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
@@ -1250,13 +1285,6 @@ const UserProfileSettings = () => {
       console.error('Error con la acción de foto:', error);
     }
   }, [refreshPhotos, refreshProfile]);
-
-  // CIERRE DEL MODAL DE EDICIÓN
-  const handleClosePhotoEditModal = useCallback(() => {
-    setShowPhotoEditModal(false);
-    setPhotoToEditData(null);
-    refreshPhotos(); // Refrescar la lista si se hizo una edición
-  }, [refreshPhotos]);
 
   // MANEJADOR DE NAVEGACIÓN ENTRE FOTOS
   const handleNavigatePhoto = useCallback((direction) => {
@@ -1598,6 +1626,71 @@ const UserProfileSettings = () => {
     );
   }
 
+  // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
+  const PhotoEditModal = ({ photo, onClose, onSave }) => {
+    const [caption, setCaption] = useState(photo.caption || '');
+    // Asumiendo que la descripción se guarda en una columna llamada 'description' si existe
+    const [description, setDescription] = useState(photo.description || ''); 
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setIsSaving(true);
+      await onSave(photo.id, caption, description);
+      setIsSaving(false);
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-card rounded-lg border max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">Editar Metadatos de Foto</h2>
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={isSaving}>
+              <Icon name="X" size={20} />
+            </Button>
+          </div>
+          
+          <p className="text-sm text-muted-foreground mb-4">
+            {`Editando foto ID: ${photo.id.slice(0, 8)}...`}
+          </p>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Título/Caption"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              className="w-full border p-2 rounded bg-input text-foreground"
+              maxLength={150}
+              required
+            />
+            {/* Si no hay columna de descripción, este textarea debe eliminarse */}
+            <textarea
+              placeholder="Descripción (Opcional)"
+              rows="3"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full border p-2 rounded bg-input text-foreground"
+              maxLength={500}
+            />
+            <Button type="submit" className="w-full" disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Guardar Cambios'
+              )}
+            </Button>
+          </form>
+          
+        </div>
+      </div>
+    );
+  };
+
+
   return (
     <>
       <Helmet>
@@ -1930,41 +2023,13 @@ const UserProfileSettings = () => {
           />
       )}
       
-      {/* 🚨 MODAL DE EDICIÓN DE FOTO (Placeholder) */}
+      {/* 🚨 MODAL DE EDICIÓN DE FOTO (Implementación Funcional) */}
       {showPhotoEditModal && photoToEditData && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-lg border max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">Editar Metadatos de Foto</h2>
-              <Button variant="ghost" size="sm" onClick={handleClosePhotoEditModal}>
-                <Icon name="X" size={20} />
-              </Button>
-            </div>
-            
-            <p className="text-sm text-muted-foreground mb-4">
-              {`Editando foto ID: ${photoToEditData.id.slice(0, 8)}...`}
-            </p>
-            
-            {/* Aquí irían los campos de formulario para Title, Caption, Tags, etc. */}
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Título/Caption"
-                defaultValue={photoToEditData.caption || ''}
-                className="w-full border p-2 rounded"
-              />
-              <textarea
-                placeholder="Descripción"
-                rows="3"
-                className="w-full border p-2 rounded"
-              />
-              <Button onClick={handleClosePhotoEditModal} className="w-full">
-                Guardar Cambios
-              </Button>
-            </div>
-            
-          </div>
-        </div>
+          <PhotoEditModal
+              photo={photoToEditData}
+              onClose={handleClosePhotoEditModal}
+              onSave={handleSaveChanges}
+          />
       )}
 
       {/* Debug Info (omitido) */}
