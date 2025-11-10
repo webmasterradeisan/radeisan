@@ -1,21 +1,23 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Solucionado el error de path de LandingPage)
+// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (RUTAS RELATIVAS EXPLÍCITAS)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
-import ScrollToTop from "components/ScrollToTop";
-import ErrorBoundary from "components/ErrorBoundary";
-import { AuthProvider } from "contexts/AuthContext";
-import { PointsProvider } from "contexts/PointsContext";
 
-// SISTEMA ORIGINAL MANTENIDO
-import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "components/ProtectedRoute";
+// FIX: Convertir alias de componentes base a rutas relativas explícitas
+import ScrollToTop from "./components/ScrollToTop";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { AuthProvider } from "./contexts/AuthContext";
+import { PointsProvider } from "./contexts/PointsContext";
 
-// MOBILE LAYOUT PARA APLICAR GRADUALMENTE
-import MobileLayout from "components/ui/MobileLayout";
+// FIX: Convertir alias de componentes base a rutas relativas explícitas
+import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "./components/ProtectedRoute";
+
+// FIX: Convertir alias de componentes base a rutas relativas explícitas
+import MobileLayout from "./components/ui/MobileLayout";
 
 // ===============================
 // PÁGINAS DE APLICACIÓN
 // ===============================
-// 🚨 FIX FINAL: Usando la ruta exacta confirmada por el usuario
+// FIX FINAL: Ruta exacta confirmada por el usuario
 import LandingPage from './pages/LandingPage/index.jsx'; 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -23,7 +25,7 @@ import VideoFeedDashboard from './pages/video-feed-dashboard';
 import VideoUploadStudio from './pages/video-upload-studio';
 import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
-import NotFound from "pages/NotFound";
+import NotFound from "./pages/NotFound"; 
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
@@ -36,20 +38,22 @@ import PointsRewardsStore from './pages/points-rewards-store';
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
-// 🚨 COMPONENTE NUEVO: Perfil Público (Se mantiene la adición solicitada)
+// 🚨 COMPONENTE NUEVO: Perfil Público
 import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
-import AdminDashboard from "pages/admin-panel/AdminDashboard";
-import AdminUsers from "pages/admin-panel/AdminUsers";
-import AdminVideos from "pages/admin-panel/AdminVideos";
-import AdminPoints from "pages/admin-panel/AdminPoints";
-import AdminBlogs from "pages/admin-panel/AdminBlogs";
+// FIX CRÍTICO: Reemplazar rutas de alias (AdminDashboard, AdminUsers, etc.)
+// Se asume la ubicación src/pages/admin-panel/...
+import AdminDashboard from './pages/admin-panel/AdminDashboard.jsx'; 
+import AdminUsers from './pages/admin-panel/AdminUsers.jsx';
+import AdminVideos from './pages/admin-panel/AdminVideos.jsx';
+import AdminPoints from './pages/admin-panel/AdminPoints.jsx';
+import AdminBlogs from './pages/admin-panel/AdminBlogs.jsx';
 
 // Otras Páginas (asumidas)
-import PrivacyPolicy from "pages/PrivacyPolicy";
-import TermsOfService from "pages/TermsOfService";
-import Unauthorized from "pages/Unauthorized";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import Unauthorized from "./pages/Unauthorized";
 
 
 const Routes = () => {
@@ -100,7 +104,7 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚨 RUTA DE PERFIL PÚBLICO: La funcionalidad solicitada */}
+              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
               <Route 
                 path="/profile/:username" 
                 element={
