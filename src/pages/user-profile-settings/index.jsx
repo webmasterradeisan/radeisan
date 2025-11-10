@@ -390,7 +390,7 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
 
-      // Eliminadas las referencias a 'likes', 'comments_count' y 'file_size' (CORRECCIÓN FINAL)
+      // 🚨 CORRECCIÓN: Eliminado el comentario que causaba el error de parseo en Supabase.
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -403,7 +403,6 @@ const useUserPhotos = (userId) => {
           aspect_ratio,
           created_at,
           user_id,
-          // 🚨 NOTA: Aseguramos que la columna 'description' exista o usamos 'caption' como backup
           description 
         `)
         .eq('user_id', userId)
@@ -1232,18 +1231,21 @@ const UserProfileSettings = () => {
     try {
       const updates = {
         // Aseguramos que el campo 'caption' se actualice.
-        // Los emojis y caracteres UNICODE son manejados por PostgreSQL de forma nativa.
         caption: newCaption,
-        // 🚨 CAMBIO CRÍTICO: Si la tabla 'photos' no tiene una columna 'description',
-        // se debe verificar. Asumimos que sí existe una columna de descripción,
-        // si no existe, la lógica de Supabase fallará y deberías eliminar esta línea.
+        // 🚨 CAMBIO CLAVE: Enviamos la descripción. Si la columna 'description' no existe,
+        // esto fallará, y solo deberíamos enviar 'caption'.
         description: newDescription, 
         updated_at: new Date().toISOString()
       };
+      
+      // Filtramos las claves nulas o indefinidas si el schema es estricto
+      const validUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, v]) => v !== null && v !== undefined)
+      );
 
       const { error } = await supabase
         .from('photos')
-        .update(updates)
+        .update(validUpdates)
         .eq('id', photoId);
 
       if (error) throw error;
@@ -1252,7 +1254,7 @@ const UserProfileSettings = () => {
       handleClosePhotoEditModal(); // Cerrar y refrescar lista
     } catch (error) {
       console.error('❌ Error al guardar cambios de foto:', error);
-      alert(`Error al guardar cambios: ${error.message}. Verifique el nombre de las columnas (caption/description) en la BD.`);
+      alert(`Error al guardar cambios: ${error.message}. Si el error persiste, la columna 'description' podría no existir en tu tabla de fotos.`);
     }
   }, [handleClosePhotoEditModal]);
 
@@ -1633,13 +1635,15 @@ const UserProfileSettings = () => {
 
   // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
   const PhotoEditModal = ({ photo, onClose, onSave }) => {
-    // 🚨 CORRECCIÓN 1: Usar valores iniciales de la foto y asegurar manejo de undefined
+    // 🚨 CORRECCIÓN: Usar valores iniciales de la foto
     const [caption, setCaption] = useState(photo.caption || '');
+    // Asumimos que la columna 'description' existe y la inicializamos.
     const [description, setDescription] = useState(photo.description || ''); 
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSubmit = async (e) => {
       e.preventDefault();
+      
       // Validar si los datos realmente cambiaron antes de guardar (Opcional)
       if (caption === (photo.caption || '') && description === (photo.description || '')) {
         onClose();
@@ -1647,10 +1651,9 @@ const UserProfileSettings = () => {
       }
       
       setIsSaving(true);
-      // 🚨 Llamamos a la función de guardado con los estados actuales
+      // Llamamos a la función de guardado con los estados actuales
       await onSave(photo.id, caption, description);
       // La función onSave se encarga de cerrar el modal y refrescar la lista.
-      // Ya no hacemos setIsSaving(false) aquí porque onSave llama a onClose.
     };
 
     return (
@@ -1668,6 +1671,7 @@ const UserProfileSettings = () => {
           </p>
           
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Campo Título/Caption */}
             <input
               type="text"
               placeholder="Título/Caption"
@@ -1675,9 +1679,8 @@ const UserProfileSettings = () => {
               onChange={(e) => setCaption(e.target.value)}
               className="w-full border p-2 rounded bg-input text-foreground"
               maxLength={150}
-              // 🚨 Emojis se permiten por defecto en inputs modernos, solo requerimos manejo de valor.
             />
-            {/* Si no hay columna de descripción, este textarea debe eliminarse */}
+            {/* Campo Descripción */}
             <textarea
               placeholder="Descripción (Opcional)"
               rows="3"
