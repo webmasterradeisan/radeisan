@@ -1,6 +1,6 @@
 // src/components/ProfileImageEditor.jsx
 // Editor completo de imágenes de perfil y portada para RADEISAN
-// VERSIÓN CORREGIDA - Soluciona problema del recorte
+// VERSIÓN CORREGIDA - Soluciona problema del recorte y escalado
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop } from 'react-image-crop';
 import imageCompression from 'browser-image-compression';
@@ -74,11 +74,6 @@ const getCroppedCanvas = (image, pixelCrop, targetWidth, targetHeight) => {
   // Aplicar suavizado para mejor calidad
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-
-  console.log('🖼️ Dimensiones imagen:', { 
-    natural: { width: image.naturalWidth, height: image.naturalHeight },
-    displayed: { width: image.width, height: image.height }
-  });
 
   // Dibujar imagen recortada y redimensionada
   ctx.drawImage(
@@ -193,7 +188,7 @@ const useImageEditor = () => {
       // Generar canvas recortado
       const canvas = getCroppedCanvas(
         image, 
-        pixelCrop, 
+        pixelCrop, // Ya está en píxeles correctos (naturales)
         config.dimensions.width, 
         config.dimensions.height
       );
@@ -339,11 +334,11 @@ const CropEditor = ({
     }
   }, [imageFile]);
 
-  // Configurar crop inicial cuando la imagen carga
+  // Configurar crop inicial cuando la imagen carga (CORREGIDO)
   const onImageLoad = useCallback((e) => {
-    const { width, height } = e.currentTarget;
+    const { naturalWidth, naturalHeight } = e.currentTarget;
     
-    console.log('📐 Imagen cargada para crop:', { width, height });
+    console.log('📐 Imagen cargada para crop:', { naturalWidth, naturalHeight });
     
     const initialCrop = centerCrop(
       makeAspectCrop(
@@ -352,17 +347,17 @@ const CropEditor = ({
           width: 90,
         },
         config.aspect,
-        width,
-        height,
+        naturalWidth, // 🚨 Usamos naturalWidth
+        naturalHeight, // 🚨 Usamos naturalHeight
       ),
-      width,
-      height,
+      naturalWidth,
+      naturalHeight,
     );
     
     setCrop(initialCrop);
     
-    // Convertir a píxeles inmediatamente
-    const pixelCrop = convertToPixelCrop(initialCrop, width, height);
+    // Convertir a píxeles inmediatamente (usando dimensiones naturales)
+    const pixelCrop = convertToPixelCrop(initialCrop, naturalWidth, naturalHeight);
     setCompletedCrop(pixelCrop);
     
     console.log('🎯 Crop inicial establecido:', { initialCrop, pixelCrop });
@@ -371,19 +366,30 @@ const CropEditor = ({
   // Manejar cambio de crop
   const onCropChange = useCallback((pixelCrop, percentCrop) => {
     setCrop(percentCrop);
+    // Nota: pixelCrop aquí es relativo a la imagen en pantalla.
   }, []);
 
   // Manejar crop completado (CORREGIDO)
   const onCropComplete = useCallback((pixelCrop, percentCrop) => {
     console.log('✂️ Crop completado:', { pixelCrop, percentCrop });
     
-    if (pixelCrop && validateCrop(pixelCrop)) {
-      setCompletedCrop(pixelCrop);
+    const { naturalWidth, naturalHeight } = imgRef.current;
+    
+    // 🚨 CONVERSIÓN CRÍTICA: Convierte el crop porcentual al tamaño real de píxeles
+    const finalPixelCrop = convertToPixelCrop(
+        percentCrop, 
+        naturalWidth, 
+        naturalHeight
+    );
+    
+    if (finalPixelCrop && validateCrop(finalPixelCrop)) {
+      setCompletedCrop(finalPixelCrop);
       
       // Actualizar previews
       if (imgRef.current) {
-        const avatarCanvas = createPreviewCanvas(imgRef.current, pixelCrop, { width: 128, height: 128 });
-        const coverCanvas = createPreviewCanvas(imgRef.current, pixelCrop, { width: 320, height: 137 });
+        // Usamos finalPixelCrop para dibujar la previsualización
+        const avatarCanvas = createPreviewCanvas(imgRef.current, finalPixelCrop, { width: 128, height: 128 });
+        const coverCanvas = createPreviewCanvas(imgRef.current, finalPixelCrop, { width: 320, height: 137 });
         
         setPreviewCanvases({
           avatar: avatarCanvas,
@@ -395,7 +401,8 @@ const CropEditor = ({
 
   // Procesar y subir (CORREGIDO)
   const handleSave = async () => {
-    if (!completedCrop || !imgRef.current || !validateCrop(completedCrop)) {
+    // Si ya tenemos un completedCrop (que ahora está en píxeles correctos)
+    if (!completedCrop || !validateCrop(completedCrop)) {
       setError('Por favor ajusta el recorte de la imagen correctamente');
       return;
     }
@@ -404,7 +411,7 @@ const CropEditor = ({
 
     const result = await uploadProcessedImage(
       imageFile, 
-      completedCrop, // Ya está en píxeles
+      completedCrop, // completedCrop ya tiene las dimensiones correctas (naturales)
       config, 
       imageType
     );
@@ -485,23 +492,26 @@ const CropEditor = ({
                 <div className="space-y-4">
                   
                   {/* Preview Avatar */}
-                  {imageType === 'avatar' && previewCanvases.avatar && (
+                  {imageType === 'avatar' && (
                     <div className="text-center">
                       <div className="relative inline-block">
                         <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-primary/20 mx-auto">
-                          <canvas
-                            ref={(canvas) => {
-                              if (canvas && previewCanvases.avatar) {
-                                const ctx = canvas.getContext('2d');
-                                if (ctx) {
-                                  canvas.width = 128;
-                                  canvas.height = 128;
-                                  ctx.drawImage(previewCanvases.avatar, 0, 0);
+                          {previewCanvases.avatar && (
+                            <canvas
+                              // Usamos el canvas de previsualización directamente si está disponible
+                              ref={(canvas) => {
+                                if (canvas && previewCanvases.avatar) {
+                                  const ctx = canvas.getContext('2d');
+                                  if (ctx) {
+                                    canvas.width = 128;
+                                    canvas.height = 128;
+                                    ctx.drawImage(previewCanvases.avatar, 0, 0, 128, 128);
+                                  }
                                 }
-                              }
-                            }}
-                            className="w-full h-full object-cover"
-                          />
+                              }}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </div>
                       </div>
                       <p className="text-sm text-muted-foreground mt-2">
@@ -511,22 +521,24 @@ const CropEditor = ({
                   )}
 
                   {/* Preview Cover */}
-                  {imageType === 'cover' && previewCanvases.cover && (
+                  {imageType === 'cover' && (
                     <div>
                       <div className="w-full aspect-[21/9] rounded-lg overflow-hidden border">
-                        <canvas
-                          ref={(canvas) => {
-                            if (canvas && previewCanvases.cover) {
-                              const ctx = canvas.getContext('2d');
-                              if (ctx) {
-                                canvas.width = 320;
-                                canvas.height = 137;
-                                ctx.drawImage(previewCanvases.cover, 0, 0);
-                              }
-                            }
-                          }}
-                          className="w-full h-full object-cover"
-                        />
+                        {previewCanvases.cover && (
+                            <canvas
+                              ref={(canvas) => {
+                                if (canvas && previewCanvases.cover) {
+                                  const ctx = canvas.getContext('2d');
+                                  if (ctx) {
+                                    canvas.width = 320;
+                                    canvas.height = 137;
+                                    ctx.drawImage(previewCanvases.cover, 0, 0, 320, 137);
+                                  }
+                                }
+                              }}
+                              className="w-full h-full object-cover"
+                            />
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-2">
                         Como se verá en tu perfil
@@ -694,6 +706,7 @@ const ProfileImageEditor = ({
     console.log('❌ Edición cancelada');
     setEditingType(null);
     setSelectedFile(null);
+    onClose?.(); // Llama al onClose pasado por el padre (index.jsx)
   };
 
   // Eliminar imagen de portada
@@ -721,7 +734,7 @@ const ProfileImageEditor = ({
                 }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center">
                 <Icon name="User" size={24} color="var(--color-muted-foreground)" />
               </div>
             )}
