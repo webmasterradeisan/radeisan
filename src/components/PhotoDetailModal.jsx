@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Icon from './AppIcon'; 
 import Button from './ui/Button'; 
 import { supabase } from '../lib/supabase'; 
-// 🚨 INTEGRACIÓN DE PUNTOS: Importar las funciones de tracking
+// 🚨 INTEGRACIÓN DE PUNTOS
 import { trackGiveLike, trackComment, trackShareContent, MISSION_TYPES } from '../services/missionsService'; 
 import { useAuth } from '../contexts/AuthContext'; 
 
@@ -20,15 +20,14 @@ const PhotoDetailModal = ({
     
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
-    const [userHasLiked, setUserHasLiked] = useState(false); // Usamos booleano para el estado del like
+    const [userHasLiked, setUserHasLiked] = useState(false); 
     const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
     
-    // Nueva constante para verificar la propiedad del contenido
     const isOwner = user?.id === photoData?.user_id;
 
     // ===================================
-    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (CRÍTICA)
+    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (FETCH)
     // ===================================
     
     const fetchInteractions = useCallback(async () => {
@@ -40,73 +39,68 @@ const PhotoDetailModal = ({
         }
 
         try {
-            // 1. OBTENER CONTEO DE LIKES
-            const { count: realLikeCount, error: countError } = await supabase
+            // 1. OBTENER CONTEO DE LIKES (Prueba C)
+            const { count: realLikeCount } = await supabase
                 .from('photo_likes') 
                 .select('*', { count: 'exact' })
                 .eq('photo_id', photoData.id);
 
-            // 2. VERIFICAR SI EL USUARIO DIO LIKE
-            // ⭐️ CORRECCIÓN DE SINTAXIS: Eliminado el 'const' duplicado ⭐️
+            // 2. VERIFICAR SI EL USUARIO DIO LIKE (Prueba B)
             const { data: userLike } = await supabase
                 .from('photo_likes') 
                 .select('id')
                 .eq('photo_id', photoData.id)
                 .eq('user_id', user.id)
-                .maybeSingle();
+                .maybeSingle(); 
 
-            // 3. OBTENER COMENTARIOS (Sintaxis corregida para PGRST100)
+            // 3. OBTENER COMENTARIOS (Prueba A - Solución a la invisibilidad)
             const { data: fetchedComments, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`
                     id, 
                     content, 
                     created_at, 
-                    // Usamos el nombre de la FK 'user_id' para el join implícito
                     user_id!inner(full_name, username) 
                 `)
                 .eq('photo_id', photoData.id)
                 .order('created_at', { ascending: false })
                 .limit(50);
                 
-            if (countError || commentsError) {
-                // Notar el error solo en el console. No detener el flujo.
-                console.error("Error al cargar interacciones:", countError || commentsError);
+            if (commentsError) {
+                console.error("Error RLS/DB al cargar comentarios:", commentsError);
+                throw commentsError; 
             }
 
             setLikeCount(realLikeCount || 0); 
-            setUserHasLiked(!!userLike);
+            setUserHasLiked(!!userLike); 
             
-            // Mapeo de comentarios: el resultado del join viene como 'user_id'
+            // ⭐️ CORRECCIÓN A: Mapeo de comentarios
             setComments(fetchedComments?.map(c => ({
                 ...c,
+                // c.user_id ahora es el objeto de perfil, según el join
                 user: c.user_id?.full_name || `@${c.user_id?.username || 'Usuario'}`
             })) || []);
 
         } catch (error) {
             console.error("Error fetching photo interactions:", error);
-            // Fallback en caso de error de lectura
             setLikeCount(photoData?.likes_count || 0);
             setUserHasLiked(false);
             setComments([]);
         }
     }, [photoData, user]);
 
-    // AJUSTE: Reiniciar el estado del comentario y refrescar interacciones al cambiar de foto
     useEffect(() => {
         fetchInteractions();
         setCommentText(''); 
     }, [fetchInteractions]);
 
 
-    // CORRECCIÓN DE USABILIDAD: Prevenir navegación con Enter
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
                 onClose();
             }
             
-            // Permitir navegación solo con flechas y solo si no estamos escribiendo
             if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
                  if (event.key === 'ArrowRight') {
                     onNavigate('next');
@@ -125,46 +119,18 @@ const PhotoDetailModal = ({
     
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Like
+    // INTEGRACIÓN DE PUNTOS: Like (Con corrección de UX y lógica)
     // ===================================
 
     const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
         setIsLiking(true);
-        const actionType = userHasLiked ? 'unlike' : 'like';
         const photoId = photoData.id;
 
         try {
-            if (actionType === 'like') {
-                // 1. REGISTRAR LIKE (Lógica de negocio)
-                const { error: insertError } = await supabase
-                    .from('photo_likes') 
-                    .insert({ user_id: user.id, photo_id: photoId });
-                
-                // MANEJO DE ERROR 409 (23505): Si el like ya existe
-                if (insertError) {
-                    if (insertError.code === '23505') {
-                        console.warn('Like ya existe (409/23505). No se vuelve a trackear.');
-                    } else {
-                        throw insertError;
-                    }
-                }
-                
-                // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si NO es el dueño)
-                if (!isOwner && (!insertError || insertError.code === '23505')) {
-                    if (MISSION_TYPES?.GIVE_LIKE) {
-                        const trackingResult = await trackGiveLike('photo', photoId); 
-                        if (trackingResult.result === 'success') {
-                            console.log(`✅ Puntos ganados por like: ${trackingResult.points_earned}`);
-                        } else if (trackingResult.result === 'already_paid') {
-                            console.log('Anti-Farming: Puntos ya ganados por este item.');
-                        }
-                    }
-                }
-                
-            } else if (actionType === 'unlike') {
-                // 1. ELIMINAR LIKE
+            if (userHasLiked) { 
+                // UNLIKE
                 const { error: deleteError } = await supabase
                     .from('photo_likes') 
                     .delete()
@@ -172,15 +138,48 @@ const PhotoDetailModal = ({
                     .eq('photo_id', photoId);
 
                 if (deleteError) throw deleteError;
+                
+                // Actualizar UI localmente (Mejor UX)
+                setUserHasLiked(false);
+                setLikeCount(prevCount => Math.max(0, prevCount - 1));
+
+            } else { 
+                // LIKE (Solución al "no funciona")
+                const { error: insertError } = await supabase
+                    .from('photo_likes') 
+                    .insert({ user_id: user.id, photo_id: photoId });
+                
+                if (insertError) {
+                    if (insertError.code === '23505') {
+                        console.warn('Like ya existe (409). Se asume like exitoso anterior.');
+                        setUserHasLiked(true); 
+                    } else {
+                        throw insertError;
+                    }
+                } else {
+                    // Inserción limpia: actualiza UI localmente
+                    setUserHasLiked(true);
+                    setLikeCount(prevCount => prevCount + 1);
+                }
+                
+                // Lógica de tracking de puntos (Solo si NO es el dueño)
+                if (!isOwner && (!insertError || insertError.code === '23505')) {
+                    if (MISSION_TYPES?.GIVE_LIKE) {
+                        const trackingResult = await trackGiveLike('photo', photoId); 
+                        if (trackingResult.result === 'success') {
+                            console.log(`✅ Puntos ganados por like: ${trackingResult.points_earned}`);
+                        }
+                    }
+                }
             }
 
-            // 3. REFRESCO Y UI
             await fetchInteractions();
             refreshParentData(); 
 
         } catch (error) {
-            console.error('💥 Error al dar like y trackear misión:', error);
+            console.error('💥 Error al dar like:', error);
             alert(`Error de interacción: ${error.message}`);
+            await fetchInteractions(); // Resincronizar
         } finally {
             setIsLiking(false);
         }
@@ -190,42 +189,30 @@ const PhotoDetailModal = ({
     // INTEGRACIÓN DE PUNTOS: Comentario
     // ===================================
     const handleCommentSubmit = useCallback(async (e) => {
-        // Detener el evento para prevenir la navegación global (Enter)
         e?.preventDefault(); 
         
         const comment = commentText.trim();
         if (comment === '' || !user?.id) return;
         
         try {
-            // 1. Lógica de inserción de comentario (DB)
             const { error: insertError } = await supabase
                 .from('photo_comments') 
-                .insert({ 
-                    user_id: user.id, 
-                    photo_id: photoData.id, 
-                    content: comment 
-                });
+                .insert({ user_id: user.id, photo_id: photoData.id, content: comment });
 
             if (insertError) throw insertError;
             
-            // Actualizar UI localmente y refrescar
             setCommentText(''); 
-            await fetchInteractions(); 
+            await fetchInteractions(); // Refrescar para ver el nuevo comentario
 
-            // 2. Lógica de tracking de puntos (Solo si NO es el dueño)
             if (!isOwner) {
                 if (MISSION_TYPES?.COMMENT) {
                     const trackingResult = await trackComment('photo', photoData.id); 
                     if (trackingResult.result === 'success') {
                         console.log(`✅ Puntos ganados por comentario: ${trackingResult.points_earned}`);
                         refreshParentData(); 
-                    } else if (trackingResult.result === 'already_paid') {
-                        console.log('Anti-Farming: Puntos ya ganados por comentar este item.');
                     }
                 }
             }
-
-
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
             alert(`Error al comentar: ${error.message}`);
@@ -233,32 +220,58 @@ const PhotoDetailModal = ({
     }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner]);
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Compartir
+    // INTEGRACIÓN DE PUNTOS: Compartir (Mejorado)
     // ===================================
     const handleShare = useCallback(async () => {
-        console.log(`Compartiendo foto ID: ${photoData.id}`);
+        // La URL debe ser la URL canónica de la foto
+        const shareUrl = `${window.location.origin}/photo/${photoData.id}`; 
+        const shareTitle = photoData.caption || "Mira esta foto!";
         
-        // 1. Lógica de negocio (Opcional: registro de share)
-        
-        // 2. Lógica de tracking de puntos (Solo si NO es el dueño)
-        if (!isOwner) {
-            if (MISSION_TYPES?.SHARE_CONTENT) {
-                 try {
-                    // trackShareContent usa 'photoId' como referenceId
-                    const trackingResult = await trackShareContent('photo', photoData.id, 'app_share'); 
+        // Función auxiliar para llamar al tracking
+        const callTracking = async (platform) => {
+             if (!isOwner) {
+                if (MISSION_TYPES?.SHARE_CONTENT) {
+                    const trackingResult = await trackShareContent('photo', photoData.id, platform); 
                     if (trackingResult.result === 'success') {
-                        console.log(`✅ Puntos ganados por compartir: ${trackingResult.points_earned}`);
-                        alert(`¡Foto compartida! Has ganado ${trackingResult.points_earned} puntos.`);
+                        alert(`¡Compartido y puntos ganados! +${trackingResult.points_earned} puntos.`);
                         refreshParentData(); 
                     } else if (trackingResult.result === 'already_paid') {
                         alert("Ya ganaste puntos por compartir este contenido hoy.");
                     }
-                 } catch (error) {
-                    console.error('💥 Error al trackear compartir:', error);
-                 }
+                }
+            } else {
+                alert("Compartiendo foto... (No ganas puntos por compartir tu propio contenido)");
+            }
+        };
+
+        if (navigator.share) {
+            // Intentar Web Share API
+            try {
+                await navigator.share({
+                    title: shareTitle,
+                    url: shareUrl,
+                });
+                await callTracking('web_share_api'); 
+
+            } catch (error) {
+                // Si el usuario cancela (AbortError) o falla, hacemos el fallback
+                if (error.name !== 'AbortError') { 
+                     console.error('Web Share API falló:', error);
+                     // Continuar al fallback de portapapeles
+                } else {
+                    console.log("Compartir cancelado por el usuario.");
+                }
             }
         } else {
-            alert("Compartiendo foto... (No ganas puntos por compartir tu propio contenido)");
+            // Fallback para desktop/navegadores sin soporte: Copiar al portapapeles
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+                await callTracking('clipboard_share');
+                
+            } catch (error) {
+                console.error('Error al copiar al portapapeles:', error);
+                alert("Error al copiar el enlace.");
+            }
         }
     }, [photoData, refreshParentData, isOwner]);
 
@@ -268,18 +281,15 @@ const PhotoDetailModal = ({
     const photoCaption = photoData?.caption || 'Foto sin descripción';
     const photoDescription = photoData?.description; 
     
-    // Obtenemos el nombre del usuario de la sesión, asumimos que el perfil completo no se pasa al modal
     const userDisplayName = user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
     const photoDate = new Date(photoData?.created_at).toLocaleDateString();
 
     const isFirstPhoto = currentPhotoIndex === 0;
     const isLastPhoto = currentPhotoIndex === totalPhotos - 1;
 
-    // Estructura del Modal 
     return (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-0 sm:p-4">
             
-            {/* 🚨 Botón de Flecha Izquierda */}
             {!isFirstPhoto && (
                 <Button
                     variant="ghost"
@@ -293,7 +303,6 @@ const PhotoDetailModal = ({
 
             <div className="flex w-full max-w-7xl h-full sm:h-[95vh] bg-card sm:rounded-lg overflow-hidden shadow-2xl">
                 
-                {/* Botón de Cierre (esquina superior izquierda) */}
                 <Button
                     variant="ghost"
                     size="icon"
@@ -303,7 +312,6 @@ const PhotoDetailModal = ({
                     <Icon name="X" size={24} />
                 </Button>
 
-                {/* Columna Izquierda: Imagen */}
                 <div className="flex-1 flex items-center justify-center relative bg-black">
                     <img 
                         src={photoUrl}
@@ -312,12 +320,9 @@ const PhotoDetailModal = ({
                     />
                 </div>
                 
-                {/* Columna Derecha: Interacciones */}
                 <div className="w-96 flex flex-col border-l border-border bg-background flex-shrink-0">
                     
-                    {/* Header del Post/Usuario */}
                     <div className="p-4 border-b border-border flex items-center space-x-3">
-                        {/* Avatar */}
                         <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" /> 
                         <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-foreground truncate">{userDisplayName}</h4>
@@ -325,22 +330,18 @@ const PhotoDetailModal = ({
                         </div>
                     </div>
 
-                    {/* Contenido/Comentarios */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         
-                        {/* Título/Caption */}
                         {photoCaption && (
                             <p className="font-semibold text-sm text-foreground">{photoCaption}</p> 
                         )}
                         
-                        {/* 🚨 DESCRIPCIÓN CORREGIDA: Se muestra si existe y es diferente al título */}
                         {photoDescription && photoDescription !== photoCaption && (
                             <p className="text-sm text-foreground mt-1">{photoDescription}</p>
                         )}
                         
                         <div className="text-sm text-muted-foreground border-t border-border pt-4 mt-4">
                             <p className="font-semibold mb-2 text-foreground">Comentarios:</p>
-                            {/* Lista de Comentarios */}
                             <div className="space-y-3">
                                 {comments.length === 0 ? (
                                     <p className="text-xs italic text-muted-foreground">Todavía no hay comentarios.</p>
@@ -356,10 +357,8 @@ const PhotoDetailModal = ({
                         </div>
                     </div>
                     
-                    {/* Pie de Interacciones (Likes, Comentar Input) */}
                     <div className="p-4 border-t border-border">
                         <div className="flex justify-between items-center mb-4">
-                            {/* Botón de Like */}
                             <Button 
                                 variant="ghost" 
                                 size="sm" 
@@ -374,7 +373,6 @@ const PhotoDetailModal = ({
                                 Me Gusta ({likeCount})
                             </Button>
 
-                            {/* Botón de Compartir */}
                             <Button 
                                 variant="ghost" 
                                 size="sm"
@@ -393,7 +391,6 @@ const PhotoDetailModal = ({
                                 onChange={(e) => setCommentText(e.target.value)}
                                 className="flex-1 bg-muted/50 border border-border rounded-full px-4 py-2 text-sm focus:ring-primary focus:border-primary"
                                 onKeyDown={(e) => {
-                                    // CORRECCIÓN: Prevenir la propagación de la tecla Enter
                                     if (e.key === 'Enter' && commentText.trim() !== '') {
                                         e.preventDefault(); 
                                         handleCommentSubmit(e);
@@ -413,7 +410,6 @@ const PhotoDetailModal = ({
                 </div>
             </div>
 
-            {/* 🚨 Botón de Flecha Derecha */}
              {!isLastPhoto && (
                 <Button
                     variant="ghost"
