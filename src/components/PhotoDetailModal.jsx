@@ -1,78 +1,65 @@
 // src/components/PhotoDetailModal.jsx
-import React, { useState, useEffect, useCallback } from 'react'; // <-- CORREGIDO: "react-react" a "react"
+import React, { useState, useEffect, useCallback } from 'react'; 
 import Icon from './AppIcon'; // Asumiendo que AppIcon es el componente de iconos
 import Button from './ui/Button'; // Asumiendo que Button es el componente UI
-import { supabase } from '../lib/supabase'; // Para cargar los datos de la foto
+import { supabase } from '../lib/supabase'; 
 // 🚨 INTEGRACIÓN DE PUNTOS: Importar las funciones de tracking
 import { trackGiveLike, MISSION_TYPES } from '../services/missionsService'; 
 import { useAuth } from '../contexts/AuthContext'; // Para obtener el user.id
 
-const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
+// El componente ahora recibe el objeto de la foto (photoData)
+const PhotoDetailModal = ({ photoData, onClose, refreshParentData }) => {
     const { user } = useAuth();
-    const [photoData, setPhotoData] = useState(null);
+    
+    // 🚨 ESTADOS TEMPORALES: Estos deben sincronizarse con la BD.
+    // Usamos el ID de la foto como clave para el useEffect de carga de likes.
+    const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
-    const [likeCount, setLikeCount] = useState(0); // Debe ser cargado desde BD o tabla separada
-    const [loading, setLoading] = useState(true);
 
     // ===================================
-    // LÓGICA DE CARGA DE DATOS (MOCK)
+    // LÓGICA DE CARGA DE LIKES (Real / Mocked)
     // ===================================
-
+    
+    // **NOTA:** Aquí se debe hacer un fetch real a la tabla 'photo_likes' para 
+    // obtener el número de likes y si el usuario actual ya dio like.
     useEffect(() => {
-        if (!photoId) return;
+        // Mock de sincronización de likes (Debe ser reemplazado por un fetch)
+        // Usamos un número fijo (12) y el caption para simular el nombre de usuario
+        const mockLikes = photoData.id.slice(-2).match(/\d+/g)?.[0] || 5; 
+        setLikeCount(parseInt(mockLikes) + 10); 
+    }, [photoData]);
 
-        // 🚨 NOTA: La carga de datos REAL debería hacerse aquí.
-        // Por ahora, simulamos los datos para que el modal se vea funcional.
-        setLoading(true);
-        setTimeout(() => {
-            // Simular datos obtenidos (deberías hacer un fetch JOIN en la tabla photos y photo_likes)
-            setPhotoData({
-                id: photoId,
-                // Usamos una URL genérica para simular la carga de imagen
-                image_url: `https://picsum.photos/id/${Math.floor(Math.random() * 100)}/800/1200`,
-                caption: "Foto de mi perfil subida hoy.",
-                user_name: user?.user_metadata?.full_name || "@UsuarioDetalle",
-                created_at: new Date().toLocaleDateString(),
-                // Estos valores DEBEN ser obtenidos de las tablas separadas (photo_likes)
-                initial_likes: 12, 
-                user_liked: false, 
-            });
-            setLikeCount(12);
-            setLoading(false);
-        }, 500);
 
-        // Si necesitas datos reales, el fetch sería:
-        /*
-        const fetchPhoto = async () => {
-             const { data, error } = await supabase
-                 .from('photos')
-                 // Aquí deberías usar una función RPC para contar likes
-                 .select(`*, likes_count:photo_likes(count)`) 
-                 .eq('id', photoId)
-                 .single();
-             if (data) {
-                 setPhotoData(data);
-                 setLikeCount(data.likes_count?.[0]?.count || 0);
-             }
-             setLoading(false);
-        };
-        fetchPhoto();
-        */
-        
-    }, [photoId, user]);
+    // **VALIDACIÓN CRÍTICA** (Se movió al padre, pero la mantenemos aquí por seguridad)
+    if (!photoData) {
+        console.error("PhotoDetailModal: photoData es null o undefined.");
+        return null;
+    }
+
+    // Asignamos datos para la UI usando photoData real
+    const photoId = photoData.id;
+    const photoUrl = photoData.image_url || photoData.thumbnail_url; 
+    const photoCaption = photoData.caption || 'Foto sin descripción';
+    
+    // El usuario que subió la foto es el usuario actual, por lo que usamos userData
+    const userDisplayName = user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDesconocido'}`;
+    const photoDate = new Date(photoData.created_at).toLocaleDateString();
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Like
     // ===================================
 
     const handleLike = useCallback(async () => {
-        if (!photoData || isLiking || !MISSION_TYPES.GIVE_LIKE) return;
+        if (!MISSION_TYPES?.GIVE_LIKE) {
+            console.error("MISSION_TYPES no está disponible. No se puede trackear el like.");
+            return;
+        }
+        if (isLiking) return;
 
         setIsLiking(true);
 
         try {
-            // Asumimos que trackGiveLike maneja la inserción/eliminación del like
-            // y el tracking de puntos en la base de datos (PostgreSQL RPC)
+            // Llama a la misión de dar like para la referencia 'photo'
             const trackingResult = await trackGiveLike('photo', photoId);
 
             if (trackingResult.result === 'success') {
@@ -80,9 +67,8 @@ const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
                 setLikeCount(prev => prev + 1);
                 console.log(`Puntos ganados por like: ${trackingResult.points_earned}`);
             } else if (trackingResult.result === 'already_paid') {
-                // Si ya había dado like, la lógica real debería hacer un UNLIKE y decrementar
-                // Por ahora, solo informamos que no ganó puntos (Anti-Farming)
-                console.log('Ya se habían otorgado puntos por este like (Anti-Farming).');
+                // Lógica de UNLIKE (Si tu función trackGiveLike maneja el toggle, ¡perfecto!)
+                console.log('Anti-Farming: Puntos ya ganados. Acción registrada, pero sin recompensa.');
             }
             
             // Refrescar el perfil principal (para actualizar el total de puntos)
@@ -93,23 +79,14 @@ const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
         } finally {
             setIsLiking(false);
         }
-    }, [photoData, photoId, isLiking, refreshParentData]);
+    }, [photoId, isLiking, refreshParentData]);
 
     const handleComment = () => {
         // Lógica de comentarios aquí...
         // Aquí se llamaría a trackComment('photo', photoId)
         alert('Comentario enviado! (Llamar a trackComment)');
     };
-
-    if (loading) {
-        return (
-            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
-                <div className="text-white">Cargando foto...</div>
-            </div>
-        );
-    }
     
-    if (!photoData) return null;
 
     // Estructura del Modal (Similar a la imagen de Facebook)
     return (
@@ -129,9 +106,9 @@ const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
                 {/* Columna Izquierda: Imagen (Ocupa el espacio restante) */}
                 <div className="flex-1 flex items-center justify-center relative bg-black">
                     <img 
-                        // Usar la URL real de la imagen completa
-                        src={photoData.image_url}
-                        alt={`Foto de ${photoData.user_name}`}
+                        // 🚨 Usamos la URL REAL de la foto seleccionada
+                        src={photoUrl}
+                        alt={`Foto de ${userDisplayName}`}
                         className="max-h-full max-w-full object-contain"
                     />
                 </div>
@@ -141,17 +118,18 @@ const PhotoDetailModal = ({ photoId, onClose, refreshParentData }) => {
                     
                     {/* Header del Post/Usuario */}
                     <div className="p-4 border-b border-border flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" />
+                        {/* Avatar */}
+                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" /> 
                         <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground truncate">{photoData.user_name}</h4>
-                            <p className="text-xs text-muted-foreground">{photoData.created_at}</p>
+                            {/* 🚨 Usamos el nombre de usuario real */}
+                            <h4 className="font-semibold text-foreground truncate">{userDisplayName}</h4>
+                            <p className="text-xs text-muted-foreground">{photoDate}</p>
                         </div>
-                        {/* Aquí iría el botón de 'Seguir' o acciones del dueño del post */}
                     </div>
 
                     {/* Contenido/Comentarios */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                        <p className="text-sm text-foreground">{photoData.caption}</p>
+                        <p className="text-sm text-foreground">{photoCaption}</p>
                         
                         <div className="text-sm text-muted-foreground border-t border-border pt-4 mt-4">
                             <p className="font-semibold mb-2">Comentarios:</p>
