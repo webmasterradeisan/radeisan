@@ -1,23 +1,23 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (RUTAS RELATIVAS EXPLÍCITAS)
+// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Solución a Fallos de Resolución de Módulos)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 
-// FIX: Convertir alias de componentes base a rutas relativas explícitas
+// 🚨 FIX: Todas las importaciones de componentes base se hacen relativas para evitar errores de alias de módulo (Rollup/Vite).
 import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PointsProvider } from "./contexts/PointsContext";
 
-// FIX: Convertir alias de componentes base a rutas relativas explícitas
+// SISTEMA ORIGINAL MANTENIDO
 import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "./components/ProtectedRoute";
 
-// FIX: Convertir alias de componentes base a rutas relativas explícitas
+// MOBILE LAYOUT PARA APLICAR GRADUALMENTE
 import MobileLayout from "./components/ui/MobileLayout";
 
 // ===============================
 // PÁGINAS DE APLICACIÓN
 // ===============================
-// FIX FINAL: Ruta exacta confirmada por el usuario
+// 🚨 FIX: Path exacto confirmado por el usuario
 import LandingPage from './pages/LandingPage/index.jsx'; 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -36,14 +36,14 @@ import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
+// 🚨 FIX: Nombre de archivo confirmado
 import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
-// 🚨 COMPONENTE NUEVO: Perfil Público
+// 🚨 COMPONENTE NUEVO: Perfil Público (Se mantiene la adición solicitada)
 import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
-// FIX CRÍTICO: Reemplazar rutas de alias (AdminDashboard, AdminUsers, etc.)
-// Se asume la ubicación src/pages/admin-panel/...
+// 🚨 FIX CRÍTICO: Reemplazar alias por rutas relativas explícitas
 import AdminDashboard from './pages/admin-panel/AdminDashboard.jsx'; 
 import AdminUsers from './pages/admin-panel/AdminUsers.jsx';
 import AdminVideos from './pages/admin-panel/AdminVideos.jsx';
@@ -104,7 +104,7 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
+              {/* 🚨 PERFIL PÚBLICO: La funcionalidad solicitada */}
               <Route 
                 path="/profile/:username" 
                 element={
