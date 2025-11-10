@@ -23,6 +23,9 @@ const PhotoDetailModal = ({
     const [userHasLiked, setUserHasLiked] = useState(false);
     const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
+    
+    // ⭐️ Nueva constante para verificar la propiedad del contenido ⭐️
+    const isOwner = user?.id === photoData?.user_id;
 
     // ===================================
     // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (CRÍTICA)
@@ -40,13 +43,13 @@ const PhotoDetailModal = ({
         try {
             // 1. OBTENER CONTEO DE LIKES (desde la tabla photo_likes)
             const { count: realLikeCount, error: countError } = await supabase
-                .from('photo_likes') // ASUME TABLA CREADA
+                .from('photo_likes') 
                 .select('*', { count: 'exact' })
                 .eq('photo_id', photoData.id);
 
             // 2. VERIFICAR SI EL USUARIO DIO LIKE
             const { data: userLike, error: userLikeError } = await supabase
-                .from('photo_likes') // ASUME TABLA CREADA
+                .from('photo_likes') 
                 .select('id')
                 .eq('photo_id', photoData.id)
                 .eq('user_id', user.id)
@@ -54,7 +57,7 @@ const PhotoDetailModal = ({
 
             // 3. OBTENER COMENTARIOS (con el perfil del usuario que comentó)
             const { data: fetchedComments, error: commentsError } = await supabase
-                .from('photo_comments') // ASUME TABLA CREADA
+                .from('photo_comments') 
                 .select(`
                     id, 
                     content, 
@@ -107,18 +110,13 @@ const PhotoDetailModal = ({
             if (actionType === 'like') {
                 // 1. REGISTRAR LIKE (Lógica de negocio y anti-farming local)
                 const { error: insertError } = await supabase
-                    .from('photo_likes') // ASUME TABLA CREADA
+                    .from('photo_likes') 
                     .insert({ user_id: user.id, photo_id: photoId });
                 
-                // Si el error es de unicidad (ya dio like), la inserción fallará,
-                // pero no tiramos error, solo salimos del tracking de puntos.
                 if (insertError && insertError.code !== '23505') throw insertError;
                 
-                // Si la inserción fue exitosa O si ya existía el like (code '23505' ignorado),
-                // actualizamos la UI y trackeamos puntos (solo si fue una inserción real o si la misión permite repetición).
-                
-                if (!insertError || insertError.code === '23505') {
-                    // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si no hubo error crítico)
+                // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si NO es el dueño)
+                if (!isOwner && (!insertError || insertError.code === '23505')) {
                     if (MISSION_TYPES?.GIVE_LIKE) {
                         const trackingResult = await trackGiveLike('photo', photoId); 
                         if (trackingResult.result === 'success') {
@@ -132,7 +130,7 @@ const PhotoDetailModal = ({
             } else if (actionType === 'unlike') {
                 // 1. ELIMINAR LIKE (Lógica de negocio)
                 const { error: deleteError } = await supabase
-                    .from('photo_likes') // ASUME TABLA CREADA
+                    .from('photo_likes') 
                     .delete()
                     .eq('user_id', user.id)
                     .eq('photo_id', photoId);
@@ -151,7 +149,7 @@ const PhotoDetailModal = ({
         } finally {
             setIsLiking(false);
         }
-    }, [photoData, isLiking, userHasLiked, refreshParentData, user, fetchInteractions]);
+    }, [photoData, isLiking, userHasLiked, refreshParentData, user, fetchInteractions, isOwner]);
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Comentario
@@ -163,7 +161,7 @@ const PhotoDetailModal = ({
         try {
             // 1. Lógica de inserción de comentario (DB)
             const { data: newCommentData, error: insertError } = await supabase
-                .from('photo_comments') // ASUME TABLA CREADA
+                .from('photo_comments') 
                 .insert({ 
                     user_id: user.id, 
                     photo_id: photoData.id, 
@@ -174,53 +172,60 @@ const PhotoDetailModal = ({
 
             if (insertError) throw insertError;
             
-            // Actualizar UI localmente
+            // Actualizar UI localmente y refrescar para obtener el nombre de usuario
             setCommentText(''); 
-            await fetchInteractions(); // Refrescar para obtener el nombre de usuario (aunque se podría simular)
+            await fetchInteractions(); 
 
-            // 2. Lógica de tracking de puntos
-            if (MISSION_TYPES?.COMMENT) {
-                const trackingResult = await trackComment('photo', photoData.id); 
-                if (trackingResult.result === 'success') {
-                    console.log(`✅ Puntos ganados por comentario: ${trackingResult.points_earned}`);
-                    refreshParentData(); 
-                } else if (trackingResult.result === 'already_paid') {
-                    console.log('Anti-Farming: Puntos ya ganados por comentar este item.');
+            // 2. Lógica de tracking de puntos (Solo si NO es el dueño)
+            if (!isOwner) {
+                if (MISSION_TYPES?.COMMENT) {
+                    const trackingResult = await trackComment('photo', photoData.id); 
+                    if (trackingResult.result === 'success') {
+                        console.log(`✅ Puntos ganados por comentario: ${trackingResult.points_earned}`);
+                        refreshParentData(); 
+                    } else if (trackingResult.result === 'already_paid') {
+                        console.log('Anti-Farming: Puntos ya ganados por comentar este item.');
+                    }
                 }
             }
+
 
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
             alert(`Error al comentar: ${error.message}`);
         }
-    }, [commentText, photoData, refreshParentData, user, fetchInteractions]);
+    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner]);
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Compartir
     // ===================================
     const handleShare = useCallback(async () => {
-        // En una app real, aquí se llamaría al API de compartir nativo o se copiaría el enlace.
         console.log(`Compartiendo foto ID: ${photoData.id}`);
         
-        // 1. Lógica de negocio (Opcional: registrar el share en una tabla)
+        // 1. Lógica de negocio (Ej. Llamada a API nativa o registro de share)
+        // No se requiere inserción en tabla si solo se usa para el tracking de puntos.
         
-        // 2. Lógica de tracking de puntos
-        if (MISSION_TYPES?.SHARE_CONTENT) {
-             try {
-                // trackShareContent usa 'photoId' como referenceId
-                const trackingResult = await trackShareContent('photo', photoData.id, 'app_share'); 
-                if (trackingResult.result === 'success') {
-                    console.log(`✅ Puntos ganados por compartir: ${trackingResult.points_earned}`);
-                    alert(`¡Foto compartida! Has ganado ${trackingResult.points_earned} puntos.`);
-                    refreshParentData(); 
-                } else if (trackingResult.result === 'already_paid') {
-                    alert("Ya ganaste puntos por compartir este contenido hoy.");
-                }
-             } catch (error) {
-                console.error('💥 Error al trackear compartir:', error);
-             }
+        // 2. Lógica de tracking de puntos (Solo si NO es el dueño)
+        if (!isOwner) {
+            if (MISSION_TYPES?.SHARE_CONTENT) {
+                 try {
+                    // trackShareContent usa 'photoId' como referenceId
+                    const trackingResult = await trackShareContent('photo', photoData.id, 'app_share'); 
+                    if (trackingResult.result === 'success') {
+                        console.log(`✅ Puntos ganados por compartir: ${trackingResult.points_earned}`);
+                        alert(`¡Foto compartida! Has ganado ${trackingResult.points_earned} puntos.`);
+                        refreshParentData(); 
+                    } else if (trackingResult.result === 'already_paid') {
+                        alert("Ya ganaste puntos por compartir este contenido hoy.");
+                    }
+                 } catch (error) {
+                    console.error('💥 Error al trackear compartir:', error);
+                 }
+            }
+        } else {
+            alert("Compartiendo foto... (No ganas puntos por compartir tu propio contenido)");
         }
-    }, [photoData, refreshParentData]);
+    }, [photoData, refreshParentData, isOwner]);
 
 
     // Asignamos datos para la UI usando photoData real
