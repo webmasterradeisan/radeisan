@@ -16,6 +16,11 @@ import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
+// 🚨 SIMULACIÓN: Asumimos que tienes un componente de modal de detalle de fotos
+// Si el componente PhotoDetailModal existe en otra ubicación, ajusta esta ruta.
+// Por ahora, usaremos un componente placeholder (marcado como PhotoDetailModalPlaceholder)
+// import PhotoDetailModal from '../../components/PhotoDetailModal'; 
+
 // ===============================
 // CONSTANTES
 // ===============================
@@ -552,18 +557,6 @@ const usePurchaseHistory = () => {
 };
 
 // ===============================
-// MANEJADOR DE CLIC DE FOTO
-// ===============================
-const handlePhotoClick = (photoId) => {
-    console.log('📸 Click en foto ID:', photoId);
-    // Acción real: Navegar a la vista de detalle o abrir un modal
-    // window.location.href = `/photo/${photoId}`; 
-    // Opcional: Implementar la apertura de modal aquí o usar un estado global
-    alert(`Abriendo foto ${photoId} para ver en detalle y comentar/dar like.`);
-};
-
-
-// ===============================
 // COMPONENTE DE GRID DE FOTOS
 // ===============================
 
@@ -1050,8 +1043,82 @@ const ReelsGridComponent = ({
   );
 };
 
-// Hook para fotos del usuario, usePointsHistory, usePurchaseHistory y PhotoGrid
-// ... (omitted for brevity, they remain as provided in the last complete corrected version)
+// ===============================
+// COMPONENTE DE MODAL DE DETALLE DE FOTO (Placeholder)
+// ===============================
+
+// Usamos este placeholder para mantener la estructura y no depender de un archivo externo aún.
+const PhotoDetailModalPlaceholder = ({ photoId, onClose }) => {
+    // Si la foto no existe, no mostramos nada.
+    if (!photoId) return null;
+    
+    // Simulación de un modal con estructura Facebook-like
+    return (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+            <div className="flex w-full max-w-7xl h-[90vh] bg-card rounded-lg overflow-hidden shadow-2xl">
+                {/* Columna Izquierda: Imagen */}
+                <div className="flex-1 flex items-center justify-center relative bg-black">
+                    <img 
+                        // Aquí se cargaría la imagen completa de la foto.
+                        src={`URL_DE_LA_FOTO_COMPLETA/${photoId}`}
+                        alt={`Detalle de foto ${photoId}`}
+                        className="max-h-full max-w-full object-contain"
+                    />
+                    
+                    {/* Botón de Cierre */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-4 right-4 text-white hover:bg-white/20"
+                        onClick={onClose}
+                    >
+                        <Icon name="X" size={24} />
+                    </Button>
+                </div>
+                
+                {/* Columna Derecha: Interacciones (Similar a Facebook) */}
+                <div className="w-96 flex flex-col border-l border-border bg-background/95 backdrop-blur-sm">
+                    {/* Header del Post */}
+                    <div className="p-4 border-b border-border flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" />
+                        <h4 className="font-semibold">{`@UsuarioDetalle`}</h4>
+                    </div>
+                    
+                    {/* Sección de Comentarios (Placeholder) */}
+                    <div className="flex-1 overflow-y-auto p-4 text-muted-foreground">
+                        <p className="mb-4">
+                           **Comentarios:** Esta sección cargaría los comentarios y la caja para escribir nuevos.
+                        </p>
+                        <p className="text-sm">
+                            *Aquí es donde se integraría la lógica para trackear puntos por comentar.*
+                        </p>
+                    </div>
+                    
+                    {/* Pie de Interacciones (Likes, etc.) */}
+                    <div className="p-4 border-t border-border">
+                        <div className="flex justify-between items-center mb-2">
+                            {/* Botón de Like */}
+                            <Button variant="ghost" size="sm" className="text-red-500">
+                                <Icon name="Heart" size={18} className="mr-2" />
+                                Me Gusta (0)
+                            </Button>
+                            {/* Botón de Compartir (Integración de puntos: trackShareContent) */}
+                            <Button variant="ghost" size="sm">
+                                <Icon name="Share2" size={18} className="mr-2" />
+                                Compartir
+                            </Button>
+                        </div>
+                        <input 
+                            type="text" 
+                            placeholder="Añade un comentario..."
+                            className="w-full bg-muted/50 border border-border rounded-full px-4 py-2 text-sm"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 // ===============================
@@ -1072,6 +1139,10 @@ const UserProfileSettings = () => {
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
   const [showImageEditor, setShowImageEditor] = useState(false);
+
+  // 🚨 NUEVOS ESTADOS PARA EL MODAL DE DETALLE DE FOTO
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [selectedPhotoId, setSelectedPhotoId] = useState(null);
 
   // Hooks de datos
   const {
@@ -1172,6 +1243,20 @@ const UserProfileSettings = () => {
   // ===============================
   // EVENT HANDLERS
   // ===============================
+
+  // 🚨 MANEJADOR DE CLIC DE FOTO ACTUALIZADO PARA ABRIR MODAL
+  const handlePhotoClick = useCallback((photoId) => {
+    console.log('📸 Click en foto ID:', photoId);
+    setSelectedPhotoId(photoId);
+    setShowPhotoModal(true);
+  }, []);
+  
+  const handleClosePhotoModal = useCallback(() => {
+    setShowPhotoModal(false);
+    setSelectedPhotoId(null);
+  }, []);
+
+  // [Resto de event handlers sin cambios funcionales]
   
   const handleEditProfile = useCallback(() => {
     setActiveTab('settings');
@@ -1794,6 +1879,14 @@ const UserProfileSettings = () => {
         </div>
       )}
 
+      {/* 🚨 MODAL DE DETALLE DE FOTO */}
+      {showPhotoModal && (
+          <PhotoDetailModalPlaceholder
+              photoId={selectedPhotoId}
+              onClose={handleClosePhotoModal}
+          />
+      )}
+      
       {/* Debug Info - Solo en development */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
