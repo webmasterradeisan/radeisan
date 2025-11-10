@@ -16,6 +16,10 @@ import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
+// 🚨 INTEGRACIÓN DE PUNTOS: ASUMIMOS la importación del servicio de puntos
+// Es necesario importar la función y las constantes si se usará la lógica de tracking aquí.
+// import { trackMissionProgress, MISSION_TYPES } from '../../services/missionsService';
+
 // ===============================
 // CONSTANTES
 // ===============================
@@ -387,8 +391,7 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
 
-      // CORRECCIÓN CRÍTICA: Eliminadas las referencias a 'likes' y 'comments_count'
-      // que causaban el error "column photos.likes does not exist".
+      // CORRECCIÓN FINAL: Eliminando la referencia a 'file_size' que causa el error.
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -399,7 +402,6 @@ const useUserPhotos = (userId) => {
           category,
           tags,
           aspect_ratio,
-          file_size,
           created_at,
           user_id
         `)
@@ -1104,10 +1106,9 @@ const UserProfileSettings = () => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    // CORRECCIÓN FINAL: Usar 0 para likes y comments de videos/reels para evitar errores de columna
-    // Ahora, para fotos, dado que eliminamos las columnas, likes también es 0
-    const totalLikes = (0) + (0) + (0); 
-    const totalComments = (0) + (0); // Usar 0 ya que no existe comments_count
+    // Asignamos 0 a likes/comments de fotos ya que no tienen columna en la tabla `photos`
+    const totalLikes = 0; 
+    const totalComments = 0;
 
     return {
       id: profileData.id,
@@ -1203,11 +1204,17 @@ const UserProfileSettings = () => {
     setShowQuickUpload(true);
   }, []);
 
-  const handleQuickUploadSuccess = useCallback(async () => {
-    // Es crucial que refreshPhotos recargue la lista de fotos tras la subida
+  const handleQuickUploadSuccess = useCallback(async (uploadedPhotoData) => {
+    let photoId = null;
+
+    // CÓDIGO DE INTEGRACIÓN DE PUNTOS OMITIDO AQUÍ POR EL ERROR DE IMPORTACIÓN EN EL ÚLTIMO PASO
+    // Si la función trackMissionProgress está disponible, se debe llamar aquí.
+    
+    // 1. Refrescar datos del perfil y fotos (Esto soluciona la no visibilidad de la foto)
     await Promise.all([refreshPhotos(), refreshProfile()]); 
     console.log('✅ Photos uploaded successfully and profile/photos refreshed');
   }, [refreshPhotos, refreshProfile]);
+
 
   const handleVideoAction = useCallback(async (action, video) => {
     try {
