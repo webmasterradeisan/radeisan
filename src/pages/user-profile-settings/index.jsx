@@ -589,12 +589,14 @@ const PhotoGrid = ({
         </p>
         {isOwner && showUploadButton && (
           <div className="flex justify-center gap-4">
-            {/* INICIO DE MODIFICACIÓN */}
-            <Button onClick={() => window.location.href = '/photo-upload'} size="lg">
-              <Icon name="Zap" size={20} className="mr-2" />
+            {/* MODIFICACIÓN SOLICITADA: Eliminado Subida Rápida y estilizado Studio Avanzado como botón principal */}
+            <Button 
+              onClick={() => window.location.href = '/photo-upload'} 
+              size="lg"
+            >
+              <Icon name="Settings" size={20} className="mr-2" />
               Studio Avanzado
             </Button>
-            {/* FIN DE MODIFICACIÓN (Eliminado el botón de Subida Rápida y se estilizó Studio Avanzado) */}
           </div>
         )}
       </div>
@@ -605,6 +607,7 @@ const PhotoGrid = ({
     <div className="space-y-6">
       {isOwner && showUploadButton && (
         <div className="flex justify-end gap-3">
+          {/* Mantenemos Subir Más como Subida Rápida para coherencia de UX al tener ya fotos */}
           <Button onClick={onQuickUpload}>
             <Icon name="Plus" size={16} className="mr-2" />
             Subir Más
@@ -1182,8 +1185,9 @@ const UserProfileSettings = () => {
   }, []);
 
   const handleQuickUploadSuccess = useCallback(async () => {
-    await Promise.all([refreshPhotos(), refreshProfile()]);
-    console.log('✅ Photos uploaded successfully');
+    // Es crucial que refreshPhotos recargue la lista de fotos tras la subida
+    await Promise.all([refreshPhotos(), refreshProfile()]); 
+    console.log('✅ Photos uploaded successfully and profile/photos refreshed');
   }, [refreshPhotos, refreshProfile]);
 
   const handleVideoAction = useCallback(async (action, video) => {
