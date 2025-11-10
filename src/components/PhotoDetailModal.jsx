@@ -129,7 +129,7 @@ const PhotoDetailModal = ({
 
 
     // ===================================
-    // CORRECCIÓN CRÍTICA: TECLA ENTER (AJUSTE FINAL)
+    // CORRECCIÓN CRÍTICA: TECLA ENTER (Mantener la corrección de listeners)
     // ===================================
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -137,8 +137,7 @@ const PhotoDetailModal = ({
                 onClose();
             }
             
-            // Permitir navegación SOLAMENTE con ArrowRight y ArrowLeft,
-            // y solo si el foco no está en un campo de texto.
+            // Permitir navegación solo con flechas y solo si no estamos escribiendo
             if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
                  if (event.key === 'ArrowRight') {
                     onNavigate('next');
@@ -146,10 +145,6 @@ const PhotoDetailModal = ({
                     onNavigate('prev');
                 }
             }
-            
-            // Si la tecla es Enter y el foco está en un campo de texto, 
-            // la función onKeyDown del input ya llama a e.preventDefault(). 
-            // Al eliminar 'Enter' de esta lista, garantizamos que solo el input lo maneje.
         };
 
         window.addEventListener('keydown', handleKeyDown);
@@ -474,6 +469,8 @@ const PhotoDetailModal = ({
                                 onChange={(e) => setCommentText(e.target.value)}
                                 className="flex-1 bg-muted/50 border border-border rounded-full px-4 py-2 text-sm focus:ring-primary focus:border-primary"
                                 onKeyDown={(e) => {
+                                    // 🛑 SOLUCIÓN DEFINITIVA: Detener la propagación ANTES de cualquier evaluación
+                                    e.stopPropagation(); 
                                     if (e.key === 'Enter' && commentText.trim() !== '') {
                                         e.preventDefault(); 
                                         handleCommentSubmit(e);
