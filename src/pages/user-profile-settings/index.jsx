@@ -2,7 +2,7 @@
 // UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
-// CAMBIO CRÍTICO: Revertida la ruta de importación para evitar el error de Rollup
+// Importación corregida a la ruta original
 import { useAuth } from '../../contexts/AuthContext'; 
 import { usePoints } from '../../contexts/PointsContext'; 
 import { supabase } from '../../lib/supabase';
@@ -387,6 +387,8 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
 
+      // CORRECCIÓN CRÍTICA: Eliminadas las referencias a 'likes' y 'comments_count'
+      // que causaban el error "column photos.likes does not exist".
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -396,8 +398,6 @@ const useUserPhotos = (userId) => {
           caption,
           category,
           tags,
-          likes,
-          comments_count,
           aspect_ratio,
           file_size,
           created_at,
@@ -1105,8 +1105,8 @@ const UserProfileSettings = () => {
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
     // CORRECCIÓN FINAL: Usar 0 para likes y comments de videos/reels para evitar errores de columna
-    const totalLikes = (0) + (0) + 
-                      photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
+    // Ahora, para fotos, dado que eliminamos las columnas, likes también es 0
+    const totalLikes = (0) + (0) + (0); 
     const totalComments = (0) + (0); // Usar 0 ya que no existe comments_count
 
     return {
