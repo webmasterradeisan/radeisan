@@ -1,57 +1,95 @@
 // src/components/PhotoDetailModal.jsx
 import React, { useState, useEffect, useCallback } from 'react'; 
-import Icon from './AppIcon'; // Asumiendo que AppIcon es el componente de iconos
-import Button from './ui/Button'; // Asumiendo que Button es el componente UI
+import Icon from './AppIcon'; 
+import Button from './ui/Button'; 
 import { supabase } from '../lib/supabase'; 
 // 🚨 INTEGRACIÓN DE PUNTOS: Importar las funciones de tracking
 import { trackGiveLike, trackComment, trackShareContent, MISSION_TYPES } from '../services/missionsService'; 
-import { useAuth } from '../contexts/AuthContext'; // Para obtener el user.id
+import { useAuth } from '../contexts/AuthContext'; 
 
-// El componente ahora recibe el array de fotos completo y el índice actual.
 const PhotoDetailModal = ({ 
     photos,
     currentPhotoIndex,
     photoData, 
     onClose, 
-    onNavigate, // Nuevo prop para navegación
+    onNavigate, 
     refreshParentData,
     totalPhotos
 }) => {
     const { user } = useAuth();
     
-    // 🚨 ESTADOS TEMPORALES DE INTERACCIÓN (DEBEN SINCRONIZARSE CON LA BD)
-    // Sincronización Mock: Usamos el ID de la foto como base para simular likes
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
     const [userHasLiked, setUserHasLiked] = useState(false);
     const [commentText, setCommentText] = useState('');
+    const [comments, setComments] = useState([]);
 
     // ===================================
-    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES
+    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (CRÍTICA)
     // ===================================
     
-    useEffect(() => {
-        if (!photoData?.id) return;
-        
-        // 🚨 MOCK DE CARGA DE LIKES (REEMPLAZAR CON FETCH REAL)
-        // Simulamos un conteo basado en el ID y si el usuario ya dio like
-        const idLastDigits = photoData.id.slice(-3).match(/\d+/g)?.[0] || '10';
-        const mockLikes = parseInt(idLastDigits) + 5;
-        const mockUserLiked = mockLikes % 2 === 0; // Alternamos si el usuario dio like
+    const fetchInteractions = useCallback(async () => {
+        if (!photoData?.id || !user?.id) {
+            // Cargar contadores de la propia foto si no hay usuario logueado
+            setLikeCount(photoData?.likes_count || 0);
+            setComments([]);
+            setUserHasLiked(false);
+            return;
+        }
 
-        setLikeCount(mockLikes); 
-        setUserHasLiked(mockUserLiked);
-        
-        // Aquí iría el fetch real:
-        /*
-        const fetchInteractions = async () => {
-             // Fetch de conteo de likes y si el usuario dio like
-             // Fetch de comentarios
-        };
+        try {
+            // 1. OBTENER CONTEO DE LIKES (desde la tabla photo_likes)
+            const { count: realLikeCount, error: countError } = await supabase
+                .from('photo_likes') // ASUME TABLA CREADA
+                .select('*', { count: 'exact' })
+                .eq('photo_id', photoData.id);
+
+            // 2. VERIFICAR SI EL USUARIO DIO LIKE
+            const { data: userLike, error: userLikeError } = await supabase
+                .from('photo_likes') // ASUME TABLA CREADA
+                .select('id')
+                .eq('photo_id', photoData.id)
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            // 3. OBTENER COMENTARIOS (con el perfil del usuario que comentó)
+            const { data: fetchedComments, error: commentsError } = await supabase
+                .from('photo_comments') // ASUME TABLA CREADA
+                .select(`
+                    id, 
+                    content, 
+                    created_at, 
+                    user_id,
+                    user_profile:user_id(full_name, username)
+                `)
+                .eq('photo_id', photoData.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+                
+            if (countError || userLikeError || commentsError) {
+                throw countError || userLikeError || commentsError;
+            }
+
+            setLikeCount(realLikeCount || 0); 
+            setUserHasLiked(!!userLike);
+            setComments(fetchedComments?.map(c => ({
+                ...c,
+                user: c.user_profile?.full_name || `@${c.user_profile?.username || 'Usuario'}`
+            })) || []);
+
+        } catch (error) {
+            console.error("Error fetching photo interactions:", error);
+            // Fallback a contadores de la tabla photos
+            setLikeCount(photoData?.likes_count || 0);
+            setUserHasLiked(false);
+            setComments([]);
+        }
+    }, [photoData, user]);
+
+
+    useEffect(() => {
         fetchInteractions();
-        */
-        
-    }, [photoData]);
+    }, [fetchInteractions]);
 
 
     // ===================================
@@ -59,76 +97,124 @@ const PhotoDetailModal = ({
     // ===================================
 
     const handleLikeToggle = useCallback(async () => {
-        if (!MISSION_TYPES?.GIVE_LIKE || isLiking) return;
+        if (!user?.id || isLiking) return;
 
         setIsLiking(true);
         const actionType = userHasLiked ? 'unlike' : 'like';
+        const photoId = photoData.id;
 
         try {
-            // Lógica de Supabase: Tu RPC trackGiveLike DEBE manejar el toggle (insert/delete)
-            const trackingResult = await trackGiveLike('photo', photoData.id);
+            if (actionType === 'like') {
+                // 1. REGISTRAR LIKE (Lógica de negocio y anti-farming local)
+                const { error: insertError } = await supabase
+                    .from('photo_likes') // ASUME TABLA CREADA
+                    .insert({ user_id: user.id, photo_id: photoId });
+                
+                // Si el error es de unicidad (ya dio like), la inserción fallará,
+                // pero no tiramos error, solo salimos del tracking de puntos.
+                if (insertError && insertError.code !== '23505') throw insertError;
+                
+                // Si la inserción fue exitosa O si ya existía el like (code '23505' ignorado),
+                // actualizamos la UI y trackeamos puntos (solo si fue una inserción real o si la misión permite repetición).
+                
+                if (!insertError || insertError.code === '23505') {
+                    // 2. LLAMADA AL SISTEMA DE PUNTOS (Solo si no hubo error crítico)
+                    if (MISSION_TYPES?.GIVE_LIKE) {
+                        const trackingResult = await trackGiveLike('photo', photoId); 
+                        if (trackingResult.result === 'success') {
+                            console.log(`✅ Puntos ganados por like: ${trackingResult.points_earned}`);
+                        } else if (trackingResult.result === 'already_paid') {
+                            console.log('Anti-Farming: Puntos ya ganados por este item.');
+                        }
+                    }
+                }
+                
+            } else if (actionType === 'unlike') {
+                // 1. ELIMINAR LIKE (Lógica de negocio)
+                const { error: deleteError } = await supabase
+                    .from('photo_likes') // ASUME TABLA CREADA
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('photo_id', photoId);
 
-            if (trackingResult.result === 'success') {
-                // Nuevo like -> +1 al contador y puntos
-                setLikeCount(prev => prev + 1);
-                setUserHasLiked(true);
-                console.log(`✅ Puntos ganados por like: ${trackingResult.points_earned}`);
-            } else if (trackingResult.result === 'already_paid' && actionType === 'like') {
-                // Si intenta dar like de nuevo (anti-farming) y el sistema de likes es solo toggle,
-                // la lógica real de tu RPC debería devolver un 'unlike' o manejar el error.
-                console.log('Anti-Farming: Puntos ya ganados. Asumiendo que se intentó dar like dos veces.');
-            } else if (trackingResult.result === 'unlike_success') {
-                 // Si trackGiveLike maneja el unlike (suposición)
-                 setLikeCount(prev => Math.max(0, prev - 1));
-                 setUserHasLiked(false);
+                if (deleteError) throw deleteError;
+                // Nota: Los puntos *no* se restan al quitar el like.
             }
-            
-            // Refrescar el perfil principal (para actualizar el total de puntos)
+
+            // 3. REFRESCO Y UI: Forzamos la recarga para sincronizar contadores
+            await fetchInteractions();
             refreshParentData(); 
 
         } catch (error) {
             console.error('💥 Error al dar like y trackear misión:', error);
+            alert(`Error de interacción: ${error.message}`);
         } finally {
             setIsLiking(false);
         }
-    }, [photoData, isLiking, userHasLiked, refreshParentData]);
+    }, [photoData, isLiking, userHasLiked, refreshParentData, user, fetchInteractions]);
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Comentario
     // ===================================
     const handleCommentSubmit = useCallback(async () => {
-        if (commentText.trim() === '') return;
+        const comment = commentText.trim();
+        if (comment === '' || !user?.id) return;
         
-        // 1. Lógica de inserción de comentario (DB)
-        console.log(`Comentario enviado: "${commentText}"`);
-        setCommentText(''); // Limpiar input
+        try {
+            // 1. Lógica de inserción de comentario (DB)
+            const { data: newCommentData, error: insertError } = await supabase
+                .from('photo_comments') // ASUME TABLA CREADA
+                .insert({ 
+                    user_id: user.id, 
+                    photo_id: photoData.id, 
+                    content: comment 
+                })
+                .select('id, content, created_at')
+                .single();
 
-        // 2. Lógica de tracking de puntos
-        if (MISSION_TYPES?.COMMENT) {
-             try {
-                const trackingResult = await trackComment('photo', photoData.id);
+            if (insertError) throw insertError;
+            
+            // Actualizar UI localmente
+            setCommentText(''); 
+            await fetchInteractions(); // Refrescar para obtener el nombre de usuario (aunque se podría simular)
+
+            // 2. Lógica de tracking de puntos
+            if (MISSION_TYPES?.COMMENT) {
+                const trackingResult = await trackComment('photo', photoData.id); 
                 if (trackingResult.result === 'success') {
                     console.log(`✅ Puntos ganados por comentario: ${trackingResult.points_earned}`);
                     refreshParentData(); 
+                } else if (trackingResult.result === 'already_paid') {
+                    console.log('Anti-Farming: Puntos ya ganados por comentar este item.');
                 }
-             } catch (error) {
-                console.error('💥 Error al trackear comentario:', error);
-             }
+            }
+
+        } catch (error) {
+            console.error('💥 Error al insertar o trackear comentario:', error);
+            alert(`Error al comentar: ${error.message}`);
         }
-    }, [commentText, photoData, refreshParentData]);
+    }, [commentText, photoData, refreshParentData, user, fetchInteractions]);
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Compartir
     // ===================================
     const handleShare = useCallback(async () => {
-        alert("Compartiendo foto..."); // Simulación de la apertura del diálogo de compartir
+        // En una app real, aquí se llamaría al API de compartir nativo o se copiaría el enlace.
+        console.log(`Compartiendo foto ID: ${photoData.id}`);
         
+        // 1. Lógica de negocio (Opcional: registrar el share en una tabla)
+        
+        // 2. Lógica de tracking de puntos
         if (MISSION_TYPES?.SHARE_CONTENT) {
              try {
-                const trackingResult = await trackShareContent('photo', photoData.id);
+                // trackShareContent usa 'photoId' como referenceId
+                const trackingResult = await trackShareContent('photo', photoData.id, 'app_share'); 
                 if (trackingResult.result === 'success') {
                     console.log(`✅ Puntos ganados por compartir: ${trackingResult.points_earned}`);
+                    alert(`¡Foto compartida! Has ganado ${trackingResult.points_earned} puntos.`);
                     refreshParentData(); 
+                } else if (trackingResult.result === 'already_paid') {
+                    alert("Ya ganaste puntos por compartir este contenido hoy.");
                 }
              } catch (error) {
                 console.error('💥 Error al trackear compartir:', error);
@@ -138,14 +224,13 @@ const PhotoDetailModal = ({
 
 
     // Asignamos datos para la UI usando photoData real
-    const photoUrl = photoData.image_url || photoData.thumbnail_url; 
-    const photoCaption = photoData.caption || 'Foto sin descripción';
+    const photoUrl = photoData?.image_url || photoData?.thumbnail_url; 
+    const photoCaption = photoData?.caption || 'Foto sin descripción';
+    const photoDescription = photoData?.description; 
     
-    // Obtenemos la descripción del objeto (que ya viene del fetch)
-    const photoDescription = photoData.description; 
-    
+    // Obtenemos el nombre del usuario de la sesión, asumimos que el perfil completo no se pasa al modal
     const userDisplayName = user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
-    const photoDate = new Date(photoData.created_at).toLocaleDateString();
+    const photoDate = new Date(photoData?.created_at).toLocaleDateString();
 
     const isFirstPhoto = currentPhotoIndex === 0;
     const isLastPhoto = currentPhotoIndex === totalPhotos - 1;
@@ -214,10 +299,19 @@ const PhotoDetailModal = ({
                         )}
                         
                         <div className="text-sm text-muted-foreground border-t border-border pt-4 mt-4">
-                            <p className="font-semibold mb-2">Comentarios:</p>
-                            {/* Placeholder de Comentarios */}
-                            <div className="space-y-2">
-                                <p className="text-xs italic">Todavía no hay comentarios.</p>
+                            <p className="font-semibold mb-2 text-foreground">Comentarios:</p>
+                            {/* Lista de Comentarios */}
+                            <div className="space-y-3">
+                                {comments.length === 0 ? (
+                                    <p className="text-xs italic text-muted-foreground">Todavía no hay comentarios.</p>
+                                ) : (
+                                    comments.map((c) => (
+                                        <div key={c.id} className="flex space-x-2">
+                                            <span className="font-semibold text-foreground">{c.user || 'Usuario'}</span>
+                                            <span className="text-muted-foreground">{c.content}</span>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
@@ -230,8 +324,7 @@ const PhotoDetailModal = ({
                                 variant="ghost" 
                                 size="sm" 
                                 className={`
-                                    text-red-500 
-                                    hover:bg-red-500/10 
+                                    ${userHasLiked ? 'text-red-500 hover:bg-red-500/10' : 'text-muted-foreground hover:text-red-500 hover:bg-red-500/10'}
                                     ${isLiking ? 'opacity-50' : ''}
                                 `}
                                 onClick={handleLikeToggle}
