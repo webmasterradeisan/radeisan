@@ -29,11 +29,8 @@ const PhotoDetailModal = ({
 
     const isOwner = user?.id === photoData?.user_id;
 
-    // Obtener datos del perfil logueado para el feedback instantáneo
-    const currentUserProfile = {
-        name: user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'Usuario'}`,
-        id: user?.id,
-    };
+    // Obtener el ID del usuario logueado para verificar permisos de eliminación
+    const currentUserId = user?.id;
 
     // ===================================
     // FUNCIÓN DE NOTIFICACIÓN TOAST (5 segundos)
@@ -111,6 +108,7 @@ const PhotoDetailModal = ({
                 id: c.id,
                 content: c.content,
                 created_at: c.created_at,
+                user_id: c.user_id, // Necesario para la eliminación
                 // Unir datos de perfil
                 user: usersMap[c.user_id]?.name || `@${usersMap[c.user_id]?.username || 'Usuario'}`
             }));
@@ -165,6 +163,43 @@ const PhotoDetailModal = ({
     // MANEJADORES DE ACCIONES
     // ===================================
 
+    // FUNCIÓN PARA ELIMINAR COMENTARIO
+    const handleDeleteComment = useCallback(async (commentId, authorId) => {
+        if (!currentUserId || currentUserId !== authorId) {
+            showTemporaryToast("No tienes permiso para eliminar este comentario.", 'error');
+            return;
+        }
+
+        if (!window.confirm("¿Estás seguro de que deseas eliminar este comentario?")) {
+            return;
+        }
+
+        // Optimistic UI Update: Quitar comentario inmediatamente
+        setComments(prev => prev.filter(c => c.id !== commentId));
+        
+        try {
+            // 1. Eliminar de la base de datos
+            const { error } = await supabase
+                .from('photo_comments') 
+                .delete()
+                .eq('id', commentId)
+                .eq('user_id', currentUserId); // Doble chequeo de seguridad en la DB
+
+            if (error) throw error;
+
+            showTemporaryToast("Comentario eliminado exitosamente.", 'success');
+            // La UI ya está actualizada, solo refrescamos la lista de la página principal.
+            refreshParentData(); 
+
+        } catch (error) {
+            console.error('💥 Error al eliminar comentario:', error);
+            showTemporaryToast("Error al eliminar el comentario.", 'error');
+            // Revertir UI: Forzar un fetch para restaurar el estado real de la DB
+            await fetchInteractions();
+        }
+    }, [currentUserId, fetchInteractions, refreshParentData, showTemporaryToast]);
+
+
     const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
@@ -213,7 +248,7 @@ const PhotoDetailModal = ({
                             
                             if (trackingResult.result === 'success') {
                                 showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 'success', 5000, () => {
-                                    fetchInteractions(); // RECARGA DESPUÉS DE QUE EL TOAST HAYA TERMINADO
+                                    fetchInteractions(); 
                                     refreshParentData(); 
                                 });
                                 // Salir sin recargar aquí
@@ -229,7 +264,7 @@ const PhotoDetailModal = ({
             // Si hubo mensaje de advertencia (o unlike), mostrar toast y luego recargar
             if (warningMessage || userHasLiked) {
                  showTemporaryToast(warningMessage || 'Me Gusta removido.', warningMessage ? 'info' : 'success', 5000, () => {
-                    fetchInteractions(); // RECARGA DESPUÉS DE QUE EL TOAST HAYA TERMINADO
+                    fetchInteractions(); 
                     refreshParentData();
                 });
             } else {
@@ -252,7 +287,6 @@ const PhotoDetailModal = ({
     }, [photoData, isLiking, userHasLiked, likeCount, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
 
-    // 🚨 FIX: COMENTARIO INSTANTÁNEO (AGREGAR AL ESTADO LOCAL PRIMERO)
     const handleCommentSubmit = useCallback(async (e) => {
         e?.preventDefault(); 
         
@@ -261,39 +295,27 @@ const PhotoDetailModal = ({
         
         const tempComment = commentText;
 
-        // 1. Crear el objeto del comentario optimista
-        const optimisticComment = {
-            // Usamos un ID temporal hasta que el fetch real lo reemplace
-            id: Date.now(), 
-            content: comment,
-            created_at: new Date().toISOString(),
-            // Usamos la información del perfil logueado para mostrar el nombre instantáneamente
-            user: currentUserProfile.name, 
-            isOptimistic: true // Bandera para saber que es temporal
-        };
-        
-        // 2. Insertar en el estado local (Instant Feedback)
-        setComments(prev => [optimisticComment, ...prev]);
-        setCommentText(''); 
-
         try {
-            // 3. Lógica de inserción en la DB
+            // 1. Lógica de inserción
             const { error: insertError } = await supabase
                 .from('photo_comments') 
                 .insert({ user_id: user.id, photo_id: photoData.id, content: comment });
 
             if (insertError) throw insertError;
             
-            // 4. Lógica de tracking de puntos (Solo si NO es el dueño)
+            // 2. Actualizar UI localmente y disparar toast
+            setCommentText(''); 
+            
+            // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
             if (!isOwner) {
                 if (MISSION_TYPES?.COMMENT) {
                     const trackingResult = await trackComment('photo', photoData.id); 
                     if (trackingResult.result === 'success') {
                          showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success', 5000, () => {
-                            fetchInteractions(); // Recarga después del toast para sincronizar el ID real
+                            fetchInteractions();
                             refreshParentData();
                         });
-                        return;
+                        return; // Salir sin recargar aquí
                     } else if (trackingResult.result === 'already_paid') {
                         showTemporaryToast("Ya ganaste puntos por este comentario.", 'info', 5000, () => {
                             fetchInteractions();
@@ -315,13 +337,12 @@ const PhotoDetailModal = ({
 
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
-            // Revertir el texto y eliminar el comentario optimista
-            setCommentText(tempComment); 
-            setComments(prev => prev.filter(c => c.id !== optimisticComment.id)); 
+            setCommentText(tempComment); // Revertir texto si falla
             showTemporaryToast('Error al enviar el comentario.', 'error');
-            fetchInteractions(); // Refrescar para asegurar el estado
+            // Si falla, recargar para ver el estado real
+            fetchInteractions();
         }
-    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast, currentUserProfile]);
+    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
     const handleShare = useCallback(async () => {
         const shareUrl = `${window.location.origin}/photo/${photoData.id}`; 
@@ -445,10 +466,25 @@ const PhotoDetailModal = ({
                                     <p className="text-xs italic text-muted-foreground">Sé el primero en comentar.</p>
                                 ) : (
                                     comments.map((c) => (
-                                        <div key={c.id} className="flex items-start space-x-2">
-                                            {/* Si es un comentario optimista, el nombre es el del perfil local, si no, el del fetch. */}
-                                            <span className={`font-semibold ${c.isOptimistic ? 'text-primary' : 'text-foreground'}`}>{c.user || 'Usuario'}</span>
-                                            <span className="text-muted-foreground">{c.content}</span>
+                                        <div key={c.id} className="flex items-start space-x-2 w-full">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between">
+                                                    <span className={`font-semibold text-sm ${c.isOptimistic ? 'text-primary' : 'text-foreground'}`}>{c.user || 'Usuario'}</span>
+                                                    {/* BOTÓN DE ELIMINAR (Solo si el usuario actual es el autor) */}
+                                                    {currentUserId === c.user_id && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="w-6 h-6 text-destructive hover:bg-destructive/10"
+                                                            onClick={() => handleDeleteComment(c.id, c.user_id)}
+                                                            title="Eliminar comentario"
+                                                        >
+                                                            <Icon name="Trash2" size={14} />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">{c.content}</p>
+                                            </div>
                                         </div>
                                     ))
                                 )}
