@@ -21,7 +21,7 @@ const PhotoDetailModal = ({
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
     const [userHasLiked, setUserHasLiked] = useState(false);
-    const [commentText, setCommentText] = useState('');
+    const [commentText, setCommentText] = useState(''); // Estado del comentario
     const [comments, setComments] = useState([]);
     
     // ⭐️ Nueva constante para verificar la propiedad del contenido ⭐️
@@ -55,7 +55,7 @@ const PhotoDetailModal = ({
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            // 3. OBTENER COMENTARIOS (¡CORRECCIÓN EN EL JOIN IMPLÍCITO!)
+            // 3. OBTENER COMENTARIOS (CORRECCIÓN en el JOIN)
             const { data: fetchedComments, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`
@@ -63,7 +63,7 @@ const PhotoDetailModal = ({
                     content, 
                     created_at, 
                     user_id,
-                    // ⭐️ CORRECCIÓN: Usar el nombre real de la tabla de perfiles (ASUMIDO 'profiles')
+                    // ⭐️ ASUMIENDO que la tabla de perfiles se llama 'profiles' 
                     profiles(full_name, username) 
                 `)
                 .eq('photo_id', photoData.id)
@@ -77,7 +77,6 @@ const PhotoDetailModal = ({
             setLikeCount(realLikeCount || 0); 
             setUserHasLiked(!!userLike);
             
-            // ⭐️ CORRECCIÓN: Mapeamos usando el alias 'profiles'
             setComments(fetchedComments?.map(c => ({
                 ...c,
                 user: c.profiles?.full_name || `@${c.profiles?.username || 'Usuario'}`
@@ -92,11 +91,42 @@ const PhotoDetailModal = ({
         }
     }, [photoData, user]);
 
-
+    // ⭐️ AJUSTE CRÍTICO 1: Reiniciar el estado del comentario y refrescar interacciones al cambiar de foto
     useEffect(() => {
         fetchInteractions();
+        // Reiniciar el texto del comentario cada vez que se navega a una nueva foto
+        setCommentText(''); 
     }, [fetchInteractions]);
 
+
+    // ===================================
+    // CORRECCIÓN 2: Lógica de teclas para evitar navegación con Enter
+    // ===================================
+
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+            
+            // Permitir navegación solo con flechas y siempre que el input de comentario no esté activo
+            // 🚨 ELIMINADO: ' ' y 'Enter' de la navegación global
+            if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                 if (event.key === 'ArrowRight') {
+                    onNavigate('next');
+                } else if (event.key === 'ArrowLeft') {
+                    onNavigate('prev');
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onNavigate, onClose]);
+    
 
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Like
@@ -157,7 +187,11 @@ const PhotoDetailModal = ({
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Comentario
     // ===================================
-    const handleCommentSubmit = useCallback(async () => {
+    // ⭐️ AJUSTE CRÍTICO 3: Agregar e.preventDefault() en el callback
+    const handleCommentSubmit = useCallback(async (e) => {
+        // Detener el evento para prevenir la navegación global (Enter)
+        e?.preventDefault(); 
+        
         const comment = commentText.trim();
         if (comment === '' || !user?.id) return;
         
@@ -360,8 +394,10 @@ const PhotoDetailModal = ({
                                 onChange={(e) => setCommentText(e.target.value)}
                                 className="flex-1 bg-muted/50 border border-border rounded-full px-4 py-2 text-sm focus:ring-primary focus:border-primary"
                                 onKeyDown={(e) => {
+                                    // 🚨 CORRECCIÓN: Prevenir la propagación de la tecla Enter
                                     if (e.key === 'Enter' && commentText.trim() !== '') {
-                                        handleCommentSubmit();
+                                        e.preventDefault(); 
+                                        handleCommentSubmit(e);
                                     }
                                 }}
                             />
