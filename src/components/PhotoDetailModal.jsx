@@ -29,6 +29,12 @@ const PhotoDetailModal = ({
 
     const isOwner = user?.id === photoData?.user_id;
 
+    // Obtener datos del perfil logueado para el feedback instantáneo
+    const currentUserProfile = {
+        name: user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'Usuario'}`,
+        id: user?.id,
+    };
+
     // ===================================
     // FUNCIÓN DE NOTIFICACIÓN TOAST (5 segundos)
     // ===================================
@@ -246,6 +252,7 @@ const PhotoDetailModal = ({
     }, [photoData, isLiking, userHasLiked, likeCount, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
 
+    // 🚨 FIX: COMENTARIO INSTANTÁNEO (AGREGAR AL ESTADO LOCAL PRIMERO)
     const handleCommentSubmit = useCallback(async (e) => {
         e?.preventDefault(); 
         
@@ -254,27 +261,39 @@ const PhotoDetailModal = ({
         
         const tempComment = commentText;
 
+        // 1. Crear el objeto del comentario optimista
+        const optimisticComment = {
+            // Usamos un ID temporal hasta que el fetch real lo reemplace
+            id: Date.now(), 
+            content: comment,
+            created_at: new Date().toISOString(),
+            // Usamos la información del perfil logueado para mostrar el nombre instantáneamente
+            user: currentUserProfile.name, 
+            isOptimistic: true // Bandera para saber que es temporal
+        };
+        
+        // 2. Insertar en el estado local (Instant Feedback)
+        setComments(prev => [optimisticComment, ...prev]);
+        setCommentText(''); 
+
         try {
-            // 1. Lógica de inserción
+            // 3. Lógica de inserción en la DB
             const { error: insertError } = await supabase
                 .from('photo_comments') 
                 .insert({ user_id: user.id, photo_id: photoData.id, content: comment });
 
             if (insertError) throw insertError;
             
-            // 2. Actualizar UI localmente y disparar toast
-            setCommentText(''); 
-            
-            // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
+            // 4. Lógica de tracking de puntos (Solo si NO es el dueño)
             if (!isOwner) {
                 if (MISSION_TYPES?.COMMENT) {
                     const trackingResult = await trackComment('photo', photoData.id); 
                     if (trackingResult.result === 'success') {
                          showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success', 5000, () => {
-                            fetchInteractions();
+                            fetchInteractions(); // Recarga después del toast para sincronizar el ID real
                             refreshParentData();
                         });
-                        return; // Salir sin recargar aquí
+                        return;
                     } else if (trackingResult.result === 'already_paid') {
                         showTemporaryToast("Ya ganaste puntos por este comentario.", 'info', 5000, () => {
                             fetchInteractions();
@@ -296,12 +315,13 @@ const PhotoDetailModal = ({
 
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
-            setCommentText(tempComment); // Revertir texto si falla
+            // Revertir el texto y eliminar el comentario optimista
+            setCommentText(tempComment); 
+            setComments(prev => prev.filter(c => c.id !== optimisticComment.id)); 
             showTemporaryToast('Error al enviar el comentario.', 'error');
-            // Si falla, recargar para ver el estado real
-            fetchInteractions();
+            fetchInteractions(); // Refrescar para asegurar el estado
         }
-    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
+    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast, currentUserProfile]);
 
     const handleShare = useCallback(async () => {
         const shareUrl = `${window.location.origin}/photo/${photoData.id}`; 
@@ -426,7 +446,8 @@ const PhotoDetailModal = ({
                                 ) : (
                                     comments.map((c) => (
                                         <div key={c.id} className="flex items-start space-x-2">
-                                            <span className="font-semibold text-foreground">{c.user || 'Usuario'}</span>
+                                            {/* Si es un comentario optimista, el nombre es el del perfil local, si no, el del fetch. */}
+                                            <span className={`font-semibold ${c.isOptimistic ? 'text-primary' : 'text-foreground'}`}>{c.user || 'Usuario'}</span>
                                             <span className="text-muted-foreground">{c.content}</span>
                                         </div>
                                     ))
@@ -469,9 +490,8 @@ const PhotoDetailModal = ({
                                 onChange={(e) => setCommentText(e.target.value)}
                                 className="flex-1 bg-muted/50 border border-border rounded-full px-4 py-2 text-sm focus:ring-primary focus:border-primary"
                                 onKeyDown={(e) => {
-                                    // 🛑 SOLUCIÓN DEFINITIVA: Detener la propagación ANTES de cualquier evaluación
-                                    e.stopPropagation(); 
                                     if (e.key === 'Enter' && commentText.trim() !== '') {
+                                        e.stopPropagation(); 
                                         e.preventDefault(); 
                                         handleCommentSubmit(e);
                                     }
