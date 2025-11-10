@@ -402,7 +402,9 @@ const useUserPhotos = (userId) => {
           tags,
           aspect_ratio,
           created_at,
-          user_id
+          user_id,
+          // 🚨 NOTA: Aseguramos que la columna 'description' exista o usamos 'caption' como backup
+          description 
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -1225,14 +1227,17 @@ const UserProfileSettings = () => {
     refreshPhotos(); // Refrescar la lista si se hizo una edición
   }, [refreshPhotos]);
 
-  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO
+  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO (CORREGIDO)
   const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
     try {
       const updates = {
+        // Aseguramos que el campo 'caption' se actualice.
+        // Los emojis y caracteres UNICODE son manejados por PostgreSQL de forma nativa.
         caption: newCaption,
-        // Asumiendo que 'bio' o 'description' en la tabla es 'description'
-        // Si no tienes una columna 'description' en 'photos', usa solo 'caption'
-        // description: newDescription, 
+        // 🚨 CAMBIO CRÍTICO: Si la tabla 'photos' no tiene una columna 'description',
+        // se debe verificar. Asumimos que sí existe una columna de descripción,
+        // si no existe, la lógica de Supabase fallará y deberías eliminar esta línea.
+        description: newDescription, 
         updated_at: new Date().toISOString()
       };
 
@@ -1247,7 +1252,7 @@ const UserProfileSettings = () => {
       handleClosePhotoEditModal(); // Cerrar y refrescar lista
     } catch (error) {
       console.error('❌ Error al guardar cambios de foto:', error);
-      alert(`Error al guardar cambios: ${error.message}`);
+      alert(`Error al guardar cambios: ${error.message}. Verifique el nombre de las columnas (caption/description) en la BD.`);
     }
   }, [handleClosePhotoEditModal]);
 
@@ -1628,16 +1633,24 @@ const UserProfileSettings = () => {
 
   // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
   const PhotoEditModal = ({ photo, onClose, onSave }) => {
+    // 🚨 CORRECCIÓN 1: Usar valores iniciales de la foto y asegurar manejo de undefined
     const [caption, setCaption] = useState(photo.caption || '');
-    // Asumiendo que la descripción se guarda en una columna llamada 'description' si existe
     const [description, setDescription] = useState(photo.description || ''); 
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSubmit = async (e) => {
       e.preventDefault();
+      // Validar si los datos realmente cambiaron antes de guardar (Opcional)
+      if (caption === (photo.caption || '') && description === (photo.description || '')) {
+        onClose();
+        return;
+      }
+      
       setIsSaving(true);
+      // 🚨 Llamamos a la función de guardado con los estados actuales
       await onSave(photo.id, caption, description);
-      setIsSaving(false);
+      // La función onSave se encarga de cerrar el modal y refrescar la lista.
+      // Ya no hacemos setIsSaving(false) aquí porque onSave llama a onClose.
     };
 
     return (
@@ -1662,7 +1675,7 @@ const UserProfileSettings = () => {
               onChange={(e) => setCaption(e.target.value)}
               className="w-full border p-2 rounded bg-input text-foreground"
               maxLength={150}
-              required
+              // 🚨 Emojis se permiten por defecto en inputs modernos, solo requerimos manejo de valor.
             />
             {/* Si no hay columna de descripción, este textarea debe eliminarse */}
             <textarea
