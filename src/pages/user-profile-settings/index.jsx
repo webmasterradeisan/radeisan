@@ -2,7 +2,8 @@
 // UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
-import { useAuth } from '../../contexts/Auth/AuthContext';
+// CAMBIO CRÍTICO: Revertida la ruta de importación para evitar el error de Rollup
+import { useAuth } from '../../contexts/AuthContext'; 
 import { usePoints } from '../../contexts/PointsContext'; 
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
@@ -583,6 +584,10 @@ const PhotoGrid = ({
         <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded max-w-lg mx-auto">
           {fetchError}
         </p>
+        <Button onClick={() => window.location.reload()}>
+          <Icon name="RefreshCw" size={16} className="mr-2" />
+          Reintentar Carga
+        </Button>
       </div>
     );
   }
