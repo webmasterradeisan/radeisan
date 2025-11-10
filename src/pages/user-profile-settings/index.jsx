@@ -378,7 +378,7 @@ const useUserPhotos = (userId) => {
 
   const fetchPhotos = useCallback(async () => {
     if (!userId) {
-      console.log('📸 No userId provided, skipping photos fetch');
+      console.log('📸 DIAGNÓSTICO FOTOS: No userId provided, skipping photos fetch');
       setPhotos([]);
       setLoading(false);
       return;
@@ -413,7 +413,7 @@ const useUserPhotos = (userId) => {
         setError(`Error de Supabase: ${fetchError.message}`);
         setPhotos([]);
       } else {
-        console.log(`✅ Fotos obtenidas exitosamente. Cantidad: ${data?.length || 0}`);
+        console.log(`✅ DIAGNÓSTICO FOTOS: Fotos obtenidas exitosamente. Cantidad: ${data?.length || 0}`);
         setPhotos(data || []);
       }
 
@@ -1068,10 +1068,6 @@ const ReelsGridComponent = ({
   );
 };
 
-// Hook para fotos del usuario, usePointsHistory, usePurchaseHistory y PhotoGrid
-// ... (omitted for brevity, they remain as provided in the last complete corrected version)
-
-
 // ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
@@ -1089,7 +1085,17 @@ const UserProfileSettings = () => {
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
-  const [showImageEditor, setShowImageEditor] = useState(false);
+  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto
+  const [showImageEditor, setShowImageEditor] = useState(false); 
+
+  // 🚨 ESTADOS PARA EL MODAL DE DETALLE DE FOTO
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  // Usamos el índice para facilitar la navegación del carrusel
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
+  
+  // 🚨 ESTADOS PARA EL MODAL DE EDICIÓN
+  const [showPhotoEditModal, setShowPhotoEditModal] = useState(false);
+  const [photoToEditData, setPhotoToEditData] = useState(null); 
 
   // Hooks de datos
   const {
@@ -1132,15 +1138,20 @@ const UserProfileSettings = () => {
   
   const { purchases } = usePurchaseHistory();
 
+  // 🚨 OBTENER LOS DATOS COMPLETOS DE LA FOTO ACTUAL (PARA EL MODAL DE DETALLE)
+  const currentPhotoData = useMemo(() => {
+    if (selectedPhotoIndex === null || !photos || selectedPhotoIndex >= photos.length) return null;
+    return photos[selectedPhotoIndex];
+  }, [selectedPhotoIndex, photos]);
+
   // Formatear datos del usuario
   const userData = useMemo(() => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    // CORRECCIÓN FINAL: Usar 0 para likes y comments de videos/reels para evitar errores de columna
-    const totalLikes = (0) + (0) + 
-                      photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
-    const totalComments = (0) + (0); // Usar 0 ya que no existe comments_count
+    // Asignamos 0 a likes/comments de fotos ya que no tienen columna en la tabla `photos`
+    const totalLikes = 0; 
+    const totalComments = 0;
 
     return {
       id: profileData.id,
@@ -1184,14 +1195,139 @@ const UserProfileSettings = () => {
     photos: photos.length,
     purchases: purchases.length,
     points: transactions.length,
-    // Eliminamos las pestañas "Me Gusta" y "Listas" del conteo.
-    // liked: 0,
-    // playlists: 0
+    liked: 0,
+    playlists: 0
   }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
 
   // ===============================
   // EVENT HANDLERS
   // ===============================
+
+  // MANEJADOR DE CLIC DE FOTO (ABRIR DETALLE)
+  const handlePhotoClick = useCallback((photoId) => {
+    // Busca el índice de la foto seleccionada
+    const index = photos.findIndex(p => p.id === photoId);
+    if (index !== -1) {
+        setSelectedPhotoIndex(index);
+        setShowPhotoModal(true);
+    }
+  }, [photos]);
+  
+  const handleClosePhotoModal = useCallback(() => {
+    setShowPhotoModal(false);
+    setSelectedPhotoIndex(null);
+    refreshProfile(); 
+  }, [refreshProfile]);
+
+  // CIERRE DEL MODAL DE EDICIÓN
+  const handleClosePhotoEditModal = useCallback(() => {
+    setShowPhotoEditModal(false);
+    setPhotoToEditData(null);
+    refreshPhotos(); // Refrescar la lista si se hizo una edición
+  }, [refreshPhotos]);
+
+  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO 
+  const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
+    try {
+      // 🚨 CORRECCIÓN: Si la columna 'description' existe, se guarda.
+      const updates = {
+        caption: newCaption,
+        description: newDescription, 
+        updated_at: new Date().toISOString()
+      };
+      
+      const validUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, v]) => v !== null && v !== undefined)
+      );
+
+      const { error } = await supabase
+        .from('photos')
+        .update(validUpdates)
+        .eq('id', photoId);
+
+      if (error) throw error;
+
+      console.log(`✅ Metadatos de foto ${photoId} guardados exitosamente.`);
+      handleClosePhotoEditModal(); // Cerrar y refrescar lista
+    } catch (error) {
+      console.error('❌ Error al guardar cambios de foto:', error);
+      alert(`Error al guardar cambios: ${error.message}. Si el error indica "column description does not exist", es necesario eliminar el campo 'description' en el modal.`);
+    }
+  }, [handleClosePhotoEditModal]);
+
+
+  // NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
+  const handlePhotoAction = useCallback(async (action, photo) => {
+    try {
+      switch (action) {
+        case 'edit':
+          console.log('Abriendo edición de foto:', photo.id);
+          setPhotoToEditData(photo); // Carga los datos de la foto en el estado
+          setShowPhotoEditModal(true); // Abre el modal de edición
+          break;
+        case 'delete':
+          if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
+            const { error } = await supabase
+              .from('photos')
+              .delete()
+              .eq('id', photo.id);
+            
+            if (!error) {
+              await refreshPhotos();
+              await refreshProfile();
+              console.log('✅ Foto eliminada exitosamente:', photo.id);
+            } else {
+              console.error('❌ Error eliminando foto:', error);
+              alert(`Error al eliminar la foto: ${error.message}`);
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error con la acción de foto:', error);
+    }
+  }, [refreshPhotos, refreshProfile]);
+
+  // MANEJADOR DE NAVEGACIÓN ENTRE FOTOS
+  const handleNavigatePhoto = useCallback((direction) => {
+    if (photos.length === 0 || selectedPhotoIndex === null) return;
+
+    let newIndex = selectedPhotoIndex;
+    if (direction === 'next' && newIndex < photos.length - 1) {
+        newIndex += 1;
+    } else if (direction === 'prev' && newIndex > 0) {
+        newIndex -= 1;
+    } else {
+        return; // No hay más fotos
+    }
+    setSelectedPhotoIndex(newIndex);
+  }, [photos, selectedPhotoIndex]);
+
+  // ⭐️ INTEGRACIÓN DE TECLADO ⭐️
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (showPhotoModal) {
+        if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') {
+          handleNavigatePhoto('next');
+        } else if (event.key === 'ArrowLeft') {
+          handleNavigatePhoto('prev');
+        } else if (event.key === 'Escape') {
+          handleClosePhotoModal();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
+
+  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto (mantener por compatibilidad)
+  // [Resto de event handlers sin cambios funcionales]
   
   const handleEditProfile = useCallback(() => {
     setActiveTab('settings');
@@ -1213,11 +1349,14 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile, refreshProfile]);
 
+  // 🚨 OPTIMIZACIÓN DE HANDLERS DE IMAGEN DE PERFIL/PORTADA
   const handleEditAvatar = useCallback(() => {
+    // Abrir el editor de imágenes general
     setShowImageEditor(true);
   }, []);
 
   const handleEditCover = useCallback(() => {
+    // Abrir el editor de imágenes general
     setShowImageEditor(true);
   }, []);
 
@@ -1237,11 +1376,14 @@ const UserProfileSettings = () => {
     setShowQuickUpload(true);
   }, []);
 
-  const handleQuickUploadSuccess = useCallback(async () => {
-    // Es crucial que refreshPhotos recargue la lista de fotos tras la subida
+  const handleQuickUploadSuccess = useCallback(async (uploadedPhotoData) => {
+    // Lógica de tracking de puntos (Asumida en pasos anteriores)
+
+    // 1. Refrescar datos del perfil y fotos (Esto soluciona la no visibilidad de la foto)
     await Promise.all([refreshPhotos(), refreshProfile()]); 
     console.log('✅ Photos uploaded successfully and profile/photos refreshed');
   }, [refreshPhotos, refreshProfile]);
+
 
   const handleVideoAction = useCallback(async (action, video) => {
     try {
@@ -1351,7 +1493,7 @@ const UserProfileSettings = () => {
         );
 
       case 'reels':
-        // ... (omitted rendering logic)
+        // 🚨 MANEJO DE ERRORES ROBUSTO PARA REELS
         if (reelsError) {
           return (
             <div className="text-center py-16">
@@ -1387,12 +1529,46 @@ const UserProfileSettings = () => {
             photos={photos}
             loading={photosLoading}
             onQuickUpload={handleQuickUploadOpen}
+            onPhotoAction={handlePhotoAction} // PASAMOS EL HANDLER DE ACCIONES
             isOwner={true}
             fetchError={photosError} // Pasa el error para visualización
+            onPhotoClick={handlePhotoClick} // Pasa el manejador de clic
           />
         );
 
-      // Eliminadas las pestañas "Me Gusta" y "Listas"
+      case 'liked':
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-4">Videos que te gustaron</h3>
+              <div className="text-center py-8">
+                <Icon name="Heart" size={48} className="text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No has dado like a ningún video aún</p>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-4">Fotos que te gustaron</h3>
+              <div className="text-center py-8">
+                <Icon name="Heart" size={48} className="text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No has dado like a ninguna foto aún</p>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'playlists':
+        return (
+          <div className="text-center py-16">
+            <Icon name="List" size={48} className="text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-foreground mb-3">No has creado listas aún</h3>
+            <p className="text-muted-foreground mb-6">Organiza tus videos favoritos en listas de reproducción</p>
+            <Button variant="outline">
+              <Icon name="Plus" size={16} className="mr-2" />
+              Crear primera lista
+            </Button>
+          </div>
+        );
+
       case 'purchases':
         return <PurchaseHistory purchases={purchases} />;
 
@@ -1457,6 +1633,80 @@ const UserProfileSettings = () => {
     );
   }
 
+  // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
+  const PhotoEditModal = ({ photo, onClose, onSave }) => {
+    // 🚨 CORRECCIÓN 1: Usar valores iniciales de la foto
+    const [caption, setCaption] = useState(photo.caption || '');
+    // 🚨 CORRECCIÓN 2: Usamos el valor real de la columna 'description'
+    const [description, setDescription] = useState(photo.description || ''); 
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      
+      // Validar si los datos realmente cambiaron antes de guardar (Opcional)
+      if (caption === (photo.caption || '') && description === (photo.description || '')) {
+        onClose();
+        return;
+      }
+      
+      setIsSaving(true);
+      // Llamamos a la función de guardado con los estados actuales
+      await onSave(photo.id, caption, description);
+      // La función onSave se encarga de cerrar el modal y refrescar la lista.
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-card rounded-lg border max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">Editar Metadatos de Foto</h2>
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={isSaving}>
+              <Icon name="X" size={20} />
+            </Button>
+          </div>
+          
+          <p className="text-sm text-muted-foreground mb-4">
+            {`Editando foto ID: ${photo.id.slice(0, 8)}...`}
+          </p>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Campo Título/Caption */}
+            <input
+              type="text"
+              placeholder="Título/Caption"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              className="w-full border p-2 rounded bg-input text-foreground"
+              maxLength={150}
+            />
+            {/* Campo Descripción */}
+            <textarea
+              placeholder="Descripción (Opcional)"
+              rows="3"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full border p-2 rounded bg-input text-foreground"
+              maxLength={500}
+            />
+            <Button type="submit" className="w-full" disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Guardar Cambios'
+              )}
+            </Button>
+          </form>
+          
+        </div>
+      </div>
+    );
+  };
+
+
   return (
     <>
       <Helmet>
@@ -1471,7 +1721,7 @@ const UserProfileSettings = () => {
         <main className="pt-32 pb-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             
-            {/* Profile Header */}
+            {/* Profile Header (omitido) */}
             <div className="bg-card border border-border rounded-lg overflow-hidden mb-8 shadow-sm">
               {/* Cover Image Container */}
               <div className="relative">
@@ -1682,11 +1932,11 @@ const UserProfileSettings = () => {
                   {[
                     { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
-                    { id: 'fotos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' }, // Usamos 'fotos' aquí
-                    //{ id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' }, // ELIMINADO
-                    //{ id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists, color: 'text-purple-600' }, // ELIMINADO
-                    { id: 'compras', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' }, // Usamos 'compras'
-                    { id: 'puntos', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' }, // Usamos 'puntos'
+                    { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
+                    // ❌ Eliminado: { id: 'liked', label: 'Me Gusta', icon: 'Heart', count: tabCounts.liked, color: 'text-red-500' },
+                    // ❌ Eliminado: { id: 'playlists', label: 'Listas', icon: 'List', count: tabCounts.playlists, color: 'text-purple-600' },
+                    { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' },
+                    { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
                     { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
                   ].map((tab) => (
                     <button
@@ -1776,7 +2026,29 @@ const UserProfileSettings = () => {
         </div>
       )}
 
-      {/* Debug Info - Solo en development */}
+      {/* 🚨 MODAL DE DETALLE DE FOTO */}
+      {showPhotoModal && currentPhotoData && (
+          <PhotoDetailModal
+              photos={photos} // Array completo para navegación
+              currentPhotoIndex={selectedPhotoIndex} // Índice actual
+              photoData={currentPhotoData} // Objeto de datos de la foto actual
+              onClose={handleClosePhotoModal}
+              onNavigate={handleNavigatePhoto} // Manjeador de navegación
+              refreshParentData={refreshProfile}
+              totalPhotos={photos.length}
+          />
+      )}
+      
+      {/* 🚨 MODAL DE EDICIÓN DE FOTO (Implementación Funcional) */}
+      {showPhotoEditModal && photoToEditData && (
+          <PhotoEditModal
+              photo={photoToEditData}
+              onClose={handleClosePhotoEditModal}
+              onSave={handleSaveChanges}
+          />
+      )}
+
+      {/* Debug Info (omitido) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
           <div className="space-y-1">
