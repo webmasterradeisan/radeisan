@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Solucionado error de importación final)
+// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Solucionados todos los errores de importación y lógica de rutas)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -33,7 +33,7 @@ import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
-// 🚨 FIX FINAL: Corregida la ruta de importación
+// 🚨 FIX FINAL: Usamos el nombre de archivo correcto
 import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
 // 🚨 COMPONENTE NUEVO: Perfil Público
@@ -47,7 +47,7 @@ import AdminPoints from "pages/admin-panel/AdminPoints";
 import AdminBlogs from "pages/admin-panel/AdminBlogs";
 
 // Otras Páginas (asumidas)
-import PricingPage from './pages/PricingPage';
+// 🚫 ELIMINADA: Importación de PricingPage
 import PrivacyPolicy from "pages/PrivacyPolicy";
 import TermsOfService from "pages/TermsOfService";
 import Unauthorized from "pages/Unauthorized";
@@ -94,7 +94,10 @@ const Routes = () => {
               <Route path="/dashboard" element={<VideoFeedDashboard />} />
               <Route path="/video/:videoId" element={<VideoPlayerPage />} />
               <Route path="/reels" element={<ReelsPage />} />
-              <Route path="/pricing" element={<PricingPage />} />
+              
+              {/* 🚨 FIX: Redirige /pricing a la página de compra de puntos */}
+              <Route path="/pricing" element={<Navigate to="/purchase-points" replace />} />
+              
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
