@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - ✅ CORREGIDO: Eliminada la consulta anidada fallida (user_points) y botón "Subida Rápida".
+// UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,20 +25,11 @@ const VIDEO_ORIENTATIONS = {
   SQUARE: 'square'
 };
 
-const PAGE_TABS = {
-  VIDEOS: 'videos',
-  REELS: 'reels',
-  PHOTOS: 'photos', 
-  POINTS: 'points',
-  HISTORY: 'history',
-  SETTINGS: 'settings'
-};
-
 // ===============================
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para datos del perfil del usuario (CORREGIDO PARA EVITAR CONSULTA ANIDADA)
+// Hook para datos del perfil del usuario
 const useUserProfile = () => {
   const { user, updateProfile } = useAuth();
   const [profileData, setProfileData] = useState(null);
@@ -46,8 +37,10 @@ const useUserProfile = () => {
   const [error, setError] = useState(null);
 
   const generateUsername = (email) => {
-    if (!email) return `user_${Math.random().toString(36).substring(2, 9)}`;
-    return email.split('@')[0];
+    if (!email) return `user${Date.now()}`;
+    const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const random = Math.floor(Math.random() * 1000);
+    return `${base}${random}`;
   };
 
   const fetchProfile = useCallback(async () => {
@@ -57,16 +50,14 @@ const useUserProfile = () => {
       setLoading(true);
       setError(null);
 
-      // ✅ CORRECCIÓN PRINCIPAL: Eliminamos la relación fallida 'user_points(...)' y solo pedimos campos directos.
-      const { data: profile, error: fetchError } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('user_profiles')
-        .select(`*`)
+        .select('*')
         .eq('id', user.id)
         .single();
 
       if (fetchError) {
         if (fetchError.code === 'PGRST116') {
-          // Lógica de creación de perfil si no existe
           const { data: newProfile, error: createError } = await supabase
             .from('user_profiles')
             .insert({
@@ -97,7 +88,7 @@ const useUserProfile = () => {
           throw fetchError;
         }
       } else {
-        setProfileData(profile);
+        setProfileData(data);
       }
 
     } catch (err) {
@@ -197,6 +188,12 @@ const useUserVideos = (userId) => {
         console.log(`📹 "${video.title}": orientación BD="${realOrientation}" → ${isHorizontal ? 'INCLUIR' : 'FILTRAR'}`);
         
         return isHorizontal;
+      });
+
+      console.log('✅ Filtrado de videos horizontales completado:', {
+        total: allVideos.length,
+        horizontal: horizontalVideos.length,
+        filtered_out: allVideos.length - horizontalVideos.length
       });
 
       setVideos(horizontalVideos);
@@ -318,6 +315,12 @@ const useUserReels = (userId) => {
         return isVertical;
       });
 
+      console.log('✅ Filtrado de reels completado:', {
+        total: allVideos.length,
+        vertical: verticalVideos.length,
+        filtered_out: allVideos.length - verticalVideos.length
+      });
+
       setReels(verticalVideos);
 
       const reelStats = verticalVideos.reduce(
@@ -363,7 +366,7 @@ const useUserReels = (userId) => {
   };
 };
 
-// Hook para fotos del usuario (CORREGIDO)
+// Hook para fotos del usuario
 const useUserPhotos = (userId) => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -383,11 +386,22 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 Fetching photos for user:', userId);
 
-      const selectFields = "id,image_url,thumbnail_url,caption,category,tags,likes_count,comments_count,aspect_ratio,file_size,created_at,user_id";
-
       const { data, error: fetchError } = await supabase
         .from('photos')
-        .select(selectFields) // Usamos la cadena segura
+        .select(`
+          id,
+          image_url,
+          thumbnail_url,
+          caption,
+          category,
+          tags,
+          likes,
+          comments_count,
+          aspect_ratio,
+          file_size,
+          created_at,
+          user_id
+        `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -424,7 +438,6 @@ const useUserPhotos = (userId) => {
 
 // Hook para historial de puntos REAL
 const usePointsHistory = (userId) => {
-  const { totalPoints: contextTotalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
     currentBalance: 0,
@@ -538,7 +551,10 @@ const usePurchaseHistory = () => {
   };
 };
 
-// Componente de Grid de Fotos (MANTENIDO)
+// ===============================
+// COMPONENTE DE GRID DE FOTOS
+// ===============================
+
 const PhotoGrid = ({ 
   photos = [], 
   loading = false, 
@@ -546,121 +562,466 @@ const PhotoGrid = ({
   isOwner = false,
   showUploadButton = true 
 }) => {
-    if (loading) {
-        return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse" />
-            ))}
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (photos.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="ImagePlus" size={32} className="text-primary" />
+        </div>
+        <h3 className="text-xl font-semibold text-foreground mb-3">
+          {isOwner ? 'Comparte tus primeras fotos' : 'No hay fotos publicadas'}
+        </h3>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+          {isOwner 
+            ? 'Sube fotos rápidamente y comparte tus mejores momentos con la comunidad'
+            : 'Este usuario no ha compartido fotos aún'
+          }
+        </p>
+        {isOwner && showUploadButton && (
+          <div className="flex justify-center gap-4">
+            <Button onClick={onQuickUpload} size="lg">
+              <Icon name="Zap" size={20} className="mr-2" />
+              Subida Rápida
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg"
+              onClick={() => window.location.href = '/photo-upload'}
+            >
+              <Icon name="Settings" size={20} className="mr-2" />
+              Studio Avanzado
+            </Button>
           </div>
-        );
-      }
-    
-      if (photos.length === 0) {
-        return (
-          <div className="text-center py-16">
-            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Icon name="ImagePlus" size={32} className="text-primary" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {isOwner && showUploadButton && (
+        <div className="flex justify-end gap-3">
+          <Button onClick={onQuickUpload}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Subir Más
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => window.location.href = '/photo-upload'}
+          >
+            <Icon name="Settings" size={16} className="mr-2" />
+            Studio
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {photos.map((photo) => (
+          <div key={photo.id} className="group relative aspect-square">
+            <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
+              <img
+                src={photo.thumbnail_url || photo.image_url}
+                alt={photo.caption || 'Foto'}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
             </div>
-            <h3 className="text-xl font-semibold text-foreground mb-3">
-              {isOwner ? 'Comparte tus primeras fotos' : 'No hay fotos publicadas'}
-            </h3>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              {isOwner 
-                ? 'Sube fotos rápidamente y comparte tus mejores momentos con la comunidad'
-                : 'Este usuario no ha compartido fotos aún'
-              }
-            </p>
-            {isOwner && showUploadButton && (
-              <div className="flex justify-center gap-4">
-                {/* BOTÓN "SUBIDA RÁPIDA" ELIMINADO */}
-                <Button 
-                  variant="outline" 
-                  size="lg"
-                  onClick={() => window.location.href = '/photo-upload'}
-                >
-                  <Icon name="Settings" size={20} className="mr-2" />
-                  Studio Avanzado
-                </Button>
+            
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex flex-col justify-end p-4">
+              <div className="text-white">
+                {photo.caption && (
+                  <p className="text-sm font-medium mb-1 truncate">{photo.caption}</p>
+                )}
+                <div className="flex items-center justify-between text-xs opacity-90">
+                  <span>{new Date(photo.created_at).toLocaleDateString()}</span>
+                  {photo.category && photo.category !== 'general' && (
+                    <span className="bg-black/50 px-2 py-1 rounded-full capitalize">
+                      {photo.category}
+                    </span>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        );
-      }
-    
-      return (
-        <div className="space-y-6">
-          {isOwner && showUploadButton && (
-            <div className="flex justify-end gap-3">
-              {/* BOTÓN "SUBIR MÁS" (Subida Rápida) ELIMINADO */}
-              <Button 
-                variant="outline" 
-                onClick={() => window.location.href = '/photo-upload'}
-              >
-                <Icon name="Settings" size={16} className="mr-2" />
-                Studio
-              </Button>
             </div>
-          )}
-    
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {photos.map((photo) => (
-              <div key={photo.id} className="group relative aspect-square">
-                <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ===============================
+// COMPONENTE DE VIDEO GRID HORIZONTAL
+// ===============================
+
+const VideoGridComponent = ({ 
+  videos = [], 
+  loading = false,
+  onVideoAction,
+  showActions = true,
+  isOwner = false,
+  onUploadClick,
+  emptyMessage = "No hay videos",
+  emptyDescription = "Los videos que subas aparecerán aquí"
+}) => {
+  console.log('🎬 VideoGridComponent render:', { 
+    videosCount: videos.length, 
+    loading,
+    hasVideos: videos.length > 0,
+    firstVideoSample: videos[0] ? {
+      id: videos[0].id,
+      title: videos[0].title,
+      views: videos[0].views_count,
+      duration: videos[0].duration_seconds,
+      orientation: videos[0].orientation,
+      aspect_ratio: videos[0].aspect_ratio,
+      classified_as: 'HORIZONTAL VIDEO'
+    } : null
+  });
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="space-y-3">
+            <div className="aspect-video bg-muted rounded-lg animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded animate-pulse" />
+              <div className="h-3 bg-muted rounded w-3/4 animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (videos.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="Monitor" size={32} className="text-blue-600" />
+        </div>
+        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
+        {isOwner && onUploadClick && (
+          <Button onClick={onUploadClick} size="lg">
+            <Icon name="Plus" size={20} className="mr-2" />
+            Subir video horizontal
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {isOwner && onUploadClick && (
+        <div className="flex justify-end">
+          <Button onClick={onUploadClick}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Subir video
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {videos.map((video) => (
+          <div 
+            key={video.id} 
+            className="group cursor-pointer"
+            onClick={() => console.log('Click en video horizontal:', video.id)}
+          >
+            <div className="relative">
+              {/* Thumbnail */}
+              <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                {video.thumbnail_url ? (
                   <img
-                    src={photo.thumbnail_url || photo.image_url}
-                    alt={photo.caption || 'Foto'}
+                    src={video.thumbnail_url}
+                    alt={video.title}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    loading="lazy"
+                    onError={(e) => {
+                      console.log('Error loading thumbnail for video:', video.id);
+                      e.target.style.display = 'none';
+                    }}
                   />
-                </div>
-                
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex flex-col justify-end p-4">
-                  <div className="text-white">
-                    {photo.caption && (
-                      <p className="text-sm font-medium mb-1 truncate">{photo.caption}</p>
-                    )}
-                    <div className="flex items-center justify-between text-xs opacity-90">
-                      <span>{new Date(photo.created_at).toLocaleDateString()}</span>
-                      {photo.category && photo.category !== 'general' && (
-                        <span className="bg-black/50 px-2 py-1 rounded-full capitalize">
-                          {photo.category}
-                        </span>
-                      )}
-                    </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+                    <Icon name="Play" size={48} className="text-muted-foreground" />
                   </div>
+                )}
+              </div>
+
+              {/* Play Button Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-16 h-16 bg-black/70 rounded-full flex items-center justify-center">
+                  <Icon name="Play" size={24} className="text-white ml-1" />
                 </div>
               </div>
-            ))}
+
+              {/* Duration */}
+              {video.duration_seconds && video.duration_seconds > 0 && (
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                  {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}
+                </div>
+              )}
+
+              {/* Horizontal Badge */}
+              <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+                VIDEO
+              </div>
+
+              {/* Debug Info - Solo en development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-1 py-0.5 rounded">
+                  {video.orientation || 'no-orient'}
+                </div>
+              )}
+            </div>
+
+            {/* Video Info */}
+            <div className="mt-3 space-y-2">
+              <h4 className="font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+                {video.title || 'Video sin título'}
+              </h4>
+              
+              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                {video.views_count !== null && video.views_count !== undefined && (
+                  <div className="flex items-center space-x-1">
+                    <Icon name="Eye" size={14} />
+                    <span>{video.views_count}</span>
+                  </div>
+                )}
+                {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
+                <span>{new Date(video.created_at).toLocaleDateString()}</span>
+              </div>
+
+              {/* Actions */}
+              {showActions && isOwner && onVideoAction && (
+                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVideoAction('edit', video);
+                    }}
+                  >
+                    <Icon name="Edit" size={14} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVideoAction('delete', video);
+                    }}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Icon name="Trash2" size={14} />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      );
+        ))}
+      </div>
+    </div>
+  );
 };
 
+// ===============================
+// COMPONENTE DE REELS GRID
+// ===============================
 
-// ✅ COMPONENTE: VideoGridComponent (Faltante, añadido como placeholder funcional)
-const VideoGridComponent = (props) => {
-    if (props.loading) return <div>Cargando videos...</div>;
-    if (props.videos.length === 0) return <div>{props.emptyMessage || 'No hay videos para mostrar.'}</div>;
+const ReelsGridComponent = ({ 
+  reels = [], 
+  loading = false,
+  onReelAction,
+  showActions = true,
+  isOwner = false,
+  onUploadClick,
+  emptyMessage = "No hay reels",
+  emptyDescription = "Los reels que subas aparecerán aquí"
+}) => {
+  console.log('📱 ReelsGridComponent render:', { 
+    reelsCount: reels.length, 
+    loading,
+    hasReels: reels.length > 0,
+    firstReelSample: reels[0] ? {
+      id: reels[0].id,
+      title: reels[0].title,
+      views: reels[0].views_count,
+      duration: reels[0].duration_seconds,
+      orientation: reels[0].orientation,
+      aspect_ratio: reels[0].aspect_ratio,
+      classified_as: 'VERTICAL REEL'
+    } : null
+  });
+
+  if (loading) {
     return (
-        <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">Videos cargados ({props.videos.length})</p>
-            {/* Aquí iría el renderizado real de la grilla de videos */}
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {[...Array(10)].map((_, i) => (
+          <div key={i} className="space-y-3">
+            <div className="aspect-[9/16] bg-muted rounded-lg animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-3 bg-muted rounded animate-pulse" />
+              <div className="h-2 bg-muted rounded w-3/4 animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
     );
+  }
+
+  if (reels.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Icon name="Smartphone" size={32} className="text-pink-600" />
+        </div>
+        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
+        {isOwner && onUploadClick && (
+          <Button onClick={onUploadClick} size="lg">
+            <Icon name="Plus" size={20} className="mr-2" />
+            Crear reel vertical
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {isOwner && onUploadClick && (
+        <div className="flex justify-end">
+          <Button onClick={onUploadClick}>
+            <Icon name="Plus" size={16} className="mr-2" />
+            Crear reel
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {reels.map((reel) => (
+          <div 
+            key={reel.id} 
+            className="group cursor-pointer"
+            onClick={() => console.log('Click en reel vertical:', reel.id)}
+          >
+            <div className="relative">
+              {/* Thumbnail - Aspecto vertical 9:16 */}
+              <div className="aspect-[9/16] bg-muted rounded-lg overflow-hidden">
+                {reel.thumbnail_url ? (
+                  <img
+                    src={reel.thumbnail_url}
+                    alt={reel.title}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      console.log('Error loading thumbnail for reel:', reel.id);
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+                    <Icon name="Play" size={24} className="text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              {/* Play Button Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-12 h-12 bg-black/70 rounded-full flex items-center justify-center">
+                  <Icon name="Play" size={16} className="text-white ml-1" />
+                </div>
+              </div>
+
+              {/* Duration */}
+              {reel.duration_seconds && reel.duration_seconds > 0 && (
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded text-center">
+                  {reel.duration_seconds < 60 ? `${reel.duration_seconds}s` : 
+                   `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}`}
+                </div>
+              )}
+
+              {/* Reel Badge */}
+              <div className="absolute top-2 left-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+                REEL
+              </div>
+
+              {/* Debug Info - Solo en development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="absolute top-2 right-2 bg-pink-600 text-white text-xs px-1 py-0.5 rounded">
+                  {reel.orientation || 'no-orient'}
+                </div>
+              )}
+            </div>
+
+            {/* Reel Info */}
+            <div className="mt-2 space-y-1">
+              <h4 className="font-medium text-foreground text-sm line-clamp-2 group-hover:text-primary transition-colors">
+                {reel.title || 'Reel sin título'}
+              </h4>
+              
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center space-x-2">
+                  {reel.views_count !== null && reel.views_count !== undefined && (
+                    <div className="flex items-center space-x-1">
+                      <Icon name="Eye" size={12} />
+                      <span>{reel.views_count}</span>
+                    </div>
+                  )}
+                  {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
+                </div>
+              </div>
+
+              {/* Actions */}
+              {showActions && isOwner && onReelAction && (
+                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReelAction('edit', reel);
+                    }}
+                  >
+                    <Icon name="Edit" size={12} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReelAction('delete', reel);
+                    }}
+                  >
+                    <Icon name="Trash2" size={12} />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
-// ✅ COMPONENTE: ReelsGridComponent (Faltante, añadido como placeholder funcional)
-const ReelsGridComponent = (props) => {
-    if (props.loading) return <div>Cargando reels...</div>;
-    if (props.reels.length === 0) return <div>{props.emptyMessage || 'No hay reels para mostrar.'}</div>;
-    return (
-        <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">Reels cargados ({props.reels.length})</p>
-            {/* Aquí iría el renderizado real de la grilla de reels */}
-        </div>
-    );
-};
+// Hook para fotos del usuario, usePointsHistory, usePurchaseHistory y PhotoGrid
+// ... (omitted for brevity, they remain as provided in the last complete corrected version)
 
 
 // ===============================
@@ -668,11 +1029,16 @@ const ReelsGridComponent = (props) => {
 // ===============================
 
 const UserProfileSettings = () => {
-  // Obtenemos los datos del contexto de puntos para el balance total
-  const { totalPoints: contextTotalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   const { user, isAuthenticated, signOut } = useAuth();
   
-  const [activeTab, setActiveTab] = useState(PAGE_TABS.VIDEOS);
+  const { 
+    totalPoints, 
+    freePoints, 
+    premiumPoints, 
+    loading: pointsLoading 
+  } = usePoints();
+  
+  const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
   const [showImageEditor, setShowImageEditor] = useState(false);
@@ -722,14 +1088,11 @@ const UserProfileSettings = () => {
     if (!profileData) return null;
 
     const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    // Usamos el campo 'likes_count' del esquema que el usuario confirmó que existe en photos
+    // CORRECCIÓN FINAL: Usar 0 para likes y comments de videos/reels para evitar errores de columna
     const totalLikes = (0) + (0) + 
-                      photos.reduce((acc, photo) => acc + (photo.likes_count || 0), 0); 
-    const totalComments = (0) + (0); 
+                      photos.reduce((acc, photo) => acc + (photo.likes || 0), 0);
+    const totalComments = (0) + (0); // Usar 0 ya que no existe comments_count
 
-    // ✅ Usamos los puntos del contexto (más fiables y actualizados)
-    const totalPoints = contextTotalPoints || profileData.points || 0;
-    
     return {
       id: profileData.id,
       name: profileData.full_name || 'Usuario',
@@ -763,7 +1126,7 @@ const UserProfileSettings = () => {
       
       achievements: []
     };
-  }, [profileData, videos, reels, photos, videoStats, reelStats, contextTotalPoints, freePoints, premiumPoints]);
+  }, [profileData, videos, reels, photos, videoStats, reelStats, totalPoints, freePoints, premiumPoints]);
 
   // Calcular contadores para tabs
   const tabCounts = useMemo(() => ({
@@ -777,7 +1140,7 @@ const UserProfileSettings = () => {
   }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
 
   // ===============================
-  // EVENT HANDLERS (MANTENIDOS)
+  // EVENT HANDLERS
   // ===============================
   
   const handleEditProfile = useCallback(() => {
@@ -825,8 +1188,7 @@ const UserProfileSettings = () => {
   }, []);
 
   const handleQuickUploadSuccess = useCallback(async () => {
-    // Cuando la subida rápida es exitosa, recargamos las fotos y el perfil
-    await Promise.all([refreshPhotos(), refreshProfile()]); 
+    await Promise.all([refreshPhotos(), refreshProfile()]);
     console.log('✅ Photos uploaded successfully');
   }, [refreshPhotos, refreshProfile]);
 
@@ -907,7 +1269,23 @@ const UserProfileSettings = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'videos':
-        // ... (render logic for videos)
+        // ... (omitted rendering logic)
+        if (videosError) {
+          return (
+            <div className="text-center py-16">
+              <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar videos</h3>
+              <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded">
+                {videosError}
+              </p>
+              <Button onClick={refreshVideos}>
+                <Icon name="RefreshCw" size={16} className="mr-2" />
+                Reintentar
+              </Button>
+            </div>
+          );
+        }
+        
         return (
           <VideoGridComponent
             videos={videos} 
@@ -922,7 +1300,23 @@ const UserProfileSettings = () => {
         );
 
       case 'reels':
-        // ... (render logic for reels)
+        // ... (omitted rendering logic)
+        if (reelsError) {
+          return (
+            <div className="text-center py-16">
+              <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar reels</h3>
+              <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded">
+                {reelsError}
+              </p>
+              <Button onClick={refreshReels}>
+                <Icon name="RefreshCw" size={16} className="mr-2" />
+                Reintentar
+              </Button>
+            </div>
+          );
+        }
+        
         return (
           <ReelsGridComponent
             reels={reels} 
@@ -1210,7 +1604,7 @@ const UserProfileSettings = () => {
                               ) : (
                                 <>
                                   <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                                    {userData.points.toLocaleString()}
+                                    {totalPoints.toLocaleString()}
                                   </p>
                                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     <span className="text-green-600 dark:text-green-400 font-medium">
@@ -1369,7 +1763,7 @@ const UserProfileSettings = () => {
             <div>Videos H: {videos.length}</div>
             <div>Reels V: {reels.length}</div>
             <div>Fotos: {photos.length}</div>
-            <div>Puntos: {contextTotalPoints}</div>
+            <div>Puntos: {totalPoints}</div>
             <div>Tab: {activeTab}</div>
           </div>
         </div>
