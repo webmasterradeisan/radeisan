@@ -1,8 +1,8 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Solución a Fallos de Resolución de Módulos)
+// src/Routes.jsx - VERSIÓN ESTABLE SIN PERFIL PÚBLICO (Mantiene las correcciones de Build)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 
-// 🚨 FIX: Todas las importaciones de componentes base se hacen relativas para evitar errores de alias de módulo (Rollup/Vite).
+// 🚨 FIX: Todas las importaciones de componentes base se hacen relativas para evitar errores de alias de módulo.
 import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -36,11 +36,9 @@ import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
-// 🚨 FIX: Nombre de archivo confirmado
 import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
-// 🚨 COMPONENTE NUEVO: Perfil Público (Se mantiene la adición solicitada)
-import PublicProfilePage from './pages/public-profile-page/index.jsx';
+// 🛑 ELIMINADA: PublicProfilePage importada de './pages/public-profile-page/index.jsx'
 
 // ADMIN PANEL
 // 🚨 FIX CRÍTICO: Reemplazar alias por rutas relativas explícitas
@@ -104,15 +102,7 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚨 PERFIL PÚBLICO: La funcionalidad solicitada */}
-              <Route 
-                path="/profile/:username" 
-                element={
-                  <UniversalRoute>
-                    <PublicProfilePage />
-                  </UniversalRoute>
-                } 
-              />
+              {/* 🛑 RUTA ELIMINADA: Se ha quitado la ruta /profile/:username */}
 
               {/* =================== RUTAS PROTEGIDAS (Requiere login) =================== */}
 
