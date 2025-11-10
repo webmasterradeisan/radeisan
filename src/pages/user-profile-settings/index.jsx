@@ -1,5 +1,5 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - ✅ CORREGIDO: Simplificado para usar solo Studio Avanzado.
+// UserProfileSettings - ✅ CORREGIDO: Eliminada la consulta anidada fallida (user_points) y botón "Subida Rápida".
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,7 +10,7 @@ import ProfileTabs from './components/ProfileTabs';
 import PointsHistory from './components/PointsHistory';
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
-import PhotoQuickUpload from '../../components/PhotoQuickUpload'; // Mantener si otras partes del app lo usan, pero lo eliminamos del render
+import PhotoQuickUpload from '../../components/PhotoQuickUpload';
 import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
@@ -573,10 +573,7 @@ const PhotoGrid = ({
             </p>
             {isOwner && showUploadButton && (
               <div className="flex justify-center gap-4">
-                <Button onClick={onQuickUpload} size="lg">
-                  <Icon name="Zap" size={20} className="mr-2" />
-                  Subida Rápida
-                </Button>
+                {/* BOTÓN "SUBIDA RÁPIDA" ELIMINADO */}
                 <Button 
                   variant="outline" 
                   size="lg"
@@ -595,10 +592,7 @@ const PhotoGrid = ({
         <div className="space-y-6">
           {isOwner && showUploadButton && (
             <div className="flex justify-end gap-3">
-              <Button onClick={onQuickUpload}>
-                <Icon name="Plus" size={16} className="mr-2" />
-                Subir Más
-              </Button>
+              {/* BOTÓN "SUBIR MÁS" (Subida Rápida) ELIMINADO */}
               <Button 
                 variant="outline" 
                 onClick={() => window.location.href = '/photo-upload'}
