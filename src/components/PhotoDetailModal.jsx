@@ -41,7 +41,7 @@ const PhotoDetailModal = ({
         }
 
         try {
-            // 1. OBTENER CONTEO DE LIKES (desde la tabla photo_likes)
+            // 1. OBTENER CONTEO DE LIKES
             const { count: realLikeCount, error: countError } = await supabase
                 .from('photo_likes') 
                 .select('*', { count: 'exact' })
@@ -55,7 +55,7 @@ const PhotoDetailModal = ({
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            // 3. OBTENER COMENTARIOS (con el perfil del usuario que comentó)
+            // 3. OBTENER COMENTARIOS (¡CORRECCIÓN EN EL JOIN IMPLÍCITO!)
             const { data: fetchedComments, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`
@@ -63,7 +63,8 @@ const PhotoDetailModal = ({
                     content, 
                     created_at, 
                     user_id,
-                    user_profile:user_id(full_name, username)
+                    // ⭐️ CORRECCIÓN: Usar el nombre real de la tabla de perfiles (ASUMIDO 'profiles')
+                    profiles(full_name, username) 
                 `)
                 .eq('photo_id', photoData.id)
                 .order('created_at', { ascending: false })
@@ -75,9 +76,11 @@ const PhotoDetailModal = ({
 
             setLikeCount(realLikeCount || 0); 
             setUserHasLiked(!!userLike);
+            
+            // ⭐️ CORRECCIÓN: Mapeamos usando el alias 'profiles'
             setComments(fetchedComments?.map(c => ({
                 ...c,
-                user: c.user_profile?.full_name || `@${c.user_profile?.username || 'Usuario'}`
+                user: c.profiles?.full_name || `@${c.profiles?.username || 'Usuario'}`
             })) || []);
 
         } catch (error) {
@@ -202,8 +205,7 @@ const PhotoDetailModal = ({
     const handleShare = useCallback(async () => {
         console.log(`Compartiendo foto ID: ${photoData.id}`);
         
-        // 1. Lógica de negocio (Ej. Llamada a API nativa o registro de share)
-        // No se requiere inserción en tabla si solo se usa para el tracking de puntos.
+        // 1. Lógica de negocio (Opcional: registro de share)
         
         // 2. Lógica de tracking de puntos (Solo si NO es el dueño)
         if (!isOwner) {
