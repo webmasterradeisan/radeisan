@@ -70,7 +70,7 @@ const PhotoDetailModal = ({
                 .eq('user_id', user.id)
                 .maybeSingle(); 
             
-            // 3. OBTENER COMENTARIOS (JOIN MANUAL EN MEMORIA como en VideoPlayerPage)
+            // 3. OBTENER COMENTARIOS (JOIN MANUAL EN MEMORIA)
             const { data: rawCommentsData, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`id, content, created_at, user_id`) // <-- SIN JOIN AQUÍ
@@ -109,7 +109,7 @@ const PhotoDetailModal = ({
 
             setLikeCount(realLikeCount || 0); 
             setUserHasLiked(!!userLike); 
-            setComments(finalComments); // <-- COMENTARIOS AHORA VISIBLES
+            setComments(finalComments); 
 
         } catch (error) {
             console.error("Error fetching photo interactions:", error);
@@ -153,16 +153,23 @@ const PhotoDetailModal = ({
     
 
     // ===================================
-    // MANEJADORES DE ACCIONES (Mantener la lógica de Like/Compartir)
+    // MANEJADORES DE ACCIONES
     // ===================================
 
+    // 🚨 FIX: LIKE CON ANTI-FARMING Y AVISOS SWEET ALERT
     const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
         setIsLiking(true);
         const photoId = photoData.id;
         const previousLikedState = userHasLiked;
-        const previousLikeCount = likeCount; // Guardar el conteo previo
+        const previousLikeCount = likeCount;
+
+        // ⭐️ Determinar el mensaje de advertencia si no gana puntos
+        let warningMessage = '';
+        if (isOwner) {
+            warningMessage = 'No ganas puntos por darle "Me Gusta" a tu propio contenido.';
+        }
 
         try {
             if (userHasLiked) { 
@@ -180,7 +187,7 @@ const PhotoDetailModal = ({
                 setLikeCount(Math.max(0, previousLikeCount - 1));
 
             } else { 
-                // LIKE
+                // LIKE (INSERT)
                 const { error: insertError } = await supabase
                     .from('photo_likes') 
                     .insert({ user_id: user.id, photo_id: photoId });
@@ -192,16 +199,25 @@ const PhotoDetailModal = ({
                     setUserHasLiked(true);
                     setLikeCount(previousLikeCount + 1);
 
-                    // Lógica de tracking de puntos (Solo si NO es el dueño)
+                    // 🛑 LÓGICA DE TRACKING Y AVISO 🛑
                     if (!isOwner) {
                         if (MISSION_TYPES?.GIVE_LIKE) {
                             const trackingResult = await trackGiveLike('photo', photoId); 
+                            
                             if (trackingResult.result === 'success') {
                                 showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 'success', 2000);
+                            } else if (trackingResult.result === 'already_paid') {
+                                // ⭐️ AVISO TIPO SWEET ALERT POR ANTI-FARMING ⭐️
+                                warningMessage = 'Ya ganaste puntos por darle "Me Gusta" a esta foto anteriormente.';
                             }
                         }
                     }
                 }
+            }
+
+            // Mostrar el aviso si se generó alguno (por owned content o anti-farming)
+            if (warningMessage) {
+                showTemporaryToast(warningMessage, 'info', 3000);
             }
 
             // Refrescar para asegurar consistencia
@@ -211,7 +227,7 @@ const PhotoDetailModal = ({
         } catch (error) {
             console.error('💥 Error al dar like:', error);
             alert(`Error de interacción: ${error.message}`);
-            // Revertir estados si falla la operación
+            // Revertir estado si falla la operación
             setUserHasLiked(previousLikedState);
             setLikeCount(previousLikeCount);
         } finally {
@@ -238,7 +254,7 @@ const PhotoDetailModal = ({
             
             // 2. Actualizar UI localmente y refrescar
             setCommentText(''); 
-            await fetchInteractions(); // Refrescar para ver el nuevo comentario
+            await fetchInteractions(); 
 
             // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
             if (!isOwner) {
@@ -247,8 +263,12 @@ const PhotoDetailModal = ({
                     if (trackingResult.result === 'success') {
                          showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success', 2000);
                         refreshParentData(); 
+                    } else if (trackingResult.result === 'already_paid') {
+                        showTemporaryToast("Ya ganaste puntos por este comentario.", 'info', 2000);
                     }
                 }
+            } else {
+                 showTemporaryToast("Comentario publicado (No ganas puntos por tu contenido).", 'info', 2000);
             }
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
@@ -269,7 +289,7 @@ const PhotoDetailModal = ({
                          showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 'success', 3000);
                         refreshParentData(); 
                     } else if (trackingResult.result === 'already_paid') {
-                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 'restriction', 3000);
+                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 'info', 3000);
                     }
                 }
             } else {
@@ -342,6 +362,7 @@ const PhotoDetailModal = ({
                 </Button>
 
                 <div className="flex-1 flex items-center justify-center relative bg-black">
+                    {/* 🚨 ASUMO QUE photoUrl AHORA ES CORRECTO */}
                     <img 
                         src={photoUrl}
                         alt={`Foto de ${userDisplayName}`}
@@ -420,7 +441,6 @@ const PhotoDetailModal = ({
                                 onChange={(e) => setCommentText(e.target.value)}
                                 className="flex-1 bg-muted/50 border border-border rounded-full px-4 py-2 text-sm focus:ring-primary focus:border-primary"
                                 onKeyDown={(e) => {
-                                    // CORRECCIÓN: Prevenir la propagación de la tecla Enter
                                     if (e.key === 'Enter' && commentText.trim() !== '') {
                                         e.preventDefault(); 
                                         handleCommentSubmit(e);
@@ -454,7 +474,10 @@ const PhotoDetailModal = ({
             {/* 🚨 TOAST NOTIFICATION COMPONENT */}
             {showToast && (
                 <div 
-                    className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] p-3 rounded-lg bg-primary text-primary-foreground shadow-xl transition-all duration-500 opacity-100"
+                    className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] p-3 rounded-lg shadow-xl transition-all duration-500 opacity-100 
+                        ${toastMessage.includes("Puntos") ? 'bg-green-600 text-white' : 
+                          (toastMessage.includes("Error") ? 'bg-red-600 text-white' : 'bg-yellow-500 text-gray-800')}`
+                    }
                     style={{ animation: 'slideUp 0.3s forwards' }}
                 >
                     <p className="text-sm font-medium">{toastMessage}</p>
