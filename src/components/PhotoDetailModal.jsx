@@ -17,16 +17,13 @@ const PhotoDetailModal = ({
 }) => {
     const { user } = useAuth();
     
-    // ===================================
-    // ESTADOS DE INTERACCIÓN
-    // ===================================
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
     const [userHasLiked, setUserHasLiked] = useState(false);
     const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
     
-    // 🚨 NOTIFICACIÓN (TOAST)
+    // NOTIFICACIÓN (TOAST)
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
 
@@ -36,7 +33,7 @@ const PhotoDetailModal = ({
     // FUNCIÓN DE NOTIFICACIÓN TOAST
     // ===================================
 
-    const showTemporaryToast = useCallback((message, duration = 3000) => {
+    const showTemporaryToast = useCallback((message, type = 'success', duration = 3000) => {
         setToastMessage(message);
         setShowToast(true);
         setTimeout(() => {
@@ -47,8 +44,7 @@ const PhotoDetailModal = ({
 
 
     // ===================================
-    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (FETCH)
-    // ⭐️ SOLUCIÓN AL ERROR PGRST100 (JOIN SINTAXIS)
+    // LÓGICA DE SINCRONIZACIÓN DE INTERACCIONES (FETCH - SOLUCIÓN PGRST100)
     // ===================================
     
     const fetchInteractions = useCallback(async () => {
@@ -74,39 +70,49 @@ const PhotoDetailModal = ({
                 .eq('user_id', user.id)
                 .maybeSingle(); 
             
-            // 3. OBTENER COMENTARIOS (Sintaxis limpia para el JOIN con user_profiles)
-            const { data: fetchedComments, error: commentsError } = await supabase
+            // 3. OBTENER COMENTARIOS (JOIN MANUAL EN MEMORIA como en VideoPlayerPage)
+            const { data: rawCommentsData, error: commentsError } = await supabase
                 .from('photo_comments') 
-                .select(`
-                    id, 
-                    content, 
-                    created_at, 
-                    // ⭐️ CORRECCIÓN A: Usamos la sintaxis de PostgREST más robusta
-                    // Asumimos que la FK user_id apunta a user_profiles, la tabla clave.
-                    user_profiles:user_id(full_name, username) 
-                `)
+                .select(`id, content, created_at, user_id`) // <-- SIN JOIN AQUÍ
                 .eq('photo_id', photoData.id)
                 .order('created_at', { ascending: false })
                 .limit(50);
                 
-            if (commentsError) {
-                // Registrar error PGRST100 si ocurre, pero no detener el flujo.
-                console.error("Error al cargar comentarios (RLS/JOIN):", commentsError);
-                throw commentsError; 
+            if (commentsError) throw commentsError;
+            
+            // 4. Obtener perfiles de todos los comentadores (JOIN EN MEMORIA)
+            const userIds = [...new Set(rawCommentsData.map(c => c.user_id).filter(Boolean))];
+            let usersMap = {};
+
+            if (userIds.length > 0) {
+                const { data: usersData, error: usersError } = await supabase
+                    .from('user_profiles')
+                    .select('id, full_name, username')
+                    .in('id', userIds);
+                
+                if (usersError) throw usersError;
+
+                usersData.forEach(p => {
+                    usersMap[p.id] = { name: p.full_name, username: p.username };
+                });
             }
 
+            // 5. Mapear y ensamblar los comentarios
+            const finalComments = rawCommentsData.map(c => ({
+                id: c.id,
+                content: c.content,
+                created_at: c.created_at,
+                // Unir datos de perfil
+                user: usersMap[c.user_id]?.name || `@${usersMap[c.user_id]?.username || 'Usuario'}`
+            }));
+
+
             setLikeCount(realLikeCount || 0); 
-            setUserHasLiked(!!userLike);
-            
-            // ⭐️ CORRECCIÓN B: Mapeo de comentarios
-            setComments(fetchedComments?.map(c => ({
-                ...c,
-                // c.user_profiles es el objeto de perfil según el nuevo alias
-                user: c.user_profiles?.full_name || `@${c.user_profiles?.username || 'Usuario'}`
-            })) || []);
+            setUserHasLiked(!!userLike); 
+            setComments(finalComments); // <-- COMENTARIOS AHORA VISIBLES
 
         } catch (error) {
-            console.error("Error fetching photo interactions (Final Catch):", error);
+            console.error("Error fetching photo interactions:", error);
             setLikeCount(photoData?.likes_count || 0);
             setUserHasLiked(false);
             setComments([]);
@@ -120,7 +126,7 @@ const PhotoDetailModal = ({
 
 
     // ===================================
-    // CORRECCIÓN CRÍTICA: TECLA ENTER
+    // CORRECCIÓN CRÍTICA: TECLA ENTER (Mantener la corrección de listeners)
     // ===================================
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -147,16 +153,16 @@ const PhotoDetailModal = ({
     
 
     // ===================================
-    // MANEJADORES DE ACCIONES
+    // MANEJADORES DE ACCIONES (Mantener la lógica de Like/Compartir)
     // ===================================
 
-    // 🚨 "LIKE" NO FUNCIONA (FIX)
     const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
         setIsLiking(true);
         const photoId = photoData.id;
         const previousLikedState = userHasLiked;
+        const previousLikeCount = likeCount; // Guardar el conteo previo
 
         try {
             if (userHasLiked) { 
@@ -169,8 +175,9 @@ const PhotoDetailModal = ({
 
                 if (deleteError) throw deleteError;
                 
+                // Actualizar UI localmente 
                 setUserHasLiked(false);
-                setLikeCount(prevCount => Math.max(0, prevCount - 1));
+                setLikeCount(Math.max(0, previousLikeCount - 1));
 
             } else { 
                 // LIKE
@@ -181,15 +188,16 @@ const PhotoDetailModal = ({
                 if (insertError && insertError.code !== '23505') throw insertError;
                 
                 if (!insertError || insertError.code === '23505') {
+                    // Si el like fue exitoso o ya existía, actualizamos el conteo y estado
                     setUserHasLiked(true);
-                    setLikeCount(prevCount => prevCount + 1);
+                    setLikeCount(previousLikeCount + 1);
 
                     // Lógica de tracking de puntos (Solo si NO es el dueño)
                     if (!isOwner) {
                         if (MISSION_TYPES?.GIVE_LIKE) {
                             const trackingResult = await trackGiveLike('photo', photoId); 
                             if (trackingResult.result === 'success') {
-                                showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 2000);
+                                showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 'success', 2000);
                             }
                         }
                     }
@@ -203,13 +211,13 @@ const PhotoDetailModal = ({
         } catch (error) {
             console.error('💥 Error al dar like:', error);
             alert(`Error de interacción: ${error.message}`);
-            // Revertir estado y forzar fetch
+            // Revertir estados si falla la operación
             setUserHasLiked(previousLikedState);
-            await fetchInteractions();
+            setLikeCount(previousLikeCount);
         } finally {
             setIsLiking(false);
         }
-    }, [photoData, isLiking, userHasLiked, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
+    }, [photoData, isLiking, userHasLiked, likeCount, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
 
     const handleCommentSubmit = useCallback(async (e) => {
@@ -230,14 +238,14 @@ const PhotoDetailModal = ({
             
             // 2. Actualizar UI localmente y refrescar
             setCommentText(''); 
-            await fetchInteractions(); 
+            await fetchInteractions(); // Refrescar para ver el nuevo comentario
 
             // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
             if (!isOwner) {
                 if (MISSION_TYPES?.COMMENT) {
                     const trackingResult = await trackComment('photo', photoData.id); 
                     if (trackingResult.result === 'success') {
-                         showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 2000);
+                         showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success', 2000);
                         refreshParentData(); 
                     }
                 }
@@ -245,11 +253,10 @@ const PhotoDetailModal = ({
         } catch (error) {
             console.error('💥 Error al insertar o trackear comentario:', error);
             setCommentText(tempComment); // Revertir texto si falla
-            showTemporaryToast('Error al enviar el comentario.');
+            showTemporaryToast('Error al enviar el comentario.', 'error');
         }
     }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
 
-    // 🚨 FUNCIÓN COMPARTIR (FIX: Notificación Toast)
     const handleShare = useCallback(async () => {
         const shareUrl = `${window.location.origin}/photo/${photoData.id}`; 
         const shareTitle = photoData.caption || "Mira esta foto!";
@@ -259,14 +266,14 @@ const PhotoDetailModal = ({
                 if (MISSION_TYPES?.SHARE_CONTENT) {
                     const trackingResult = await trackShareContent('photo', photoData.id, platform); 
                     if (trackingResult.result === 'success') {
-                         showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 3000);
+                         showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 'success', 3000);
                         refreshParentData(); 
                     } else if (trackingResult.result === 'already_paid') {
-                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 3000);
+                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 'restriction', 3000);
                     }
                 }
             } else {
-                showTemporaryToast("Compartiendo foto (No ganas puntos por tu contenido).", 3000);
+                showTemporaryToast("Compartiendo foto (No ganas puntos por tu contenido).", 'info', 3000);
             }
         };
 
@@ -281,7 +288,7 @@ const PhotoDetailModal = ({
             } catch (error) {
                 if (error.name !== 'AbortError') { 
                      console.error('Web Share API falló:', error);
-                     showTemporaryToast('Error al abrir el diálogo de compartir.', 3000);
+                     showTemporaryToast('Error al abrir el diálogo de compartir.', 'error', 3000);
                 }
             }
         } else {
@@ -292,7 +299,7 @@ const PhotoDetailModal = ({
                 
             } catch (error) {
                 console.error('Error al copiar al portapapeles:', error);
-                showTemporaryToast('Error al copiar el enlace.', 3000);
+                showTemporaryToast('Error al copiar el enlace.', 'error', 3000);
             }
         }
     }, [photoData, refreshParentData, isOwner, showTemporaryToast]);
@@ -370,7 +377,6 @@ const PhotoDetailModal = ({
                                 ) : (
                                     comments.map((c) => (
                                         <div key={c.id} className="flex items-start space-x-2">
-                                            {/* Usamos el alias user_profiles que está configurado en el fetch */}
                                             <span className="font-semibold text-foreground">{c.user || 'Usuario'}</span>
                                             <span className="text-muted-foreground">{c.content}</span>
                                         </div>
