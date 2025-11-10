@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL
+// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Sin PhotoDetailPage)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -26,7 +26,7 @@ import NotFound from "pages/NotFound";
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
-import PhotoDetailPage from './pages/PhotoDetailPage.jsx'; // 🚨 CORRECCIÓN: Se añade la extensión .jsx para resolver el error de compilación
+// 🚫 ELIMINADA: import PhotoDetailPage from './pages/PhotoDetailPage.jsx';
 
 // ✅ PÁGINAS REALES DE USUARIO
 import UserProfileSettings from './pages/user-profile-settings';
@@ -37,7 +37,7 @@ import PointsRewardsStore from './pages/points-rewards-store';
 import PurchasePointsPage from './pages/purchase-points';
 
 // 🚨 CORRECCIÓN - Importación asumida para el Perfil Público
-import PublicProfilePage from './pages/public-profile-page'; // NECESARIO para la ruta /profile/:username
+import PublicProfilePage from './pages/public-profile-page';
 
 // ADMIN PANEL
 import AdminDashboard from "pages/admin-panel/AdminDashboard";
@@ -97,7 +97,9 @@ const Routes = () => {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
-              <Route path="/photo/:photoId" element={<PhotoDetailPage />} /> 
+              
+              {/* 🚫 RUTA ELIMINADA: La página de detalle de foto fue eliminada para resolver el error de build. */}
+              {/* <Route path="/photo/:photoId" element={<PhotoDetailPage />} /> */} 
 
               {/* 🚨 CORRECCIÓN CLAVE: 1. PERFIL PÚBLICO (/profile/pedro) */}
               <Route 
