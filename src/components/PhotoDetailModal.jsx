@@ -21,7 +21,7 @@ const PhotoDetailModal = ({
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
     const [userHasLiked, setUserHasLiked] = useState(false);
-    const [commentText, setCommentText] = useState(''); // Estado del comentario
+    const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
     
     // ⭐️ Nueva constante para verificar la propiedad del contenido ⭐️
@@ -33,7 +33,6 @@ const PhotoDetailModal = ({
     
     const fetchInteractions = useCallback(async () => {
         if (!photoData?.id || !user?.id) {
-            // Cargar contadores de la propia foto si no hay usuario logueado
             setLikeCount(photoData?.likes_count || 0);
             setComments([]);
             setUserHasLiked(false);
@@ -42,6 +41,7 @@ const PhotoDetailModal = ({
 
         try {
             // 1. OBTENER CONTEO DE LIKES
+            // Si el LIKE no funciona, verifica RLS en photo_likes y si existe el user.id
             const { count: realLikeCount, error: countError } = await supabase
                 .from('photo_likes') 
                 .select('*', { count: 'exact' })
@@ -55,7 +55,7 @@ const PhotoDetailModal = ({
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            // 3. OBTENER COMENTARIOS (CORRECCIÓN en el JOIN)
+            // 3. OBTENER COMENTARIOS (¡AJUSTE FINAL EN LA LECTURA!)
             const { data: fetchedComments, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`
@@ -63,8 +63,9 @@ const PhotoDetailModal = ({
                     content, 
                     created_at, 
                     user_id,
-                    // ⭐️ ASUMIENDO que la tabla de perfiles se llama 'profiles' 
-                    profiles(full_name, username) 
+                    // ⭐️ AJUSTE CRÍTICO DE TABLA DE PERFILES: Usamos el nombre 'user_profiles' 
+                    // y el nombre de la FK 'user_id' para la unión.
+                    user_profile:user_id(full_name, username) 
                 `)
                 .eq('photo_id', photoData.id)
                 .order('created_at', { ascending: false })
@@ -77,9 +78,10 @@ const PhotoDetailModal = ({
             setLikeCount(realLikeCount || 0); 
             setUserHasLiked(!!userLike);
             
+            // ⭐️ Ajuste del mapeo: usamos el alias 'user_profile'
             setComments(fetchedComments?.map(c => ({
                 ...c,
-                user: c.profiles?.full_name || `@${c.profiles?.username || 'Usuario'}`
+                user: c.user_profile?.full_name || `@${c.user_profile?.username || 'Usuario'}`
             })) || []);
 
         } catch (error) {
@@ -91,7 +93,7 @@ const PhotoDetailModal = ({
         }
     }, [photoData, user]);
 
-    // ⭐️ AJUSTE CRÍTICO 1: Reiniciar el estado del comentario y refrescar interacciones al cambiar de foto
+    // ⭐️ AJUSTE CRÍTICO: Reiniciar el estado del comentario y refrescar interacciones al cambiar de foto
     useEffect(() => {
         fetchInteractions();
         // Reiniciar el texto del comentario cada vez que se navega a una nueva foto
@@ -99,18 +101,14 @@ const PhotoDetailModal = ({
     }, [fetchInteractions]);
 
 
-    // ===================================
-    // CORRECCIÓN 2: Lógica de teclas para evitar navegación con Enter
-    // ===================================
-
+    // ⭐️ CORRECCIÓN DE USABILIDAD: Prevenir navegación con Enter
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
                 onClose();
             }
             
-            // Permitir navegación solo con flechas y siempre que el input de comentario no esté activo
-            // 🚨 ELIMINADO: ' ' y 'Enter' de la navegación global
+            // Permitir navegación solo con flechas y solo si no estamos escribiendo
             if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
                  if (event.key === 'ArrowRight') {
                     onNavigate('next');
@@ -129,7 +127,7 @@ const PhotoDetailModal = ({
     
 
     // ===================================
-    // INTEGRACIÓN DE PUNTOS: Like
+    // INTEGRACIÓN DE PUNTOS: Like (Ahora debe funcionar si las tablas están OK)
     // ===================================
 
     const handleLikeToggle = useCallback(async () => {
@@ -187,7 +185,6 @@ const PhotoDetailModal = ({
     // ===================================
     // INTEGRACIÓN DE PUNTOS: Comentario
     // ===================================
-    // ⭐️ AJUSTE CRÍTICO 3: Agregar e.preventDefault() en el callback
     const handleCommentSubmit = useCallback(async (e) => {
         // Detener el evento para prevenir la navegación global (Enter)
         e?.preventDefault(); 
