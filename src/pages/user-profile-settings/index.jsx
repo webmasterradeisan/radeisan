@@ -390,7 +390,7 @@ const useUserPhotos = (userId) => {
 
       console.log('📸 DIAGNÓSTICO FOTOS: Fetching photos for user ID:', userId);
 
-      // CORRECCIÓN FINAL: Eliminadas las referencias a 'likes', 'comments_count' y 'file_size'
+      // Eliminadas las referencias a 'likes', 'comments_count' y 'file_size'
       const { data, error: fetchError } = await supabase
         .from('photos')
         .select(`
@@ -925,6 +925,12 @@ const UserProfileSettings = () => {
   
   const { purchases } = usePurchaseHistory();
 
+  // 🚨 OBTENER LOS DATOS COMPLETOS DE LA FOTO SELECCIONADA (CORREGIDO)
+  const selectedPhotoData = useMemo(() => {
+    if (!selectedPhotoId || !photos) return null;
+    return photos.find(p => p.id === selectedPhotoId);
+  }, [selectedPhotoId, photos]);
+
   // Formatear datos del usuario
   const userData = useMemo(() => {
     if (!profileData) return null;
@@ -984,7 +990,7 @@ const UserProfileSettings = () => {
   // EVENT HANDLERS
   // ===============================
 
-  // 🚨 MANEJADOR DE CLIC DE FOTO ACTUALIZADO PARA ABRIR MODAL
+  // MANEJADOR DE CLIC DE FOTO ACTUALIZADO PARA ABRIR MODAL
   const handlePhotoClick = useCallback((photoId) => {
     console.log('📸 Abriendo modal de foto ID:', photoId);
     setSelectedPhotoId(photoId);
@@ -1621,9 +1627,9 @@ const UserProfileSettings = () => {
       )}
 
       {/* 🚨 MODAL DE DETALLE DE FOTO */}
-      {showPhotoModal && selectedPhotoId && (
+      {showPhotoModal && selectedPhotoData && (
           <PhotoDetailModal
-              photoId={selectedPhotoId}
+              photoData={selectedPhotoData} // PASAMOS EL OBJETO DE DATOS COMPLETO
               onClose={handleClosePhotoModal}
               refreshParentData={refreshProfile} // Pasa la función de refresco del perfil
           />
