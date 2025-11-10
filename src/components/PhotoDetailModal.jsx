@@ -141,6 +141,9 @@ const PhotoDetailModal = ({
     const photoUrl = photoData.image_url || photoData.thumbnail_url; 
     const photoCaption = photoData.caption || 'Foto sin descripción';
     
+    // Obtenemos la descripción del objeto (que ya viene del fetch)
+    const photoDescription = photoData.description; 
+    
     const userDisplayName = user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
     const photoDate = new Date(photoData.created_at).toLocaleDateString();
 
@@ -199,7 +202,16 @@ const PhotoDetailModal = ({
 
                     {/* Contenido/Comentarios */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                        <p className="text-sm text-foreground">{photoCaption}</p>
+                        
+                        {/* Título/Caption */}
+                        {photoCaption && (
+                            <p className="font-semibold text-sm text-foreground">{photoCaption}</p> 
+                        )}
+                        
+                        {/* 🚨 DESCRIPCIÓN CORREGIDA: Se muestra si existe y es diferente al título */}
+                        {photoDescription && photoDescription !== photoCaption && (
+                            <p className="text-sm text-foreground mt-1">{photoDescription}</p>
+                        )}
                         
                         <div className="text-sm text-muted-foreground border-t border-border pt-4 mt-4">
                             <p className="font-semibold mb-2">Comentarios:</p>
