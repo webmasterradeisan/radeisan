@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL
+// src/Routes.jsx - VERSIÓN CORREGIDA Y FUNCIONAL (Solucionado error de importación final)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -7,7 +7,6 @@ import { AuthProvider } from "contexts/AuthContext";
 import { PointsProvider } from "contexts/PointsContext";
 
 // SISTEMA ORIGINAL MANTENIDO
-// 🚨 FIX: Se agrega ProtectedAdminRoute a la lista
 import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "components/ProtectedRoute";
 
 // MOBILE LAYOUT PARA APLICAR GRADUALMENTE
@@ -27,7 +26,6 @@ import NotFound from "pages/NotFound";
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
-// 🚫 ELIMINADA: import PhotoDetailPage from './pages/PhotoDetailPage';
 
 // ✅ PÁGINAS REALES DE USUARIO
 import UserProfileSettings from './pages/user-profile-settings';
@@ -35,13 +33,11 @@ import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
-// 🚨 FIX: Se agrega /index.jsx
-import PurchasePointsPage from './pages/purchase-points/index.jsx';
+// 🚨 FIX FINAL: Corregida la ruta de importación
+import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
 // 🚨 COMPONENTE NUEVO: Perfil Público
-// 🚨 FIX: Se agrega /index.jsx
-import PublicProfilePage from './pages/public-profile-page/index.jsx'; 
-
+import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
 import AdminDashboard from "pages/admin-panel/AdminDashboard";
@@ -102,10 +98,7 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚫 COMENTADA: Ruta que dependía de PhotoDetailPage que no existe */}
-              {/* <Route path="/photo/:photoId" element={<PhotoDetailPage />} /> */}
-
-              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica para usuarios visitantes */}
+              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
               <Route 
                 path="/profile/:username" 
                 element={
@@ -147,14 +140,14 @@ const Routes = () => {
                 </ProtectedRoute>
               } />
 
-              {/* 🚨 PERFIL DEL DUEÑO: Movido a settings/profile para evitar conflicto con /profile/:username */}
+              {/* 🚨 PERFIL DEL DUEÑO: Ruta estática para la configuración del usuario logueado */}
               <Route path="/settings/profile" element={
                 <ProtectedRoute>
                   <UserProfileSettings />
                 </ProtectedRoute>
               } />
               
-              {/* Redirects para que rutas antiguas o el link simple "/profile" apunten a la configuración del dueño */}
+              {/* Redirects de rutas antiguas o comunes a /settings/profile */}
               <Route path="/user-profile-settings" element={<Navigate to="/settings/profile" replace />} />
               <Route path="/user/profile" element={<Navigate to="/settings/profile" replace />} />
               <Route path="/profile" element={<Navigate to="/settings/profile" replace />} />
