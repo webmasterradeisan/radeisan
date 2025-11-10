@@ -562,10 +562,11 @@ const PhotoGrid = ({
   photos = [], 
   loading = false, 
   onQuickUpload,
+  onPhotoAction, // Nuevo prop para acciones (Editar/Eliminar)
   isOwner = false,
   showUploadButton = true,
-  fetchError = null, // Se añade el error del fetcher para mostrarlo
-  onPhotoClick // Nuevo prop para manejar el click
+  fetchError = null,
+  onPhotoClick
 }) => {
   if (loading) {
     return (
@@ -628,16 +629,14 @@ const PhotoGrid = ({
     <div className="space-y-6">
       {isOwner && showUploadButton && (
         <div className="flex justify-end gap-3">
-          {/* INICIO DE MODIFICACIÓN: Se elimina "Subir Más" y se estiliza "Studio" */}
+          {/* Único botón de subida, con estilo principal y texto "Subir Fotos" */}
           <Button 
             onClick={() => window.location.href = '/photo-upload'} 
-            // Usamos el estilo principal y el ícono de subida
-            size="sm" // Opcional, mantener el tamaño del botón
+            size="sm" 
           >
             <Icon name="Plus" size={16} className="mr-2" />
             Subir Fotos
           </Button>
-          {/* FIN DE MODIFICACIÓN */}
         </div>
       )}
 
@@ -645,8 +644,8 @@ const PhotoGrid = ({
         {photos.map((photo) => (
           <div 
             key={photo.id} 
-            className="group relative aspect-square cursor-pointer" // Añadir cursor-pointer
-            onClick={() => onPhotoClick(photo.id)} // Añadir manejador de clic
+            className="group relative aspect-square cursor-pointer" 
+            onClick={() => onPhotoClick(photo.id)}
           >
             <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
               <img
@@ -657,6 +656,7 @@ const PhotoGrid = ({
               />
             </div>
             
+            {/* Overlay de Interacciones y Edición */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex flex-col justify-end p-4">
               <div className="text-white">
                 {photo.caption && (
@@ -671,6 +671,34 @@ const PhotoGrid = ({
                   )}
                 </div>
               </div>
+
+              {/* Botones de Editar/Eliminar */}
+              {isOwner && onPhotoAction && (
+                <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-white bg-black/50 hover:bg-black/70"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPhotoAction('edit', photo);
+                    }}
+                  >
+                    <Icon name="Edit" size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-400 bg-black/50 hover:bg-black/70 hover:text-red-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPhotoAction('delete', photo);
+                    }}
+                  >
+                    <Icon name="Trash2" size={16} />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -1222,6 +1250,40 @@ const UserProfileSettings = () => {
     };
   }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
 
+  // 🚨 NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
+  const handlePhotoAction = useCallback(async (action, photo) => {
+    try {
+      switch (action) {
+        case 'edit':
+          console.log('Editando foto:', photo.id);
+          // Asumimos una ruta de edición similar a la de videos
+          window.location.href = `/photo-edit/${photo.id}`;
+          break;
+        case 'delete':
+          if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
+            const { error } = await supabase
+              .from('photos')
+              .delete()
+              .eq('id', photo.id);
+            
+            if (!error) {
+              await refreshPhotos();
+              await refreshProfile();
+              console.log('✅ Foto eliminada exitosamente:', photo.id);
+            } else {
+              console.error('❌ Error eliminando foto:', error);
+              alert(`Error al eliminar la foto: ${error.message}`);
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error con la acción de foto:', error);
+    }
+  }, [refreshPhotos, refreshProfile]);
+
 
   // [Resto de event handlers sin cambios funcionales]
   
@@ -1422,6 +1484,7 @@ const UserProfileSettings = () => {
             photos={photos}
             loading={photosLoading}
             onQuickUpload={handleQuickUploadOpen}
+            onPhotoAction={handlePhotoAction} // PASAMOS EL HANDLER DE ACCIONES
             isOwner={true}
             fetchError={photosError} // Pasa el error para visualización
             onPhotoClick={handlePhotoClick} // Pasa el manejador de clic
