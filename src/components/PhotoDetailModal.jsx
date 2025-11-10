@@ -30,17 +30,15 @@ const PhotoDetailModal = ({
     const isOwner = user?.id === photoData?.user_id;
 
     // ===================================
-    // FUNCIÓN DE NOTIFICACIÓN TOAST (Ajustada para disparar el fetch después)
+    // FUNCIÓN DE NOTIFICACIÓN TOAST (5 segundos)
     // ===================================
 
-    // 🚨 AJUSTE CRÍTICO: Nueva firma para aceptar un callback de acción
     const showTemporaryToast = useCallback((message, type = 'success', duration = 5000, callback = null) => {
         setToastMessage(message);
         setShowToast(true);
         setTimeout(() => {
             setShowToast(false);
             setToastMessage('');
-            // 🚨 Ejecutar callback (fetch) solo después de que el toast desaparezca
             if (callback) {
                 callback();
             }
@@ -131,7 +129,7 @@ const PhotoDetailModal = ({
 
 
     // ===================================
-    // CORRECCIÓN CRÍTICA: TECLA ENTER (Mantener la corrección de listeners)
+    // CORRECCIÓN CRÍTICA: TECLA ENTER (AJUSTE FINAL)
     // ===================================
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -139,7 +137,8 @@ const PhotoDetailModal = ({
                 onClose();
             }
             
-            // Permitir navegación solo con flechas y solo si no estamos escribiendo
+            // Permitir navegación SOLAMENTE con ArrowRight y ArrowLeft,
+            // y solo si el foco no está en un campo de texto.
             if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
                  if (event.key === 'ArrowRight') {
                     onNavigate('next');
@@ -147,6 +146,10 @@ const PhotoDetailModal = ({
                     onNavigate('prev');
                 }
             }
+            
+            // Si la tecla es Enter y el foco está en un campo de texto, 
+            // la función onKeyDown del input ya llama a e.preventDefault(). 
+            // Al eliminar 'Enter' de esta lista, garantizamos que solo el input lo maneje.
         };
 
         window.addEventListener('keydown', handleKeyDown);
@@ -161,7 +164,6 @@ const PhotoDetailModal = ({
     // MANEJADORES DE ACCIONES
     // ===================================
 
-    // FIX: LIKE CON RETRASO DE FETCH
     const handleLikeToggle = useCallback(async () => {
         if (!user?.id || isLiking) return;
 
@@ -213,7 +215,7 @@ const PhotoDetailModal = ({
                                     fetchInteractions(); // RECARGA DESPUÉS DE QUE EL TOAST HAYA TERMINADO
                                     refreshParentData(); 
                                 });
-                                // 🛑 SALIR SIN LLAMAR fetchInteractions() aquí
+                                // Salir sin recargar aquí
                                 return; 
                             } else if (trackingResult.result === 'already_paid') {
                                 warningMessage = 'Ya ganaste puntos por darle "Me Gusta" a esta foto anteriormente.';
