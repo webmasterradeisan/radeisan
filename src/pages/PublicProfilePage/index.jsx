@@ -1,5 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ DISEÑO EXACTO SEGÚN LA IMAGEN FINAL (PORTADA AL FONDO, AVATAR SUPERPUESTO, DATOS INMEDIATAMENTE DEBAJO)
+// ✅ DISEÑO EXACTO SEGÚN LA IMAGEN 'radeisan2025' (PORTADA ALTA, AVATAR GRANDE, INFO ALINEADA)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -124,7 +124,7 @@ const PublicProfilePage = () => {
         username: profile.username || `user_${profile.id.substring(0, 8)}`,
         avatar: avatarUrl,
         coverImage: profile.cover_image_url,
-        bio: profile.bio, // Mantener el bio original para la meta description
+        bio: profile.bio,
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
         photosCount: photosData?.length || 0,
@@ -233,7 +233,6 @@ const PublicProfilePage = () => {
     );
   }
 
-  // Se extrae la información para evitar profileData.xxx repetidamente
   const {
     name,
     username,
@@ -250,7 +249,6 @@ const PublicProfilePage = () => {
     bio,
   } = profileData;
 
-  // Bio/Fecha de registro (solo usamos la fecha si el bio está vacío)
   const formattedCreationDate = new Date(created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
   const bioText = bio || `Usuario de RADEISAN desde ${formattedCreationDate}`;
 
@@ -267,11 +265,10 @@ const PublicProfilePage = () => {
 
         <main className="pt-16">
           <div className="max-w-6xl mx-auto">
-            {/* ✅ HEADER - DISEÑO EXACTO DE LA IMAGEN */}
+            {/* ✅ HEADER - DISEÑO EXACTO DE LA IMAGEN 'radeisan2025' */}
             <div className="bg-card border-b border-border">
               
-              {/* Cover Image - Alta y al fondo */}
-              {/* h-48/h-64 según la última imagen, ajustado de nuevo a los valores que se ven mejor en la referencia */}
+              {/* Cover Image - Alta */}
               <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
                 {coverImage ? (
                   <Image 
@@ -280,26 +277,26 @@ const PublicProfilePage = () => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
+                  // Usar fondo de color o imagen placeholder si no hay coverImage
                   <div className="w-full h-full bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
                 )}
                 
-                {/* Botón de Seguir justo en el borde inferior de la portada (parte superior derecha) */}
-                <div className="absolute bottom-0 right-0 p-4 transform translate-y-1/2">
+                {/* Botones de acción justo debajo del borde de la portada */}
+                <div className="absolute bottom-0 right-0 px-4 flex items-center gap-2 transform translate-y-1/2">
+                    
+                    {/* Botón de Seguir/Siguiendo */}
                     <Button
-                      variant={following ? "default" : "secondary"}
+                      variant={following ? "outline" : "default"}
                       size="sm"
                       onClick={handleFollowToggle}
-                      className={`text-sm ${following ? 'bg-muted text-foreground hover:bg-muted/80' : 'bg-red-500 hover:bg-red-600 text-white'}`}
-                      style={{ height: '32px' }} // Altura ajustada
+                      className={`text-sm h-8 px-4 ${following ? 'bg-muted border-border text-foreground' : 'bg-red-500 hover:bg-red-600 text-white'}`}
                     >
                       <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-1" />
                       {following ? 'Siguiendo' : 'Seguir'}
                     </Button>
-                </div>
-                
-                {/* Botón de Compartir justo al lado (parte superior derecha) */}
-                <div className="absolute bottom-0 right-20 p-4 transform translate-y-1/2">
-                     <Button variant="outline" size="icon" className="border-0 bg-transparent hover:bg-muted/50 w-8 h-8">
+                    
+                    {/* Botón de Compartir */}
+                    <Button variant="outline" size="icon" className="border-0 bg-transparent hover:bg-muted/50 w-8 h-8">
                         <Icon name="Share2" size={16} />
                     </Button>
                 </div>
@@ -309,12 +306,12 @@ const PublicProfilePage = () => {
               <div className="px-4 sm:px-6 pb-4"> 
                 
                 {/* Contenedor Flex para alinear Avatar (izquierda) y todo el texto (derecha) */}
-                {/* -mt-16/sm:-mt-20 ajustado para que el avatar se superponga ~50% */}
+                {/* -mt-16/sm:-mt-20 para que el avatar se superponga ~50% de la portada */}
                 <div className="flex items-start -mt-16 sm:-mt-20"> 
                   
-                  {/* Lado izquierdo: Avatar (Más grande) */}
+                  {/* Lado izquierdo: Avatar (Grande) */}
                   <div className="flex-shrink-0 mr-4"> 
-                    {/* Tamaño del avatar ligeramente aumentado (w-32/h-32) */}
+                    {/* Tamaño del avatar (w-32/h-32) */}
                     <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
                       <Image 
                         src={avatar} 
@@ -324,24 +321,31 @@ const PublicProfilePage = () => {
                     </div>
                   </div>
 
-                  {/* Lado Derecho: Toda la información, stats y botones */}
+                  {/* Lado Derecho: Toda la información, Nombre, Bio y Stats */}
                   <div className="flex flex-col flex-1 min-w-0 pt-4"> 
                     
-                    {/* Fila 1: Nombre principal */}
-                    <div className="flex items-baseline gap-2 mb-1">
-                        {/* Nombre principal (ej. pedro buenhombre) */}
-                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground whitespace-nowrap">
-                            {name} 
-                        </h1>
-                        {isVerified && (
-                            <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
-                        )}
-                        {isBusinessAccount && (
-                            <div className="flex items-center space-x-1 px-1.5 py-0 bg-accent/10 rounded-full">
-                              <Icon name="Building2" size={10} color="var(--color-accent)" />
-                              <span className="text-xs font-medium text-accent">Business</span>
-                            </div>
-                        )}
+                    {/* Fila 1: Nombre principal + Bio/Fecha de Registro */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-baseline gap-1 sm:gap-4 mb-1">
+                        <div className="flex items-baseline gap-2">
+                            {/* Nombre principal (radeisan2025) */}
+                            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-foreground whitespace-nowrap">
+                                {name} 
+                            </h1>
+                            {isVerified && (
+                                <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                            )}
+                            {isBusinessAccount && (
+                                <div className="flex items-center space-x-1 px-1.5 py-0 bg-accent/10 rounded-full">
+                                  <Icon name="Building2" size={10} color="var(--color-accent)" />
+                                  <span className="text-xs font-medium text-accent">Business</span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Bio/Fecha de registro (pequeño a la derecha del nombre) */}
+                        <p className="text-sm text-muted-foreground whitespace-nowrap mt-1 sm:mt-0">
+                          {bioText}
+                        </p>
                     </div>
                     
                     {/* Fila 2: @Username */}
@@ -353,7 +357,7 @@ const PublicProfilePage = () => {
                       
                       {/* Videos */}
                       <div className="flex items-center space-x-1">
-                        <Icon name="Monitor" size={16} className="text-blue-500" /> {/* Color azul como en la imagen previa */}
+                        <Icon name="Monitor" size={16} className="text-muted-foreground" /> 
                         <span className="font-medium text-foreground">{videosCount}</span>
                         <span className="text-muted-foreground">videos</span>
                       </div>
@@ -388,9 +392,6 @@ const PublicProfilePage = () => {
                     </div>
                   </div>
                 </div>
-                
-                {/* Nota: La bio/fecha de registro no aparece visiblemente en la última imagen. Se deja la versión anterior comentada. */}
-                {/* <p className="text-sm text-muted-foreground mt-4 sm:hidden"> {bioText} </p> */}
               </div>
             </div>
 
