@@ -366,16 +366,12 @@ const Routes = () => {
                 } 
               />
 
+              {/* CONFIGURACIÓN - REDIRECCIÓN A /PROFILE (Implementación lista) */}
               <Route 
                 path="/settings" 
                 element={
                   <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PlaceholderPage 
-                        title="Configuración" 
-                        description="Personaliza tu experiencia en RADEISAN" 
-                      />
-                    </MobileLayoutWrapper>
+                    <Navigate to="/profile" replace />
                   </ProtectedRoute>
                 } 
               />
