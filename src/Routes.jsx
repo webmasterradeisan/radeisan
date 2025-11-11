@@ -24,8 +24,8 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
-// 🚨 CORRECCIÓN DE LA RUTA: Cambiamos a la importación explícita del archivo
-import UserProfilePage from './pages/UserProfilePage.jsx';
+// 🚨 CORRECCIÓN FINAL DE RUTA: Apuntando explícitamente a index.jsx (Soluciona el error Rollup)
+import UserProfilePage from './pages/UserProfilePage/index.jsx';
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
