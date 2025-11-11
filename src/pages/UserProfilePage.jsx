@@ -1,4 +1,4 @@
-// src/pages/UserProfilePage.jsx (o src/pages/UserProfilePage/index.jsx)
+// src/pages/UserProfilePage.jsx
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
