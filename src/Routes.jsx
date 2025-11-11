@@ -24,6 +24,9 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
+// 🚨 CORRECCIÓN FINAL DE RUTA: Apuntando explícitamente a index.jsx (Soluciona el error Rollup)
+import UserProfilePage from './pages/UserProfilePage/index.jsx';
+
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
 
@@ -252,6 +255,18 @@ const Routes = () => {
                   </ProtectedRoute>
                 } 
               />
+              
+              {/* ✅ RUTA: PERFIL PÚBLICO (PROTEGIDA) */}
+              <Route 
+                path="/user/:userIdOrUsername" 
+                element={
+                  <ProtectedRoute>
+                    <MobileLayoutWrapper>
+                      <UserProfilePage />
+                    </MobileLayoutWrapper>
+                  </ProtectedRoute>
+                } 
+              />
 
               <Route 
                 path="/upload" 
@@ -264,7 +279,7 @@ const Routes = () => {
                 } 
               />
               
-              {/* ✅ RUTA CORREGIDA: Photo Upload Studio */}
+              {/* ✅ RUTA: Photo Upload Studio */}
               <Route 
                 path="/photo-upload" 
                 element={
