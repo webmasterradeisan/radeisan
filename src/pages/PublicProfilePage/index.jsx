@@ -232,11 +232,33 @@ const PublicProfilePage = () => {
     );
   }
 
+  const {
+    name,
+    username,
+    avatar,
+    coverImage,
+    bio,
+    videosCount,
+    reelsCount,
+    photosCount,
+    totalViews,
+    totalLikes,
+    created_at,
+    isVerified,
+    isBusinessAccount
+  } = profileData;
+
+  const formattedCreationDate = new Date(created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+  // Bio sin la frase "Usuario de RADEISAN desde"
+  const bioText = bio && !bio.includes('Usuario de RADEISAN desde') ? bio : `Usuario de RADEISAN desde ${formattedCreationDate}`;
+
+  // --- Inicio del componente Renderizado (Parte modificada) ---
+
   return (
     <>
       <Helmet>
-        <title>{profileData.name} (@{profileData.username}) | RADEISAN</title>
-        <meta name="description" content={profileData.bio} />
+        <title>{name} (@{username}) | RADEISAN</title>
+        <meta name="description" content={bioText} />
       </Helmet>
 
       <div className="min-h-screen bg-background">
@@ -248,117 +270,141 @@ const PublicProfilePage = () => {
             <div className="bg-card border-b border-border">
               {/* Cover Image */}
               <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
-                {profileData.coverImage ? (
+                {coverImage ? (
                   <Image 
-                    src={profileData.coverImage} 
+                    src={coverImage} 
                     alt="Portada del perfil"
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
+                  // Usar una imagen borrosa para simular la portada de la foto
+                  <div className="w-full h-full">
+                    {/* Placeholder para simular el fondo desenfocado de la imagen */}
+                    <Image 
+                        src={avatar} // Usamos el avatar para el fondo desenfocado, si no hay portada
+                        alt="Fondo desenfocado"
+                        className="w-full h-full object-cover filter blur-md scale-110"
+                    />
+                    <div className="absolute inset-0 bg-black/30"></div>
+                  </div>
                 )}
               </div>
 
-              {/* Profile Info - Avatar SOBRE la portada */}
-              <div className="px-4 sm:px-6 pb-6 -mt-20 sm:-mt-24">
-                <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-                  {/* Lado izquierdo: Avatar + Info */}
-                  <div className="flex items-end gap-4">
+              {/* Profile Info - Avatar y detalles */}
+              {/* Usamos padding horizontal y el margen negativo para la superposición del avatar */}
+              <div className="px-4 sm:px-6 pb-4 -mt-16 sm:-mt-20"> 
+                <div className="flex items-end justify-between gap-4">
+
+                  {/* Lado izquierdo: Avatar + Nombre/Username + Stats */}
+                  <div className="flex items-start gap-4 w-full"> {/* Usamos items-start para alinear el texto con la parte superior del avatar */}
                     {/* Avatar SOBRE la portada */}
-                    <div className="flex-shrink-0">
-                      <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
+                    <div className="flex-shrink-0 -translate-y-4"> {/* Ajuste extra para subir el avatar y hacerlo más visible sobre la portada */}
+                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
                         <Image 
-                          src={profileData.avatar} 
-                          alt={profileData.name}
+                          src={avatar} 
+                          alt={name}
                           className="w-full h-full object-cover"
                         />
                       </div>
                     </div>
 
-                    {/* Nombre, username y stats */}
-                    <div className="flex-1 min-w-0 pb-2">
-                      {/* Nombre y badges */}
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
-                          {profileData.name}
+                    {/* Contenedor de Info y Stats */}
+                    <div className="flex flex-col flex-1 min-w-0 pt-4"> {/* pt-4 para bajar el texto y alinearlo mejor con el avatar */}
+                      
+                      {/* Nombre, Username, Bio (en la misma línea del username) */}
+                      <div className="flex items-baseline justify-start gap-2 mb-1">
+                        
+                        {/* Nombre principal (Username) */}
+                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground whitespace-nowrap">
+                            {name} {/* En la imagen, 'radeisan2025' es el texto principal */}
                         </h1>
-                        {profileData.isVerified && (
-                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                        
+                        {/* Bio/Fecha de registro (pequeño a la derecha del nombre) */}
+                        <p className="text-sm text-muted-foreground hidden sm:block whitespace-nowrap">
+                          {bioText}
+                        </p>
+
+                        {/* Badges, si existen */}
+                        {isVerified && (
+                            <Icon name="BadgeCheck" size={16} color="var(--color-primary)" />
                         )}
-                        {profileData.isBusinessAccount && (
-                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
-                            <Icon name="Building2" size={12} color="var(--color-accent)" />
-                            <span className="text-xs font-medium text-accent">Business</span>
-                          </div>
+                        {isBusinessAccount && (
+                            <div className="flex items-center space-x-1 px-1.5 py-0 bg-accent/10 rounded-full">
+                              <Icon name="Building2" size={10} color="var(--color-accent)" />
+                              <span className="text-xs font-medium text-accent">Business</span>
+                            </div>
                         )}
                       </div>
                       
-                      {/* Username */}
-                      <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
+                      {/* @Username (pequeño debajo del nombre principal) */}
+                      <p className="text-sm text-muted-foreground mb-3">@{username}</p>
                       
-                      {/* Stats en UNA LÍNEA con iconos */}
-                      <div className="flex items-center flex-wrap gap-x-3 text-sm">
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Monitor" size={16} className="text-blue-500" />
-                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
-                          <span className="text-muted-foreground">videos</span>
-                        </div>
+                      {/* Fila: Stats + Botones (Alineación exacta como en la imagen) */}
+                      <div className="flex items-center justify-between w-full">
                         
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Smartphone" size={16} className="text-red-500" />
-                          <span className="font-medium text-foreground">{profileData.reelsCount}</span>
-                          <span className="text-muted-foreground">reels</span>
+                        {/* Stats en UNA LÍNEA simple */}
+                        <div className="flex items-center flex-wrap gap-x-3 text-sm">
+                          
+                          {/* Videos */}
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Monitor" size={16} className="text-muted-foreground" />
+                            <span className="font-medium text-foreground">{videosCount}</span>
+                            <span className="text-muted-foreground">videos</span>
+                          </div>
+                          
+                          {/* Reels */}
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Smartphone" size={16} className="text-muted-foreground" />
+                            <span className="font-medium text-foreground">{reelsCount}</span>
+                            <span className="text-muted-foreground">reels</span>
+                          </div>
+                          
+                          {/* Fotos */}
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Image" size={16} className="text-muted-foreground" />
+                            <span className="font-medium text-foreground">{photosCount}</span>
+                            <span className="text-muted-foreground">fotos</span>
+                          </div>
+
+                          {/* Vistas */}
+                          <div className="flex items-center space-x-1 hidden sm:flex"> {/* Ocultar en móvil si es demasiado largo */}
+                            <Icon name="Eye" size={16} className="text-muted-foreground" />
+                            <span className="font-medium text-foreground">{totalViews.toLocaleString()}</span>
+                            <span className="text-muted-foreground">views</span>
+                          </div>
+                          
+                          {/* Likes */}
+                          <div className="flex items-center space-x-1 hidden sm:flex"> {/* Ocultar en móvil si es demasiado largo */}
+                            <Icon name="Heart" size={16} className="text-muted-foreground" />
+                            <span className="font-medium text-foreground">{totalLikes.toLocaleString()}</span>
+                            <span className="text-muted-foreground">likes</span>
+                          </div>
                         </div>
-                        
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Image" size={16} className="text-green-500" />
-                          <span className="font-medium text-foreground">{profileData.photosCount}</span>
-                          <span className="text-muted-foreground">fotos</span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Eye" size={16} className="text-muted-foreground" />
-                          <span className="font-medium text-foreground">{profileData.totalViews.toLocaleString()}</span>
-                          <span className="text-muted-foreground">views</span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Heart" size={16} className="text-red-500" />
-                          <span className="font-medium text-foreground">{profileData.totalLikes.toLocaleString()}</span>
-                          <span className="text-muted-foreground">likes</span>
+
+                        {/* Botones (Alineados a la derecha de las stats) */}
+                        <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                          <Button
+                            variant={following ? "outline" : "default"}
+                            size="sm"
+                            onClick={handleFollowToggle}
+                          >
+                            <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-1" />
+                            {following ? 'Siguiendo' : 'Seguir'}
+                          </Button>
+                          
+                          <Button variant="outline" size="icon-sm"> 
+                            <Icon name="Share2" size={16} />
+                          </Button>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Lado derecho: Bio + Botones */}
-                  <div className="flex flex-col items-start sm:items-end gap-3 w-full sm:w-auto">
-                    {/* Bio/Fecha de registro */}
-                    <p className="text-sm text-muted-foreground">
-                      {profileData.bio || `Usuario de RADEISAN desde ${new Date(profileData.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' })}`}
-                    </p>
-                    
-                    {/* Botones */}
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant={following ? "outline" : "default"}
-                        size="sm"
-                        onClick={handleFollowToggle}
-                      >
-                        <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-2" />
-                        {following ? 'Siguiendo' : 'Seguir'}
-                      </Button>
-                      
-                      <Button variant="outline" size="icon">
-                        <Icon name="Share2" size={16} />
-                      </Button>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Tabs */}
+            {/* Tabs (Mantenemos el diseño actual) */}
             <div className="px-4 sm:px-6 py-6">
               <div className="flex border-b border-border mb-6 overflow-x-auto">
                 <button
