@@ -1,4 +1,4 @@
-// src/Routes.jsx - VERSIÓN COMPLETA CON PANEL ADMIN Y SISTEMA DE PUNTOS PREMIUM
+// src/Routes.jsx - ACTUALIZADO CON PERFIL PÚBLICO
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -28,6 +28,9 @@ import NotFound from "pages/NotFound";
 import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
+
+// ✅ NUEVO - PERFIL PÚBLICO
+import PublicProfilePage from './pages/PublicProfilePage';
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/PurchasePointsPage';
@@ -208,35 +211,6 @@ const Routes = () => {
                 } 
               />
 
-              {/* =================== SISTEMA DE VIDEOS =================== */}
-              
-              <Route 
-                path="/video/:videoId" 
-                element={
-                  <UniversalRoute>
-                    <VideoPlayerPage />
-                  </UniversalRoute>
-                } 
-              />
-
-              <Route 
-                path="/reel/:videoId" 
-                element={
-                  <UniversalRoute>
-                    <VideoPlayerPage />
-                  </UniversalRoute>
-                } 
-              />
-
-              <Route 
-                path="/reels" 
-                element={
-                  <UniversalRoute>
-                    <ReelsPage />
-                  </UniversalRoute>
-                } 
-              />
-
               {/* =================== RUTAS PROTEGIDAS =================== */}
               
               <Route 
@@ -262,6 +236,38 @@ const Routes = () => {
               />
 
               <Route 
+                path="/reels" 
+                element={
+                  <ProtectedRoute>
+                    <MobileLayoutWrapper>
+                      <ReelsPage />
+                    </MobileLayoutWrapper>
+                  </ProtectedRoute>
+                } 
+              />
+
+              <Route 
+                path="/video/:videoId" 
+                element={
+                  <UniversalRoute>
+                    <VideoPlayerPage />
+                  </UniversalRoute>
+                } 
+              />
+
+              <Route 
+                path="/reel/:videoId" 
+                element={
+                  <UniversalRoute>
+                    <VideoPlayerPage />
+                  </UniversalRoute>
+                } 
+              />
+
+              {/* =================== PERFIL =================== */}
+              
+              {/* Perfil propio del usuario autenticado */}
+              <Route 
                 path="/profile" 
                 element={
                   <ProtectedRoute>
@@ -271,6 +277,18 @@ const Routes = () => {
                   </ProtectedRoute>
                 } 
               />
+
+              {/* ✅ NUEVO - Perfil público (acepta username o UUID) */}
+              <Route 
+                path="/profile/:identifier" 
+                element={
+                  <UniversalRoute>
+                    <PublicProfilePage />
+                  </UniversalRoute>
+                } 
+              />
+
+              {/* =================== MARKETPLACE Y REWARDS =================== */}
 
               <Route 
                 path="/marketplace" 
@@ -294,33 +312,17 @@ const Routes = () => {
                 } 
               />
 
-              {/* =================== 💎 SISTEMA DE COMPRA DE PUNTOS PREMIUM =================== */}
-              
-              {/* Página principal de compra */}
+              {/* =================== COMPRA DE PUNTOS PREMIUM =================== */}
+
               <Route 
                 path="/purchase-points" 
                 element={
                   <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PurchasePointsPage />
-                    </MobileLayoutWrapper>
+                    <PurchasePointsPage />
                   </ProtectedRoute>
                 } 
               />
 
-              {/* Ruta alternativa en español */}
-              <Route 
-                path="/comprar-puntos" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PurchasePointsPage />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* Rutas de retorno de pasarelas de pago */}
               <Route 
                 path="/purchase/success" 
                 element={
