@@ -3,19 +3,18 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// ✅ Contextos y Supabase (Rutas verificadas)
+// ✅ Contextos y Supabase
 import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../contexts/AuthContext';
 
-// ✅ Componentes UI (Rutas verificadas)
+// ✅ Componentes UI
 import Header from '../components/ui/Header';
 import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
+import Loader from '../components/ui/Loader'; 
 
-// 🚨 COMPONENTE LOADER ELIMINADO: Usaremos el código de carga inline para evitar el RollupError.
-
-// 🚨 RUTA CORREGIDA: ProfileTabs (Asumiendo ubicación de user-profile-settings)
-import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
+// 🚨 CORRECCIÓN FINAL DE RUTA: Asumiendo que ProfileTabs.jsx está directamente en user-profile-settings/
+import ProfileTabs from '../user-profile-settings/ProfileTabs'; 
 
 // ===============================
 // HOOKS DE CONTENIDO (PLACEHOLDERS REUTILIZADOS)
@@ -26,6 +25,7 @@ const useUserContent = (userId, type) => {
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
     
+    // Función para obtener el título correcto para la simulación
     const getContentTitle = (index) => {
         if (type === 'videos') return `Video Horizontal #${index + 1}`;
         if (type === 'reels') return `Reel Viral #${index + 1}`;
