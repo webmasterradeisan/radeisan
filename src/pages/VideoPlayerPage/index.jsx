@@ -1,17 +1,15 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // VERSION FINAL ESTABLE
-// ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
-// ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
-// 🚨 3. (CORRECCIÓN) Enlace al perfil del autor usando <Link> y la ruta /user/:username.
+// 🚨 RUTA CORREGIDA: Conversión de importaciones absolutas (alias) a relativas (../../)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { supabase } from 'lib/supabase';
-import { useAuth } from 'contexts/AuthContext';
-import { usePoints } from 'contexts/PointsContext'; 
+import { supabase } from '../../lib/supabase'; // Corregido previamente
+import { useAuth } from '../../contexts/AuthContext'; // Corregido previamente
+import { usePoints } from '../../contexts/PointsContext'; // Corregido previamente
 import { 
   trackWatchVideo, 
   trackGiveLike, 
@@ -19,14 +17,16 @@ import {
   trackComment, 
   trackFollowUser,
   trackMissionProgress 
-} from 'services/missionsService'; 
-import Header from 'components/ui/Header';
-import Icon from 'components/AppIcon';
-import Button from 'components/ui/Button';
-import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
-import useIsMobile from 'hooks/useIsMobile';
-import VideoPlayerComponent from 'components/video/VideoPlayerComponent'; // Componente Asumido
-import CommentsSection from 'components/video/CommentsSection'; // Componente Asumido
+} from '../../services/missionsService'; // Asumiendo que services/ está en src/
+
+// 🚨 CORRECCIONES DE ALIAS A RUTAS RELATIVAS (../../)
+import Header from '../../components/ui/Header';
+import Icon from '../../components/AppIcon';
+import Button from '../../components/ui/Button';
+import RelatedVideosSidebar from '../../components/video/RelatedVideosSidebar';
+import useIsMobile from '../../hooks/useIsMobile'; // Asumiendo hooks/ está en src/
+import VideoPlayerComponent from '../../components/video/VideoPlayerComponent'; 
+import CommentsSection from '../../components/video/CommentsSection'; 
 
 // Definición de la animación simple para el feedback 
 const styleSheet = document.styleSheets[0] || document.createElement('style');
@@ -99,7 +99,7 @@ const VideoPlayerPage = () => {
           author:user_profiles (
             id,
             full_name,
-            username, // <<-- ESTO ES CLAVE PARA CONSTRUIR LA RUTA
+            username,
             avatar_url
           ),
           likes (
