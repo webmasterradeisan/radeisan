@@ -259,81 +259,91 @@ const PublicProfilePage = () => {
                 )}
               </div>
 
-              {/* Profile Info - IDÉNTICO A ProfileHeader */}
+              {/* Profile Info - LAYOUT VERTICAL CENTRADO */}
               <div className="px-4 sm:px-6 pb-6">
-                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between -mt-12 sm:-mt-16">
-                  {/* Avatar and Basic Info */}
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:space-x-4">
-                    <div className="relative mb-4 sm:mb-0">
-                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
-                        <Image 
-                          src={profileData.avatar} 
-                          alt={profileData.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground truncate">
-                          {profileData.name}
-                        </h1>
-                        {profileData.isVerified && (
-                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
-                        )}
-                        {profileData.isBusinessAccount && (
-                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
-                            <Icon name="Building2" size={12} color="var(--color-accent)" />
-                            <span className="text-xs font-medium text-accent">Business</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
-                      
-                      {profileData.bio && (
-                        <p className="text-sm text-foreground mb-3 max-w-md">
-                          {profileData.bio}
-                        </p>
-                      )}
-
-                      {/* Stats - IDÉNTICO */}
-                      <div className="flex items-center space-x-4 text-sm">
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium text-foreground">{profileData.followersCount?.toLocaleString()}</span>
-                          <span className="text-muted-foreground">seguidores</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
-                          <span className="text-muted-foreground">siguiendo</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
-                          <span className="text-muted-foreground">videos</span>
-                        </div>
-                        {profileData.photosCount > 0 && (
-                          <div className="flex items-center space-x-1">
-                            <span className="font-medium text-foreground">{profileData.photosCount}</span>
-                            <span className="text-muted-foreground">fotos</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Stats adicionales en mobile */}
-                      <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1 sm:hidden">
-                        {profileData.totalViews > 0 && (
-                          <span>{profileData.totalViews.toLocaleString()} visualizaciones</span>
-                        )}
-                        {profileData.totalLikes > 0 && (
-                          <span>{profileData.totalLikes.toLocaleString()} likes</span>
-                        )}
-                      </div>
+                {/* Avatar centrado */}
+                <div className="flex justify-center -mt-16 sm:-mt-20 mb-4">
+                  <div className="relative">
+                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
+                      <Image 
+                        src={profileData.avatar} 
+                        alt={profileData.name}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {/* Action Buttons - ADAPTADO PARA PERFIL PÚBLICO */}
-                  <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                {/* Info centrada debajo del avatar */}
+                <div className="text-center">
+                  {/* Nombre */}
+                  <div className="flex items-center justify-center space-x-2 mb-1">
+                    <h1 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">
+                      {profileData.name}
+                    </h1>
+                    {profileData.isVerified && (
+                      <Icon name="BadgeCheck" size={24} color="var(--color-primary)" />
+                    )}
+                    {profileData.isBusinessAccount && (
+                      <div className="flex items-center space-x-1 px-2 py-1 bg-accent/10 rounded-full">
+                        <Icon name="Building2" size={14} color="var(--color-accent)" />
+                        <span className="text-xs font-medium text-accent">Business</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Username */}
+                  <p className="text-sm text-muted-foreground mb-3">@{profileData.username}</p>
+                  
+                  {/* Bio */}
+                  {profileData.bio && (
+                    <p className="text-sm text-foreground mb-4 max-w-2xl mx-auto">
+                      {profileData.bio}
+                    </p>
+                  )}
+
+                  {/* Stats en UNA LÍNEA HORIZONTAL */}
+                  <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 text-sm mb-4">
+                    <div className="flex items-center space-x-1">
+                      <span className="font-medium text-foreground">{profileData.followersCount?.toLocaleString()}</span>
+                      <span className="text-muted-foreground">seguidores</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
+                      <span className="text-muted-foreground">siguiendo</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span className="font-medium text-foreground">{profileData.videosCount}</span>
+                      <span className="text-muted-foreground">videos</span>
+                    </div>
+                    {profileData.reelsCount > 0 && (
+                      <div className="flex items-center space-x-1">
+                        <span className="font-medium text-foreground">{profileData.reelsCount}</span>
+                        <span className="text-muted-foreground">reels</span>
+                      </div>
+                    )}
+                    {profileData.photosCount > 0 && (
+                      <div className="flex items-center space-x-1">
+                        <span className="font-medium text-foreground">{profileData.photosCount}</span>
+                        <span className="text-muted-foreground">fotos</span>
+                      </div>
+                    )}
+                    {profileData.totalViews > 0 && (
+                      <div className="flex items-center space-x-1">
+                        <span className="font-medium text-foreground">{profileData.totalViews.toLocaleString()}</span>
+                        <span className="text-muted-foreground">views</span>
+                      </div>
+                    )}
+                    {profileData.totalLikes > 0 && (
+                      <div className="flex items-center space-x-1">
+                        <span className="font-medium text-foreground">{profileData.totalLikes.toLocaleString()}</span>
+                        <span className="text-muted-foreground">likes</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons centrados */}
+                  <div className="flex items-center justify-center space-x-2">
                     <Button
                       variant={following ? "outline" : "default"}
                       size="sm"
