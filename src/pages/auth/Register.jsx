@@ -24,7 +24,6 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
 
   const accountTypeOptions = [
     { value: 'personal', label: 'Cuenta Personal' },
@@ -157,10 +156,11 @@ const Register = () => {
         setErrors({
           username: 'Este nombre de usuario ya está en uso'
         });
+        setIsLoading(false);
         return;
       }
 
-      // Sign up the user
+      // Sign up the user (sin confirmación de email)
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -169,7 +169,8 @@ const Register = () => {
             name: formData.name.trim(),
             username: formData.username.toLowerCase().trim(),
             account_type: formData.accountType
-          }
+          },
+          emailRedirectTo: `${window.location.origin}/video-feed-dashboard`
         }
       });
 
@@ -183,19 +184,22 @@ const Register = () => {
             general: error.message
           });
         }
+        setIsLoading(false);
         return;
       }
 
       if (data.user) {
-        // Show email confirmation message
-        setEmailSent(true);
+        // ✅ Usuario registrado y autenticado automáticamente
+        // Redirigir al dashboard inmediatamente
+        console.log('✅ Usuario registrado exitosamente:', data.user.email);
+        navigate('/video-feed-dashboard', { replace: true });
       }
       
     } catch (error) {
+      console.error('Error en registro:', error);
       setErrors({
         general: 'Error al crear la cuenta. Por favor intenta de nuevo.'
       });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -235,40 +239,6 @@ const Register = () => {
       return () => clearTimeout(timeoutId);
     }
   }, [formData.username]);
-
-  // Show email sent confirmation
-  if (emailSent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-card rounded-lg shadow-elevation-2 p-8">
-            <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Icon name="Mail" size={32} className="text-success" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground mb-4">
-              ¡Revisa tu email!
-            </h1>
-            <p className="text-muted-foreground mb-6">
-              Hemos enviado un enlace de confirmación a <strong>{formData.email}</strong>. 
-              Haz clic en el enlace para activar tu cuenta.
-            </p>
-            <Button
-              onClick={() => setEmailSent(false)}
-              variant="outline"
-              className="w-full mb-4"
-            >
-              Cambiar email
-            </Button>
-            <Link to="/login">
-              <Button className="w-full">
-                Ir al Login
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -416,10 +386,10 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Terms and Conditions - SECCIÓN CORREGIDA */}
+            {/* Terms and Conditions */}
             <div className="space-y-2">
               <div className="flex items-start space-x-3">
-                {/* Checkbox nativo HTML - garantizado que funcione */}
+                {/* Checkbox nativo HTML */}
                 <div className="flex items-center h-5 mt-1">
                   <input
                     id="acceptTerms"
@@ -437,7 +407,7 @@ const Register = () => {
                   />
                 </div>
                 
-                {/* Label clickeable que también activa el checkbox */}
+                {/* Label clickeable */}
                 <label 
                   htmlFor="acceptTerms" 
                   className="text-sm text-muted-foreground leading-relaxed cursor-pointer select-none flex-1"
