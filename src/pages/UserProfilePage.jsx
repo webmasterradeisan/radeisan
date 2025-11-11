@@ -3,19 +3,19 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// ✅ Contextos y Supabase (Sube 1 nivel: ../)
+// ✅ Contextos y Supabase (Rutas verificadas)
 import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../contexts/AuthContext';
 
-// ✅ Componentes UI (Sube 1 nivel: ../)
+// ✅ Componentes UI (Rutas verificadas)
 import Header from '../components/ui/Header';
 import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
-import Loader from '../components/ui/Loader'; 
 
-// 🚨 CORRECCIÓN DE RUTA para ProfileTabs: Sube 1 nivel y luego entra en la carpeta existente.
+// 🚨 COMPONENTE LOADER ELIMINADO: Usaremos el código de carga inline para evitar el RollupError.
+
+// 🚨 RUTA CORREGIDA: ProfileTabs (Asumiendo ubicación de user-profile-settings)
 import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
-
 
 // ===============================
 // HOOKS DE CONTENIDO (PLACEHOLDERS REUTILIZADOS)
@@ -26,7 +26,6 @@ const useUserContent = (userId, type) => {
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // Función para obtener el título correcto para la simulación
     const getContentTitle = (index) => {
         if (type === 'videos') return `Video Horizontal #${index + 1}`;
         if (type === 'reels') return `Reel Viral #${index + 1}`;
@@ -224,7 +223,15 @@ const UserProfilePage = () => {
     const isOwnProfile = currentUser && profileData && currentUser.id === profileData.id;
 
     if (profileLoading) {
-        return <Loader message="Cargando perfil..." />;
+        // 🚨 LOADER INLINE
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mb-4"></div>
+                <p className="text-gray-600 text-sm">Cargando perfil...</p>
+              </div>
+            </div>
+        );
     }
 
     if (profileError) {
