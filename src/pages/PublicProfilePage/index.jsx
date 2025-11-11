@@ -1,5 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ VERSIÓN CON 3 TABS: Videos (horizontales), Reels (verticales), Fotos
+// ✅ VERSIÓN CON CABECERA MEJORADA + 3 TABS
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -36,15 +36,11 @@ const PublicProfilePage = () => {
   };
 
   // ===============================
-  // DETERMINAR ORIENTACIÓN (igual que en reels)
+  // DETERMINAR ORIENTACIÓN
   // ===============================
   const determineOrientation = (video) => {
-    // PRIORIDAD 1: Si tiene campo orientation en BD
-    if (video.orientation) {
-      return video.orientation;
-    }
+    if (video.orientation) return video.orientation;
 
-    // PRIORIDAD 2: Si hay dimensiones width/height
     if (video.width && video.height) {
       const aspectRatio = video.width / video.height;
       if (aspectRatio <= 0.8) return 'vertical';
@@ -52,7 +48,6 @@ const PublicProfilePage = () => {
       return 'square';
     }
 
-    // PRIORIDAD 3: Si tiene video_width y video_height
     if (video.video_width && video.video_height) {
       const aspectRatio = video.video_width / video.video_height;
       if (aspectRatio <= 0.8) return 'vertical';
@@ -60,7 +55,6 @@ const PublicProfilePage = () => {
       return 'square';
     }
     
-    // Por defecto, horizontal
     return 'horizontal';
   };
 
@@ -101,16 +95,13 @@ const PublicProfilePage = () => {
 
       console.log('✅ Perfil encontrado:', profile);
 
-      // Verificar si es el perfil del usuario actual
       const isOwn = currentUser?.id === profile.id;
 
-      // Si es el perfil propio, redirigir a /profile
       if (isOwn) {
         navigate('/profile');
         return;
       }
 
-      // ✅ Cargar videos del usuario
       const { data: videosData } = await supabase
         .from('videos')
         .select('*')
@@ -118,13 +109,11 @@ const PublicProfilePage = () => {
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // ✅ Procesar y separar videos por orientación
       const processedVideos = (videosData || []).map(video => ({
         ...video,
         orientation: determineOrientation(video)
       }));
 
-      // Separar en reels (verticales) y videos (horizontales)
       const verticalVideos = processedVideos.filter(v => v.orientation === 'vertical');
       const horizontalOnly = processedVideos.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
 
@@ -132,13 +121,6 @@ const PublicProfilePage = () => {
       setReels(verticalVideos);
       setHorizontalVideos(horizontalOnly);
 
-      console.log('📊 Videos separados:', {
-        total: processedVideos.length,
-        reels: verticalVideos.length,
-        horizontales: horizontalOnly.length
-      });
-
-      // ✅ Cargar fotos del usuario
       const { data: photosData } = await supabase
         .from('photos')
         .select('*')
@@ -146,7 +128,6 @@ const PublicProfilePage = () => {
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // ✅ Verificar si el usuario actual sigue a este perfil
       if (currentUser) {
         const { data: followData } = await supabase
           .from('user_follows')
@@ -308,11 +289,11 @@ const PublicProfilePage = () => {
         <Header />
 
         <main className="pt-16">
-          <div className="max-w-6xl mx-auto">
-            {/* Header del Perfil */}
-            <div className="bg-card border-b border-border">
+          <div className="max-w-7xl mx-auto">
+            {/* ✨ CABECERA MEJORADA */}
+            <div className="bg-card">
               {/* Cover Image */}
-              <div className="relative h-32 sm:h-48 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
+              <div className="relative h-32 sm:h-48 md:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
                 {profileData.coverImage ? (
                   <img 
                     src={profileData.coverImage} 
@@ -324,130 +305,171 @@ const PublicProfilePage = () => {
                 )}
               </div>
 
-              {/* Profile Info */}
-              <div className="px-4 sm:px-6 pb-6">
-                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between -mt-12 sm:-mt-16">
-                  {/* Avatar and Basic Info */}
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:space-x-4">
-                    <div className="relative mb-4 sm:mb-0">
-                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-card overflow-hidden shadow-lg">
-                        <img 
-                          src={profileData.avatar} 
-                          alt={profileData.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    </div>
+              {/* Profile Info Container */}
+              <div className="px-4 sm:px-6 lg:px-8">
+                {/* Avatar */}
+                <div className="flex justify-center sm:justify-start -mt-12 sm:-mt-16 mb-4">
+                  <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-card bg-card overflow-hidden shadow-xl">
+                    <img 
+                      src={profileData.avatar} 
+                      alt={profileData.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <h1 className="text-xl sm:text-2xl font-bold text-foreground truncate">
+                {/* Info and Actions */}
+                <div className="pb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    {/* Left: User Info */}
+                    <div className="flex-1 text-center sm:text-left">
+                      {/* Name and Badges */}
+                      <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
                           {profileData.name}
                         </h1>
                         {profileData.isVerified && (
-                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                          <Icon name="BadgeCheck" size={24} color="var(--color-primary)" />
                         )}
                         {profileData.isBusinessAccount && (
-                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
-                            <Icon name="Building2" size={12} color="var(--color-accent)" />
+                          <div className="flex items-center gap-1 px-2 py-1 bg-accent/10 rounded-full">
+                            <Icon name="Building2" size={14} color="var(--color-accent)" />
                             <span className="text-xs font-medium text-accent">Business</span>
                           </div>
                         )}
                       </div>
-                      
-                      <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
-                      
+
+                      {/* Username and Stats in one line */}
+                      <div className="flex items-center justify-center sm:justify-start gap-2 text-sm text-muted-foreground mb-3 flex-wrap">
+                        <span className="font-medium">@{profileData.username}</span>
+                        <span>•</span>
+                        <span>{profileData.followersCount?.toLocaleString()} seguidores</span>
+                        <span>•</span>
+                        <span>{profileData.videosCount + profileData.reelsCount} videos</span>
+                        {profileData.photosCount > 0 && (
+                          <>
+                            <span>•</span>
+                            <span>{profileData.photosCount} fotos</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Bio */}
                       {profileData.bio && (
-                        <p className="text-sm text-foreground mb-3 max-w-md">
+                        <p className="text-sm text-foreground max-w-2xl mb-3">
                           {profileData.bio}
                         </p>
                       )}
 
-                      {/* Stats */}
-                      <div className="flex items-center space-x-4 text-sm">
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium text-foreground">{profileData.followersCount?.toLocaleString()}</span>
-                          <span className="text-muted-foreground">seguidores</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
-                          <span className="text-muted-foreground">siguiendo</span>
-                        </div>
-                      </div>
+                      {/* Member Since */}
+                      <p className="text-xs text-muted-foreground">
+                        Usuario de RADEISAN desde {new Date(profileData.created_at).toLocaleDateString('es-ES', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+
+                    {/* Right: Action Buttons */}
+                    <div className="flex items-center justify-center sm:justify-end gap-2 flex-shrink-0">
+                      <Button
+                        variant={following ? "outline" : "default"}
+                        size="default"
+                        onClick={handleFollowToggle}
+                        className="min-w-[120px]"
+                      >
+                        <Icon name={following ? "UserCheck" : "UserPlus"} size={18} className="mr-2" />
+                        {following ? 'Siguiendo' : 'Seguir'}
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Compartir perfil"
+                      >
+                        <Icon name="Share2" size={18} />
+                      </Button>
                     </div>
                   </div>
+                </div>
+              </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                    <Button
-                      variant={following ? "outline" : "default"}
-                      size="sm"
-                      onClick={handleFollowToggle}
+              {/* Tabs */}
+              <div className="border-t border-border">
+                <div className="px-4 sm:px-6 lg:px-8">
+                  <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+                    <button
+                      onClick={() => setActiveTab('videos')}
+                      className={`px-6 py-4 font-medium text-sm transition-colors whitespace-nowrap border-b-2 ${
+                        activeTab === 'videos' 
+                          ? 'border-primary text-primary' 
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
                     >
-                      <Icon name={following ? "UserMinus" : "UserPlus"} size={16} className="mr-2" />
-                      {following ? 'Siguiendo' : 'Seguir'}
-                    </Button>
+                      <Icon name="Monitor" size={18} className="inline mr-2" />
+                      Videos
+                      <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+                        {horizontalVideos.length}
+                      </span>
+                    </button>
+                    
+                    <button
+                      onClick={() => setActiveTab('reels')}
+                      className={`px-6 py-4 font-medium text-sm transition-colors whitespace-nowrap border-b-2 ${
+                        activeTab === 'reels' 
+                          ? 'border-primary text-primary' 
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Icon name="Smartphone" size={18} className="inline mr-2" />
+                      Reels
+                      <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+                        {reels.length}
+                      </span>
+                    </button>
+                    
+                    <button
+                      onClick={() => setActiveTab('photos')}
+                      className={`px-6 py-4 font-medium text-sm transition-colors whitespace-nowrap border-b-2 ${
+                        activeTab === 'photos' 
+                          ? 'border-primary text-primary' 
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Icon name="Image" size={18} className="inline mr-2" />
+                      Fotos
+                      <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+                        {userPhotos.length}
+                      </span>
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Tabs y Contenido */}
-            <div className="px-4 sm:px-6 py-6">
-              {/* ✅ TABS: Videos, Reels, Fotos */}
-              <div className="flex border-b border-border mb-6 overflow-x-auto">
-                <button
-                  onClick={() => setActiveTab('videos')}
-                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-                    activeTab === 'videos' 
-                      ? 'border-b-2 border-primary text-primary' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Icon name="Monitor" size={16} className="inline mr-2" />
-                  Videos ({horizontalVideos.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('reels')}
-                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-                    activeTab === 'reels' 
-                      ? 'border-b-2 border-primary text-primary' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Icon name="Smartphone" size={16} className="inline mr-2" />
-                  Reels ({reels.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('photos')}
-                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-                    activeTab === 'photos' 
-                      ? 'border-b-2 border-primary text-primary' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Icon name="Image" size={16} className="inline mr-2" />
-                  Fotos ({userPhotos.length})
-                </button>
-              </div>
-
-              {/* ✅ CONTENT - VIDEOS HORIZONTALES */}
+            {/* Content */}
+            <div className="px-4 sm:px-6 lg:px-8 py-6">
+              {/* Videos Horizontales */}
               {activeTab === 'videos' && (
                 <div>
                   {horizontalVideos.length === 0 ? (
-                    <div className="text-center py-12">
+                    <div className="text-center py-16">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon name="Monitor" size={32} className="text-muted-foreground" />
                       </div>
-                      <p className="text-muted-foreground">Sin videos horizontales aún</p>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">Sin videos aún</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Este usuario no ha publicado videos horizontales todavía.
+                      </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {horizontalVideos.map((video) => (
                         <Link 
                           key={video.id}
                           to={`/video/${video.id}`}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02]"
                         >
                           <div className="relative aspect-video bg-muted">
                             <img 
@@ -455,20 +477,21 @@ const PublicProfilePage = () => {
                               alt={video.title}
                               className="w-full h-full object-cover"
                             />
-                            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+                            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded font-medium">
                               {video.duration_seconds ? `${Math.floor(video.duration_seconds / 60)}:${String(video.duration_seconds % 60).padStart(2, '0')}` : '0:00'}
                             </div>
                           </div>
                           <div className="p-3">
-                            <h3 className="font-semibold text-sm line-clamp-2 mb-1">{video.title}</h3>
-                            <div className="flex items-center space-x-3 text-xs text-muted-foreground">
-                              <span className="flex items-center space-x-1">
+                            <h3 className="font-semibold text-sm line-clamp-2 mb-2">{video.title}</h3>
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
                                 <Icon name="Eye" size={12} />
-                                <span>{video.views_count?.toLocaleString() || 0}</span>
+                                {video.views_count?.toLocaleString() || 0}
                               </span>
-                              <span className="flex items-center space-x-1">
+                              <span className="flex items-center gap-1">
                                 <Icon name="Heart" size={12} />
-                                <span>{video.likes_count?.toLocaleString() || 0}</span>
+                                {video.likes_count?.toLocaleString() || 0}
                               </span>
                             </div>
                           </div>
@@ -479,23 +502,26 @@ const PublicProfilePage = () => {
                 </div>
               )}
 
-              {/* ✅ CONTENT - REELS (VERTICALES) */}
+              {/* Reels Verticales */}
               {activeTab === 'reels' && (
                 <div>
                   {reels.length === 0 ? (
-                    <div className="text-center py-12">
+                    <div className="text-center py-16">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon name="Smartphone" size={32} className="text-muted-foreground" />
                       </div>
-                      <p className="text-muted-foreground">Sin reels aún</p>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">Sin reels aún</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Este usuario no ha publicado reels todavía.
+                      </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                       {reels.map((reel) => (
                         <Link 
                           key={reel.id}
                           to={`/reels?id=${reel.id}`}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02]"
                         >
                           <div className="relative aspect-[9/16] bg-muted">
                             <img 
@@ -503,21 +529,24 @@ const PublicProfilePage = () => {
                               alt={reel.title}
                               className="w-full h-full object-cover"
                             />
-                            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center space-x-1">
-                              <Icon name="Play" size={10} />
-                              <span>{reel.duration_seconds ? `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}` : '0:00'}</span>
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+                            <div className="absolute bottom-2 left-2 right-2">
+                              <div className="flex items-center justify-between text-white text-xs">
+                                <div className="flex items-center gap-1 bg-black/60 px-2 py-1 rounded">
+                                  <Icon name="Play" size={10} />
+                                  <span className="font-medium">
+                                    {reel.duration_seconds ? `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}` : '0:00'}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                           <div className="p-2">
                             <h3 className="font-semibold text-xs line-clamp-2 mb-1">{reel.title}</h3>
-                            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                              <span className="flex items-center space-x-1">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
                                 <Icon name="Eye" size={10} />
-                                <span>{reel.views_count?.toLocaleString() || 0}</span>
-                              </span>
-                              <span className="flex items-center space-x-1">
-                                <Icon name="Heart" size={10} />
-                                <span>{reel.likes_count?.toLocaleString() || 0}</span>
+                                {reel.views_count?.toLocaleString() || 0}
                               </span>
                             </div>
                           </div>
@@ -528,22 +557,25 @@ const PublicProfilePage = () => {
                 </div>
               )}
 
-              {/* ✅ CONTENT - FOTOS */}
+              {/* Fotos */}
               {activeTab === 'photos' && (
                 <div>
                   {userPhotos.length === 0 ? (
-                    <div className="text-center py-12">
+                    <div className="text-center py-16">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon name="Image" size={32} className="text-muted-foreground" />
                       </div>
-                      <p className="text-muted-foreground">Sin fotos aún</p>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">Sin fotos aún</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Este usuario no ha publicado fotos todavía.
+                      </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {userPhotos.map((photo) => (
                         <div 
                           key={photo.id}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
                         >
                           <div className="relative aspect-square bg-muted">
                             <img 
@@ -551,6 +583,7 @@ const PublicProfilePage = () => {
                               alt={photo.title}
                               className="w-full h-full object-cover"
                             />
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
                           </div>
                         </div>
                       ))}
