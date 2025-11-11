@@ -24,9 +24,6 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
-// ✅ NUEVA IMPORTACIÓN DE PERFIL PÚBLICO
-import UserProfilePage from './pages/UserProfilePage';
-
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
 
@@ -251,18 +248,6 @@ const Routes = () => {
                   <ProtectedRoute>
                     <MobileLayoutWrapper>
                       <VideoFeedDashboard />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* ✅ NUEVA RUTA: PERFIL PÚBLICO (PROTEGIDA POR REQUISITO DEL USUARIO) */}
-              <Route 
-                path="/user/:userIdOrUsername" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <UserProfilePage />
                     </MobileLayoutWrapper>
                   </ProtectedRoute>
                 } 
