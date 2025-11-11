@@ -24,8 +24,8 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
-// ✅ NUEVA IMPORTACIÓN DE PERFIL PÚBLICO
-import UserProfilePage from './pages/UserProfilePage';
+// 🚨 CORRECCIÓN DE LA RUTA: Cambiamos a la importación explícita del archivo
+import UserProfilePage from './pages/UserProfilePage.jsx';
 
 // ✅ NUEVA IMPORTACIÓN DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
@@ -256,7 +256,7 @@ const Routes = () => {
                 } 
               />
               
-              {/* ✅ NUEVA RUTA: PERFIL PÚBLICO (PROTEGIDA POR REQUISITO DEL USUARIO) */}
+              {/* ✅ RUTA: PERFIL PÚBLICO (PROTEGIDA) */}
               <Route 
                 path="/user/:userIdOrUsername" 
                 element={
@@ -279,7 +279,7 @@ const Routes = () => {
                 } 
               />
               
-              {/* ✅ RUTA CORREGIDA: Photo Upload Studio */}
+              {/* ✅ RUTA: Photo Upload Studio */}
               <Route 
                 path="/photo-upload" 
                 element={
