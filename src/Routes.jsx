@@ -1,14 +1,15 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Ajustando Convenciones de Admin Paths y Limpieza)
+// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Eliminación de la declaración duplicada)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 
-// FIX: Todas las importaciones de componentes base se hacen relativas para asegurar que Rollup las resuelva.
+// 🚨 FIX: Todas las importaciones de componentes base se hacen relativas para evitar errores de alias de módulo.
 import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PointsProvider } from "./contexts/PointsContext";
 
 // SISTEMA ORIGINAL MANTENIDO
+// 🚨 MANTENER: ProtectedAdminRoute se importa desde aquí
 import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "./components/ProtectedRoute";
 
 // MOBILE LAYOUT PARA APLICAR GRADUALMENTE
@@ -38,34 +39,29 @@ import PointsRewardsStore from './pages/points-rewards-store';
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/PurchasePointsPage.jsx'; 
 
-// 🚨 COMPONENTE NUEVO: Perfil Público
+// 🚨 PERFIL PÚBLICO
 import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
-// 🚨 FIX CRÍTICO: Reemplazar alias por rutas relativas explícitas (probando convención de directorios)
-import AdminDashboard from './pages/admin-dashboard/index.jsx'; 
-import AdminUsers from './pages/admin-users/UserManagement.jsx'; 
-import AdminVideos from './pages/admin-videos/index.jsx'; // FIX: Usando convención de directorio /index.jsx
-import AdminPoints from './pages/admin-points/index.jsx'; // FIX: Usando convención de directorio /index.jsx
-import AdminBlogs from './pages/admin-blogs/index.jsx'; // FIX: Usando convención de directorio /index.jsx
+// 🚨 FIX CRÍTICO: Reemplazar alias por rutas relativas explícitas
+import AdminDashboard from './pages/admin-panel/AdminDashboard.jsx'; 
+import AdminUsers from './pages/admin-panel/AdminUsers.jsx';
+import AdminVideos from './pages/admin-panel/AdminVideos.jsx';
+import AdminPoints from './pages/admin-panel/AdminPoints.jsx';
+import AdminBlogs from './pages/admin-panel/AdminBlogs.jsx';
 
-import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
+// 🛑 ELIMINADA LA DECLARACIÓN DUPLICADA DE ProtectedAdminRoute 🛑
 import AdminLayout from './components/admin/AdminLayout';
-import UserManagement from './pages/admin-users/UserManagement.jsx';
-import CategoryManagement from './pages/admin-categories/CategoryManagement.jsx';
-import PointsRulesEditor from './pages/admin-points/PointsRulesEditor.jsx';
-import MissionsManagement from './pages/admin/MissionsManagement.jsx';
-import RewardsManagement from './pages/admin-rewards/RewardsManagement.jsx';
-import BrandingSettings from './pages/admin-settings/BrandingSettings.jsx';
-import ContentModeration from './pages/admin-moderation/ContentModeration.jsx';
-import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics.jsx';
-import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfig.jsx';
-import TransactionsManagement from './pages/admin/TransactionsManagement.jsx';
-
-// Otras Páginas (asumidas)
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import TermsOfService from "./pages/TermsOfService";
-import Unauthorized from "./pages/Unauthorized";
+import UserManagement from './pages/admin-users/UserManagement';
+import CategoryManagement from './pages/admin-categories/CategoryManagement';
+import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
+import MissionsManagement from './pages/admin/MissionsManagement';
+import RewardsManagement from './pages/admin-rewards/RewardsManagement';
+import BrandingSettings from './pages/admin-settings/BrandingSettings';
+import ContentModeration from './pages/admin-moderation/ContentModeration';
+import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics';
+import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfig';
+import TransactionsManagement from './pages/admin/TransactionsManagement';
 
 
 const Routes = () => {
@@ -116,7 +112,7 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
+              {/* 🚨 PERFIL PÚBLICO: La funcionalidad solicitada */}
               <Route 
                 path="/profile/:username" 
                 element={
@@ -175,7 +171,7 @@ const Routes = () => {
               
               <Route path="/admin" element={
                 <ProtectedAdminRoute>
-                  <AdminDashboard />
+                  <AdminLayout />
                 </ProtectedAdminRoute>
               }>
                 <Route index element={<AdminDashboard />} />
@@ -191,7 +187,7 @@ const Routes = () => {
                   </ProtectedAdminRoute>
                 } />
                 <Route path="points" element={
-                  <ProtectedAdminRoute>
+                  <ProtectedAdminRoute requiredPermission="manage_points">
                     <AdminPoints />
                   </ProtectedAdminRoute>
                 } />
