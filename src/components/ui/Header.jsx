@@ -219,6 +219,9 @@ const Header = () => {
   const Icon = ({ name, size = 20, color = "currentColor", className = "" }) => {
     return <AppIcon name={name} size={size} color={color} className={className} />;
   };
+  
+  // Determina la ruta de configuración
+  const configPath = user?.isAdmin ? '/admin/settings' : '/settings';
 
   // ============================================================================
   // RENDER
@@ -564,7 +567,7 @@ const Header = () => {
 
                           {/* Configuración */}
                           <Link
-                            to="/settings"
+                            to={configPath} // ✅ CORREGIDO: Enlaza a /admin/settings si es Admin, o /settings si no lo es
                             className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                             onClick={() => setIsUserMenuOpen(false)}
                           >
