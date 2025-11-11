@@ -1,5 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ VERSIÓN CORREGIDA: Info al lado derecho del avatar
+// ✅ DISEÑO IDÉNTICO A ProfileHeader.jsx
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
+import Image from '../../components/AppImage';
 import useIsMobile from '../../hooks/useIsMobile';
 
 const PublicProfilePage = () => {
@@ -113,6 +114,10 @@ const PublicProfilePage = () => {
       const avatarUrl = profile.avatar_url || profile.avatar || 
         `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.full_name || profile.username || 'User')}&background=6366f1&color=ffffff&size=128`;
 
+      // Calcular vistas totales
+      const totalViews = processedVideos.reduce((sum, v) => sum + (v.views_count || 0), 0);
+      const totalLikes = processedVideos.reduce((sum, v) => sum + (v.likes_count || 0), 0);
+
       setProfileData({
         ...profile,
         name: profile.full_name || profile.username,
@@ -122,9 +127,11 @@ const PublicProfilePage = () => {
         bio: profile.bio || `Usuario de RADEISAN desde ${new Date(profile.created_at).toLocaleDateString()}`,
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
-        photosCount: profile.photos_count || 0,
+        photosCount: photosData?.length || 0,
         videosCount: horizontalOnly.length,
         reelsCount: verticalVideos.length,
+        totalViews: totalViews,
+        totalLikes: totalLikes,
         isVerified: profile.is_verified || false,
         isBusinessAccount: profile.is_business_account || false,
       });
@@ -237,12 +244,12 @@ const PublicProfilePage = () => {
 
         <main className="pt-16">
           <div className="max-w-6xl mx-auto">
-            {/* ✅ CABECERA: Portada + Avatar + Info al lado */}
+            {/* ✅ HEADER EXACTO COMO ProfileHeader.jsx */}
             <div className="bg-card border-b border-border">
-              {/* Cover Image - SIN CAMBIOS */}
+              {/* Cover Image - IDÉNTICO */}
               <div className="relative h-32 sm:h-48 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
                 {profileData.coverImage ? (
-                  <img 
+                  <Image 
                     src={profileData.coverImage} 
                     alt="Portada del perfil"
                     className="w-full h-full object-cover"
@@ -252,78 +259,93 @@ const PublicProfilePage = () => {
                 )}
               </div>
 
-              {/* ✅ LAYOUT: Avatar a la izquierda, Info a la derecha */}
+              {/* Profile Info - IDÉNTICO A ProfileHeader */}
               <div className="px-4 sm:px-6 pb-6">
-                <div className="flex flex-col sm:flex-row gap-4 -mt-12 sm:-mt-16">
-                  {/* Avatar - SIN CAMBIOS */}
-                  <div className="flex-shrink-0">
-                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-card overflow-hidden shadow-lg">
-                      <img 
-                        src={profileData.avatar} 
-                        alt={profileData.name}
-                        className="w-full h-full object-cover"
-                      />
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between -mt-12 sm:-mt-16">
+                  {/* Avatar and Basic Info */}
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:space-x-4">
+                    <div className="relative mb-4 sm:mb-0">
+                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
+                        <Image 
+                          src={profileData.avatar} 
+                          alt={profileData.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground truncate">
+                          {profileData.name}
+                        </h1>
+                        {profileData.isVerified && (
+                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                        )}
+                        {profileData.isBusinessAccount && (
+                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
+                            <Icon name="Building2" size={12} color="var(--color-accent)" />
+                            <span className="text-xs font-medium text-accent">Business</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
+                      
+                      {profileData.bio && (
+                        <p className="text-sm text-foreground mb-3 max-w-md">
+                          {profileData.bio}
+                        </p>
+                      )}
+
+                      {/* Stats - IDÉNTICO */}
+                      <div className="flex items-center space-x-4 text-sm">
+                        <div className="flex items-center space-x-1">
+                          <span className="font-medium text-foreground">{profileData.followersCount?.toLocaleString()}</span>
+                          <span className="text-muted-foreground">seguidores</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
+                          <span className="text-muted-foreground">siguiendo</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
+                          <span className="text-muted-foreground">videos</span>
+                        </div>
+                        {profileData.photosCount > 0 && (
+                          <div className="flex items-center space-x-1">
+                            <span className="font-medium text-foreground">{profileData.photosCount}</span>
+                            <span className="text-muted-foreground">fotos</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Stats adicionales en mobile */}
+                      <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1 sm:hidden">
+                        {profileData.totalViews > 0 && (
+                          <span>{profileData.totalViews.toLocaleString()} visualizaciones</span>
+                        )}
+                        {profileData.totalLikes > 0 && (
+                          <span>{profileData.totalLikes.toLocaleString()} likes</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* ✅ Info al lado derecho del avatar */}
-                  <div className="flex-1 min-w-0 pt-0 sm:pt-16">
-                    {/* Nombre y badges */}
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-                        {profileData.name}
-                      </h1>
-                      {profileData.isVerified && (
-                        <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
-                      )}
-                      {profileData.isBusinessAccount && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 bg-accent/10 rounded-full">
-                          <Icon name="Building2" size={12} color="var(--color-accent)" />
-                          <span className="text-xs font-medium text-accent">Business</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Username y stats */}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2 flex-wrap">
-                      <span>@{profileData.username}</span>
-                      <span>•</span>
-                      <span>{profileData.followersCount?.toLocaleString()} seguidores</span>
-                      <span>•</span>
-                      <span>{profileData.videosCount + profileData.reelsCount} videos</span>
-                    </div>
-
-                    {/* Bio */}
-                    {profileData.bio && (
-                      <p className="text-sm text-foreground mb-2">
-                        {profileData.bio}
-                      </p>
-                    )}
-
-                    {/* Fecha de registro */}
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Usuario de RADEISAN desde {new Date(profileData.created_at).toLocaleDateString('es-ES', { 
-                        day: 'numeric',
-                        month: 'numeric', 
-                        year: 'numeric'
-                      })}
-                    </p>
-
-                    {/* Botones */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant={following ? "outline" : "default"}
-                        size="sm"
-                        onClick={handleFollowToggle}
-                      >
-                        <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-2" />
-                        {following ? 'Siguiendo' : 'Seguir'}
-                      </Button>
-                      
-                      <Button variant="outline" size="icon">
-                        <Icon name="Share2" size={16} />
-                      </Button>
-                    </div>
+                  {/* Action Buttons - ADAPTADO PARA PERFIL PÚBLICO */}
+                  <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                    <Button
+                      variant={following ? "outline" : "default"}
+                      size="sm"
+                      onClick={handleFollowToggle}
+                    >
+                      <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-2" />
+                      {following ? 'Siguiendo' : 'Seguir'}
+                    </Button>
+                    
+                    <Button variant="outline" size="icon">
+                      <Icon name="Share2" size={16} />
+                    </Button>
                   </div>
                 </div>
               </div>
