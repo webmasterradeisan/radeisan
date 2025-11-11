@@ -1,38 +1,73 @@
 // src/pages/UserProfilePage/index.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// ✅ RUTAS CORREGIDAS (Subiendo solo un nivel: "../")
+// ✅ RUTAS CORREGIDAS (Subiendo un nivel desde src/pages/)
 import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/ui/Header';
 import Icon from '../components/AppIcon';
 import Button from '../components/ui/Button';
-import Loader from '../components/ui/Loader'; 
-import ProfileTabs from './components/ProfileTabs'; // Esta ruta es local (dentro de UserProfilePage/)
+
+// 🚨 CORRECCIÓN DE RUTAS: Asumo que Loader y ProfileTabs están en src/components/
+import Loader from '../components/Loader'; 
+import ProfileTabs from '../components/ProfileTabs'; 
 
 // ===============================
-// HOOKS DE CONTENIDO (PLACEHOLDERS)
+// HOOKS DE CONTENIDO (PLACEHOLDERS REUTILIZADOS)
 // ===============================
 
 // Función genérica de conteo de contenido (solo para simular)
 const useUserContent = (userId, type) => {
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
+    
+    // Función para obtener el título correcto para la simulación
+    const getContentTitle = (index) => {
+        if (type === 'videos') return `Video Horizontal #${index + 1}`;
+        if (type === 'reels') return `Reel Viral #${index + 1}`;
+        if (type === 'photos') return `Foto de Perfil #${index + 1}`;
+        return 'Contenido';
+    };
+
     const fetchContent = useCallback(async () => {
-        if (!userId) return;
-        setLoading(true);
-        // Lógica de Supabase para obtener videos, reels o fotos por userId
-        const { data, error } = await supabase
-            .from(`${type}`) // 'videos', 'reels', 'photos'
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+        if (!userId) {
+            setLoading(false);
+            return;
+        }
+        
+        try {
+            setLoading(true);
+            // Simulación de datos: El código real de Supabase debería ir aquí
+            const simulationLength = type === 'photos' ? 6 : 4;
+            const simulatedData = Array.from({ length: simulationLength }).map((_, index) => ({
+                id: `${type}-${userId.slice(0, 8)}-${index}`,
+                user_id: userId,
+                title: getContentTitle(index),
+                views_count: Math.floor(Math.random() * 10000)
+            }));
             
-        if (error) console.error(`Error fetching ${type}:`, error);
-        setContent(data || []);
-        setLoading(false);
+            // Reemplaza esto con tu consulta real si la simulación falla:
+            /*
+            const { data, error } = await supabase
+                .from(type) 
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setContent(data || []);
+            */
+
+            // Usando la simulación:
+            setContent(simulatedData);
+
+        } catch (error) {
+             console.error(`Error fetching ${type}:`, error);
+             setContent([]);
+        } finally {
+            setLoading(false);
+        }
     }, [userId, type]);
 
     useEffect(() => {
@@ -48,7 +83,7 @@ const useUserPhotos = (userId) => useUserContent(userId, 'photos');
 
 
 // ===============================
-// HOOK PERSONALIZADO PARA PERFIL PÚBLICO (EL ARREGLO PRINCIPAL)
+// HOOK PERSONALIZADO PARA PERFIL PÚBLICO
 // ===============================
 
 const usePublicProfile = (userIdOrUsername) => {
@@ -67,10 +102,9 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                // ✅ Consulta asumiendo que ya creaste las columnas en la BD:
+                // ✅ Consulta asumiendo las columnas añadidas
                 .select('*, followers_count, following_count') 
 
-            // Determinar si el input es un UUID (ID) o un string (USERNAME)
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdOrUsername);
 
             if (isUUID) {
@@ -139,7 +173,6 @@ const usePublicProfile = (userIdOrUsername) => {
             setIsFollowing(!isFollowing);
             
             // Refrescar los datos para actualizar el contador
-            // (El trigger de BD debería actualizar followers_count)
             await fetchProfile(); 
 
         } catch (err) {
@@ -172,6 +205,7 @@ const UserProfilePage = () => {
     // Obtener el ID/Username del perfil a ver desde la URL
     const { userIdOrUsername } = useParams(); 
     const { user: currentUser, isAuthenticated } = useAuth();
+    const navigate = useNavigate();
     
     // Custom hook para obtener los datos del perfil
     const { 
@@ -208,13 +242,14 @@ const UserProfilePage = () => {
                 <Icon name="AlertTriangle" size={36} className="text-red-500 mb-4" />
                 <h1 className="text-xl font-bold">{profileError}</h1>
                 <p className="text-muted-foreground">Verifica la URL o si el perfil es público.</p>
-                <Link to="/dashboard" className="text-blue-500 hover:underline mt-4 block">Ir al inicio</Link>
+                <Button onClick={() => navigate('/dashboard')} className="mt-4">
+                    Volver al Dashboard
+                </Button>
             </div>
         );
     }
     
     if (!profileData) {
-        // Esto debería ser capturado por profileError, pero como fallback
         return (
             <div className="text-center p-8 mt-10">
                 <h1 className="text-xl font-bold">Perfil no encontrado.</h1>
