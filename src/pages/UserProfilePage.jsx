@@ -3,16 +3,19 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// ✅ RUTAS CORREGIDAS (Subiendo un nivel desde src/pages/)
+// ✅ Contextos y Supabase (Sube 1 nivel: ../)
 import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../contexts/AuthContext';
-import Header from '../components/ui/Header';
-import Icon from '../components/AppIcon';
-import Button from '../components/ui/Button';
 
-// 🚨 CORRECCIÓN DE RUTAS: Asumo que Loader y ProfileTabs están en src/components/
-import Loader from '../components/Loader'; 
-import ProfileTabs from '../components/ProfileTabs'; 
+// ✅ Componentes UI (Sube 1 nivel: ../)
+import Header from '../components/ui/Header';
+import Button from '../components/ui/Button';
+import Icon from '../components/AppIcon';
+import Loader from '../components/ui/Loader'; 
+
+// 🚨 CORRECCIÓN DE RUTA para ProfileTabs: Sube 1 nivel y luego entra en la carpeta existente.
+import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
+
 
 // ===============================
 // HOOKS DE CONTENIDO (PLACEHOLDERS REUTILIZADOS)
@@ -39,7 +42,7 @@ const useUserContent = (userId, type) => {
         
         try {
             setLoading(true);
-            // Simulación de datos: El código real de Supabase debería ir aquí
+            // Simulación de datos:
             const simulationLength = type === 'photos' ? 6 : 4;
             const simulatedData = Array.from({ length: simulationLength }).map((_, index) => ({
                 id: `${type}-${userId.slice(0, 8)}-${index}`,
@@ -48,18 +51,6 @@ const useUserContent = (userId, type) => {
                 views_count: Math.floor(Math.random() * 10000)
             }));
             
-            // Reemplaza esto con tu consulta real si la simulación falla:
-            /*
-            const { data, error } = await supabase
-                .from(type) 
-                .select('*')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setContent(data || []);
-            */
-
-            // Usando la simulación:
             setContent(simulatedData);
 
         } catch (error) {
@@ -102,7 +93,7 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                // ✅ Consulta asumiendo las columnas añadidas
+                // Consulta asumiendo las columnas añadidas
                 .select('*, followers_count, following_count') 
 
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdOrUsername);
@@ -335,14 +326,12 @@ const UserProfilePage = () => {
                     <div className="mt-6 border-t pt-4 flex justify-around">
                         <div className="text-center">
                             <p className="text-2xl font-bold">
-                                {/* Usa followers_count de la base de datos */}
                                 {profileData.followers_count !== undefined ? profileData.followers_count : 0}
                             </p>
                             <p className="text-sm text-muted-foreground">Seguidores</p>
                         </div>
                         <div className="text-center">
                             <p className="text-2xl font-bold">
-                                {/* Usa following_count de la base de datos */}
                                 {profileData.following_count !== undefined ? profileData.following_count : 0}
                             </p>
                             <p className="text-sm text-muted-foreground">Siguiendo</p>
