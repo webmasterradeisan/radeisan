@@ -2,13 +2,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { supabase } from '../../lib/supabase';
+// 🚨 CORRECCIÓN DE RUTA: Subir solo un nivel (../) desde src/pages/
+import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
-import Loader from '../../components/ui/Loader'; // Asumiendo un componente Loader
-import ProfileTabs from './components/ProfileTabs'; // Pestañas para Videos/Reels/Fotos
+import Loader from '../../components/ui/Loader'; 
+import ProfileTabs from './components/ProfileTabs'; 
 
 // ===============================
 // HOOKS DE CONTENIDO (PLACEHOLDERS)
@@ -299,12 +300,14 @@ const UserProfilePage = () => {
                     <div className="mt-6 border-t pt-4 flex justify-around">
                         <div className="text-center">
                             <p className="text-2xl font-bold">
+                                {/* Usa followers_count de la base de datos */}
                                 {profileData.followers_count !== undefined ? profileData.followers_count : 0}
                             </p>
                             <p className="text-sm text-muted-foreground">Seguidores</p>
                         </div>
                         <div className="text-center">
                             <p className="text-2xl font-bold">
+                                {/* Usa following_count de la base de datos */}
                                 {profileData.following_count !== undefined ? profileData.following_count : 0}
                             </p>
                             <p className="text-sm text-muted-foreground">Siguiendo</p>
