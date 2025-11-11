@@ -3,7 +3,6 @@
 // VERSION FINAL ESTABLE
 // ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
 // ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
-// ✅ 3. (CORREGIDO) Todos los enlaces de perfil de autor apuntan a /user/:username para evitar 404.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -278,7 +277,7 @@ const VideoPlayerPage = () => {
     const mainVideo = videoRef.current;
     const miniVideo = miniPlayerRef.current;
 
-    if (!mainVideo || !miniPlayerRef.current) return;
+    if (!mainVideo || !miniVideo) return;
 
     const currentTime = miniVideoRef.current?.currentTime || mainVideo.currentTime;
     const wasPlaying = miniVideoRef.current?.paused === false;
@@ -1334,7 +1333,7 @@ const VideoPlayerPage = () => {
 
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <Link to={`/user/${video.creator?.username || 'unknown'}`}>
+                    <Link to={`/profile/${video.creator?.username || 'unknown'}`}>
                       <img
                         src={video.creator?.profile_image_url || '/default-avatar.png'}
                         alt={video.creator?.name || 'Usuario'}
@@ -1344,7 +1343,7 @@ const VideoPlayerPage = () => {
                     <div>
                       <div className="flex items-center gap-2">
                         <Link
-                          to={`/user/${video.creator?.username || 'unknown'}`}
+                          to={`/profile/${video.creator?.username || 'unknown'}`}
                           className="font-semibold text-sm md:text-base text-foreground hover:text-primary"
                         >
                           {video.creator?.name || 'Usuario'}
@@ -1507,7 +1506,7 @@ const VideoPlayerPage = () => {
                       comments.map((comment) => (
                         <div key={comment.id} className="space-y-3">
                           <div className="flex gap-2 md:gap-3">
-                            <Link to={`/user/${comment.user?.username || 'unknown'}`}>
+                            <Link to={`/profile/${comment.user?.username || 'unknown'}`}>
                               <img
                                 src={comment.user?.profile_image_url || '/default-avatar.png'}
                                 alt={comment.user?.name || 'Usuario'}
@@ -1517,7 +1516,7 @@ const VideoPlayerPage = () => {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Link
-                                  to={`/user/${comment.user?.username || 'unknown'}`}
+                                  to={`/profile/${comment.user?.username || 'unknown'}`}
                                   className="font-semibold text-xs md:text-sm hover:text-primary"
                                 >
                                   {comment.user?.name || 'Usuario'}
@@ -1570,7 +1569,7 @@ const VideoPlayerPage = () => {
                                       </button>
                                       {comment.replies.map((reply) => (
                                         <div key={reply.id} className="flex gap-2 md:gap-3 ml-4 md:ml-6">
-                                          <Link to={`/user/${reply.user?.username || 'unknown'}`}>
+                                          <Link to={`/profile/${reply.user?.username || 'unknown'}`}>
                                             <img
                                               src={reply.user?.profile_image_url || '/default-avatar.png'}
                                               alt={reply.user?.name || 'Usuario'}
@@ -1580,7 +1579,7 @@ const VideoPlayerPage = () => {
                                           <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
                                               <Link
-                                                to={`/user/${reply.user?.username || 'unknown'}`}
+                                                to={`/profile/${reply.user?.username || 'unknown'}`}
                                                 className="font-semibold text-xs md:text-sm hover:text-primary"
                                               >
                                                 {reply.user?.name || 'Usuario'}
