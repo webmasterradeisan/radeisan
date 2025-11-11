@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-// 🚨 CORRECCIÓN DE RUTA: Subir solo un nivel (../) desde src/pages/
+// 🚨 CORRECCIÓN 1: Importar AuthContext subiendo solo UN nivel
+import { useAuth } from '../contexts/AuthContext'; 
+// 🚨 CORRECCIÓN 2: Importar Supabase subiendo solo UN nivel
 import { supabase } from '../lib/supabase'; 
-import { useAuth } from '../../contexts/AuthContext';
+
 import Header from '../../components/ui/Header';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
