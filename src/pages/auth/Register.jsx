@@ -35,7 +35,7 @@ const Register = () => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        navigate('/video-feed-dashboard', { replace: true });
+        navigate('/dashboard', { replace: true });
       }
     };
     checkUser();
@@ -170,7 +170,7 @@ const Register = () => {
             username: formData.username.toLowerCase().trim(),
             account_type: formData.accountType
           },
-          emailRedirectTo: `${window.location.origin}/video-feed-dashboard`
+          emailRedirectTo: `${window.location.origin}/dashboard`
         }
       });
 
@@ -192,7 +192,7 @@ const Register = () => {
         // ✅ Usuario registrado y autenticado automáticamente
         // Redirigir al dashboard inmediatamente
         console.log('✅ Usuario registrado exitosamente:', data.user.email);
-        navigate('/video-feed-dashboard', { replace: true });
+        navigate('/dashboard', { replace: true });
       }
       
     } catch (error) {
@@ -211,7 +211,7 @@ const Register = () => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
-          redirectTo: `${window.location.origin}/video-feed-dashboard`
+          redirectTo: `${window.location.origin}/dashboard`
         }
       });
 
