@@ -244,10 +244,10 @@ const PublicProfilePage = () => {
 
         <main className="pt-16">
           <div className="max-w-6xl mx-auto">
-            {/* ✅ HEADER EXACTO COMO ProfileHeader.jsx */}
+            {/* ✅ HEADER EXACTO COMO LA IMAGEN */}
             <div className="bg-card border-b border-border">
-              {/* Cover Image - IDÉNTICO */}
-              <div className="relative h-32 sm:h-48 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
+              {/* Cover Image */}
+              <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
                 {profileData.coverImage ? (
                   <Image 
                     src={profileData.coverImage} 
@@ -259,114 +259,86 @@ const PublicProfilePage = () => {
                 )}
               </div>
 
-              {/* Profile Info - LAYOUT HORIZONTAL */}
-              <div className="px-4 sm:px-6 pb-6">
-                <div className="flex flex-col sm:flex-row gap-4 -mt-16 sm:-mt-20">
-                  {/* Avatar a la izquierda */}
-                  <div className="flex-shrink-0">
-                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
-                      <Image 
-                        src={profileData.avatar} 
-                        alt={profileData.name}
-                        className="w-full h-full object-cover"
-                      />
+              {/* Profile Info - Avatar SOBRE la portada */}
+              <div className="px-4 sm:px-6 pb-6 -mt-20 sm:-mt-24">
+                <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+                  {/* Lado izquierdo: Avatar + Info */}
+                  <div className="flex items-end gap-4">
+                    {/* Avatar SOBRE la portada */}
+                    <div className="flex-shrink-0">
+                      <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
+                        <Image 
+                          src={profileData.avatar} 
+                          alt={profileData.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Nombre, username y stats */}
+                    <div className="flex-1 min-w-0 pb-2">
+                      {/* Nombre y badges */}
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
+                          {profileData.name}
+                        </h1>
+                        {profileData.isVerified && (
+                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                        )}
+                        {profileData.isBusinessAccount && (
+                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
+                            <Icon name="Building2" size={12} color="var(--color-accent)" />
+                            <span className="text-xs font-medium text-accent">Business</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Username */}
+                      <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
+                      
+                      {/* Stats en UNA LÍNEA con iconos */}
+                      <div className="flex items-center flex-wrap gap-x-3 text-sm">
+                        <div className="flex items-center space-x-1">
+                          <Icon name="Monitor" size={16} className="text-blue-500" />
+                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
+                          <span className="text-muted-foreground">videos</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-1">
+                          <Icon name="Smartphone" size={16} className="text-red-500" />
+                          <span className="font-medium text-foreground">{profileData.reelsCount}</span>
+                          <span className="text-muted-foreground">reels</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-1">
+                          <Icon name="Image" size={16} className="text-green-500" />
+                          <span className="font-medium text-foreground">{profileData.photosCount}</span>
+                          <span className="text-muted-foreground">fotos</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-1">
+                          <Icon name="Eye" size={16} className="text-muted-foreground" />
+                          <span className="font-medium text-foreground">{profileData.totalViews.toLocaleString()}</span>
+                          <span className="text-muted-foreground">views</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-1">
+                          <Icon name="Heart" size={16} className="text-red-500" />
+                          <span className="font-medium text-foreground">{profileData.totalLikes.toLocaleString()}</span>
+                          <span className="text-muted-foreground">likes</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Info a la derecha del avatar */}
-                  <div className="flex-1 min-w-0 pt-0 sm:pt-20">
-                    {/* Nombre y badges */}
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
-                        {profileData.name}
-                      </h1>
-                      {profileData.isVerified && (
-                        <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
-                      )}
-                      {profileData.isBusinessAccount && (
-                        <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
-                          <Icon name="Building2" size={12} color="var(--color-accent)" />
-                          <span className="text-xs font-medium text-accent">Business</span>
-                        </div>
-                      )}
-                    </div>
+                  {/* Lado derecho: Bio + Botones */}
+                  <div className="flex flex-col items-start sm:items-end gap-3 w-full sm:w-auto">
+                    {/* Bio/Fecha de registro */}
+                    <p className="text-sm text-muted-foreground">
+                      {profileData.bio || `Usuario de RADEISAN desde ${new Date(profileData.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' })}`}
+                    </p>
                     
-                    {/* Username */}
-                    <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
-                    
-                    {/* Bio */}
-                    {profileData.bio && (
-                      <p className="text-sm text-foreground mb-2">
-                        {profileData.bio}
-                      </p>
-                    )}
-
-                    {/* Seguidores/Siguiendo - línea separada */}
-                    <div className="flex items-center gap-4 text-sm mb-3">
-                      <div className="flex items-center space-x-1">
-                        <span className="font-medium text-foreground">{profileData.followersCount?.toLocaleString()}</span>
-                        <span className="text-muted-foreground">seguidores</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
-                        <span className="text-muted-foreground">siguiendo</span>
-                      </div>
-                    </div>
-
-                    {/* Stats en UNA LÍNEA HORIZONTAL con iconos y separadores */}
-                    <div className="flex items-center flex-wrap gap-x-3 text-sm mb-4">
-                      <div className="flex items-center space-x-1">
-                        <Icon name="Monitor" size={16} className="text-blue-500" />
-                        <span className="font-medium text-foreground">{profileData.videosCount}</span>
-                        <span className="text-muted-foreground">videos</span>
-                      </div>
-                      
-                      {profileData.reelsCount > 0 && (
-                        <>
-                          <span className="text-muted-foreground">•</span>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Smartphone" size={16} className="text-red-500" />
-                            <span className="font-medium text-foreground">{profileData.reelsCount}</span>
-                            <span className="text-muted-foreground">reels</span>
-                          </div>
-                        </>
-                      )}
-                      
-                      {profileData.photosCount > 0 && (
-                        <>
-                          <span className="text-muted-foreground">•</span>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Image" size={16} className="text-green-500" />
-                            <span className="font-medium text-foreground">{profileData.photosCount}</span>
-                            <span className="text-muted-foreground">fotos</span>
-                          </div>
-                        </>
-                      )}
-                      
-                      {profileData.totalViews > 0 && (
-                        <>
-                          <span className="text-muted-foreground">•</span>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Eye" size={16} className="text-muted-foreground" />
-                            <span className="font-medium text-foreground">{profileData.totalViews.toLocaleString()}</span>
-                            <span className="text-muted-foreground">views</span>
-                          </div>
-                        </>
-                      )}
-                      
-                      {profileData.totalLikes > 0 && (
-                        <>
-                          <span className="text-muted-foreground">•</span>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Heart" size={16} className="text-red-500" />
-                            <span className="font-medium text-foreground">{profileData.totalLikes.toLocaleString()}</span>
-                            <span className="text-muted-foreground">likes</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
+                    {/* Botones */}
                     <div className="flex items-center space-x-2">
                       <Button
                         variant={following ? "outline" : "default"}
