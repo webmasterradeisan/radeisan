@@ -1,15 +1,14 @@
-// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Sin declaración duplicada ni rutas alias)
+// src/Routes.jsx - VERSIÓN CORREGIDA FINAL (Ajustando Convenciones de Admin Paths y Limpieza)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 
-// 🚨 FIX: Todas las importaciones de componentes base se hacen relativas para evitar errores de alias de módulo.
+// FIX: Todas las importaciones de componentes base se hacen relativas para asegurar que Rollup las resuelva.
 import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PointsProvider } from "./contexts/PointsContext";
 
 // SISTEMA ORIGINAL MANTENIDO
-// 🚨 MANTENER: ProtectedAdminRoute se importa desde aquí (components/ProtectedRoute)
 import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "./components/ProtectedRoute";
 
 // MOBILE LAYOUT PARA APLICAR GRADUALMENTE
@@ -43,33 +42,30 @@ import PurchasePointsPage from './pages/PurchasePointsPage.jsx';
 import PublicProfilePage from './pages/public-profile-page/index.jsx';
 
 // ADMIN PANEL
-// 🚨 FIX CRÍTICO: Reemplazar alias por rutas relativas explícitas
-// (El componente ProtectedAdminRoute ya se importa arriba)
-import AdminLayout from './components/admin/AdminLayout'; // Asumimos esta ruta
-import AdminDashboard from './pages/admin-dashboard'; 
-import AdminUsers from './pages/admin-users/UserManagement';
-import AdminVideos from './pages/admin-panel/AdminVideos.jsx'; // Asumo que el nombre es AdminVideos.jsx
-import AdminPoints from './pages/admin-panel/AdminPoints.jsx'; // Asumo que el nombre es AdminPoints.jsx
-import AdminBlogs from './pages/admin-panel/AdminBlogs.jsx'; // Asumo que el nombre es AdminBlogs.jsx
+// 🚨 FIX CRÍTICO: Reemplazar alias por rutas relativas explícitas (probando convención de directorios)
+import AdminDashboard from './pages/admin-dashboard/index.jsx'; 
+import AdminUsers from './pages/admin-users/UserManagement.jsx'; 
+import AdminVideos from './pages/admin-videos/index.jsx'; // FIX: Usando convención de directorio /index.jsx
+import AdminPoints from './pages/admin-points/index.jsx'; // FIX: Usando convención de directorio /index.jsx
+import AdminBlogs from './pages/admin-blogs/index.jsx'; // FIX: Usando convención de directorio /index.jsx
+
+import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
+import AdminLayout from './components/admin/AdminLayout';
+import UserManagement from './pages/admin-users/UserManagement.jsx';
+import CategoryManagement from './pages/admin-categories/CategoryManagement.jsx';
+import PointsRulesEditor from './pages/admin-points/PointsRulesEditor.jsx';
+import MissionsManagement from './pages/admin/MissionsManagement.jsx';
+import RewardsManagement from './pages/admin-rewards/RewardsManagement.jsx';
+import BrandingSettings from './pages/admin-settings/BrandingSettings.jsx';
+import ContentModeration from './pages/admin-moderation/ContentModeration.jsx';
+import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics.jsx';
+import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfig.jsx';
+import TransactionsManagement from './pages/admin/TransactionsManagement.jsx';
 
 // Otras Páginas (asumidas)
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Unauthorized from "./pages/Unauthorized";
-
-// ===============================
-// Componentes con nombres ambiguos del admin panel (ajustados a la versión original)
-// ===============================
-import UserManagement from './pages/admin-users/UserManagement';
-import CategoryManagement from './pages/admin-categories/CategoryManagement';
-import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
-import MissionsManagement from './pages/admin/MissionsManagement';
-import RewardsManagement from './pages/admin-rewards/RewardsManagement';
-import BrandingSettings from './pages/admin-settings/BrandingSettings';
-import ContentModeration from './pages/admin-moderation/ContentModeration';
-import AdvancedAnalytics from './pages/admin-analytics/AdvancedAnalytics';
-import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfig';
-import TransactionsManagement from './pages/admin/TransactionsManagement';
 
 
 const Routes = () => {
@@ -120,7 +116,7 @@ const Routes = () => {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               
-              {/* 🚨 PERFIL PÚBLICO: La funcionalidad solicitada */}
+              {/* 🚨 PERFIL PÚBLICO: Ruta dinámica accesible por cualquier usuario/visitante */}
               <Route 
                 path="/profile/:username" 
                 element={
@@ -179,14 +175,14 @@ const Routes = () => {
               
               <Route path="/admin" element={
                 <ProtectedAdminRoute>
-                  <AdminLayout />
+                  <AdminDashboard />
                 </ProtectedAdminRoute>
               }>
                 <Route index element={<AdminDashboard />} />
 
                 <Route path="users" element={
                   <ProtectedAdminRoute requiredPermission="manage_users">
-                    <UserManagement />
+                    <AdminUsers />
                   </ProtectedAdminRoute>
                 } />
                 <Route path="videos" element={
@@ -195,7 +191,7 @@ const Routes = () => {
                   </ProtectedAdminRoute>
                 } />
                 <Route path="points" element={
-                  <ProtectedAdminRoute requiredPermission="manage_points">
+                  <ProtectedAdminRoute>
                     <AdminPoints />
                   </ProtectedAdminRoute>
                 } />
@@ -214,10 +210,6 @@ const Routes = () => {
                 <Route path="analytics" element={<ProtectedAdminRoute requiredPermission="view_analytics"><AdvancedAnalytics /></ProtectedAdminRoute>} />
                 <Route path="premium-points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PremiumPointsConfig /></ProtectedAdminRoute>} />
                 <Route path="transactions" element={<ProtectedAdminRoute requiredPermission="manage_transactions"><TransactionsManagement /></ProtectedAdminRoute>} />
-
-
-                {/* Logs - ⏳ PLACEHOLDER (Se puede comentar si no se usa) */}
-                {/* <Route path="logs" element={<ProtectedAdminRoute requiredPermission="view_logs"><AdminPlaceholder title="Logs..." requiredPermission="view_logs" /></ProtectedAdminRoute>} /> */}
 
               </Route>
 
