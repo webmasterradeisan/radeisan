@@ -292,59 +292,77 @@ const PublicProfilePage = () => {
                     </div>
                     
                     {/* Username */}
-                    <p className="text-sm text-muted-foreground mb-3">@{profileData.username}</p>
+                    <p className="text-sm text-muted-foreground mb-2">@{profileData.username}</p>
                     
                     {/* Bio */}
                     {profileData.bio && (
-                      <p className="text-sm text-foreground mb-3">
+                      <p className="text-sm text-foreground mb-2">
                         {profileData.bio}
                       </p>
                     )}
 
-                    {/* Stats en UNA LÍNEA HORIZONTAL con iconos */}
-                    <div className="flex items-center flex-wrap gap-x-4 gap-y-2 text-sm mb-4">
+                    {/* Seguidores/Siguiendo - línea separada */}
+                    <div className="flex items-center gap-4 text-sm mb-3">
                       <div className="flex items-center space-x-1">
-                        <Icon name="Users" size={14} className="text-muted-foreground" />
                         <span className="font-medium text-foreground">{profileData.followersCount?.toLocaleString()}</span>
                         <span className="text-muted-foreground">seguidores</span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <Icon name="UserPlus" size={14} className="text-muted-foreground" />
                         <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
                         <span className="text-muted-foreground">siguiendo</span>
                       </div>
+                    </div>
+
+                    {/* Stats en UNA LÍNEA HORIZONTAL con iconos y separadores */}
+                    <div className="flex items-center flex-wrap gap-x-3 text-sm mb-4">
                       <div className="flex items-center space-x-1">
-                        <Icon name="Monitor" size={14} className="text-muted-foreground" />
+                        <Icon name="Monitor" size={16} className="text-blue-500" />
                         <span className="font-medium text-foreground">{profileData.videosCount}</span>
                         <span className="text-muted-foreground">videos</span>
                       </div>
+                      
                       {profileData.reelsCount > 0 && (
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Smartphone" size={14} className="text-muted-foreground" />
-                          <span className="font-medium text-foreground">{profileData.reelsCount}</span>
-                          <span className="text-muted-foreground">reels</span>
-                        </div>
+                        <>
+                          <span className="text-muted-foreground">•</span>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Smartphone" size={16} className="text-red-500" />
+                            <span className="font-medium text-foreground">{profileData.reelsCount}</span>
+                            <span className="text-muted-foreground">reels</span>
+                          </div>
+                        </>
                       )}
+                      
                       {profileData.photosCount > 0 && (
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Image" size={14} className="text-muted-foreground" />
-                          <span className="font-medium text-foreground">{profileData.photosCount}</span>
-                          <span className="text-muted-foreground">fotos</span>
-                        </div>
+                        <>
+                          <span className="text-muted-foreground">•</span>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Image" size={16} className="text-green-500" />
+                            <span className="font-medium text-foreground">{profileData.photosCount}</span>
+                            <span className="text-muted-foreground">fotos</span>
+                          </div>
+                        </>
                       )}
+                      
                       {profileData.totalViews > 0 && (
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Eye" size={14} className="text-muted-foreground" />
-                          <span className="font-medium text-foreground">{profileData.totalViews.toLocaleString()}</span>
-                          <span className="text-muted-foreground">views</span>
-                        </div>
+                        <>
+                          <span className="text-muted-foreground">•</span>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Eye" size={16} className="text-muted-foreground" />
+                            <span className="font-medium text-foreground">{profileData.totalViews.toLocaleString()}</span>
+                            <span className="text-muted-foreground">views</span>
+                          </div>
+                        </>
                       )}
+                      
                       {profileData.totalLikes > 0 && (
-                        <div className="flex items-center space-x-1">
-                          <Icon name="Heart" size={14} className="text-muted-foreground" />
-                          <span className="font-medium text-foreground">{profileData.totalLikes.toLocaleString()}</span>
-                          <span className="text-muted-foreground">likes</span>
-                        </div>
+                        <>
+                          <span className="text-muted-foreground">•</span>
+                          <div className="flex items-center space-x-1">
+                            <Icon name="Heart" size={16} className="text-red-500" />
+                            <span className="font-medium text-foreground">{profileData.totalLikes.toLocaleString()}</span>
+                            <span className="text-muted-foreground">likes</span>
+                          </div>
+                        </>
                       )}
                     </div>
 
