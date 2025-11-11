@@ -37,7 +37,7 @@ const VIDEO_ORIENTATIONS = {
 // ===============================
 
 // Hook para datos del perfil del usuario
-const useUserProfile = () => {
+export const useUserProfile = () => { // 👈 CORRECCIÓN: export const
   const { user, updateProfile } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -124,7 +124,7 @@ const useUserProfile = () => {
 };
 
 // Hook para videos horizontales
-const useUserVideos = (userId) => {
+export const useUserVideos = (userId) => { // 👈 CORRECCIÓN: export const
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -249,7 +249,7 @@ const useUserVideos = (userId) => {
 };
 
 // Hook para reels (videos verticales)
-const useUserReels = (userId) => {
+export const useUserReels = (userId) => { // 👈 CORRECCIÓN: export const
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -374,7 +374,7 @@ const useUserReels = (userId) => {
 };
 
 // Hook para fotos del usuario
-const useUserPhotos = (userId) => {
+export const useUserPhotos = (userId) => { // 👈 CORRECCIÓN: export const
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -561,7 +561,7 @@ const usePurchaseHistory = () => {
 // COMPONENTE DE GRID DE FOTOS
 // ===============================
 
-const PhotoGrid = ({ 
+export const PhotoGrid = ({ // 👈 CORRECCIÓN: export const
   photos = [], 
   loading = false, 
   onQuickUpload,
@@ -714,7 +714,7 @@ const PhotoGrid = ({
 // COMPONENTE DE VIDEO GRID HORIZONTAL
 // ===============================
 
-const VideoGridComponent = ({ 
+export const VideoGridComponent = ({ // 👈 CORRECCIÓN: export const
   videos = [], 
   loading = false,
   onVideoAction,
@@ -893,7 +893,7 @@ const VideoGridComponent = ({
 // COMPONENTE DE REELS GRID
 // ===============================
 
-const ReelsGridComponent = ({ 
+export const ReelsGridComponent = ({ // 👈 CORRECCIÓN: export const
   reels = [], 
   loading = false,
   onReelAction,
