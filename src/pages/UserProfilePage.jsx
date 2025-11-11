@@ -2,20 +2,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-// 🚨 CORRECCIÓN 1: Importar AuthContext subiendo solo UN nivel
-import { useAuth } from '../contexts/AuthContext'; 
-// 🚨 CORRECCIÓN 2: Importar Supabase subiendo solo UN nivel
-import { supabase } from '../lib/supabase'; 
 
-import Header from '../../components/ui/Header';
-import Icon from '../../components/AppIcon';
-import Button from '../../components/ui/Button';
-import Loader from '../../components/ui/Loader'; 
-import ProfileTabs from './components/ProfileTabs'; 
+// ✅ RUTAS CORREGIDAS (Subiendo solo un nivel: "../")
+import { supabase } from '../lib/supabase'; 
+import { useAuth } from '../contexts/AuthContext';
+import Header from '../components/ui/Header';
+import Icon from '../components/AppIcon';
+import Button from '../components/ui/Button';
+import Loader from '../components/ui/Loader'; 
+import ProfileTabs from './components/ProfileTabs'; // Esta ruta es local (dentro de UserProfilePage/)
 
 // ===============================
 // HOOKS DE CONTENIDO (PLACEHOLDERS)
-// * Asume que tienes hooks para obtener el contenido de cada usuario *
 // ===============================
 
 // Función genérica de conteo de contenido (solo para simular)
@@ -69,7 +67,7 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                // ✅ ARREGLO: select('*') funciona ahora que las columnas existen
+                // ✅ Consulta asumiendo que ya creaste las columnas en la BD:
                 .select('*, followers_count, following_count') 
 
             // Determinar si el input es un UUID (ID) o un string (USERNAME)
