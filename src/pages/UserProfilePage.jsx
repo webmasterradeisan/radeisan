@@ -3,18 +3,17 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// ✅ Contextos y Supabase
+// ✅ Contextos y Supabase (Rutas verificadas)
 import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../contexts/AuthContext';
 
-// ✅ Componentes UI
+// ✅ Componentes UI (Rutas verificadas)
 import Header from '../components/ui/Header';
 import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
-import Loader from '../components/ui/Loader'; 
 
-// 🚨 CORRECCIÓN FINAL DE RUTA: Asumiendo que ProfileTabs.jsx está directamente en user-profile-settings/
-import ProfileTabs from '../user-profile-settings/ProfileTabs'; 
+// 🚨 RUTA FINAL CONFIRMADA: ProfileTabs
+import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
 
 // ===============================
 // HOOKS DE CONTENIDO (PLACEHOLDERS REUTILIZADOS)
@@ -25,7 +24,6 @@ const useUserContent = (userId, type) => {
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // Función para obtener el título correcto para la simulación
     const getContentTitle = (index) => {
         if (type === 'videos') return `Video Horizontal #${index + 1}`;
         if (type === 'reels') return `Reel Viral #${index + 1}`;
@@ -223,7 +221,7 @@ const UserProfilePage = () => {
     const isOwnProfile = currentUser && profileData && currentUser.id === profileData.id;
 
     if (profileLoading) {
-        // 🚨 LOADER INLINE
+        // 🚨 LOADER INLINE (copiado de AdminLayout)
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
               <div className="text-center">
