@@ -24,12 +24,6 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 import ReelsPage from './pages/reels';
 import NotFound from "pages/NotFound";
 
-// ✅ NUEVA IMPORTACIÓN DE PERFIL PÚBLICO
-import UserProfilePage from './pages/UserProfilePage';
-
-// ✅ NUEVA IMPORTACIÓN DE FOTOS
-import PhotoUploadStudio from './pages/photo-upload-studio/index.jsx';
-
 // ✅ PÁGINAS REALES DE USUARIO
 import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
@@ -255,18 +249,6 @@ const Routes = () => {
                   </ProtectedRoute>
                 } 
               />
-              
-              {/* ✅ NUEVA RUTA: PERFIL PÚBLICO (PROTEGIDA POR REQUISITO DEL USUARIO) */}
-              <Route 
-                path="/user/:userIdOrUsername" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <UserProfilePage />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
 
               <Route 
                 path="/upload" 
@@ -274,18 +256,6 @@ const Routes = () => {
                   <ProtectedRoute>
                     <MobileLayoutWrapper>
                       <VideoUploadStudio />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* ✅ RUTA CORREGIDA: Photo Upload Studio */}
-              <Route 
-                path="/photo-upload" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PhotoUploadStudio />
                     </MobileLayoutWrapper>
                   </ProtectedRoute>
                 } 
