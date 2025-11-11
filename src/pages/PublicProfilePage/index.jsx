@@ -1,5 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ VERSIÓN AUTOCONTENIDA - Sin dependencias de ProfileTabs
+// ✅ VERSIÓN CON 3 TABS: Videos (horizontales), Reels (verticales), Fotos
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -21,7 +21,9 @@ const PublicProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [following, setFollowing] = useState(false);
-  const [userVideos, setUserVideos] = useState([]);
+  const [allVideos, setAllVideos] = useState([]);
+  const [reels, setReels] = useState([]);
+  const [horizontalVideos, setHorizontalVideos] = useState([]);
   const [userPhotos, setUserPhotos] = useState([]);
   const [activeTab, setActiveTab] = useState('videos');
 
@@ -31,6 +33,35 @@ const PublicProfilePage = () => {
   const isUUID = (str) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(str);
+  };
+
+  // ===============================
+  // DETERMINAR ORIENTACIÓN (igual que en reels)
+  // ===============================
+  const determineOrientation = (video) => {
+    // PRIORIDAD 1: Si tiene campo orientation en BD
+    if (video.orientation) {
+      return video.orientation;
+    }
+
+    // PRIORIDAD 2: Si hay dimensiones width/height
+    if (video.width && video.height) {
+      const aspectRatio = video.width / video.height;
+      if (aspectRatio <= 0.8) return 'vertical';
+      if (aspectRatio >= 1.3) return 'horizontal'; 
+      return 'square';
+    }
+
+    // PRIORIDAD 3: Si tiene video_width y video_height
+    if (video.video_width && video.video_height) {
+      const aspectRatio = video.video_width / video.video_height;
+      if (aspectRatio <= 0.8) return 'vertical';
+      if (aspectRatio >= 1.3) return 'horizontal'; 
+      return 'square';
+    }
+    
+    // Por defecto, horizontal
+    return 'horizontal';
   };
 
   // ===============================
@@ -79,7 +110,7 @@ const PublicProfilePage = () => {
         return;
       }
 
-      // Cargar videos del usuario
+      // ✅ Cargar videos del usuario
       const { data: videosData } = await supabase
         .from('videos')
         .select('*')
@@ -87,7 +118,27 @@ const PublicProfilePage = () => {
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // Cargar fotos del usuario
+      // ✅ Procesar y separar videos por orientación
+      const processedVideos = (videosData || []).map(video => ({
+        ...video,
+        orientation: determineOrientation(video)
+      }));
+
+      // Separar en reels (verticales) y videos (horizontales)
+      const verticalVideos = processedVideos.filter(v => v.orientation === 'vertical');
+      const horizontalOnly = processedVideos.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
+
+      setAllVideos(processedVideos);
+      setReels(verticalVideos);
+      setHorizontalVideos(horizontalOnly);
+
+      console.log('📊 Videos separados:', {
+        total: processedVideos.length,
+        reels: verticalVideos.length,
+        horizontales: horizontalOnly.length
+      });
+
+      // ✅ Cargar fotos del usuario
       const { data: photosData } = await supabase
         .from('photos')
         .select('*')
@@ -95,7 +146,7 @@ const PublicProfilePage = () => {
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // Verificar si el usuario actual sigue a este perfil
+      // ✅ Verificar si el usuario actual sigue a este perfil
       if (currentUser) {
         const { data: followData } = await supabase
           .from('user_follows')
@@ -106,8 +157,6 @@ const PublicProfilePage = () => {
 
         setFollowing(!!followData);
       }
-
-      const videosCount = videosData?.length || 0;
 
       const avatarUrl = profile.avatar_url || profile.avatar || 
         `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.full_name || profile.username || 'User')}&background=6366f1&color=ffffff&size=128`;
@@ -124,7 +173,8 @@ const PublicProfilePage = () => {
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
         photosCount: profile.photos_count || 0,
-        videosCount: videosCount,
+        videosCount: horizontalOnly.length,
+        reelsCount: verticalVideos.length,
         isVerified: profile.is_verified || false,
         isBusinessAccount: profile.is_business_account || false,
         totalPoints: totalPoints,
@@ -132,7 +182,6 @@ const PublicProfilePage = () => {
         premiumPoints: profile.premium_points || 0
       });
 
-      setUserVideos(videosData || []);
       setUserPhotos(photosData || []);
       setLoading(false);
 
@@ -324,16 +373,6 @@ const PublicProfilePage = () => {
                           <span className="font-medium text-foreground">{profileData.followingCount?.toLocaleString()}</span>
                           <span className="text-muted-foreground">siguiendo</span>
                         </div>
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
-                          <span className="text-muted-foreground">videos</span>
-                        </div>
-                        {profileData.photosCount > 0 && (
-                          <div className="flex items-center space-x-1">
-                            <span className="font-medium text-foreground">{profileData.photosCount}</span>
-                            <span className="text-muted-foreground">fotos</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -355,22 +394,33 @@ const PublicProfilePage = () => {
 
             {/* Tabs y Contenido */}
             <div className="px-4 sm:px-6 py-6">
-              {/* Tabs */}
-              <div className="flex border-b border-border mb-6">
+              {/* ✅ TABS: Videos, Reels, Fotos */}
+              <div className="flex border-b border-border mb-6 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('videos')}
-                  className={`px-4 py-2 font-medium transition-colors ${
+                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
                     activeTab === 'videos' 
                       ? 'border-b-2 border-primary text-primary' 
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Icon name="Play" size={16} className="inline mr-2" />
-                  Videos ({userVideos.length})
+                  <Icon name="Monitor" size={16} className="inline mr-2" />
+                  Videos ({horizontalVideos.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('reels')}
+                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'reels' 
+                      ? 'border-b-2 border-primary text-primary' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Icon name="Smartphone" size={16} className="inline mr-2" />
+                  Reels ({reels.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('photos')}
-                  className={`px-4 py-2 font-medium transition-colors ${
+                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
                     activeTab === 'photos' 
                       ? 'border-b-2 border-primary text-primary' 
                       : 'text-muted-foreground hover:text-foreground'
@@ -381,19 +431,19 @@ const PublicProfilePage = () => {
                 </button>
               </div>
 
-              {/* Content */}
+              {/* ✅ CONTENT - VIDEOS HORIZONTALES */}
               {activeTab === 'videos' && (
                 <div>
-                  {userVideos.length === 0 ? (
+                  {horizontalVideos.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Icon name="Video" size={32} className="text-muted-foreground" />
+                        <Icon name="Monitor" size={32} className="text-muted-foreground" />
                       </div>
-                      <p className="text-muted-foreground">Sin videos aún</p>
+                      <p className="text-muted-foreground">Sin videos horizontales aún</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {userVideos.map((video) => (
+                      {horizontalVideos.map((video) => (
                         <Link 
                           key={video.id}
                           to={`/video/${video.id}`}
@@ -429,6 +479,56 @@ const PublicProfilePage = () => {
                 </div>
               )}
 
+              {/* ✅ CONTENT - REELS (VERTICALES) */}
+              {activeTab === 'reels' && (
+                <div>
+                  {reels.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Icon name="Smartphone" size={32} className="text-muted-foreground" />
+                      </div>
+                      <p className="text-muted-foreground">Sin reels aún</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {reels.map((reel) => (
+                        <Link 
+                          key={reel.id}
+                          to={`/reels?id=${reel.id}`}
+                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                        >
+                          <div className="relative aspect-[9/16] bg-muted">
+                            <img 
+                              src={reel.thumbnail_url || '/placeholder-video.jpg'} 
+                              alt={reel.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center space-x-1">
+                              <Icon name="Play" size={10} />
+                              <span>{reel.duration_seconds ? `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}` : '0:00'}</span>
+                            </div>
+                          </div>
+                          <div className="p-2">
+                            <h3 className="font-semibold text-xs line-clamp-2 mb-1">{reel.title}</h3>
+                            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                              <span className="flex items-center space-x-1">
+                                <Icon name="Eye" size={10} />
+                                <span>{reel.views_count?.toLocaleString() || 0}</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <Icon name="Heart" size={10} />
+                                <span>{reel.likes_count?.toLocaleString() || 0}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ✅ CONTENT - FOTOS */}
               {activeTab === 'photos' && (
                 <div>
                   {userPhotos.length === 0 ? (
