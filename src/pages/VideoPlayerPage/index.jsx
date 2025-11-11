@@ -1,6 +1,6 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// 🚨 RUTA CORREGIDA: Se usa '../' en lugar de '../../' para todas las importaciones
+// 🚨 RUTA CORREGIDA: Se usa '../../' en lugar de '../' para todas las importaciones
 //                   que apuntan a carpetas en el nivel 'src/'.
 // ============================================================================
 
@@ -8,10 +8,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// 🚨 CORRECCIÓN DE RUTAS A UN SOLO NIVEL (../)
-import { supabase } from '../lib/supabase'; 
-import { useAuth } from '../contexts/AuthContext'; 
-import { usePoints } from '../contexts/PointsContext'; 
+// 🚨 CORRECCIÓN DE RUTAS A DOBLE NIVEL (../../)
+import { supabase } from '../../lib/supabase'; 
+import { useAuth } from '../../contexts/AuthContext'; 
+import { usePoints } from '../../contexts/PointsContext'; 
 import { 
   trackWatchVideo, 
   trackGiveLike, 
@@ -19,14 +19,14 @@ import {
   trackComment, 
   trackFollowUser,
   trackMissionProgress 
-} from '../services/missionsService'; 
-import Header from '../components/ui/Header';
-import Icon from '../components/AppIcon';
-import Button from '../components/ui/Button';
-import RelatedVideosSidebar from '../components/video/RelatedVideosSidebar';
-import useIsMobile from '../hooks/useIsMobile'; 
-import VideoPlayerComponent from '../components/video/VideoPlayerComponent'; // 🚨 RUTA CRÍTICA
-import CommentsSection from '../components/video/CommentsSection'; 
+} from '../../services/missionsService'; 
+import Header from '../../components/ui/Header';
+import Icon from '../../components/AppIcon';
+import Button from '../../components/ui/Button';
+import RelatedVideosSidebar from '../../components/video/RelatedVideosSidebar';
+import useIsMobile from '../../hooks/useIsMobile'; 
+import VideoPlayerComponent from '../../components/video/VideoPlayerComponent'; 
+import CommentsSection from '../../components/video/CommentsSection'; 
 
 // Definición de la animación simple para el feedback 
 const styleSheet = document.styleSheets[0] || document.createElement('style');
