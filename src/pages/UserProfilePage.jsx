@@ -1,4 +1,5 @@
-// src/pages/UserProfilePage/index.jsx
+// src/pages/UserProfilePage.jsx (o src/pages/UserProfilePage/index.jsx)
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -12,7 +13,7 @@ import Header from '../components/ui/Header';
 import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
 
-// 🚨 RUTA FINAL CONFIRMADA
+// 🚨 RUTA FINAL CONFIRMADA POR EL USUARIO:
 import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
 
 // ===============================
@@ -71,7 +72,7 @@ const useUserPhotos = (userId) => useUserContent(userId, 'photos');
 
 
 // ===============================
-// HOOK PERSONALIZADO PARA PERFIL PÚBLICO (AJUSTADO PARA EVITAR ERRORES DE COLUMNA)
+// HOOK PERSONALIZADO PARA PERFIL PÚBLICO (Corregido para evitar errores de columna)
 // ===============================
 
 const usePublicProfile = (userIdOrUsername) => {
@@ -90,9 +91,8 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                // 🚨 CORRECCIÓN CLAVE: Solo solicitamos las columnas que sabemos que existen ('*') 
-                // y followers/following que asumimos que sí existen o que se calcularán.
-                // Eliminamos cualquier referencia a videos_count o photos_count.
+                // 🚨 CORRECCIÓN CLAVE DE DB: Solo solicitamos las columnas que sabemos que existen ('*') 
+                // y los contadores de seguidores/siguiendo. Esto evita el error de videos_count, etc.
                 .select('*, followers_count, following_count') 
 
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdOrUsername);
@@ -126,7 +126,6 @@ const usePublicProfile = (userIdOrUsername) => {
 
         } catch (err) {
             console.error('Error fetching public profile:', err);
-            // Mensaje de error general para evitar revelar detalles de la DB al usuario.
             setError('Error al cargar perfil.'); 
         } finally {
             setLoading(false);
@@ -210,12 +209,12 @@ const UserProfilePage = () => {
     
     const [activeTab, setActiveTab] = useState('videos');
 
-    // Usar los hooks de contenido para calcular los contadores
+    // Usar los hooks de contenido
     const { content: videos, loading: videosLoading, refresh: refreshVideos } = useUserVideos(profileData?.id);
     const { content: reels, loading: reelsLoading, refresh: refreshReels } = useUserReels(profileData?.id);
     const { content: photos, loading: photosLoading, refresh: refreshPhotos } = useUserPhotos(profileData?.id);
 
-    // Contadores de contenido (Calculados con la longitud de los arrays, NO de la DB)
+    // Contadores de contenido
     const videosCount = videos.length;
     const reelsCount = reels.length;
     const photosCount = photos.length;
