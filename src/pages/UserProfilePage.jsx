@@ -12,7 +12,7 @@ import Header from '../components/ui/Header';
 import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
 
-// 🚨 RUTA FINAL CONFIRMADA: ProfileTabs
+// 🚨 RUTA FINAL CONFIRMADA
 import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
 
 // ===============================
@@ -71,7 +71,7 @@ const useUserPhotos = (userId) => useUserContent(userId, 'photos');
 
 
 // ===============================
-// HOOK PERSONALIZADO PARA PERFIL PÚBLICO
+// HOOK PERSONALIZADO PARA PERFIL PÚBLICO (AJUSTADO PARA EVITAR ERRORES DE COLUMNA)
 // ===============================
 
 const usePublicProfile = (userIdOrUsername) => {
@@ -90,7 +90,9 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                // Consulta asumiendo las columnas añadidas
+                // 🚨 CORRECCIÓN CLAVE: Solo solicitamos las columnas que sabemos que existen ('*') 
+                // y followers/following que asumimos que sí existen o que se calcularán.
+                // Eliminamos cualquier referencia a videos_count o photos_count.
                 .select('*, followers_count, following_count') 
 
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdOrUsername);
@@ -124,6 +126,7 @@ const usePublicProfile = (userIdOrUsername) => {
 
         } catch (err) {
             console.error('Error fetching public profile:', err);
+            // Mensaje de error general para evitar revelar detalles de la DB al usuario.
             setError('Error al cargar perfil.'); 
         } finally {
             setLoading(false);
@@ -207,12 +210,12 @@ const UserProfilePage = () => {
     
     const [activeTab, setActiveTab] = useState('videos');
 
-    // Usar los hooks de contenido
+    // Usar los hooks de contenido para calcular los contadores
     const { content: videos, loading: videosLoading, refresh: refreshVideos } = useUserVideos(profileData?.id);
     const { content: reels, loading: reelsLoading, refresh: refreshReels } = useUserReels(profileData?.id);
     const { content: photos, loading: photosLoading, refresh: refreshPhotos } = useUserPhotos(profileData?.id);
 
-    // Contadores de contenido
+    // Contadores de contenido (Calculados con la longitud de los arrays, NO de la DB)
     const videosCount = videos.length;
     const reelsCount = reels.length;
     const photosCount = photos.length;
@@ -221,7 +224,7 @@ const UserProfilePage = () => {
     const isOwnProfile = currentUser && profileData && currentUser.id === profileData.id;
 
     if (profileLoading) {
-        // 🚨 LOADER INLINE (copiado de AdminLayout)
+        // 🚨 LOADER INLINE
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
               <div className="text-center">
