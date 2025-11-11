@@ -1,5 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ DISEÑO IDÉNTICO AL NUEVO REQUERIMIENTO (PORTADA AL FONDO, DATOS INMEDIATAMENTE DEBAJO)
+// ✅ DISEÑO EXACTO SEGÚN LA IMAGEN FINAL (PORTADA AL FONDO, AVATAR SUPERPUESTO, DATOS INMEDIATAMENTE DEBAJO)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -124,7 +124,7 @@ const PublicProfilePage = () => {
         username: profile.username || `user_${profile.id.substring(0, 8)}`,
         avatar: avatarUrl,
         coverImage: profile.cover_image_url,
-        bio: profile.bio || `Usuario de RADEISAN desde ${new Date(profile.created_at).toLocaleDateString()}`,
+        bio: profile.bio, // Mantener el bio original para la meta description
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
         photosCount: photosData?.length || 0,
@@ -134,6 +134,7 @@ const PublicProfilePage = () => {
         totalLikes: totalLikes,
         isVerified: profile.is_verified || false,
         isBusinessAccount: profile.is_business_account || false,
+        created_at: profile.created_at,
       });
 
       setUserPhotos(photosData || []);
@@ -232,28 +233,27 @@ const PublicProfilePage = () => {
     );
   }
 
+  // Se extrae la información para evitar profileData.xxx repetidamente
   const {
     name,
     username,
     avatar,
     coverImage,
-    bio,
     videosCount,
     reelsCount,
     photosCount,
     totalViews,
     totalLikes,
-    created_at,
     isVerified,
-    isBusinessAccount
+    isBusinessAccount,
+    created_at,
+    bio,
   } = profileData;
 
+  // Bio/Fecha de registro (solo usamos la fecha si el bio está vacío)
   const formattedCreationDate = new Date(created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
-  const bioText = bio && !bio.includes('Usuario de RADEISAN desde') 
-    ? bio 
-    : `Usuario de RADEISAN desde ${formattedCreationDate}`;
+  const bioText = bio || `Usuario de RADEISAN desde ${formattedCreationDate}`;
 
-  // --- Inicio del componente Renderizado (Parte modificada para ser exacta a la imagen) ---
 
   return (
     <>
@@ -267,11 +267,12 @@ const PublicProfilePage = () => {
 
         <main className="pt-16">
           <div className="max-w-6xl mx-auto">
-            {/* ✅ HEADER EXACTO COMO LA IMAGEN */}
+            {/* ✅ HEADER - DISEÑO EXACTO DE LA IMAGEN */}
             <div className="bg-card border-b border-border">
               
               {/* Cover Image - Alta y al fondo */}
-              <div className="relative h-56 sm:h-72 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
+              {/* h-48/h-64 según la última imagen, ajustado de nuevo a los valores que se ven mejor en la referencia */}
+              <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
                 {coverImage ? (
                   <Image 
                     src={coverImage} 
@@ -279,26 +280,41 @@ const PublicProfilePage = () => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  // Fondo con imagen borrosa para simular la portada de la foto
-                  <div className="w-full h-full">
-                    <Image 
-                        src={avatar} 
-                        alt="Fondo desenfocado"
-                        className="w-full h-full object-cover filter blur-md scale-110"
-                    />
-                    <div className="absolute inset-0 bg-black/30"></div>
-                  </div>
+                  <div className="w-full h-full bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
                 )}
+                
+                {/* Botón de Seguir justo en el borde inferior de la portada (parte superior derecha) */}
+                <div className="absolute bottom-0 right-0 p-4 transform translate-y-1/2">
+                    <Button
+                      variant={following ? "default" : "secondary"}
+                      size="sm"
+                      onClick={handleFollowToggle}
+                      className={`text-sm ${following ? 'bg-muted text-foreground hover:bg-muted/80' : 'bg-red-500 hover:bg-red-600 text-white'}`}
+                      style={{ height: '32px' }} // Altura ajustada
+                    >
+                      <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-1" />
+                      {following ? 'Siguiendo' : 'Seguir'}
+                    </Button>
+                </div>
+                
+                {/* Botón de Compartir justo al lado (parte superior derecha) */}
+                <div className="absolute bottom-0 right-20 p-4 transform translate-y-1/2">
+                     <Button variant="outline" size="icon" className="border-0 bg-transparent hover:bg-muted/50 w-8 h-8">
+                        <Icon name="Share2" size={16} />
+                    </Button>
+                </div>
               </div>
 
               {/* Profile Info - Avatar y detalles (justo debajo de la portada) */}
               <div className="px-4 sm:px-6 pb-4"> 
                 
                 {/* Contenedor Flex para alinear Avatar (izquierda) y todo el texto (derecha) */}
-                <div className="flex items-end -mt-16 sm:-mt-20"> {/* Ajuste para que el avatar se superponga -mt-16/sm:-mt-20 */}
+                {/* -mt-16/sm:-mt-20 ajustado para que el avatar se superponga ~50% */}
+                <div className="flex items-start -mt-16 sm:-mt-20"> 
                   
                   {/* Lado izquierdo: Avatar (Más grande) */}
                   <div className="flex-shrink-0 mr-4"> 
+                    {/* Tamaño del avatar ligeramente aumentado (w-32/h-32) */}
                     <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full border-4 border-card bg-card overflow-hidden shadow-elevation-2">
                       <Image 
                         src={avatar} 
@@ -309,108 +325,76 @@ const PublicProfilePage = () => {
                   </div>
 
                   {/* Lado Derecho: Toda la información, stats y botones */}
-                  <div className="flex flex-col flex-1 min-w-0 pb-2"> {/* pb-2 para que el texto esté ligeramente por encima de la línea */}
+                  <div className="flex flex-col flex-1 min-w-0 pt-4"> 
                     
-                    {/* Fila 1: Nombre principal + Bio/Fecha de Registro + Botones (alineados a la derecha) */}
-                    <div className="flex items-start justify-between w-full">
-                      
-                      {/* Contenedor de Nombre y Bio/Fecha de Registro */}
-                      <div className="flex flex-col sm:flex-row items-start sm:items-baseline gap-1 sm:gap-2 mb-1">
-                        <div className="flex items-baseline gap-2">
-                            {/* Nombre principal (ej. pedro buenhombre) */}
-                            <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground whitespace-nowrap">
-                                {name} 
-                            </h1>
-                            {isVerified && (
-                                <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
-                            )}
-                            {isBusinessAccount && (
-                                <div className="flex items-center space-x-1 px-1.5 py-0 bg-accent/10 rounded-full">
-                                  <Icon name="Building2" size={10} color="var(--color-accent)" />
-                                  <span className="text-xs font-medium text-accent">Business</span>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* Bio/Fecha de registro (pequeño a la derecha del nombre) */}
-                        <p className="text-sm text-muted-foreground whitespace-nowrap hidden sm:block">
-                          {bioText}
-                        </p>
-                      </div>
-
-                      {/* Botones de Seguir y Compartir (Justo debajo de la portada) */}
-                      <div className="flex items-center space-x-2 flex-shrink-0 ml-4 -translate-y-6"> {/* -translate-y-6 para subirlo ligeramente, como en la imagen */}
-                          <Button
-                            variant={following ? "default" : "secondary"}
-                            size="sm"
-                            onClick={handleFollowToggle}
-                            className="text-sm bg-red-500 hover:bg-red-600 text-white" // Estilo rojo del botón Seguir
-                          >
-                            <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-1" />
-                            {following ? 'Siguiendo' : 'Seguir'}
-                          </Button>
-                          
-                          <Button variant="outline" size="icon-sm" className="border-0 hover:bg-muted/50"> {/* Sin borde para parecerse más a un icono puro */}
-                            <Icon name="Share2" size={16} />
-                          </Button>
-                      </div>
+                    {/* Fila 1: Nombre principal */}
+                    <div className="flex items-baseline gap-2 mb-1">
+                        {/* Nombre principal (ej. pedro buenhombre) */}
+                        <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground whitespace-nowrap">
+                            {name} 
+                        </h1>
+                        {isVerified && (
+                            <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                        )}
+                        {isBusinessAccount && (
+                            <div className="flex items-center space-x-1 px-1.5 py-0 bg-accent/10 rounded-full">
+                              <Icon name="Building2" size={10} color="var(--color-accent)" />
+                              <span className="text-xs font-medium text-accent">Business</span>
+                            </div>
+                        )}
                     </div>
                     
-                    {/* Fila 2: @Username y Stats (Todo alineado a la izquierda) */}
-                    <div className="flex flex-col w-full">
-                        {/* @Username (pequeño) */}
-                        <p className="text-sm text-muted-foreground mb-3">@{username}</p>
+                    {/* Fila 2: @Username */}
+                    <p className="text-sm text-muted-foreground mb-3">@{username}</p>
 
-                        {/* Stats con ICONOS (Alineación exacta como en la imagen) */}
-                        <div className="flex items-center flex-wrap gap-x-3 sm:gap-x-4 text-sm">
-                          
-                          {/* Videos */}
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Monitor" size={16} className="text-muted-foreground" />
-                            <span className="font-medium text-foreground">{videosCount}</span>
-                            <span className="text-muted-foreground">videos</span>
-                          </div>
-                          
-                          {/* Reels (Icono con color rojizo) */}
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Smartphone" size={16} className="text-red-500" />
-                            <span className="font-medium text-foreground">{reelsCount}</span>
-                            <span className="text-muted-foreground">reels</span>
-                          </div>
-                          
-                          {/* Fotos (Icono con color verdoso) */}
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Image" size={16} className="text-green-500" />
-                            <span className="font-medium text-foreground">{photosCount}</span>
-                            <span className="text-muted-foreground">fotos</span>
-                          </div>
 
-                          {/* Vistas */}
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Eye" size={16} className="text-muted-foreground" />
-                            <span className="font-medium text-foreground">{totalViews.toLocaleString()}</span>
-                            <span className="text-muted-foreground">views</span>
-                          </div>
-                          
-                          {/* Likes */}
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Heart" size={16} className="text-muted-foreground" />
-                            <span className="font-medium text-foreground">{totalLikes.toLocaleString()}</span>
-                            <span className="text-muted-foreground">likes</span>
-                          </div>
-                        </div>
+                    {/* Fila 3: Stats con ICONOS (Alineación exacta como en la imagen) */}
+                    <div className="flex items-center flex-wrap gap-x-4 text-sm">
+                      
+                      {/* Videos */}
+                      <div className="flex items-center space-x-1">
+                        <Icon name="Monitor" size={16} className="text-blue-500" /> {/* Color azul como en la imagen previa */}
+                        <span className="font-medium text-foreground">{videosCount}</span>
+                        <span className="text-muted-foreground">videos</span>
+                      </div>
+                      
+                      {/* Reels (Icono con color rojizo) */}
+                      <div className="flex items-center space-x-1">
+                        <Icon name="Smartphone" size={16} className="text-red-500" />
+                        <span className="font-medium text-foreground">{reelsCount}</span>
+                        <span className="text-muted-foreground">reels</span>
+                      </div>
+                      
+                      {/* Fotos (Icono con color verdoso) */}
+                      <div className="flex items-center space-x-1">
+                        <Icon name="Image" size={16} className="text-green-500" />
+                        <span className="font-medium text-foreground">{photosCount}</span>
+                        <span className="text-muted-foreground">fotos</span>
+                      </div>
+
+                      {/* Vistas */}
+                      <div className="flex items-center space-x-1">
+                        <Icon name="Eye" size={16} className="text-muted-foreground" />
+                        <span className="font-medium text-foreground">{totalViews.toLocaleString()}</span>
+                        <span className="text-muted-foreground">views</span>
+                      </div>
+                      
+                      {/* Likes */}
+                      <div className="flex items-center space-x-1">
+                        <Icon name="Heart" size={16} className="text-muted-foreground" />
+                        <span className="font-medium text-foreground">{totalLikes.toLocaleString()}</span>
+                        <span className="text-muted-foreground">likes</span>
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                {/* Bio/Fecha de registro para móvil */}
-                <p className="text-sm text-muted-foreground mt-4 sm:hidden"> 
-                  {bioText}
-                </p>
+                {/* Nota: La bio/fecha de registro no aparece visiblemente en la última imagen. Se deja la versión anterior comentada. */}
+                {/* <p className="text-sm text-muted-foreground mt-4 sm:hidden"> {bioText} </p> */}
               </div>
             </div>
 
-            {/* Tabs (Mantenemos el diseño actual) */}
+            {/* Tabs */}
             <div className="px-4 sm:px-6 py-6">
               <div className="flex border-b border-border mb-6 overflow-x-auto">
                 <button
