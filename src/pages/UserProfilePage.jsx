@@ -1,5 +1,4 @@
 // src/pages/UserProfilePage.jsx
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -13,7 +12,7 @@ import Header from '../components/ui/Header';
 import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
 
-// 🚨 RUTA FINAL CONFIRMADA POR EL USUARIO:
+// 🚨 RUTA FINAL CORRECTA CONFIRMADA:
 import ProfileTabs from '../user-profile-settings/components/ProfileTabs'; 
 
 // ===============================
@@ -72,7 +71,7 @@ const useUserPhotos = (userId) => useUserContent(userId, 'photos');
 
 
 // ===============================
-// HOOK PERSONALIZADO PARA PERFIL PÚBLICO (Corregido para evitar errores de columna)
+// HOOK PERSONALIZADO PARA PERFIL PÚBLICO
 // ===============================
 
 const usePublicProfile = (userIdOrUsername) => {
@@ -91,8 +90,8 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                // 🚨 CORRECCIÓN CLAVE DE DB: Solo solicitamos las columnas que sabemos que existen ('*') 
-                // y los contadores de seguidores/siguiendo. Esto evita el error de videos_count, etc.
+                // Se solicitan solo las columnas que sabemos que existen ('*')
+                // Se mantienen followers_count y following_count que supuestamente ya están resueltos.
                 .select('*, followers_count, following_count') 
 
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdOrUsername);
@@ -223,7 +222,7 @@ const UserProfilePage = () => {
     const isOwnProfile = currentUser && profileData && currentUser.id === profileData.id;
 
     if (profileLoading) {
-        // 🚨 LOADER INLINE
+        // 🚨 LOADER INLINE para evitar errores de importación
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
               <div className="text-center">
