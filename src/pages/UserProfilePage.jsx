@@ -1,87 +1,23 @@
 // src/pages/UserProfilePage.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 
-// ✅ Contextos y Supabase (Rutas verificadas)
-// Si UserProfilePage.jsx está en src/pages/, estas son las correctas:
+// Componentes y Contextos
 import { supabase } from '../lib/supabase'; 
 import { useAuth } from '../contexts/AuthContext';
-
-// ✅ Componentes UI (Rutas verificadas)
 import Header from '../components/ui/Header';
-import Button from '../components/ui/Button';
 import Icon from '../components/AppIcon';
-
-// 🚨 CORRECCIÓN FINAL DE RUTA: Ajustamos la importación para subir un nivel (a /pages) 
-// y luego entrar en la ruta completa confirmada.
-// Si el build asume que estamos en /src, la ruta debe ser más directa. 
-// Dejaremos la ruta relativa confirmada, ya que la anterior era la correcta para src/pages/
-// El problema es el archivo que estás editando: si estás editando src/pages/UserProfilePage.jsx
-// (sin subdirectorio), la ruta es:
-import ProfileTabs from './user-profile-settings/components/ProfileTabs'; // ¡Probando ruta directa sin subir nivel!
+import Button from '../components/ui/Button';
 
 // ===============================
-// HOOKS DE CONTENIDO (etc.) ...
+// HOOK SIMPLIFICADO PARA OBTENER PERFIL
 // ===============================
-// (El resto del código funcional es el mismo, solo se cambió la línea 17)
-
-// (Resto del código idéntico al anterior para mantener la funcionalidad...)
-const useUserContent = (userId, type) => {
-    const [content, setContent] = useState([]);
-    const [loading, setLoading] = useState(true);
-    
-    const getContentTitle = (index) => {
-        if (type === 'videos') return `Video Horizontal #${index + 1}`;
-        if (type === 'reels') return `Reel Viral #${index + 1}`;
-        if (type === 'photos') return `Foto de Perfil #${index + 1}`;
-        return 'Contenido';
-    };
-
-    const fetchContent = useCallback(async () => {
-        if (!userId) {
-            setLoading(false);
-            return;
-        }
-        
-        try {
-            setLoading(true);
-            const simulationLength = type === 'photos' ? 6 : 4;
-            const simulatedData = Array.from({ length: simulationLength }).map((_, index) => ({
-                id: `${type}-${userId.slice(0, 8)}-${index}`,
-                user_id: userId,
-                title: getContentTitle(index),
-                views_count: Math.floor(Math.random() * 10000)
-            }));
-            
-            setContent(simulatedData);
-
-        } catch (error) {
-             console.error(`Error fetching ${type}:`, error);
-             setContent([]);
-        } finally {
-            setLoading(false);
-        }
-    }, [userId, type]);
-
-    useEffect(() => {
-        fetchContent();
-    }, [fetchContent]);
-
-    return { content, loading, refresh: fetchContent };
-};
-
-const useUserVideos = (userId) => useUserContent(userId, 'videos');
-const useUserReels = (userId) => useUserContent(userId, 'reels');
-const useUserPhotos = (userId) => useUserContent(userId, 'photos');
-
 
 const usePublicProfile = (userIdOrUsername) => {
-    const { user: currentUser } = useAuth();
     const [profileData, setProfileData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [isFollowing, setIsFollowing] = useState(false);
 
     const fetchProfile = useCallback(async () => {
         if (!userIdOrUsername) return;
@@ -92,7 +28,8 @@ const usePublicProfile = (userIdOrUsername) => {
 
             let query = supabase
                 .from('user_profiles')
-                .select('*, followers_count, following_count') 
+                // Seleccionamos solo las columnas básicas necesarias para la cabecera
+                .select('id, full_name, username, avatar_url, cover_image_url, is_verified, bio') 
 
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdOrUsername);
 
@@ -112,15 +49,6 @@ const usePublicProfile = (userIdOrUsername) => {
             if (fetchError) throw fetchError;
             
             setProfileData(data);
-            
-            if (currentUser?.id && data?.id) {
-                const { count } = await supabase
-                    .from('user_follows')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('follower_id', currentUser.id)
-                    .eq('following_id', data.id);
-                setIsFollowing(count > 0);
-            }
 
         } catch (err) {
             console.error('Error fetching public profile:', err);
@@ -128,83 +56,29 @@ const usePublicProfile = (userIdOrUsername) => {
         } finally {
             setLoading(false);
         }
-    }, [userIdOrUsername, currentUser]);
-    
-    const toggleFollow = useCallback(async () => {
-        if (!currentUser || !profileData) return;
-
-        try {
-            if (isFollowing) {
-                const { error: unfollowError } = await supabase
-                    .from('user_follows')
-                    .delete()
-                    .eq('follower_id', currentUser.id)
-                    .eq('following_id', profileData.id);
-
-                if (unfollowError) throw unfollowError;
-                
-            } else {
-                const { error: followError } = await supabase
-                    .from('user_follows')
-                    .insert({
-                        follower_id: currentUser.id,
-                        following_id: profileData.id
-                    });
-                
-                if (followError) throw followError;
-            }
-            
-            setIsFollowing(!isFollowing);
-            await fetchProfile(); 
-
-        } catch (err) {
-            console.error('Error toggling follow:', err);
-        }
-    }, [currentUser, profileData, isFollowing, fetchProfile]);
-
+    }, [userIdOrUsername]);
 
     useEffect(() => {
         fetchProfile();
     }, [fetchProfile]);
 
-    return {
-        profileData,
-        loading,
-        error,
-        isFollowing,
-        toggleFollow,
-        refresh: fetchProfile,
-    };
+    return { profileData, loading, error, refresh: fetchProfile };
 };
 
 
+// ===============================
+// COMPONENTE PRINCIPAL (Simplificado)
+// ===============================
+
 const UserProfilePage = () => {
     const { userIdOrUsername } = useParams(); 
-    const { user: currentUser, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     
-    const { 
-        profileData, 
-        loading: profileLoading, 
-        error: profileError, 
-        isFollowing, 
-        toggleFollow,
-        refresh: refreshProfile 
-    } = usePublicProfile(userIdOrUsername);
-    
-    const [activeTab, setActiveTab] = useState('videos');
-
-    const { content: videos, loading: videosLoading, refresh: refreshVideos } = useUserVideos(profileData?.id);
-    const { content: reels, loading: reelsLoading, refresh: refreshReels } = useUserReels(profileData?.id);
-    const { content: photos, loading: photosLoading, refresh: refreshPhotos } = useUserPhotos(profileData?.id);
-
-    const videosCount = videos.length;
-    const reelsCount = reels.length;
-    const photosCount = photos.length;
-
-    const isOwnProfile = currentUser && profileData && currentUser.id === profileData.id;
+    // Solo necesitamos los datos básicos y el estado de carga
+    const { profileData, loading: profileLoading, error: profileError } = usePublicProfile(userIdOrUsername);
 
     if (profileLoading) {
+        // Loader simple inline
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
               <div className="text-center">
@@ -215,142 +89,80 @@ const UserProfilePage = () => {
         );
     }
 
-    if (profileError) {
+    if (profileError || !profileData) {
         return (
             <div className="text-center p-8 mt-10">
                 <Icon name="AlertTriangle" size={36} className="text-red-500 mb-4" />
-                <h1 className="text-xl font-bold">{profileError}</h1>
-                <p className="text-muted-foreground">Verifica la URL o si el perfil es público.</p>
+                <h1 className="text-xl font-bold">{profileError || 'Perfil no encontrado.'}</h1>
                 <Button onClick={() => navigate('/dashboard')} className="mt-4">
                     Volver al Dashboard
                 </Button>
             </div>
         );
     }
-    
-    if (!profileData) {
-        return (
-            <div className="text-center p-8 mt-10">
-                <h1 className="text-xl font-bold">Perfil no encontrado.</h1>
-            </div>
-        );
-    }
 
-
+    // ------------------------------------------
+    // Renderizado Únicamente de Portada, Avatar y Nombre
+    // ------------------------------------------
     return (
         <>
             <Helmet>
-                <title>{profileData.username || profileData.full_name} | Perfil</title>
+                <title>{profileData.username || profileData.full_name} | Perfil Público</title>
             </Helmet>
             
             <Header />
 
-            <main className="max-w-4xl mx-auto py-8 px-4 md:px-0">
-                {/* Cabecera del Perfil */}
-                <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-                    <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+            <main className="max-w-4xl mx-auto pt-24 pb-8 px-4 md:px-0">
+                <div className="bg-white rounded-xl shadow-lg mb-8">
+                    
+                    {/* 1. SECCIÓN DE PORTADA */}
+                    <div className="relative">
+                        <div className="h-48 rounded-t-xl overflow-hidden bg-gray-200">
+                            {profileData.cover_image_url ? (
+                                <img 
+                                    src={profileData.cover_image_url} 
+                                    alt="Portada del perfil" 
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-gradient-to-r from-gray-300 to-gray-400 flex items-center justify-center">
+                                    <span className="text-white font-bold">PORTADA</span>
+                                </div>
+                            )}
+                        </div>
                         
-                        {/* Avatar y Cover */}
-                        <div className="relative w-full h-40 md:w-32 md:h-32 flex-shrink-0">
-                            <div className="w-full h-full rounded-lg overflow-hidden bg-gray-200">
-                                {/* Imagen de portada o placeholder */}
-                                {profileData.cover_image_url ? (
-                                    <img 
-                                        src={profileData.cover_image_url} 
-                                        alt="Cover" 
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500">
-                                        <Icon name="Image" size={30} />
-                                    </div>
-                                )}
-                            </div>
-                            {/* Avatar sobre la imagen de portada (posicionamiento absoluto) */}
-                            <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-24 h-24 md:w-20 md:h-20 rounded-full border-4 border-white shadow-md bg-gray-500 overflow-hidden">
+                        {/* 2. AVATAR (POSICIONADO SOBRE LA PORTADA) */}
+                        <div className="absolute left-6 -bottom-12">
+                            <div className="w-28 h-28 rounded-full border-4 border-white shadow-lg bg-gray-500 overflow-hidden">
                                 {profileData.avatar_url ? (
                                     <img 
                                         src={profileData.avatar_url} 
-                                        alt="Avatar" 
+                                        alt={profileData.full_name} 
                                         className="w-full h-full object-cover"
                                     />
                                 ) : (
-                                    <Icon name="User" size={30} className="w-full h-full p-4 text-white" />
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Información del Usuario */}
-                        <div className="flex-1 text-center md:text-left pt-6 md:pt-0">
-                            <h1 className="text-2xl font-bold flex items-center justify-center md:justify-start gap-2">
-                                {profileData.full_name}
-                                {profileData.is_verified && <Icon name="CheckCircle" size={20} className="text-blue-500" title="Verificado" />}
-                            </h1>
-                            <p className="text-muted-foreground text-lg mb-2">@{profileData.username}</p>
-                            
-                            {/* Botón Seguir/Editar */}
-                            <div className="mt-3">
-                                {isOwnProfile ? (
-                                    <Link to="/profile" className="inline-flex items-center gap-2 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors">
-                                        <Icon name="Edit" size={18} />
-                                        Editar Perfil
-                                    </Link>
-                                ) : isAuthenticated ? (
-                                    <Button 
-                                        onClick={toggleFollow}
-                                        variant={isFollowing ? 'outline' : 'primary'}
-                                        className="min-w-[120px]"
-                                    >
-                                        {isFollowing ? 'Siguiendo' : 'Seguir'}
-                                    </Button>
-                                ) : (
-                                    <Link to="/login" className="text-blue-500 hover:underline">Inicia sesión para seguir</Link>
+                                    <Icon name="User" size={40} className="w-full h-full p-4 text-white" />
                                 )}
                             </div>
                         </div>
                     </div>
                     
-                    {/* Estadísticas */}
-                    <div className="mt-6 border-t pt-4 flex justify-around">
-                        <div className="text-center">
-                            <p className="text-2xl font-bold">
-                                {profileData.followers_count !== undefined ? profileData.followers_count : 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Seguidores</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold">
-                                {profileData.following_count !== undefined ? profileData.following_count : 0}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Siguiendo</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold">
-                                {videosCount + reelsCount + photosCount}
-                            </p>
-                            <p className="text-sm text-muted-foreground">Contenido</p>
+                    {/* 3. NOMBRE Y USERNAME */}
+                    <div className="p-6 pt-16">
+                        <h1 className="text-3xl font-bold flex items-center gap-2">
+                            {profileData.full_name}
+                            {profileData.is_verified && <Icon name="CheckCircle" size={24} className="text-blue-500" title="Verificado" />}
+                        </h1>
+                        <p className="text-muted-foreground text-lg mb-4">@{profileData.username}</p>
+                        
+                        {/* Mensaje de prueba */}
+                        <div className="bg-blue-50 border border-blue-200 p-3 rounded text-sm text-blue-800">
+                           ✅ **PRUEBA EXITOSA:** Se cargó la información básica del perfil `{profileData.username}`.
                         </div>
                     </div>
                 </div>
 
-                {/* Pestañas de Contenido */}
-                <ProfileTabs
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    counts={{
-                        videos: videosCount,
-                        reels: reelsCount,
-                        photos: photosCount,
-                    }}
-                    content={{
-                        videos: { data: videos, loading: videosLoading, refresh: refreshVideos },
-                        reels: { data: reels, loading: reelsLoading, refresh: refreshReels },
-                        photos: { data: photos, loading: photosLoading, refresh: refreshPhotos },
-                    }}
-                    userId={profileData.id}
-                    isOwnProfile={isOwnProfile}
-                />
-
+                {/* Este es el punto donde el resto de la página iría */}
             </main>
         </>
     );
