@@ -108,7 +108,7 @@ const CategorySelector = ({ value, onChange, required = true, className = '' }) 
         >
           <option value="">Selecciona una categoría</option>
           {categories.map(cat => (
-            <option key={cat.id} value={cat.slug}>
+            <option key={cat.id} value={cat.id}> {/* ✅ CORRECCIÓN CLAVE: Devolver cat.id (UUID) en lugar de cat.slug */}
               {renderIcon(cat)} {cat.name}
             </option>
           ))}
@@ -116,10 +116,14 @@ const CategorySelector = ({ value, onChange, required = true, className = '' }) 
       )}
       
       {/* Información de la categoría seleccionada */}
+      {/* NOTA: Para que esta sección de preview funcione, 
+         el find debe usar el 'id' si el valor es el ID, o un slug si se usa el slug.
+         Ya que estamos pasando el ID como 'value', ajustamos el find para usar 'id'. */}
       {value && !loading && (
         <div className="flex items-center space-x-2 p-2 bg-muted/50 rounded-lg">
           {(() => {
-            const selectedCat = categories.find(c => c.slug === value);
+            // Buscamos por ID (value)
+            const selectedCat = categories.find(c => c.id === value);
             if (!selectedCat) return null;
             
             return (
