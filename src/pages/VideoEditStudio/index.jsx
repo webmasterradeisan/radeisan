@@ -5,7 +5,8 @@ import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
-import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
+// ❌ ELIMINADO: Se quita la importación del menú duplicado
+// import PrimaryNavigation from '../../components/ui/PrimaryNavigation'; 
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -16,7 +17,6 @@ import { calculateVideoPointsFull as calculateVideoPoints } from '../../services
 
 // =================================================================
 // FUNCIÓN LOCAL DE PREVISUALIZACIÓN DE PUNTOS (Seguro en el cliente)
-// Esto evita el error de llamada a la función posicional
 // =================================================================
 const calculateLocalPreview = (duration, multiplier, orientation) => {
     // FÓRMULA DE CAÍDA BASADA EN REGLAS COMUNES (ej. de pointsService.js)
@@ -179,7 +179,6 @@ const VideoEditStudio = () => {
   // Efecto para recalcular puntos cada vez que cambian los campos relevantes
   useEffect(() => {
     if (formData.duration_seconds > 0) {
-      // 🛑 CORRECCIÓN APLICADA: Usamos la función local de cálculo para el preview.
       const calculatedPoints = calculateLocalPreview(
         formData.duration_seconds,
         formData.points_multiplier,
@@ -325,7 +324,8 @@ const VideoEditStudio = () => {
 
       <div className="min-h-screen bg-background">
         <Header />
-        <PrimaryNavigation />
+        {/* ❌ REMOVIDO: Se quita el componente PrimaryNavigation */}
+        {/* <PrimaryNavigation /> */}
 
         <main className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
           <div className="space-y-8">
@@ -409,12 +409,10 @@ const VideoEditStudio = () => {
                     {errors.description && <p className="text-xs text-error mt-1">{errors.description}</p>}
                   </div>
                   
-                  {/* Categoría */}
+                  {/* ✅ CORRECCIÓN DE LA CATEGORÍA: Asegurar que el onChange actualice el estado */}
                   <CategorySelector
-                    // Cambiamos el valor a category_id para que el selector funcione con el UUID
                     value={formData.category_id} 
-                    // Asegúrate de que CategorySelector esté usando 'category_id' en lugar de 'slug' para el valor del select.
-                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                    onChange={(newCategoryId) => setFormData(prev => ({ ...prev, category_id: newCategoryId }))}
                     required
                   />
                   {errors.category_id && <p className="text-xs text-error mt-1">{errors.category_id}</p>}
