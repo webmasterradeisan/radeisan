@@ -1,4 +1,4 @@
-// src/Routes.jsx - ACTUALIZADO CON PERFIL PÚBLICO Y EDICIÓN DE VIDEO
+// src/Routes.jsx - CORREGIDO: Importación de AdminUserManagement
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -7,7 +7,7 @@ import { AuthProvider } from "contexts/AuthContext";
 import { PointsProvider } from "contexts/PointsContext";
 
 // SISTEMA ORIGINAL MANTENIDO
-import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "components/ProtectedRoute"; // Asegurando ProtectedAdminRoute
+import { ProtectedRoute, PublicRoute, UniversalRoute, ProtectedAdminRoute } from "components/ProtectedRoute"; 
 
 // MOBILE LAYOUT PARA APLICAR GRADUALMENTE
 import MobileLayout from "components/ui/MobileLayout";
@@ -39,13 +39,14 @@ import PurchasePointsPage from './pages/PurchasePointsPage';
 // PÁGINAS DE ADMINISTRACIÓN
 // ===============================
 import AdminDashboard from './pages/admin-dashboard';
-import AdminUserManagement from './pages/admin-user-management';
+// 🛠️ CORRECCIÓN: Ajuste de ruta para resolver './pages/admin-user-management'
+import AdminUserManagement from './pages/admin-user-management/index.jsx'; 
 import CategoryManagement from './pages/admin-categories/CategoryManagement';
 import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
 import AdminLogs from './pages/admin-logs';
 
 // ✅ NUEVO - COMPONENTE DE EDICIÓN DE VIDEO
-import VideoEditStudio from './pages/VideoEditStudio'; // <-- ¡NUEVA IMPORTACIÓN!
+import VideoEditStudio from './pages/VideoEditStudio'; 
 
 const Routes = () => {
   return (
@@ -106,11 +107,11 @@ const Routes = () => {
 
               {/* ✅ RUTA DE EDICIÓN DE VIDEO - Resuelve el Error 404 */}
               <Route 
-                path="/video-edit/:videoId" // <-- RUTA CORREGIDA
+                path="/video-edit/:videoId" 
                 element={
                   <ProtectedRoute>
                     <UniversalRoute>
-                      <VideoEditStudio /> {/* <-- NUEVO COMPONENTE */}
+                      <VideoEditStudio /> 
                     </UniversalRoute>
                   </ProtectedRoute>
                 } 
@@ -240,7 +241,7 @@ const Routes = () => {
                 path="/unauthorized" 
                 element={
                   <UniversalRoute>
-                    <NotFound /> {/* Reemplazamos Unauthorized por NotFound si no existe */}
+                    <NotFound /> 
                   </UniversalRoute>
                 } 
               />
