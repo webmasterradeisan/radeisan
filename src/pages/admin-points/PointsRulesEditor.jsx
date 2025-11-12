@@ -4,6 +4,7 @@
 //    - 'handleSave' ahora guarda 'show_in_store'.
 //    - 'ActionPointsInput' ahora renderiza el checklist.
 //    - Añadida 'updateActionShowInStore' para manejar el estado del checklist.
+// ✅ NUEVA ACCIÓN: Añadida 'gift_points_received' a getIconForAction.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -165,6 +166,7 @@ export default function PointsRulesEditor() {
       if (upsertError) throw upsertError;
 
       // 2. ✅ CHECKLIST AÑADIDO: Guardar 'actionRules' (incluyendo 'show_in_store')
+      // NOTA: Esto solo actualiza reglas existentes por action_type
       const updates = actionRules.map(rule => 
         supabase
           .from('points_rules')
@@ -357,7 +359,9 @@ export default function PointsRulesEditor() {
       photo_like_received: 'HeartHandshake',
       give_like: 'Heart',
       give_comment: 'MessageCircle',
-      share_content: 'Share2'
+      share_content: 'Share2',
+      // ✅ NUEVA ACCIÓN
+      gift_points_received: 'Gift' 
     };
     return map[actionType] || 'Zap';
   };
