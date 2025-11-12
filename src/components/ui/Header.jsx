@@ -333,17 +333,7 @@ const Header = () => {
                   <span>Videos</span>
                 </button>
 
-                <Link
-                  to="/marketplace"
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/marketplace' 
-                      ? 'bg-primary/10 text-primary' 
-                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon name="Store" size={18} />
-                  <span>Tienda</span>
-                </Link>
+                {/* ENLACE "TIENDA" ELIMINADO */}
 
                 <Link
                   to="/rewards"
@@ -382,9 +372,9 @@ const Header = () => {
               {user ? (
                 // ============= USUARIO AUTENTICADO =============
                 <>
-                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) */}
+                  {/* ZONA DE PUNTOS GRATIS (Estrella + Saldo + Label) - CLASE MODIFICADA */}
                   <div 
-                    className="hidden lg:flex flex-col items-center cursor-pointer group"
+                    className="flex flex-col items-center cursor-pointer group"
                     title={`Puntos Gratis: ${freePoints.toLocaleString()}`} 
                   >
                     {/* Fila 1: Icono y Saldo */}
@@ -410,9 +400,9 @@ const Header = () => {
                     </span>
                   </div>
 
-                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) */}
+                  {/* ZONA DE PUNTOS PREMIUM (Saldo + Label) - CLASE MODIFICADA */}
                   <div
-                    className="hidden lg:flex flex-col items-center"
+                    className="flex flex-col items-center"
                     title={`Puntos Premium: ${premiumPoints.toLocaleString()}`}
                   >
                     {/* Fila 1: Saldo */}
@@ -547,6 +537,8 @@ const Header = () => {
                             <Icon name="Gift" size={16} className="mr-2" />
                             Mis Recompensas
                           </Link>
+                          
+                          {/* ELIMINADO: Enlace a Tienda si existiera aquí */}
 
                           {/* PANEL ADMIN en el menú */}
                           {user.isAdmin && (
@@ -567,7 +559,7 @@ const Header = () => {
 
                           {/* Configuración */}
                           <Link
-                            to={configPath} // ✅ CORREGIDO: Enlaza a /admin/settings si es Admin, o /settings si no lo es
+                            to={configPath}
                             className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors"
                             onClick={() => setIsUserMenuOpen(false)}
                           >
@@ -681,7 +673,7 @@ const Header = () => {
                                 { name: 'Inicio', path: '/dashboard', icon: 'Home', orientation: 'all' },
                                 { name: 'Reels', path: '/dashboard', icon: 'Smartphone', orientation: 'vertical' },
                                 { name: 'Videos', path: '/dashboard', icon: 'Monitor', orientation: 'horizontal' },
-                                { name: 'Tienda', path: '/marketplace', icon: 'Store' },
+                                // { name: 'Tienda', path: '/marketplace', icon: 'Store' }, // ENLACE "TIENDA" ELIMINADO DEL MENÚ MÓVIL
                                 { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
                             ].map((item) => {
                                 const isActive = item.orientation 
