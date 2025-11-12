@@ -177,8 +177,7 @@ const useVideoUpload = () => {
       let pointsCalculation = { total_points: 10 }; // Fallback por defecto
       
       try {
-        // metadata.category contiene el UUID (que es category_id), pero el servicio espera el SLUG (o al menos un TEXT válido)
-        // Por ahora, pasamos el UUID y asumimos que el servicio puede manejarlo.
+        // metadata.category contiene el UUID (category_id).
         pointsCalculation = await calculateVideoPoints(
           Math.round(videoDuration || 0),
           metadata.category, 
@@ -200,7 +199,7 @@ const useVideoUpload = () => {
           description: metadata.description || '',
           video_url: urlData.publicUrl,
           thumbnail_url: thumbnailUrl,
-          // 🛑 CORRECCIÓN CLAVE: Usar category_id para el UUID (clave foránea)
+          // 🛑 CORRECCIÓN: Usar category_id para el UUID (clave foránea)
           category_id: metadata.category, 
           tags: metadata.tags || [],
           duration_seconds: Math.round(videoDuration || 0),
@@ -242,7 +241,7 @@ const useVideoUpload = () => {
       // 🆕 PASO 12: ACTUALIZAR CONTADOR DE CATEGORÍA
       console.log('📊 Actualizando contador de categoría...');
       try {
-        // Nota: Esta RPC probablemente espera un SLUG. Si falla con UUID, requiere ajuste en la RPC.
+        // Nota: Asumimos que la RPC acepta ID. Si falla, requiere revisión de la RPC.
         const { error: categoryError } = await supabase.rpc('increment_category_count', {
           category_id: metadata.category // Intentamos pasar el ID para la RPC
         });
@@ -318,7 +317,7 @@ const getVideoDuration = (file) => {
 };
 
 const calculateUploadPoints = (durationSeconds, category) => {
-  let basePoints = 50;
+  let basePoints = 30; // 🛑 CORRECCIÓN APLICADA AQUÍ: Ajustado de 50 a 30.
   let durationPoints = Math.floor(durationSeconds / 60) * 10;
   
   const categoryMultipliers = {
