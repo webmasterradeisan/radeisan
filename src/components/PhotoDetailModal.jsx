@@ -5,6 +5,8 @@ import Button from './ui/Button';
 import { supabase } from '../lib/supabase'; 
 import { trackGiveLike, trackComment, trackShareContent, MISSION_TYPES } from '../services/missionsService'; 
 import { useAuth } from '../contexts/AuthContext'; 
+// ✅ NUEVA IMPORTACIÓN
+import GiftPointsModal from './GiftPointsModal'; 
 
 const PhotoDetailModal = ({ 
     photos,
@@ -26,6 +28,9 @@ const PhotoDetailModal = ({
     // NOTIFICACIÓN (TOAST)
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
+
+    // ✅ NUEVO ESTADO: Control del Modal de Regalo
+    const [showGiftModal, setShowGiftModal] = useState(false);
 
     const isOwner = user?.id === photoData?.user_id;
 
@@ -393,6 +398,24 @@ const PhotoDetailModal = ({
             }
         }
     }, [photoData, refreshParentData, isOwner, showTemporaryToast]);
+    
+    // ✅ NUEVA FUNCIÓN: Abrir Modal de Regalo
+    const handleGift = useCallback(() => {
+        if (!user) {
+            showTemporaryToast("Debes iniciar sesión para regalar puntos.", 'error'); 
+            return;
+        }
+        if (isOwner) {
+            showTemporaryToast("No puedes regalar puntos a tu propia foto.", 'error');
+            return;
+        }
+        setShowGiftModal(true);
+    }, [user, isOwner, showTemporaryToast]);
+    
+    // ✅ NUEVA FUNCIÓN: Manejar el éxito del regalo
+    const handleGiftSuccess = useCallback((amount) => {
+        showTemporaryToast(`¡Regalo enviado! ${amount} puntos para el creador.`, 'success', 3000);
+    }, [showTemporaryToast]);
 
 
     // Asignamos datos para la UI usando photoData real
@@ -400,7 +423,7 @@ const PhotoDetailModal = ({
     const photoCaption = photoData?.caption || 'Foto sin descripción';
     const photoDescription = photoData?.description; 
     
-    const userDisplayName = user?.user_metadata?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
+    const userDisplayName = photoData?.user_profiles?.username || photoData?.user_profiles?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
     const photoDate = new Date(photoData?.created_at).toLocaleDateString();
 
     const isFirstPhoto = currentPhotoIndex === 0;
@@ -507,6 +530,19 @@ const PhotoDetailModal = ({
                                 <Icon name={userHasLiked ? "Heart" : "Heart"} fill={userHasLiked ? "currentColor" : "none"} size={18} className="mr-2" />
                                 Me Gusta ({likeCount})
                             </Button>
+                            
+                            {/* ✅ NUEVO BOTÓN: Regalar Puntos */}
+                            {currentUserId && photoData?.user_id && currentUserId !== photoData.user_id && (
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="text-yellow-600 hover:bg-yellow-600/10 transition-colors"
+                                    onClick={handleGift}
+                                >
+                                    <span className="text-lg font-extrabold mr-0.5 leading-none">R</span>
+                                    <Icon name="Gift" size={18} className="fill-current" />
+                                </Button>
+                            )}
 
                             <Button 
                                 variant="ghost" 
@@ -557,7 +593,7 @@ const PhotoDetailModal = ({
                 </Button>
             )}
             
-            {/* 🚨 TOAST NOTIFICATION COMPONENT */}
+            {/* 🚨 TOAST NOTIFICATION COMPONENT (sin cambios) */}
             {showToast && (
                 <div 
                     className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] p-3 rounded-lg shadow-xl transition-all duration-500 opacity-100 
@@ -569,6 +605,17 @@ const PhotoDetailModal = ({
                     <p className="text-sm font-medium">{toastMessage}</p>
                 </div>
             )}
+            
+            {/* ✅ NUEVO: MODAL DE REGALO DE PUNTOS */}
+            <GiftPointsModal
+                isOpen={showGiftModal}
+                onClose={() => setShowGiftModal(false)}
+                receiverId={photoData?.user_id}
+                receiverUsername={userDisplayName}
+                contentId={photoData?.id}
+                contentType="photo"
+                onSuccess={handleGiftSuccess}
+            />
         </div>
     );
 };
