@@ -1,4 +1,4 @@
-// src/Routes.jsx - CORREGIDO: Importación de AdminUserManagement
+// src/Routes.jsx - CORREGIDO: Ajuste de ruta para el archivo real
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -39,8 +39,8 @@ import PurchasePointsPage from './pages/PurchasePointsPage';
 // PÁGINAS DE ADMINISTRACIÓN
 // ===============================
 import AdminDashboard from './pages/admin-dashboard';
-// 🛠️ CORRECCIÓN: Ajuste de ruta para resolver './pages/admin-user-management'
-import AdminUserManagement from './pages/admin-user-management/index.jsx'; 
+// 🛠️ CORRECCIÓN FINAL: Usar la ruta y el nombre del archivo correctos
+import AdminUserManagement from './pages/admin-users/UserManagement'; 
 import CategoryManagement from './pages/admin-categories/CategoryManagement';
 import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
 import AdminLogs from './pages/admin-logs';
