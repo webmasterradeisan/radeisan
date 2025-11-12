@@ -6,6 +6,7 @@
 // ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
 // ✅ CORREGIDO: Carrusel desktop no desaparece - usa videos sin filtrar por orientación
 // ✅ NUEVO: Recibe orientación desde Header para navegación directa a Reels/Videos
+// ✅ CORREGIDO: Lee selectedReelId del location.state para reproducción desde Perfil
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -347,7 +348,7 @@ const VideoFeedDashboard = () => {
   const { points: userPoints, addPoints } = useUserPoints();
   
   const isMobile = useIsMobile();
-  const location = useLocation(); // ✅ AGREGADO: Para recibir el state de navegación
+  const location = useLocation(); 
 
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [shuffledReels, setShuffledReels] = useState([]);
@@ -356,17 +357,28 @@ const VideoFeedDashboard = () => {
   const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
-  const [selectedReelId, setSelectedReelId] = useState(null);
+  const [selectedReelId, setSelectedReelId] = useState(null); // Estado clave
 
-  // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
+  // ✅ CORRECCIÓN: Efecto para leer tanto la orientación como el Reel ID desde la navegación
   useEffect(() => {
-    if (location.state?.orientation) {
-      console.log('🎯 Orientación recibida desde Header:', location.state.orientation);
-      setActiveOrientation(location.state.orientation);
+    let newOrientation = location.state?.orientation;
+    let newReelId = location.state?.selectedReelId;
+
+    if (newOrientation || newReelId) {
+      if (newOrientation) {
+        console.log('🎯 Orientación recibida:', newOrientation);
+        setActiveOrientation(newOrientation);
+      }
+      
+      if (newReelId) {
+        console.log('🎯 Reel ID recibido:', newReelId);
+        setSelectedReelId(newReelId); // <--- INICIALIZA el Reel que debe mostrarse
+      }
+      
       // Limpiar el state para evitar que persista en futuras navegaciones
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+  }, [location.state]); // Depende solo de location.state
 
   console.log('🏠 VideoFeedDashboard rendered:', {
     isMobile,
@@ -462,6 +474,8 @@ const VideoFeedDashboard = () => {
   const handleOrientationChange = useCallback((orientation) => {
     console.log(`🔄 Cambiando orientación a: ${orientation}`);
     setActiveOrientation(orientation);
+    // IMPORTANTE: Al cambiar orientación manualmente, reseteamos el reel seleccionado
+    setSelectedReelId(null); 
   }, []);
 
   const handleLayoutChange = useCallback(() => {
