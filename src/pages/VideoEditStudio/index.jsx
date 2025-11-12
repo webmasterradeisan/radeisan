@@ -46,31 +46,74 @@ const VideoEditStudio = () => {
   // ===============================
   const fetchVideoData = useCallback(async () => {
     if (!videoId) {
-      // Manejar el caso de que no haya ID en la URL
+      console.log('⚠️ No hay videoId en la URL');
       setLoading(false);
+      return;
+    }
+
+    if (!user) {
+      console.log('⚠️ Usuario no está cargado aún, esperando...');
       return;
     }
 
     try {
       setLoading(true);
+      console.log('🎬 Cargando datos del video:', videoId);
 
+      // Primero intentamos cargar sin el JOIN para diagnosticar mejor
       const { data: videoData, error: fetchError } = await supabase
         .from('videos')
-        .select(`
-          *, 
-          content_categories (points_multiplier, is_multiplier_enabled) // Obtener el multiplicador de la categoría
-        `)
+        .select('*')
         .eq('id', videoId)
         .single();
 
-      if (fetchError) throw fetchError;
-      if (!videoData) throw new Error('Video no encontrado.');
+      if (fetchError) {
+        console.error('❌ Error de Supabase:', fetchError);
+        
+        // Si el error es PGRST116, significa que no se encontró el registro
+        if (fetchError.code === 'PGRST116') {
+          console.error('❌ Video no encontrado con ID:', videoId);
+          setErrors({ general: 'Video no encontrado.' });
+          setLoading(false);
+          // Solo redirigir a 404 si realmente no existe el video
+          setTimeout(() => navigate('/profile', { replace: true }), 2000);
+          return;
+        }
+        
+        // Para otros errores, mostrar mensaje pero no redirigir
+        throw fetchError;
+      }
+
+      if (!videoData) {
+        console.error('❌ No se recibieron datos del video');
+        setErrors({ general: 'Video no encontrado.' });
+        setLoading(false);
+        setTimeout(() => navigate('/profile', { replace: true }), 2000);
+        return;
+      }
+
+      console.log('✅ Video cargado:', videoData);
 
       // 🛑 REGLA DE SEGURIDAD: Verificar si el usuario actual es el propietario
-      if (!user || user.id !== videoData.user_id) {
+      if (user.id !== videoData.user_id) {
+        console.warn('⚠️ Usuario no es propietario del video');
         alert('No tienes permiso para editar este video.');
-        navigate(`/profile/${videoData.user_id}`); // Redirigir al perfil
+        navigate('/profile', { replace: true });
         return;
+      }
+
+      // Cargar la categoría por separado (más seguro)
+      let categoryMultiplier = 1.0;
+      if (videoData.category_id) {
+        const { data: categoryData } = await supabase
+          .from('content_categories')
+          .select('points_multiplier, is_multiplier_enabled')
+          .eq('id', videoData.category_id)
+          .single();
+
+        if (categoryData && categoryData.is_multiplier_enabled !== false) {
+          categoryMultiplier = categoryData.points_multiplier || 1.0;
+        }
       }
       
       // Mapear los datos de la BD al estado del formulario
@@ -87,19 +130,19 @@ const VideoEditStudio = () => {
         orientation: videoData.orientation || 'horizontal',
 
         // Multiplicador (usado para la previsualización de puntos)
-        points_multiplier: 
-          videoData.content_categories?.is_multiplier_enabled === false
-            ? 1.0
-            : videoData.content_categories?.points_multiplier || 1.0,
+        points_multiplier: categoryMultiplier,
       });
 
+      console.log('✅ Formulario inicializado correctamente');
+      setLoading(false);
+
     } catch (err) {
-      console.error('Error al cargar video para edición:', err.message);
+      console.error('❌ Error al cargar video para edición:', err);
+      setErrors({ 
+        general: 'Error al cargar el video. Por favor, intenta de nuevo.' 
+      });
       setLoading(false);
-      // Enviar a 404 si el fetch falla o el video no existe
-      navigate('/404', { replace: true }); 
-    } finally {
-      setLoading(false);
+      // No redirigir automáticamente, dejar que el usuario vea el error
     }
   }, [videoId, navigate, user]);
 
@@ -108,15 +151,14 @@ const VideoEditStudio = () => {
   // ===============================
 
   useEffect(() => {
-    // Asegurarse de que el usuario esté autenticado antes de intentar cargar
-    if (user) {
+    // Solo intentar cargar el video cuando el usuario esté disponible
+    if (user && videoId) {
+      console.log('🔄 Usuario autenticado, cargando video...');
       fetchVideoData();
-    } else if (!loading) {
-        // Si no está autenticado, podría redirigir al login
-        // Por ahora, asumimos que AuthContext maneja esto fuera de este componente.
-        setLoading(false);
+    } else if (!user) {
+      console.log('⏳ Esperando autenticación del usuario...');
     }
-  }, [fetchVideoData, user, loading]);
+  }, [fetchVideoData, user, videoId]);
 
   // Efecto para recalcular puntos cada vez que cambian los campos relevantes
   useEffect(() => {
@@ -207,9 +249,31 @@ const VideoEditStudio = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Icon name="Loader" className="animate-spin text-primary" size={32} />
-        <p className="ml-3 text-lg text-muted-foreground">Cargando video para edición...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Icon name="Loader" size={48} className="animate-spin text-primary mx-auto mb-4" />
+          <p className="text-lg font-medium text-foreground">Cargando editor de video...</p>
+          <p className="text-sm text-muted-foreground mt-2">Video ID: {videoId}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error general si existe
+  if (errors.general) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-card border border-border rounded-lg p-8 text-center">
+          <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="AlertCircle" size={32} className="text-destructive" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Error</h2>
+          <p className="text-muted-foreground mb-6">{errors.general}</p>
+          <Button onClick={() => navigate('/profile')}>
+            <Icon name="Home" size={16} className="mr-2" />
+            Volver al Perfil
+          </Button>
+        </div>
       </div>
     );
   }
@@ -217,13 +281,20 @@ const VideoEditStudio = () => {
   // Comprobación de que el video existe y se cargaron los datos.
   if (!formData.title && !loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8">
-        <Icon name="Frown" className="text-warning mb-4" size={48} />
-        <h1 className="text-2xl font-bold text-foreground">Video no encontrado</h1>
-        <p className="text-muted-foreground mt-2">Parece que el video que intentas editar no existe o no tienes permiso.</p>
-        <Button onClick={() => navigate('/dashboard')} className="mt-6">
-          Ir al Inicio
-        </Button>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-card border border-border rounded-lg p-8 text-center">
+          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="Video" size={32} className="text-muted-foreground" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Video no encontrado</h2>
+          <p className="text-muted-foreground mb-6">
+            Parece que el video que intentas editar no existe o no tienes permiso para editarlo.
+          </p>
+          <Button onClick={() => navigate('/profile')}>
+            <Icon name="Home" size={16} className="mr-2" />
+            Volver al Perfil
+          </Button>
+        </div>
       </div>
     );
   }
