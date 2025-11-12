@@ -1,7 +1,8 @@
 // src/pages/PublicProfilePage/index.jsx
 // ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
+// ✅ CORREGIDO: Lógica para abrir PhotoDetailModal
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { supabase } from '../../lib/supabase';
@@ -11,6 +12,8 @@ import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 import Image from '../../components/AppImage';
 import useIsMobile from '../../hooks/useIsMobile';
+// ✅ NUEVA IMPORTACIÓN
+import PhotoDetailModal from '../../components/PhotoDetailModal'; 
 
 const PublicProfilePage = () => {
   const { identifier } = useParams();
@@ -27,6 +30,10 @@ const PublicProfilePage = () => {
   const [horizontalVideos, setHorizontalVideos] = useState([]);
   const [userPhotos, setUserPhotos] = useState([]);
   const [activeTab, setActiveTab] = useState('videos');
+  
+  // ✅ NUEVOS ESTADOS PARA EL MODAL DE FOTOS
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
+  const [showPhotoModal, setShowPhotoModal] = useState(false); 
 
   const isUUID = (str) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -96,7 +103,7 @@ const PublicProfilePage = () => {
 
       const { data: photosData } = await supabase
         .from('photos')
-        .select('*')
+        .select('*, user_profiles(id, username, full_name)') // ✅ Incluye perfil para el modal
         .eq('user_id', profile.id)
         .eq('is_published', true)
         .order('created_at', { ascending: false });
@@ -183,6 +190,29 @@ const PublicProfilePage = () => {
       setFollowing(!following);
     }
   };
+  
+  // ✅ NUEVOS HANDLERS PARA EL MODAL DE FOTOS
+  const handlePhotoClick = useCallback((index) => {
+    setSelectedPhotoIndex(index);
+    setShowPhotoModal(true);
+  }, []);
+
+  const handlePhotoModalClose = useCallback(() => {
+    setShowPhotoModal(false);
+    setSelectedPhotoIndex(null);
+  }, []);
+  
+  const handlePhotoNavigation = useCallback((direction) => {
+    if (selectedPhotoIndex === null) return;
+    let newIndex = selectedPhotoIndex;
+    if (direction === 'next') {
+        newIndex = Math.min(userPhotos.length - 1, selectedPhotoIndex + 1);
+    } else if (direction === 'prev') {
+        newIndex = Math.max(0, selectedPhotoIndex - 1);
+    }
+    setSelectedPhotoIndex(newIndex);
+  }, [selectedPhotoIndex, userPhotos.length]);
+
 
   useEffect(() => {
     if (identifier) {
@@ -496,10 +526,12 @@ const PublicProfilePage = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {userPhotos.map((photo) => (
+                      {userPhotos.map((photo, index) => (
                         <div 
                           key={photo.id}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                          // ✅ AÑADIDO: Click handler para abrir el modal
+                          onClick={() => handlePhotoClick(index)} 
+                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group relative"
                         >
                           <div className="relative aspect-square bg-muted">
                             <img 
@@ -507,6 +539,9 @@ const PublicProfilePage = () => {
                               alt={photo.title}
                               className="w-full h-full object-cover"
                             />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <Icon name="Maximize" size={24} className="text-white" />
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -518,6 +553,20 @@ const PublicProfilePage = () => {
           </div>
         </main>
       </div>
+      
+      {/* ✅ RENDERIZADO DEL MODAL DE FOTOS */}
+      {showPhotoModal && selectedPhotoIndex !== null && userPhotos.length > 0 && (
+          <PhotoDetailModal 
+              photos={userPhotos}
+              currentPhotoIndex={selectedPhotoIndex}
+              photoData={userPhotos[selectedPhotoIndex]}
+              onClose={handlePhotoModalClose}
+              onNavigate={handlePhotoNavigation}
+              // Se pasa loadUserProfile para que el modal pueda refrescar la lista si es necesario (ej: al borrar una foto)
+              refreshParentData={loadUserProfile} 
+              totalPhotos={userPhotos.length}
+          />
+      )}
     </>
   );
 };
