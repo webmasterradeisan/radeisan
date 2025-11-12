@@ -12,7 +12,7 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 // Componentes que se reutilizan
 import CategorySelector from '../video-upload-studio/components/CategorySelector'; 
-import { calculateVideoPointsFull as calculateVideoPoints, addFreePoints } from '../../services/pointsService';
+import { calculateVideoPointsFull as calculateVideoPoints } from '../../services/pointsService';
 
 // =================================================================
 // ESTADO INICIAL DEL FORMULARIO (para edición)
