@@ -1,17 +1,11 @@
 // src/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
-// ============================================================================
 // ✅ CORREGIDO: Verificaciones de seguridad para comment.user
 // ✅ CORREGIDO: Estructura JSX del modal
 // ✅ NUEVO: Avisos de puntos cerca del botón like
 // ✅ CORREGIDO: Sistema de tracking persistente para likes
-// Componente principal para visualización de reels con:
-// - Sistema de puntos integrado (usa PointsContext)
-// - Likes, comentarios, guardados, compartir
-// - Modal de comentarios funcional
-// - Seguir creadores
-// - Tracking de misiones
+// ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -21,6 +15,8 @@ import { usePoints } from 'contexts/PointsContext';
 import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
+// ✅ NUEVA IMPORTACIÓN
+import GiftPointsModal from 'components/GiftPointsModal'; 
 
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
@@ -44,10 +40,10 @@ const ReelsContainer = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
-  const [likedVideos, setLikedVideos] = useState(new Set());
-  const [dislikedVideos, setDislikedVideos] = useState(new Set());
-  const [savedVideos, setSavedVideos] = useState(new Set());
-  const [followedCreators, setFollowedCreators] = useState(new Set());
+  const [likedVideos, setLikedVideos] = new Set([]);
+  const [dislikedVideos, setDislikedVideos] = new Set([]);
+  const [savedVideos, setSavedVideos] = new Set([]);
+  const [followedCreators, setFollowedCreators] = new Set([]);
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
   
@@ -61,6 +57,9 @@ const ReelsContainer = ({
   const [replyingTo, setReplyingTo] = useState(null);
   const [showReplies, setShowReplies] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
+  
+  // ✅ NUEVO: Estado para el Modal de Regalo
+  const [showGiftModal, setShowGiftModal] = useState(false); 
 
   // ✅ NUEVO: Estado para notificaciones de puntos
   const [pointsNotification, setPointsNotification] = useState({
@@ -96,7 +95,8 @@ const ReelsContainer = ({
     hasPlayedInitial: hasPlayedInitial.current,
     isMobile,
     isDesktop,
-    showCommentsModal
+    showCommentsModal,
+    showGiftModal // ✅ Nuevo estado de debug
   });
 
   // ✅ NUEVO: Función para mostrar notificación de puntos
@@ -862,6 +862,32 @@ const ReelsContainer = ({
       console.error('Error guardando video:', error);
     }
   };
+  
+  // ✅ NUEVA FUNCIÓN: Abrir el Modal de Regalo
+  const handleGiftClick = (video, e) => {
+      if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      
+      if (!currentUser) {
+          navigate('/login');
+          return;
+      }
+      
+      if (currentUser.id === video.creator?.id) {
+          showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id);
+          return;
+      }
+      
+      setShowGiftModal(true);
+  };
+  
+  const handleGiftSuccess = (amount) => {
+      // El modal se encarga de la lógica de puntos, solo mostramos una notificación
+      showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id);
+  };
+
 
   const handleFollow = async (creatorId, e) => {
     if (e) {
@@ -1566,6 +1592,19 @@ const ReelsContainer = ({
                 <Icon name="ThumbsDown" size={26} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
               </div>
             </button>
+            
+            {/* ✅ NUEVO BOTÓN DE REGALO - MOBILE */}
+            {currentUser && currentUser.id !== currentVideo.creator?.id && (
+                <button 
+                    onClick={(e) => handleGiftClick(currentVideo, e)} 
+                    className="flex flex-col items-center space-y-1"
+                >
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-yellow-500 bg-white/20">
+                        <span className="text-xl font-extrabold mr-0.5 leading-none">R</span>
+                        <Icon name="Gift" size={20} className="fill-current" />
+                    </div>
+                </button>
+            )}
 
             <button 
               onClick={(e) => handleOpenComments(currentVideo.id, e)} 
@@ -1685,6 +1724,20 @@ const ReelsContainer = ({
                 <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
               </div>
             </button>
+            
+            {/* ✅ NUEVO BOTÓN DE REGALO - DESKTOP */}
+            {currentUser && currentUser.id !== currentVideo.creator?.id && (
+                <button 
+                    onClick={(e) => handleGiftClick(currentVideo, e)} 
+                    className="flex flex-col items-center space-y-1 group"
+                    title="Regalar Puntos"
+                >
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-yellow-600 group-hover:bg-yellow-50">
+                        <span className="text-2xl font-extrabold mr-0.5 leading-none">R</span>
+                        <Icon name="Gift" size={24} className="fill-current" />
+                    </div>
+                </button>
+            )}
 
             <button 
               onClick={(e) => handleOpenComments(currentVideo.id, e)} 
@@ -2015,6 +2068,19 @@ const ReelsContainer = ({
             </div>
           </div>
         </div>
+      )}
+      
+      {/* ✅ MODAL DE REGALO DE PUNTOS */}
+      {showGiftModal && currentVideo && currentUser && (
+        <GiftPointsModal
+          isOpen={showGiftModal}
+          onClose={() => setShowGiftModal(false)}
+          receiverId={currentVideo.creator?.id}
+          receiverUsername={currentVideo.creator?.username || currentVideo.creator?.name}
+          contentId={currentVideo.id}
+          contentType="reel"
+          onSuccess={handleGiftSuccess}
+        />
       )}
     </div>
   );
