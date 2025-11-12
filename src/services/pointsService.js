@@ -2,6 +2,7 @@
 // ============================================================================
 // ✅ FIX: 'calculateVideoPointsFull' ajustado para usar COLUMNAS EXISTENTES:
 //         'action_type' y 'metadata' para multiplicadores, basándose en el esquema del usuario.
+// ✅ NUEVO: LÓGICA DE REGALAR PUNTOS (giftPoints)
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -13,6 +14,9 @@ export const PREMIUM_POINTS_MULTIPLIER = 2;
 const TRANSACTION_TABLE = 'points_transactions';
 const INIT_POINTS_RPC_NAME = 'ensure_user_points_record'; 
 const UPDATE_POINTS_RPC_NAME = 'update_user_points';
+
+// ✅ NUEVA CONSTANTE RPC para REGALAR PUNTOS
+const GIFT_POINTS_RPC_NAME = 'rpc_gift_points'; 
 
 // Constantes de reglas (AJUSTADAS AL ESQUEMA DEL USUARIO: ASUMIMOS QUE action_type TIENE ESTOS VALORES)
 const BASE_UPLOAD_RULE = 'video_base'; // Usaremos 'video_base' en lugar de 'video_base_upload'
@@ -92,6 +96,61 @@ export const calculateVideoPointsFull = async (durationSeconds, categorySlug, or
 export const calculatePremiumValue = (premiumPoints) => {
     return premiumPoints * PREMIUM_POINTS_MULTIPLIER;
 };
+
+// ============================================================================
+// LÓGICA DE REGALO DE PUNTOS (NUEVA)
+// ============================================================================
+
+/**
+ * Llama al RPC de Supabase para transferir puntos del emisor al receptor.
+ * @param {string} senderId - ID del usuario que regala.
+ * @param {string} receiverId - ID del usuario que recibe.
+ * @param {number} amount - Cantidad de puntos a regalar (debe ser puntos 'free').
+ * @param {string} contentType - Tipo de contenido ('video', 'photo', 'reel').
+ * @param {string} contentId - ID del contenido.
+ * @returns {Promise<{success: boolean, message: string, newSenderPoints?: object}>}
+ */
+export const giftPoints = async (senderId, receiverId, amount, contentType, contentId) => {
+    if (!senderId || !receiverId || amount <= 0) {
+        return { success: false, message: 'Datos de regalo inválidos.' };
+    }
+    
+    try {
+        console.log(`📡 Llamando RPC ${GIFT_POINTS_RPC_NAME}: ${amount} de ${senderId} a ${receiverId}`);
+
+        const rpcParams = {
+            p_sender_id: senderId,
+            p_receiver_id: receiverId,
+            p_amount: amount,
+            p_content_type: contentType,
+            p_content_id: contentId
+        };
+        
+        // Supabase RPC se encargará de:
+        // 1. Verificar saldo del emisor.
+        // 2. Deducción y registro de transacción para el emisor.
+        // 3. Adición y registro de transacción para el receptor.
+        const { data, error } = await supabase.rpc(GIFT_POINTS_RPC_NAME, rpcParams);
+
+        if (error) {
+            console.error(`❌ Error en RPC ${GIFT_POINTS_RPC_NAME}:`, error);
+            // El RPC debe devolver un error claro (ej: 'No hay saldo suficiente')
+            return { success: false, message: error.message }; 
+        }
+        
+        // El RPC debe devolver el nuevo saldo del emisor o un mensaje de éxito.
+        return { 
+            success: true, 
+            message: data?.message || `Regalo de ${amount} puntos enviado con éxito.`,
+            newSenderPoints: { free: data?.sender_free_points || 0, premium: data?.sender_premium_points || 0 }
+        };
+
+    } catch (error) {
+        console.error('❌ Excepción en giftPoints:', error);
+        return { success: false, message: `Error inesperado: ${error.message}` };
+    }
+};
+
 
 // ============================================================================
 // INICIALIZACIÓN DE PUNTOS
@@ -314,5 +373,6 @@ export default {
   deductPoints,
   calculatePremiumValue,
   PREMIUM_POINTS_MULTIPLIER,
-  getUserPointsHistory // <-- Función actualizada
+  getUserPointsHistory, // <-- Función actualizada
+  giftPoints // ✅ NUEVA FUNCIÓN EXPORTADA
 };
