@@ -5,8 +5,6 @@ import { Helmet } from 'react-helmet';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
-// ❌ ELIMINADO: Se quita la importación del menú duplicado
-// import PrimaryNavigation from '../../components/ui/PrimaryNavigation'; 
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -315,6 +313,13 @@ const VideoEditStudio = () => {
       </div>
     );
   }
+  
+  // Determinamos el tipo de video para el preview
+  const videoType = formData.orientation === 'vertical' ? 'Reel (Video Vertical)' : 'Video (Video Horizontal)';
+  const previewAspectRatio = formData.orientation === 'vertical' ? 'aspect-[9/16] w-full max-w-[200px] mx-auto' : 'aspect-video w-full';
+  
+  const formattedDuration = `${Math.floor(formData.duration_seconds / 60)}m ${String(formData.duration_seconds % 60).padStart(2, '0')}s`;
+
 
   return (
     <>
@@ -324,10 +329,9 @@ const VideoEditStudio = () => {
 
       <div className="min-h-screen bg-background">
         <Header />
-        {/* ❌ REMOVIDO: Se quita el componente PrimaryNavigation */}
-        {/* <PrimaryNavigation /> */}
+        {/* La navegación PrimaryNavigation fue eliminada */}
 
-        <main className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8 pt-16"> {/* ✅ CORREGIDO: Espaciado Superior (pt-16) */}
           <div className="space-y-8">
             <h1 className="text-3xl font-extrabold text-foreground">
               <Icon name="Edit" size={24} className="inline-block mr-2" />
@@ -343,9 +347,8 @@ const VideoEditStudio = () => {
                 <div className="p-6 bg-card border border-border rounded-xl shadow-lg">
                   <h2 className="text-xl font-semibold text-foreground mb-4">Vista Previa</h2>
                   
-                  {/* Vista Previa del Video */}
-                  <div className="relative rounded-lg overflow-hidden border border-border bg-black aspect-video">
-                    {/* Usamos el thumbnail_url como placeholder y el video_url real */}
+                  {/* Vista Previa del Video con Aspect Ratio Dinámico */}
+                  <div className={`relative rounded-lg overflow-hidden border border-border bg-black ${previewAspectRatio}`}>
                     <div className="w-full h-full">
                        <img 
                           src={formData.thumbnail_url || '/placeholder.jpg'} 
@@ -360,18 +363,18 @@ const VideoEditStudio = () => {
                     </div>
                   </div>
 
-                  <div className="mt-4 space-y-3">
-                    <p className="text-sm font-medium text-muted-foreground">
+                  <div className="mt-4 space-y-3 p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm font-medium text-foreground border-b border-border/50 pb-2 mb-2 flex items-center">
+                      <Icon name="FileVideo" size={16} className="inline-block mr-2 text-primary" />
+                      Tipo: <strong>{videoType}</strong> {/* ✅ CORREGIDO: Muestra el tipo de video */}
+                    </p>
+                    <p className="text-sm font-medium text-muted-foreground flex items-center">
                       <Icon name="Link" size={14} className="inline-block mr-1" />
-                      URL: <a href={formData.video_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">{formData.video_url}</a>
+                      URL: <a href={formData.video_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block flex-1">{formData.video_url}</a>
                     </p>
-                    <p className="text-sm font-medium text-muted-foreground">
+                    <p className="text-sm font-medium text-muted-foreground flex items-center">
                       <Icon name="Clock" size={14} className="inline-block mr-1" />
-                      Duración: {Math.floor(formData.duration_seconds / 60)}m {formData.duration_seconds % 60}s
-                    </p>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      <Icon name={formData.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} size={14} className="inline-block mr-1" />
-                      Formato: {formData.orientation === 'vertical' ? 'Vertical (Reel)' : 'Horizontal'}
+                      Duración: {formattedDuration}
                     </p>
                   </div>
                 </div>
@@ -409,7 +412,7 @@ const VideoEditStudio = () => {
                     {errors.description && <p className="text-xs text-error mt-1">{errors.description}</p>}
                   </div>
                   
-                  {/* ✅ CORRECCIÓN DE LA CATEGORÍA: Asegurar que el onChange actualice el estado */}
+                  {/* ✅ CATEGORY SELECTOR CORREGIDO: Asegura que el UUID de la categoría se guarde */}
                   <CategorySelector
                     value={formData.category_id} 
                     onChange={(newCategoryId) => setFormData(prev => ({ ...prev, category_id: newCategoryId }))}
@@ -441,12 +444,12 @@ const VideoEditStudio = () => {
                       {saving ? (
                         <>
                           <Icon name="Loader" size={16} className="animate-spin mr-2" />
-                          Guardando Cambios...
+                          Guardando...
                         </>
                       ) : (
                         <>
                           <Icon name="Save" size={16} className="mr-2" />
-                          Actualizar Metadatos
+                          Actualizar
                         </>
                       )}
                     </Button>
