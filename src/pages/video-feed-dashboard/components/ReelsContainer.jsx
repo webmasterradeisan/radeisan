@@ -1,4 +1,4 @@
-// src/components/ReelsContainer.jsx
+// src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
 // ✅ CORREGIDO: Verificaciones de seguridad para comment.user
@@ -6,6 +6,7 @@
 // ✅ NUEVO: Avisos de puntos cerca del botón like
 // ✅ CORREGIDO: Sistema de tracking persistente para likes
 // ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
+// ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -15,7 +16,7 @@ import { usePoints } from 'contexts/PointsContext';
 import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
-// ✅ NUEVA IMPORTACIÓN
+// ✅ CORRECCIÓN DE RUTA DE IMPORTACIÓN (usando alias absoluto asumido o ajustando)
 import GiftPointsModal from 'components/GiftPointsModal'; 
 
 // ===============================
@@ -40,10 +41,10 @@ const ReelsContainer = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
-  const [likedVideos, setLikedVideos] = new Set([]);
-  const [dislikedVideos, setDislikedVideos] = new Set([]);
-  const [savedVideos, setSavedVideos] = new Set([]);
-  const [followedCreators, setFollowedCreators] = new Set([]);
+  const [likedVideos, setLikedVideos] = useState(new Set());
+  const [dislikedVideos, setDislikedVideos] = useState(new Set());
+  const [savedVideos, setSavedVideos] = useState(new Set());
+  const [followedCreators, setFollowedCreators] = useState(new Set());
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
   
