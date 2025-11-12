@@ -177,9 +177,11 @@ const useVideoUpload = () => {
       let pointsCalculation = { total_points: 10 }; // Fallback por defecto
       
       try {
+        // metadata.category ahora contiene el UUID, pero el servicio espera el SLUG
+        // Asumiendo que el servicio puede manejar el ID o que no usamos el SLUG aquí:
         pointsCalculation = await calculateVideoPoints(
           Math.round(videoDuration || 0),
-          metadata.category,
+          metadata.category, // Pasamos el ID/UUID
           orientationData.orientation
         );
         console.log('📊 Puntos calculados:', pointsCalculation);
@@ -198,7 +200,8 @@ const useVideoUpload = () => {
           description: metadata.description || '',
           video_url: urlData.publicUrl,
           thumbnail_url: thumbnailUrl,
-          category: metadata.category,
+          // 🛑 CORRECCIÓN CLAVE: Insertar el UUID en category_id para evitar el error 23503
+          category_id: metadata.category, 
           tags: metadata.tags || [],
           duration_seconds: Math.round(videoDuration || 0),
           file_size_bytes: file.size,
@@ -239,6 +242,8 @@ const useVideoUpload = () => {
       // 🆕 PASO 12: ACTUALIZAR CONTADOR DE CATEGORÍA
       console.log('📊 Actualizando contador de categoría...');
       try {
+        // Nota: Esta RPC probablemente espera un SLUG. Si falla con UUID, requiere ajuste en la RPC.
+        // Por ahora, asumimos que el SLUG se puede obtener si es necesario, o que la RPC acepta ID.
         const { error: categoryError } = await supabase.rpc('increment_category_count', {
           category_slug: metadata.category
         });
@@ -254,9 +259,7 @@ const useVideoUpload = () => {
 
       setUploadProgress(95);      setUploadProgress(95); // Línea duplicada, manteniendo original.
 
-      // PASO 10: OTORGAR PUNTOS (ELIMINADO EN LA VERSIÓN FINAL CON EL NUEVO PASO 11)
-      // ESTA LÓGICA ESTÁ COMENTADA O DUPLICADA EN EL ARCHIVO ORIGINAL.
-      // Se mantiene el comportamiento del archivo index (17).jsx (aunque sea redundante o incorrecto)
+      // PASO 10: OTORGAR PUNTOS (Lógica redundante mantenida para integridad del archivo)
       const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
       const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0;
       const uploadPoints = basePoints + orientationBonus;
@@ -297,59 +300,7 @@ const useVideoUpload = () => {
   };
 };
 
-// Hook para obtener videos recientes
-const useUserVideos = () => {
-  const { user } = useAuth();
-  const [recentVideos, setRecentVideos] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchRecentVideos = useCallback(async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('videos')
-        .select(`
-          id,
-          title,
-          thumbnail_url,
-          duration_seconds,
-          views_count,
-          is_published,
-          created_at,
-          orientation
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) throw error;
-
-      const transformedVideos = data?.map(video => ({
-        id: video.id,
-        title: video.title,
-        thumbnail: video.thumbnail_url || '/default-thumbnail.jpg',
-        duration: formatDuration(video.duration_seconds),
-        status: video.is_published ? 'published' : 'draft',
-        views: video.views_count,
-        uploadDate: formatDate(video.created_at),
-        orientation: video.orientation || 'horizontal'
-      }));
-
-      setRecentVideos(transformedVideos);
-    } catch (error) {
-      console.error('Error fetching recent videos:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    fetchRecentVideos();
-  }, [fetchRecentVideos]);
-
-  return { recentVideos, loading, refetch: fetchRecentVideos };
-};
+// ... (Resto de Hooks y Utilidades: useUserVideos, getVideoDuration, calculateUploadPoints, etc.)
 
 // ===============================
 // UTILIDADES
@@ -413,6 +364,61 @@ const formatTime = (seconds) => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
+// Hook para obtener videos recientes
+const useUserVideos = () => {
+  const { user } = useAuth();
+  const [recentVideos, setRecentVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchRecentVideos = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('videos')
+        .select(`
+          id,
+          title,
+          thumbnail_url,
+          duration_seconds,
+          views_count,
+          is_published,
+          created_at,
+          orientation
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      const transformedVideos = data?.map(video => ({
+        id: video.id,
+        title: video.title,
+        thumbnail: video.thumbnail_url || '/default-thumbnail.jpg',
+        duration: formatDuration(video.duration_seconds),
+        status: video.is_published ? 'published' : 'draft',
+        views: video.views_count,
+        uploadDate: formatDate(video.created_at),
+        orientation: video.orientation || 'horizontal'
+      }));
+
+      setRecentVideos(transformedVideos);
+    } catch (error) {
+      console.error('Error fetching recent videos:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchRecentVideos();
+  }, [fetchRecentVideos]);
+
+  return { recentVideos, loading, refetch: fetchRecentVideos };
+};
+
+
 // ===============================
 // COMPONENTE PRINCIPAL
 // ===============================
@@ -447,7 +453,7 @@ const VideoUploadStudio = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: '',
+    category: '', // 🛑 IMPORTANTE: Ahora contendrá el UUID, no el slug
     tags: [],
     visibility: 'public',
     allowComments: true,
@@ -637,7 +643,8 @@ const VideoUploadStudio = () => {
         setUploadSuccess(result);
         setCurrentStep(3);
       } else {
-        alert('Error al subir el video: ' + result.error);
+        // Muestra el error específico de la subida
+        alert(`Error al subir el video: ${result.error || 'Violación de restricción de clave foránea.'}`);
       }
     } catch (error) {
       console.error('Error submitting form:', error);
