@@ -237,7 +237,7 @@ const Routes = () => {
               />
 
               <Route 
-                path="/edit/:videoId" 
+                path="/video-edit/:videoId" 
                 element={
                   <ProtectedRoute>
                     <MobileLayoutWrapper>
