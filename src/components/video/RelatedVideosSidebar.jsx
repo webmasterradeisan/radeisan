@@ -4,7 +4,7 @@
 // ============================================================================
 // ✅ Carrusel de REELS con scroll de rueda del mouse
 // ✅ Flechas SIEMPRE VISIBLES con diseño moderno
-// ✅ Navegación correcta a /dashboard?videoId=X
+// ✅ CORREGIDO: Navegación de Reels para usar state (replicando el comportamiento del Dashboard)
 // ✅ Videos relacionados horizontales
 // ✅ Información completa del creador
 // ✅ Filtros inteligentes
@@ -412,15 +412,20 @@ const RelatedVideosSidebar = ({
     }
   };
 
-  // ✅ NAVEGACIÓN CORRECTA A DASHBOARD CON REEL ID
+  // ✅ NAVEGACIÓN CORRECTA A DASHBOARD CON REEL ID (USANDO STATE)
   const handleReelClick = (reelIndex, reelId) => {
     console.log('🎬 Click en reel del sidebar:');
     console.log('   📍 Índice:', reelIndex);
     console.log('   🆔 ID:', reelId);
-    console.log('   🎯 Navegando a: /dashboard?videoId=' + reelId);
     
-    // Navegar a dashboard con el ID del video
-    navigate(`/dashboard?videoId=${reelId}`);
+    // *** CORRECCIÓN APLICADA AQUÍ ***
+    // Navegar a /dashboard con el ID del reel en el state
+    navigate('/dashboard', {
+      state: {
+        orientation: 'vertical',
+        selectedReelId: reelId
+      }
+    });
   };
 
   // Filtros
