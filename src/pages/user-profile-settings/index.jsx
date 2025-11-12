@@ -1,6 +1,7 @@
 // src/pages/user-profile-settings/index.jsx
 // UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 // Importación corregida a la ruta original
 import { useAuth } from '../../contexts/AuthContext'; 
@@ -1077,6 +1078,7 @@ export const ReelsGridComponent = ({ // 👈 CORRECCIÓN: export const
 
 const UserProfileSettings = () => {
   const { user, isAuthenticated, signOut } = useAuth();
+  const navigate = useNavigate();
   
   const { 
     totalPoints, 
@@ -1415,7 +1417,7 @@ const UserProfileSettings = () => {
           console.log('Like video:', video.id);
           break;
         case 'edit':
-          window.location.href = `/video-edit/${video.id}`;
+          navigate(`/video-edit/${video.id}`);
           break;
         case 'delete':
           if (window.confirm('¿Estás seguro de que quieres eliminar este video?')) {
@@ -1435,7 +1437,7 @@ const UserProfileSettings = () => {
     } catch (error) {
       console.error('Error with video action:', error);
     }
-  }, [refreshVideos, refreshReels]);
+  }, [navigate, refreshVideos, refreshReels]);
 
   const handleReelAction = useCallback(async (action, reel) => {
     try {
@@ -1444,7 +1446,7 @@ const UserProfileSettings = () => {
           console.log('Like reel:', reel.id);
           break;
         case 'edit':
-          window.location.href = `/video-edit/${reel.id}`;
+          navigate(`/video-edit/${reel.id}`);
           break;
         case 'delete':
           if (window.confirm('¿Estás seguro de que quieres eliminar este reel?')) {
@@ -1464,7 +1466,7 @@ const UserProfileSettings = () => {
     } catch (error) {
       console.error('Error with reel action:', error);
     }
-  }, [refreshVideos, refreshReels]);
+  }, [navigate, refreshVideos, refreshReels]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
