@@ -2,7 +2,8 @@
 // ============================================================================
 // ✅ FIX: 'calculateVideoPointsFull' ajustado para usar COLUMNAS EXISTENTES:
 //         'action_type' y 'metadata' para multiplicadores, basándose en el esquema del usuario.
-// ✅ NUEVO: LÓGICA DE REGALAR PUNTOS (giftPoints)
+// ✅ FIX: Valores de FALLBACK de Puntos Base y Bono Vertical alineados a la configuración del Admin (30 y 0).
+// ✅ NUEVO: LÓGICA DE REGALO DE PUNTOS (giftPoints)
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -31,7 +32,7 @@ const VERTICAL_BONUS_RULE = 'vertical_bonus'; // Usaremos 'vertical_bonus' en lu
  * Calcula los puntos totales ganados por un video subido,
  * basándose en la duración, categoría y orientación (dinámico de BD).
  */
-export const calculateVideoPointsFull = async (durationSeconds, categorySlug, orientation) => {
+export const calculateVideoPointsFull = async (durationSeconds, categoryId, orientation) => {
     
     // Paso 1: Obtener reglas de la tabla points_rules
     const { data: rules, error } = await supabase
@@ -40,12 +41,11 @@ export const calculateVideoPointsFull = async (durationSeconds, categorySlug, or
 
     if (error) {
         console.error("❌ Error al cargar reglas de puntos:", error);
-        // Fallback a un valor seguro si la BD falla
-        return { total_points: 10, base_points: 10, category_multiplier: 1.0, orientation_bonus: 0, category_name: categorySlug };
+        // 🛑 CORRECCIÓN: Fallback alineado con la configuración base (30 pts)
+        return { total_points: 30, base_points: 30, category_multiplier: 1.0, orientation_bonus: 0, category_name: categoryId };
     }
 
     // Convertir reglas a un mapa usando action_type como clave
-    // NOTA: Tu tabla usa 'action_type' y 'points_amount'
     const rulesMap = rules.reduce((acc, rule) => {
         acc[rule.action_type] = { 
             amount: rule.points_amount || 0,
@@ -54,19 +54,37 @@ export const calculateVideoPointsFull = async (durationSeconds, categorySlug, or
         return acc;
     }, {});
 
-    // Obtener multiplicadores de categoría
-    // Buscamos por action_type (ej: 'category_education') y accedemos al multiplicador dentro de 'metadata'
-    const categoryRuleKey = `category_${categorySlug}`;
-    const categoryRule = rulesMap[categoryRuleKey];
+    // Paso 2: Obtener el slug de la categoría (si se usa el ID) y el multiplicador
+    let categorySlug = categoryId; // Usaremos el ID temporalmente si no podemos obtener el slug
+    let categoryMultiplier = 1.0;
+    let categoryName = categoryId;
     
-    const categoryMultiplier = categoryRule?.metadata?.multiplier || 1.0;
-    const categoryName = categoryRule?.action_name || categorySlug; // Usamos action_name para el display
+    try {
+        const { data: categoryData } = await supabase
+            .from('content_categories')
+            .select('slug, points_multiplier, is_multiplier_enabled, name')
+            .eq('id', categoryId)
+            .single();
+
+        if (categoryData) {
+            categorySlug = categoryData.slug;
+            categoryName = categoryData.name;
+            
+            if (categoryData.is_multiplier_enabled !== false) {
+                categoryMultiplier = categoryData.points_multiplier || 1.0;
+            }
+        }
+    } catch (e) {
+        console.warn("⚠️ No se pudo obtener el multiplicador de la categoría por ID. Usando x1.0");
+    }
 
     // 1. Puntos Base de la acción 
-    const basePoints = rulesMap[BASE_UPLOAD_RULE]?.amount || 50;
+    // 🛑 CORRECCIÓN: Fallback ajustado de 50 a 30
+    const basePoints = rulesMap[BASE_UPLOAD_RULE]?.amount || 30; 
 
     // 2. Puntos por Duración
-    const pointsPerMinute = rulesMap[DURATION_RULE]?.amount || 10;
+    // 🛑 CORRECCIÓN: Fallback ajustado de 10 a 0 (si la DB lo tiene en 0, lo respetará)
+    const pointsPerMinute = rulesMap[DURATION_RULE]?.amount || 0; 
     const durationPoints = Math.floor(durationSeconds / 60) * pointsPerMinute;
 
     let subtotal = basePoints + durationPoints;
@@ -77,7 +95,8 @@ export const calculateVideoPointsFull = async (durationSeconds, categorySlug, or
     // 4. Bonus por Orientación Vertical (Reel)
     let orientationBonus = 0;
     if (orientation === 'vertical') {
-        orientationBonus = rulesMap[VERTICAL_BONUS_RULE]?.amount || 10;
+        // 🛑 CORRECCIÓN: Fallback ajustado de 10 a 0 para respetar la configuración del Admin
+        orientationBonus = rulesMap[VERTICAL_BONUS_RULE]?.amount || 0; 
     }
 
     // 5. Total
@@ -324,7 +343,7 @@ export const getUserPointsHistory = async (userId, options = {}) => {
   
   try {
     let query = supabase
-      .from('points_transactions')
+      .from(TRANSACTION_TABLE)
       .select('*', { count: 'exact' }) // Pedimos el conteo total
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
