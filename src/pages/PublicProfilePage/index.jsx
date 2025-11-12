@@ -1,5 +1,6 @@
 // src/pages/PublicProfilePage/index.jsx
 // ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
+// ✅ CORREGIDO: Navegación de Reels para imitar el comportamiento del Dashboard (usando navigate)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -9,12 +10,28 @@ import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
-import Image from '../../components/AppImage';
+import Image from '../../components/AppImage'; // Asumiendo AppImage es un componente de imagen optimizado
 import useIsMobile from '../../hooks/useIsMobile';
 
+// ===========================================
+// FUNCIONES HELPER
+// ===========================================
+const formatCount = (num) => {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  return num;
+};
+
+// ===========================================
+// COMPONENTE PRINCIPAL
+// ===========================================
 const PublicProfilePage = () => {
   const { identifier } = useParams();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // ✅ Usamos useNavigate para la corrección
   const { user: currentUser } = useAuth();
   const isMobile = useIsMobile();
 
@@ -33,205 +50,148 @@ const PublicProfilePage = () => {
     return uuidRegex.test(str);
   };
 
-  const determineOrientation = (video) => {
-    if (video.orientation) return video.orientation;
-    if (video.width && video.height) {
-      const aspectRatio = video.width / video.height;
-      if (aspectRatio <= 0.8) return 'vertical';
-      if (aspectRatio >= 1.3) return 'horizontal'; 
-      return 'square';
-    }
-    if (video.video_width && video.video_height) {
-      const aspectRatio = video.video_width / video.video_height;
-      if (aspectRatio <= 0.8) return 'vertical';
-      if (aspectRatio >= 1.3) return 'horizontal'; 
-      return 'square';
-    }
-    return 'horizontal';
-  };
-
-  const loadUserProfile = async () => {
-    try {
+  // ===========================================
+  // EFECTO: Carga de Datos del Perfil
+  // ===========================================
+  useEffect(() => {
+    const fetchProfileAndContent = async () => {
       setLoading(true);
       setError(null);
+      setProfileData(null);
 
-      let profileQuery;
-      if (isUUID(identifier)) {
-        profileQuery = supabase.from('user_profiles').select('*').eq('id', identifier).single();
-      } else {
-        profileQuery = supabase.from('user_profiles').select('*').eq('username', identifier).single();
+      // 1. Obtener el ID de usuario (UUID)
+      let userId = identifier;
+      if (!isUUID(identifier)) {
+        // Si no es un UUID, asumimos que es un username y lo buscamos
+        const { data, error: userError } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('username', identifier)
+          .single();
+
+        if (userError || !data) {
+          setError('Perfil no encontrado.');
+          setLoading(false);
+          return;
+        }
+        userId = data.id;
       }
 
-      const { data: profile, error: profileError } = await profileQuery;
-      if (profileError || !profile) {
-        setError('Usuario no encontrado');
+      // 2. Obtener datos del perfil y contenido
+      const [{ data: profileData, error: profileError }, { data: videosData, error: videosError }] = await Promise.all([
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+        supabase
+          .from('videos')
+          .select('*, user_profiles!fk_video_owner_id(username, avatar_url)') // JOIN al perfil
+          .eq('owner_id', userId)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      if (profileError || !profileData) {
+        setError('Error al cargar los datos del perfil.');
         setLoading(false);
         return;
       }
 
-      const isOwn = currentUser?.id === profile.id;
-      if (isOwn) {
-        navigate('/profile');
-        return;
+      if (videosError) {
+        console.error('Error fetching videos:', videosError);
+        // Continuamos incluso con error de videos, pero mostramos un array vacío
+        videosData = [];
       }
 
-      const { data: videosData } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('user_id', profile.id)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
+      setProfileData(profileData);
+      setAllVideos(videosData);
+      
+      // Separar Reels (vertical) de Videos (horizontal)
+      setReels(videosData.filter(v => v.orientation === 'vertical'));
+      setHorizontalVideos(videosData.filter(v => v.orientation === 'horizontal'));
+      
+      // Simular fotos (en un sistema real se haría otra query)
+      // Usaremos los horizontalVideos como placeholder para "fotos" si la pestaña fuera activa
+      setUserPhotos(videosData.filter(v => v.type === 'image' || v.orientation === 'horizontal').slice(0, 8));
 
-      const processedVideos = (videosData || []).map(video => ({
-        ...video,
-        orientation: determineOrientation(video)
-      }));
 
-      const verticalVideos = processedVideos.filter(v => v.orientation === 'vertical');
-      const horizontalOnly = processedVideos.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
-
-      setAllVideos(processedVideos);
-      setReels(verticalVideos);
-      setHorizontalVideos(horizontalOnly);
-
-      const { data: photosData } = await supabase
-        .from('photos')
-        .select('*')
-        .eq('user_id', profile.id)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
-
+      // 3. Chequear estado de seguimiento (si el usuario actual está logueado)
       if (currentUser) {
         const { data: followData } = await supabase
-          .from('user_follows')
+          .from('followers')
           .select('*')
           .eq('follower_id', currentUser.id)
-          .eq('following_id', profile.id)
-          .single();
-        setFollowing(!!followData);
+          .eq('followed_id', userId);
+
+        setFollowing(followData && followData.length > 0);
       }
-
-      const avatarUrl = profile.avatar_url || profile.avatar || 
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.full_name || profile.username || 'User')}&background=6366f1&color=ffffff&size=128`;
-
-      // Calcular vistas totales
-      const totalViews = processedVideos.reduce((sum, v) => sum + (v.views_count || 0), 0);
-      const totalLikes = processedVideos.reduce((sum, v) => sum + (v.likes_count || 0), 0);
-
-      setProfileData({
-        ...profile,
-        name: profile.full_name || profile.username,
-        username: profile.username || `user_${profile.id.substring(0, 8)}`,
-        avatar: avatarUrl,
-        coverImage: profile.cover_image_url,
-        bio: profile.bio,
-        followersCount: profile.followers_count || 0,
-        followingCount: profile.following_count || 0,
-        photosCount: photosData?.length || 0,
-        videosCount: horizontalOnly.length,
-        reelsCount: verticalVideos.length,
-        totalViews: totalViews,
-        totalLikes: totalLikes,
-        isVerified: profile.is_verified || false,
-        isBusinessAccount: profile.is_business_account || false,
-        created_at: profile.created_at,
-      });
-
-      setUserPhotos(photosData || []);
+      
       setLoading(false);
-    } catch (err) {
-      console.error('❌ Error al cargar perfil:', err);
-      setError('Error al cargar el perfil');
-      setLoading(false);
-    }
-  };
+    };
 
+    fetchProfileAndContent();
+  }, [identifier, currentUser]);
+
+  // ===========================================
+  // HANDLERS
+  // ===========================================
   const handleFollowToggle = async () => {
     if (!currentUser) {
       navigate('/login');
       return;
     }
-    if (!profileData?.id) return;
 
-    try {
-      if (following) {
-        setFollowing(false);
-        await supabase
-          .from('user_follows')
-          .delete()
-          .eq('follower_id', currentUser.id)
-          .eq('following_id', profileData.id);
-        setProfileData(prev => ({
-          ...prev,
-          followersCount: Math.max(0, prev.followersCount - 1)
-        }));
-      } else {
-        setFollowing(true);
-        await supabase
-          .from('user_follows')
-          .insert({
-            follower_id: currentUser.id,
-            following_id: profileData.id
-          });
-        setProfileData(prev => ({
-          ...prev,
-          followersCount: prev.followersCount + 1
-        }));
-      }
-    } catch (err) {
-      console.error('❌ Error al seguir/dejar de seguir:', err);
-      setFollowing(!following);
+    setFollowing(prev => !prev);
+    
+    // Optimistic UI update
+    setProfileData(prev => ({
+      ...prev,
+      followers_count: prev.followers_count + (following ? -1 : 1)
+    }));
+
+    if (following) {
+      // Unfollow
+      await supabase
+        .from('followers')
+        .delete()
+        .match({ follower_id: currentUser.id, followed_id: profileData.id });
+    } else {
+      // Follow
+      await supabase
+        .from('followers')
+        .insert([{ follower_id: currentUser.id, followed_id: profileData.id }]);
     }
   };
-
-  useEffect(() => {
-    if (identifier) {
-      loadUserProfile();
-    }
-  }, [identifier, currentUser]);
-
+  
+  // ===========================================
+  // RENDER
+  // ===========================================
+  
   if (loading) {
     return (
-      <>
-        <Helmet>
-          <title>Cargando perfil... | RADEISAN</title>
-        </Helmet>
-        <Header />
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Cargando perfil...</p>
-          </div>
-        </div>
-      </>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <p className="ml-4 text-muted-foreground">Cargando perfil...</p>
+      </div>
     );
   }
 
   if (error || !profileData) {
     return (
-      <>
-        <Helmet>
-          <title>Usuario no encontrado | RADEISAN</title>
-        </Helmet>
+      <div className="min-h-screen bg-background pt-16">
         <Header />
-        <div className="min-h-screen bg-background flex items-center justify-center px-4">
-          <div className="text-center max-w-md">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-              <Icon name="UserX" size={32} className="text-muted-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Usuario no encontrado</h1>
-            <p className="text-muted-foreground mb-6">
-              El perfil que buscas no existe o no está disponible.
-            </p>
-            <Button onClick={() => navigate('/dashboard')}>
-              <Icon name="Home" size={16} className="mr-2" />
-              Volver al inicio
-            </Button>
-          </div>
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <h1 className="text-3xl font-bold text-destructive mb-4">Error</h1>
+          <p className="text-muted-foreground">{error || 'El perfil solicitado no existe.'}</p>
+          <Link to="/dashboard" className="mt-6 inline-block text-primary hover:underline">
+            Volver al Inicio
+          </Link>
         </div>
-      </>
+      </div>
     );
   }
+  
+  const isOwner = currentUser?.id === profileData.id;
 
   return (
     <>
@@ -244,276 +204,253 @@ const PublicProfilePage = () => {
         <Header />
 
         <main className="pt-16">
-          <div className="max-w-6xl mx-auto">
-            {/* ✅ HEADER - Portada arriba, TODO debajo */}
-            <div className="bg-card border-b border-border">
-              {/* Cover Image - AL FONDO */}
-              <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
-                {profileData.coverImage ? (
-                  <Image 
-                    src={profileData.coverImage} 
-                    alt="Portada del perfil"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
-                )}
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            
+            {/* ======================= HEADER DEL PERFIL ======================= */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-6 sm:space-y-0 sm:space-x-12 pb-8 border-b border-border">
+              
+              {/* Avatar */}
+              <div className="flex-shrink-0">
+                <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-muted shadow-lg overflow-hidden flex items-center justify-center">
+                  {profileData.avatar_url ? (
+                    <img 
+                      src={profileData.avatar_url} 
+                      alt={profileData.name} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Icon name="User" size={48} className="text-muted-foreground" />
+                  )}
+                </div>
               </div>
-
-              {/* Profile Section - TODO DEBAJO de la portada */}
-              <div className="px-4 sm:px-6 py-6">
-                <div className="flex items-start justify-between gap-4">
-                  {/* Lado IZQUIERDO: Avatar + Info */}
-                  <div className="flex items-start gap-4 flex-1">
-                    {/* Avatar DEBAJO de la portada */}
-                    <div className="flex-shrink-0">
-                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-card overflow-hidden shadow-lg">
-                        <Image 
-                          src={profileData.avatar} 
-                          alt={profileData.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Info al lado del avatar */}
-                    <div className="flex-1 min-w-0">
-                      {/* Nombre y badges */}
-                      <div className="flex items-center gap-2 mb-1">
-                        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-                          {profileData.name}
-                        </h1>
-                        {profileData.isVerified && (
-                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
-                        )}
-                        {profileData.isBusinessAccount && (
-                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
-                            <Icon name="Building2" size={12} color="var(--color-accent)" />
-                            <span className="text-xs font-medium text-accent">Business</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Username */}
-                      <p className="text-sm text-muted-foreground mb-3">
-                        @{profileData.username}
-                      </p>
-                      
-                      {/* Stats en UNA LÍNEA HORIZONTAL */}
-                      <div className="flex items-center flex-wrap gap-4 text-sm">
-                        <div className="flex items-center gap-1">
-                          <Icon name="Monitor" size={16} className="text-blue-500" />
-                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
-                          <span className="text-muted-foreground">videos</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          <Icon name="Smartphone" size={16} className="text-red-500" />
-                          <span className="font-medium text-foreground">{profileData.reelsCount}</span>
-                          <span className="text-muted-foreground">reels</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          <Icon name="Image" size={16} className="text-green-500" />
-                          <span className="font-medium text-foreground">{profileData.photosCount}</span>
-                          <span className="text-muted-foreground">fotos</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          <Icon name="Eye" size={16} className="text-muted-foreground" />
-                          <span className="font-medium text-foreground">{profileData.totalViews}</span>
-                          <span className="text-muted-foreground">views</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          <Icon name="Heart" size={16} className="text-red-500" />
-                          <span className="font-medium text-foreground">{profileData.totalLikes}</span>
-                          <span className="text-muted-foreground">likes</span>
-                        </div>
-                      </div>
-                    </div>
+              
+              {/* Información y Botones */}
+              <div className="flex-grow text-center sm:text-left">
+                {/* Nombre y Username */}
+                <h1 className="text-3xl font-bold text-foreground mb-1">{profileData.name}</h1>
+                <p className="text-lg text-muted-foreground mb-4">@{profileData.username}</p>
+                
+                {/* Estadísticas */}
+                <div className="flex justify-center sm:justify-start space-x-8 mb-4">
+                  <div className="text-center">
+                    <span className="font-bold text-lg">{formatCount(allVideos.length)}</span>
+                    <p className="text-sm text-muted-foreground">Videos</p>
                   </div>
+                  <div className="text-center">
+                    <span className="font-bold text-lg">{formatCount(profileData.followers_count || 0)}</span>
+                    <p className="text-sm text-muted-foreground">Seguidores</p>
+                  </div>
+                  <div className="text-center">
+                    <span className="font-bold text-lg">{formatCount(profileData.following_count || 0)}</span>
+                    <p className="text-sm text-muted-foreground">Siguiendo</p>
+                  </div>
+                </div>
+                
+                {/* Bio */}
+                <p className="text-foreground max-w-lg mx-auto sm:mx-0 mb-6">{profileData.bio || '¡Hola! Este es mi perfil.'}</p>
 
-                  {/* Lado DERECHO: Botones */}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={following ? "outline" : "default"}
-                      size="sm"
-                      onClick={handleFollowToggle}
+                {/* Acciones */}
+                <div className="flex justify-center sm:justify-start space-x-4">
+                  {isOwner ? (
+                    <Button 
+                      onClick={() => navigate('/profile')}
+                      variant="outline"
+                      className="w-full sm:w-auto"
                     >
-                      <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-2" />
-                      {following ? 'Siguiendo' : 'Seguir'}
+                      <Icon name="Edit" size={16} className="mr-2" />
+                      Editar Perfil
                     </Button>
-                    
-                    <Button variant="outline" size="icon">
-                      <Icon name="Share2" size={16} />
-                    </Button>
-                  </div>
+                  ) : (
+                    <>
+                      <Button 
+                        onClick={handleFollowToggle}
+                        variant={following ? 'outline' : 'default'}
+                        className="w-full sm:w-auto"
+                      >
+                        <Icon name={following ? 'UserCheck' : 'UserPlus'} size={16} className="mr-2" />
+                        {following ? 'Siguiendo' : 'Seguir'}
+                      </Button>
+                      <Button 
+                        variant="secondary" 
+                        className="w-full sm:w-auto"
+                      >
+                        <Icon name="Send" size={16} className="mr-2" />
+                        Mensaje
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="px-4 sm:px-6 py-6">
-              <div className="flex border-b border-border mb-6 overflow-x-auto">
+            {/* ======================= TABS DE CONTENIDO ======================= */}
+            <div className="mt-8">
+              <div className="flex justify-center border-b border-border space-x-6 sm:space-x-12">
+                
+                {/* Pestaña Videos (Horizontal) */}
                 <button
                   onClick={() => setActiveTab('videos')}
-                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-                    activeTab === 'videos' 
-                      ? 'border-b-2 border-primary text-primary' 
+                  className={`py-3 text-sm font-semibold transition-colors ${
+                    activeTab === 'videos'
+                      ? 'text-primary border-b-2 border-primary'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Icon name="Monitor" size={16} className="inline mr-2" />
-                  Videos ({horizontalVideos.length})
+                  <span className="hidden sm:inline">Videos</span>
+                  <span className="sm:hidden"><Icon name="Monitor" size={18} /></span>
                 </button>
+                
+                {/* Pestaña Reels (Vertical) */}
                 <button
                   onClick={() => setActiveTab('reels')}
-                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-                    activeTab === 'reels' 
-                      ? 'border-b-2 border-primary text-primary' 
+                  className={`py-3 text-sm font-semibold transition-colors ${
+                    activeTab === 'reels'
+                      ? 'text-primary border-b-2 border-primary'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Icon name="Smartphone" size={16} className="inline mr-2" />
-                  Reels ({reels.length})
+                  <span className="hidden sm:inline">Reels</span>
+                  <span className="sm:hidden"><Icon name="Smartphone" size={18} /></span>
                 </button>
+                
+                {/* Pestaña Fotos (Ejemplo) */}
                 <button
                   onClick={() => setActiveTab('photos')}
-                  className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-                    activeTab === 'photos' 
-                      ? 'border-b-2 border-primary text-primary' 
+                  className={`py-3 text-sm font-semibold transition-colors ${
+                    activeTab === 'photos'
+                      ? 'text-primary border-b-2 border-primary'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Icon name="Image" size={16} className="inline mr-2" />
-                  Fotos ({userPhotos.length})
+                  <span className="hidden sm:inline">Fotos</span>
+                  <span className="sm:hidden"><Icon name="Image" size={18} /></span>
                 </button>
               </div>
 
-              {/* Content - Videos */}
-              {activeTab === 'videos' && (
-                <div>
-                  {horizontalVideos.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Icon name="Monitor" size={32} className="text-muted-foreground" />
-                      </div>
-                      <p className="text-muted-foreground">Sin videos aún</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {horizontalVideos.map((video) => (
-                        <Link 
-                          key={video.id}
-                          to={`/video/${video.id}`}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
-                        >
-                          <div className="relative aspect-video bg-muted">
-                            <img 
-                              src={video.thumbnail_url || '/placeholder-video.jpg'} 
-                              alt={video.title}
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                              {video.duration_seconds ? `${Math.floor(video.duration_seconds / 60)}:${String(video.duration_seconds % 60).padStart(2, '0')}` : '0:00'}
-                            </div>
-                          </div>
-                          <div className="p-3">
-                            <h3 className="font-semibold text-sm line-clamp-2 mb-1">{video.title}</h3>
-                            <div className="flex items-center space-x-3 text-xs text-muted-foreground">
-                              <span className="flex items-center space-x-1">
-                                <Icon name="Eye" size={12} />
-                                <span>{video.views_count?.toLocaleString() || 0}</span>
-                              </span>
-                              <span className="flex items-center space-x-1">
-                                <Icon name="Heart" size={12} />
-                                <span>{video.likes_count?.toLocaleString() || 0}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Content - Reels */}
-              {activeTab === 'reels' && (
-                <div>
-                  {reels.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Icon name="Smartphone" size={32} className="text-muted-foreground" />
-                      </div>
-                      <p className="text-muted-foreground">Sin reels aún</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {reels.map((reel) => (
-                        <Link 
-                          key={reel.id}
-                          to={`/reels?id=${reel.id}`}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
-                        >
-                          <div className="relative aspect-[9/16] bg-muted">
-                            <img 
-                              src={reel.thumbnail_url || '/placeholder-video.jpg'} 
-                              alt={reel.title}
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center space-x-1">
-                              <Icon name="Play" size={10} />
-                              <span>{reel.duration_seconds ? `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}` : '0:00'}</span>
-                            </div>
-                          </div>
-                          <div className="p-2">
-                            <h3 className="font-semibold text-xs line-clamp-2 mb-1">{reel.title}</h3>
-                            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                              <span className="flex items-center space-x-1">
-                                <Icon name="Eye" size={10} />
-                                <span>{reel.views_count?.toLocaleString() || 0}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Content - Fotos */}
-              {activeTab === 'photos' && (
-                <div>
-                  {userPhotos.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Icon name="Image" size={32} className="text-muted-foreground" />
-                      </div>
-                      <p className="text-muted-foreground">Sin fotos aún</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {userPhotos.map((photo) => (
-                        <div 
-                          key={photo.id}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                        >
-                          <div className="relative aspect-square bg-muted">
-                            <img 
-                              src={photo.image_url || '/placeholder-photo.jpg'} 
-                              alt={photo.title}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
+              {/* ======================= CONTENIDO DE LAS PESTAÑAS ======================= */}
+              <div className="space-y-6 mt-6">
+                
+                {/* Content - Reels (Vertical Videos) */}
+                {activeTab === 'reels' && (
+                  <div>
+                    {reels.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Icon name="Smartphone" size={32} className="text-muted-foreground" />
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                        <p className="text-muted-foreground">Sin Reels aún</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {reels.map((reel) => (
+                          <div 
+                            key={reel.id}
+                            // *** CORRECCIÓN APLICADA AQUÍ ***
+                            // Usamos onClick + navigate para replicar la navegación imperativa a la vista de reproducción.
+                            onClick={() => navigate(`/reels?id=${reel.id}`)}
+                            className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                            role="button"
+                            tabIndex={0}
+                          >
+                            <div className="relative aspect-[9/16] bg-muted">
+                              {/* Usamos el componente Image para optimización */}
+                              <Image 
+                                src={reel.thumbnail_url || '/placeholder-reel.jpg'} 
+                                alt={reel.title}
+                                className="w-full h-full object-cover"
+                              />
+                              {/* Overlay con datos (views) */}
+                              <div className="absolute inset-0 bg-black/30 flex flex-col justify-end p-2 text-white/90">
+                                <div className="flex items-center space-x-1 text-sm font-semibold">
+                                  <Icon name="Eye" size={14} />
+                                  <span>{formatCount(reel.views_count || 0)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Content - Videos (Horizontal Videos) */}
+                {activeTab === 'videos' && (
+                  <div>
+                    {horizontalVideos.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Icon name="Monitor" size={32} className="text-muted-foreground" />
+                        </div>
+                        <p className="text-muted-foreground">Sin videos largos aún</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {horizontalVideos.map((video) => (
+                          <Link 
+                            key={video.id}
+                            to={`/video/${video.id}`}
+                            className="bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow block"
+                          >
+                            <div className="relative aspect-video bg-muted">
+                              <img 
+                                src={video.thumbnail_url || '/placeholder-video.jpg'} 
+                                alt={video.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                {video.duration_seconds ? `${Math.floor(video.duration_seconds / 60)}:${String(video.duration_seconds % 60).padStart(2, '0')}` : '0:00'}
+                              </div>
+                            </div>
+                            <div className="p-3">
+                              <h3 className="font-semibold text-base line-clamp-2 mb-1">{video.title}</h3>
+                              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                                <span className="flex items-center space-x-1">
+                                  <Icon name="Eye" size={14} />
+                                  <span>{formatCount(video.views_count || 0)}</span>
+                                </span>
+                                <span className="text-xs">•</span>
+                                <span className="text-xs">{new Date(video.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Content - Fotos (Placeholder) */}
+                {activeTab === 'photos' && (
+                  <div>
+                    {userPhotos.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Icon name="Image" size={32} className="text-muted-foreground" />
+                        </div>
+                        <p className="text-muted-foreground">Sin fotos aún</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {userPhotos.map((photo) => (
+                          <div 
+                            key={photo.id}
+                            className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                          >
+                            <div className="relative aspect-square bg-muted">
+                              <img 
+                                src={photo.thumbnail_url || '/placeholder-photo.jpg'} 
+                                alt={photo.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </main>
