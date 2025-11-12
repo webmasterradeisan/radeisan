@@ -456,19 +456,19 @@ const VideoEditStudio = () => {
                       <div className="flex items-start space-x-2">
                         <Icon name="Trophy" size={16} color="var(--color-warning)" className="mt-0.5 flex-shrink-0" />
                         <p className="text-muted-foreground">
-                          Multiplicador de Categoría: **{formData.points_multiplier}x**
+                          Multiplicador de Categoría: <strong>{formData.points_multiplier}x</strong>
                         </p>
                       </div>
                       <div className="flex items-start space-x-2">
                         <Icon name="Smartphone" size={16} color="var(--color-success)" className="mt-0.5 flex-shrink-0" />
                         <p className="text-muted-foreground">
-                          Los Reels (videos verticales) reciben **{addFreePoints?.vertical_bonus || '10'} puntos bonus**
+                          Los Reels (videos verticales) reciben <strong>10 puntos bonus</strong>
                         </p>
                       </div>
                       <div className="flex items-start space-x-2">
                         <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                         <p className="text-muted-foreground">
-                          Puntos por duración: **{formData.duration_seconds} segundos**
+                          Puntos por duración: <strong>{formData.duration_seconds} segundos</strong>
                         </p>
                       </div>
                     </div>
