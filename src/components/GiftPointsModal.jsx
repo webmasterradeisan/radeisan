@@ -1,13 +1,15 @@
 // src/components/GiftPointsModal.jsx
+// ============================================================================
+// ✅ CORREGIDO: Se asegura que el saldo se cargue desde el contexto y se maneje el estado de carga.
+// ============================================================================
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext'; 
-// Asumimos que existe un contexto de puntos para obtener y actualizar el saldo.
 import { usePoints } from '../contexts/PointsContext'; 
 import { giftPoints } from '../services/pointsService'; 
 import AppIcon from './AppIcon'; 
-import Button from './ui/Button'; // Asumimos que existe este componente
+import Button from './ui/Button'; 
 
-// Montos sugeridos
 const GIFT_AMOUNTS = [10, 50, 100, 500];
 
 const GiftPointsModal = ({ 
@@ -20,31 +22,42 @@ const GiftPointsModal = ({
     onSuccess 
 }) => {
     const { user } = useAuth();
-    // Usamos usePoints para obtener el saldo actual y actualizarlo.
-    const { points, refreshPoints } = usePoints(); 
+    const { points, refreshPoints, loading: loadingPoints } = usePoints(); // ✅ Usamos loading del contexto
     
     const [amount, setAmount] = useState(GIFT_AMOUNTS[0]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
     
+    // Si el contexto de puntos está cargando, asumimos 0 para evitar errores, pero inhabilitamos el botón
     const isGiftingToSelf = user?.id === receiverId;
-    const senderFreePoints = points?.free || 0;
+    const senderFreePoints = points?.free || 0; 
 
+    // ✅ EFECTO PARA REFRESCAR PUNTOS AL ABRIR EL MODAL
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && user) {
             setError(null);
             setSuccessMessage(null);
-            // Asegurarse de que el saldo del usuario esté actualizado
-            if (user) {
-                refreshPoints(); 
-            }
-            // Si el monto actual es mayor que el saldo, resetear al monto más bajo
-            if (amount > senderFreePoints) {
-                 setAmount(GIFT_AMOUNTS[0]);
-            }
+            // Forzar un refresh del saldo desde la base de datos
+            refreshPoints(); 
+            // Esto asegura que points?.free refleje el saldo más reciente
         }
     }, [isOpen, user, refreshPoints]);
+
+    // ✅ VALIDACIÓN DE ERRORES VISUALES RELACIONADAS AL SALDO
+    useEffect(() => {
+        if (isOpen) {
+             // Si el error actual es el de saldo y el saldo real se actualizó, limpiamos el error.
+            if (error?.includes('Saldo insuficiente') && senderFreePoints >= amount) {
+                setError(null);
+            }
+             // Si el saldo es 0 (y el contexto no está cargando), mostramos el error.
+            if (!loadingPoints && senderFreePoints === 0) {
+                 setError('¡Saldo insuficiente! Solo tienes 0 puntos disponibles.');
+            }
+        }
+    }, [isOpen, senderFreePoints, amount, loadingPoints, error]);
+
 
     const handleGift = useCallback(async (e) => {
         e.preventDefault();
@@ -66,8 +79,9 @@ const GiftPointsModal = ({
             return;
         }
         
+        // ✅ VALIDACIÓN CRÍTICA EN TIEMPO DE EJECUCIÓN: Usamos senderFreePoints
         if (amount > senderFreePoints) {
-            setError(`¡Saldo insuficiente! Solo tienes ${senderFreePoints} puntos.`);
+            setError(`¡Saldo insuficiente! Solo tienes ${senderFreePoints} puntos disponibles.`);
             return;
         }
 
@@ -83,21 +97,18 @@ const GiftPointsModal = ({
             );
 
             if (result.success) {
-                // Actualizar contexto de puntos con el nuevo saldo del emisor
                 refreshPoints(); 
                 
                 setSuccessMessage(`✅ ¡${amount} puntos enviados a @${receiverUsername || 'el creador'}!`);
                 
-                // Llamar al callback de éxito si se proporciona
                 if (onSuccess) {
                     onSuccess(amount);
                 }
                 
-                // Cerrar el modal después de un tiempo
                 setTimeout(onClose, 2500); 
 
             } else {
-                // El RPC devuelve un error (ej: "Saldo insuficiente" si la validación falla a nivel de DB)
+                // El RPC devuelve el error exacto de Supabase (ej: "Saldo insuficiente")
                 setError(`❌ Error de transacción: ${result.message}`);
             }
 
@@ -111,17 +122,19 @@ const GiftPointsModal = ({
 
 
     if (!isOpen || !user) return null;
+    
+    // ✅ Deshabilitar si está cargando los puntos del contexto
+    const isDisabled = loading || loadingPoints || amount <= 0 || amount > senderFreePoints || isGiftingToSelf;
 
     return (
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center p-4" onClick={onClose}>
             <div 
                 className="bg-card rounded-xl max-w-sm w-full p-6 shadow-2xl transition-all transform duration-300"
-                onClick={(e) => e.stopPropagation()} // Previene el cierre al hacer clic dentro
+                onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between mb-4 border-b pb-3">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                             {/* Icono de Regalo Grande */}
                             <AppIcon name="Gift" className="w-5 h-5 text-yellow-600 fill-current" /> 
                         </div>
                         <h3 className="text-xl font-bold text-foreground">Regalar Puntos</h3>
@@ -143,7 +156,9 @@ const GiftPointsModal = ({
                     <form onSubmit={handleGift} className="space-y-4">
                         <p className="text-sm text-muted-foreground">
                             Envía puntos a **@{receiverUsername}** por su excelente contenido.
-                            Tus puntos gratis disponibles: <span className="font-bold text-primary">{senderFreePoints}</span>
+                            Tus puntos gratis disponibles: <span className="font-bold text-primary">
+                                {loadingPoints ? 'Cargando...' : senderFreePoints}
+                            </span>
                         </p>
                         
                         {/* Selector de Monto */}
@@ -155,11 +170,15 @@ const GiftPointsModal = ({
                                         key={a}
                                         type="button"
                                         onClick={() => setAmount(a)}
+                                        // ✅ Se deshabilita si el monto es mayor al saldo
+                                        disabled={a > senderFreePoints && !loadingPoints} 
                                         className={`
                                             px-3 py-2 rounded-lg font-semibold transition-colors text-sm
                                             ${amount === a 
                                                 ? 'bg-primary text-white shadow-md' 
-                                                : 'bg-muted text-foreground hover:bg-primary/10'
+                                                : (a > senderFreePoints && !loadingPoints) 
+                                                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                                    : 'bg-muted text-foreground hover:bg-primary/10'
                                             }
                                         `}
                                     >
@@ -184,10 +203,18 @@ const GiftPointsModal = ({
                                 {error}
                             </div>
                         )}
+                        
+                         {/* ✅ Aviso de cargando puntos */}
+                        {loadingPoints && (
+                             <div className="p-3 bg-blue-100 border border-blue-300 rounded-lg text-sm text-blue-700 flex items-center gap-2">
+                                <AppIcon name="Loader2" className="w-4 h-4 flex-shrink-0 animate-spin" />
+                                Validando saldo actual...
+                            </div>
+                        )}
 
                         <Button 
                             type="submit" 
-                            disabled={loading || amount <= 0 || amount > senderFreePoints || isGiftingToSelf}
+                            disabled={isDisabled}
                             className="w-full flex items-center justify-center gap-2"
                         >
                             {loading ? (
