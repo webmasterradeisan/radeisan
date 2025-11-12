@@ -1,8 +1,7 @@
 // src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
-// ✅ CHECKLIST AÑADIDO: Integrado el checklist 'show_in_store'
-// ✅ NUEVA ACCIÓN: Añadida 'gift_points_received' a getIconForAction.
-// 🛠️ FIX: Alineación de 'video_upload_base' con 'video_base' usado en pointsService.js.
+// ✅ FIX: Alineación de 'video_upload_base' con 'video_base' usado en pointsService.js.
+// ✅ FIX: Lógica de Multiplicadores actualizada para usar 'is_multiplier_enabled'.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -86,7 +85,7 @@ export default function PointsRulesEditor() {
       setError(null);
       setHasChanges(false);
 
-      // 1. Cargar categorías
+      // 1. Cargar categorías (incluyendo la nueva columna is_multiplier_enabled)
       const { data: categoriesData, error: categoriesError } = await supabase
         .from('categories')
         .select('*')
@@ -96,7 +95,6 @@ export default function PointsRulesEditor() {
       setCategories(categoriesData || []);
 
       // 2. Cargar reglas de acción desde 'public.points_rules'
-      // ✅ 'select('*')' cargará la nueva columna 'show_in_store'
       const { data: rulesData, error: rulesError } = await supabase
         .from('points_rules')
         .select('*') 
@@ -163,19 +161,31 @@ export default function PointsRulesEditor() {
 
       if (upsertError) throw upsertError;
 
-      // 2. ✅ CHECKLIST AÑADIDO: Guardar 'actionRules' (incluyendo 'show_in_store')
-      // NOTA: Esto solo actualiza reglas existentes por action_type
+      // 2. Guardar 'actionRules'
       const updates = actionRules.map(rule => 
         supabase
           .from('points_rules')
           .update({ 
             points_amount: rule.points_amount,
-            show_in_store: rule.show_in_store // <-- Guarda el estado del checkbox
+            show_in_store: rule.show_in_store 
           })
           .eq('action_type', rule.action_type)
       );
       
-      const results = await Promise.all(updates);
+      // 3. Guardar categorías (Asegura que los cambios en puntos y el multiplicador estén guardados)
+      const categoryUpdates = categories.map(cat => 
+          supabase
+              .from('categories')
+              .update({
+                  points_multiplier: cat.points_multiplier, // Guarda el valor editado
+                  is_multiplier_enabled: cat.is_multiplier_enabled // Guarda el estado del switch
+                  // Nota: También se podría guardar name, slug, description, etc. si se hubieran editado aquí.
+              })
+              .eq('id', cat.id)
+      );
+
+
+      const results = await Promise.all([...updates, ...categoryUpdates]);
       
       for (const res of results) {
         if (res.error) throw res.error;
@@ -206,7 +216,7 @@ export default function PointsRulesEditor() {
   };
 
   // ============================================================================
-  // FUNCIONES DE ACTUALIZACIÓN (CORREGIDAS)
+  // FUNCIONES DE ACTUALIZACIÓN (ADAPTADAS)
   // ============================================================================
 
   // Esta función actualiza el input de puntos
@@ -221,7 +231,7 @@ export default function PointsRulesEditor() {
     setHasChanges(true);
   };
 
-  // ✅ CHECKLIST AÑADIDO: Nueva función para manejar el estado del checkbox
+  // Función para manejar el estado del checkbox de 'show_in_store'
   const updateActionShowInStore = (actionType, isChecked) => {
     setActionRules(prev =>
       prev.map(rule =>
@@ -267,15 +277,8 @@ export default function PointsRulesEditor() {
     setHasChanges(true);
   };
 
-  const updateCategoryMultiplier = async (categoryId, multiplier) => {
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .update({ points_multiplier: parseFloat(multiplier) })
-        .eq('id', categoryId);
-
-      if (error) throw error;
-
+  // ✅ CORREGIDA: Actualiza el valor numérico del multiplicador en el estado local
+  const updateCategoryMultiplier = (categoryId, multiplier) => {
       setCategories(prev =>
         prev.map(cat =>
           cat.id === categoryId
@@ -283,13 +286,19 @@ export default function PointsRulesEditor() {
             : cat
         )
       );
+      setHasChanges(true);
+  };
 
-      setSuccessMessage('Multiplicador actualizado');
-      setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err) {
-      console.error('Error actualizando multiplicador:', err);
-      setError(err.message);
-    }
+  // ✅ NUEVA FUNCIÓN: Maneja el estado de activación/desactivación del multiplicador
+  const toggleCategoryMultiplier = (categoryId, isEnabled) => {
+    setCategories(prev =>
+      prev.map(cat =>
+        cat.id === categoryId
+          ? { ...cat, is_multiplier_enabled: isEnabled }
+          : cat
+      )
+    );
+    setHasChanges(true);
   };
 
   // ============================================================================
@@ -304,23 +313,30 @@ export default function PointsRulesEditor() {
     // Usamos 'gaming' como ejemplo para el preview
     const category = categories.find(c => c.slug === 'gaming') || categories[0];
     const multiplier = category?.points_multiplier || 1.0;
-
-    // 🛠️ FIX: Usar 'video_base' en lugar de 'video_upload_base' para alineación con pointsService.js
-    const uploadVideoPoints = getActionValue('video_base'); 
     
-    // Las otras acciones parecen correctas
+    // Obtener el estado de activación del multiplicador
+    const isMultiplierEnabled = category?.is_multiplier_enabled ?? true; // Default TRUE
+
+    const uploadVideoPoints = getActionValue('video_base'); 
     const watchVideoPoints = getActionValue('video_view');
     const giveLikePoints = getActionValue('give_like');
+
+    // Calcular el multiplicador final (0 si está desactivado)
+    const finalMultiplier = isMultiplierEnabled ? multiplier : 1.0;
+    const pointsWithMultiplier = isMultiplierEnabled 
+        ? Math.round(uploadVideoPoints * finalMultiplier) 
+        : uploadVideoPoints;
 
     const preview = {
       uploadVideo: {
         base: uploadVideoPoints,
-        withMultiplier: Math.round(uploadVideoPoints * multiplier),
-        withBonus: Math.round(uploadVideoPoints * multiplier + config.bonuses.first_upload_day)
+        withMultiplier: pointsWithMultiplier,
+        withBonus: Math.round(pointsWithMultiplier + config.bonuses.first_upload_day),
+        isMultiplierEnabled: isMultiplierEnabled
       },
       watchVideo: {
         base: watchVideoPoints,
-        withMultiplier: Math.round(watchVideoPoints * multiplier),
+        withMultiplier: Math.round(watchVideoPoints * finalMultiplier),
         dailyLimit: config.daily_limits.max_watch_points
       },
       giveLike: {
@@ -351,7 +367,7 @@ export default function PointsRulesEditor() {
       daily_login: 'LogIn',
       profile_complete: 'UserCheck',
       email_verified: 'Mail',
-      video_base: 'Upload', // 🛠️ FIX: Cambiado de video_upload_base a video_base
+      video_base: 'Upload', 
       video_upload_per_minute: 'Upload',
       vertical_video_bonus: 'Upload',
       video_view: 'Play',
@@ -362,7 +378,6 @@ export default function PointsRulesEditor() {
       give_like: 'Heart',
       give_comment: 'MessageCircle',
       share_content: 'Share2',
-      // ✅ NUEVA ACCIÓN
       gift_points_received: 'Gift' 
     };
     return map[actionType] || 'Zap';
@@ -492,7 +507,7 @@ export default function PointsRulesEditor() {
                   Define cuántos puntos gratis ganan los usuarios por cada acción
                 </p>
 
-                {/* ✅ CHECKLIST AÑADIDO: Renderizado dinámico desde 'actionRules' */}
+                {/* Renderizado dinámico desde 'actionRules' */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {actionRules.length > 0 ? (
                     actionRules.map(rule => (
@@ -504,7 +519,6 @@ export default function PointsRulesEditor() {
                         value={rule.points_amount}
                         onChange={(value) => updateAction(rule.action_type, value)}
                         highlight={rule.action_type.includes('upload') || rule.action_type.includes('base')}
-                        // ✅ CHECKLIST AÑADIDO: Pasar los nuevos props
                         showInStore={rule.show_in_store}
                         onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
                       />
@@ -518,7 +532,7 @@ export default function PointsRulesEditor() {
           )}
 
           {/* =================================== */}
-          {/* Tab: Multiplicadores (Corregida)    */}
+          {/* Tab: Multiplicadores (MODIFICADA)   */}
           {/* =================================== */}
           {activeTab === 'multipliers' && (
             <div className="space-y-6">
@@ -533,9 +547,14 @@ export default function PointsRulesEditor() {
 
                 <div className="space-y-3">
                   {categories.map(category => (
+                    // Usamos category.is_multiplier_enabled para determinar el estado del multiplicador
                     <div
                       key={category.id}
-                      className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
+                      className={`flex items-center gap-4 p-4 border rounded-lg transition-colors ${
+                        category.is_multiplier_enabled // ✅ Usa la nueva columna
+                          ? 'border-blue-300 bg-blue-50/50'
+                          : 'border-gray-200 bg-gray-50'
+                      }`}
                     >
                       <div
                         className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -555,6 +574,23 @@ export default function PointsRulesEditor() {
                           {category.description}
                         </p>
                       </div>
+                      
+                      {/* ✅ Checkbox para activar/desactivar el multiplicador */}
+                      <div className="flex flex-col items-center gap-1 flex-shrink-0 w-24">
+                          <label className="text-xs font-semibold text-gray-700">Multiplicador</label>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!category.is_multiplier_enabled} // ✅ Usa la nueva columna
+                              onChange={(e) => toggleCategoryMultiplier(category.id, e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                            <span className="ml-3 text-xs font-medium text-gray-900">{category.is_multiplier_enabled ? 'ON' : 'OFF'}</span>
+                          </label>
+                      </div>
+
+
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <input
                           type="number"
@@ -563,22 +599,29 @@ export default function PointsRulesEditor() {
                           step="0.1"
                           value={category.points_multiplier}
                           onChange={(e) => updateCategoryMultiplier(category.id, e.target.value)}
-                          className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-semibold"
+                          className={`w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-semibold ${
+                            category.is_multiplier_enabled ? '' : 'bg-gray-200 text-gray-500 cursor-not-allowed' // ✅ Deshabilita si está OFF
+                          }`}
+                          disabled={!category.is_multiplier_enabled} // ✅ Deshabilita si está OFF
                         />
                         <span className="text-gray-600 font-medium">x</span>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="text-sm text-gray-600">
-                          {getActionValue('video_base')} pts {/* 🛠️ FIX: Alineado con video_base */}
+                          {getActionValue('video_base')} pts
                         </div>
-                        <div className="text-lg font-bold text-blue-600">
-                          {Math.round(getActionValue('video_base') * category.points_multiplier)} pts {/* 🛠️ FIX: Alineado con video_base */}
+                        <div className={`text-lg font-bold ${category.is_multiplier_enabled ? 'text-blue-600' : 'text-gray-400'}`}>
+                          {category.is_multiplier_enabled // ✅ Muestra el resultado final o Desactivado
+                            ? `${Math.round(getActionValue('video_base') * category.points_multiplier)} pts`
+                            : `Desactivado`
+                          }
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
+              
               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex gap-3">
                   <AppIcon name="Info" className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -593,7 +636,7 @@ export default function PointsRulesEditor() {
               </div>
             </div>
           )}
-          
+
           {/* =================================== */}
           {/* Tab: Bonos (Sin cambios)            */}
           {/* =================================== */}
@@ -871,8 +914,11 @@ export default function PointsRulesEditor() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-700">Con multiplicador de categoría:</span>
-                          <span className="font-semibold text-blue-600">
-                            {previewData.uploadVideo.withMultiplier} pts
+                          <span className={`font-semibold ${previewData.uploadVideo.isMultiplierEnabled ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {previewData.uploadVideo.isMultiplierEnabled 
+                                ? `${previewData.uploadVideo.withMultiplier} pts`
+                                : `Desactivado`
+                            }
                           </span>
                         </div>
                         <div className="flex justify-between items-center pt-3 border-t border-blue-200">
@@ -947,7 +993,7 @@ export default function PointsRulesEditor() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES (✅ CHECKLIST AÑADIDO)
+// SUB-COMPONENTES
 // ============================================================================
 
 /**
@@ -997,7 +1043,7 @@ function ActionPointsInput({
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={!!showInStore} // Asegurarse de que sea un booleano
+                checked={!!showInStore} 
                 onChange={(e) => onShowInStoreChange(e.target.checked)}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
               />
