@@ -412,19 +412,19 @@ const RelatedVideosSidebar = ({
     }
   };
 
-  // ✅ NAVEGACIÓN CORRECTA A DASHBOARD CON REEL ID (USANDO STATE)
+  // ✅ NAVEGACIÓN CORREGIDA A DASHBOARD CON REEL ID (USANDO STATE + REPLACE)
   const handleReelClick = (reelIndex, reelId) => {
     console.log('🎬 Click en reel del sidebar:');
     console.log('   📍 Índice:', reelIndex);
     console.log('   🆔 ID:', reelId);
     
-    // *** CORRECCIÓN APLICADA AQUÍ ***
     // Navegar a /dashboard con el ID del reel en el state
     navigate('/dashboard', {
       state: {
         orientation: 'vertical',
         selectedReelId: reelId
-      }
+      },
+      replace: true // ✅ FUERZA un estado de historial limpio para el Dashboard
     });
   };
 
