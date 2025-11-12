@@ -1,8 +1,7 @@
 // src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
-// ✅ RESTAURADO: Definiciones de subcomponentes al final del archivo.
+// ✅ FIX: Alineación de 'video_upload_base' con 'video_base' usado en pointsService.js.
 // ✅ FIX: Lógica de Multiplicadores actualizada para usar 'is_multiplier_enabled'.
-// ✅ REORGANIZACIÓN: Agrupación lógica de las reglas de Subida de Video.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -369,8 +368,8 @@ export default function PointsRulesEditor() {
       profile_complete: 'UserCheck',
       email_verified: 'Mail',
       video_base: 'Upload', 
-      video_upload_per_minute: 'Clock',
-      vertical_video_bonus: 'Smartphone',
+      video_upload_per_minute: 'Upload',
+      vertical_video_bonus: 'Upload',
       video_view: 'Play',
       video_like_received: 'HeartHandshake',
       video_comment_received: 'MessageCircle',
@@ -495,7 +494,7 @@ export default function PointsRulesEditor() {
 
         <div className="p-6">
           {/* =================================== */}
-          {/* Tab: Acciones (REORGANIZADO)        */}
+          {/* Tab: Acciones (CORREGIDA)           */}
           {/* =================================== */}
           {activeTab === 'actions' && (
             <div className="space-y-6">
@@ -508,170 +507,25 @@ export default function PointsRulesEditor() {
                   Define cuántos puntos gratis ganan los usuarios por cada acción
                 </p>
 
+                {/* Renderizado dinámico desde 'actionRules' */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  
-                  {/* --- SECCIÓN 1: REGLAS DE CREACIÓN DE CONTENIDO --- */}
-                  <div className="md:col-span-2 space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="text-md font-bold text-blue-800">
-                        <AppIcon name="UploadCloud" className="w-4 h-4 inline-block mr-2" />
-                        Reglas de Subida de Contenido
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <ActionPointsInput
-                            icon={getIconForAction('video_base')}
-                            label={findRule('video_base')?.action_name || 'Subir Video (Base)'}
-                            description="Puntos por subir cualquier contenido de video"
-                            value={getActionValue('video_base')}
-                            onChange={(value) => updateAction('video_base', value)}
-                            highlight={true}
-                            showInStore={findRule('video_base')?.show_in_store}
-                            onShowInStoreChange={(isChecked) => updateActionShowInStore('video_base', isChecked)}
-                        />
-                        <ActionPointsInput
-                            icon={getIconForAction('video_upload_per_minute')}
-                            label={findRule('video_upload_per_minute')?.action_name || 'Subir Video (Por Minuto)'}
-                            description="Puntos adicionales por cada minuto de video"
-                            value={getActionValue('video_upload_per_minute')}
-                            onChange={(value) => updateAction('video_upload_per_minute', value)}
-                            highlight={true}
-                            showInStore={findRule('video_upload_per_minute')?.show_in_store}
-                            onShowInStoreChange={(isChecked) => updateActionShowInStore('video_upload_per_minute', isChecked)}
-                        />
-                        <ActionPointsInput
-                            icon={getIconForAction('vertical_video_bonus')}
-                            label={findRule('vertical_video_bonus')?.action_name || 'Bono Video Vertical (Reel)'}
-                            description="Puntos extra por subir un video vertical (Reel)"
-                            value={getActionValue('vertical_video_bonus')}
-                            onChange={(value) => updateAction('vertical_video_bonus', value)}
-                            highlight={true}
-                            showInStore={findRule('vertical_video_bonus')?.show_in_store}
-                            onShowInStoreChange={(isChecked) => updateActionShowInStore('vertical_video_bonus', isChecked)}
-                        />
-                        {/* Regla 'Subir foto' (No está en el grupo de video, se mantiene como una acción independiente) */}
-                        <ActionPointsInput
-                            icon={getIconForAction('photo_upload')}
-                            label={findRule('photo_upload')?.action_name || 'Subir foto'}
-                            description="Puntos por subir una foto"
-                            value={getActionValue('photo_upload')}
-                            onChange={(value) => updateAction('photo_upload', value)}
-                            showInStore={findRule('photo_upload')?.show_in_store}
-                            onShowInStoreChange={(isChecked) => updateActionShowInStore('photo_upload', isChecked)}
-                        />
-                    </div>
-                  </div>
-                  
-                  {/* --- SECCIÓN 2: REGLAS DE INTERACCIÓN Y MISCELÁNEAS --- */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:col-span-2">
-
-                    {/* Misiones Únicas / Perfil */}
-                    <ActionPointsInput
-                        icon={getIconForAction('profile_complete')}
-                        label={findRule('profile_complete')?.action_name || 'Perfil completo'}
-                        description="Completa todos los campos del perfil"
-                        value={getActionValue('profile_complete')}
-                        onChange={(value) => updateAction('profile_complete', value)}
-                        showInStore={findRule('profile_complete')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('profile_complete', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('email_verified')}
-                        label={findRule('email_verified')?.action_name || 'Email verificado'}
-                        description="Verifica la dirección de correo"
-                        value={getActionValue('email_verified')}
-                        onChange={(value) => updateAction('email_verified', value)}
-                        showInStore={findRule('email_verified')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('email_verified', isChecked)}
-                    />
-
-                    {/* Likes/Comentarios Recibidos (Interacción de Terceros) */}
-                    <ActionPointsInput
-                        icon={getIconForAction('video_like_received')}
-                        label={findRule('video_like_received')?.action_name || 'Recibir like en video'}
-                        description="Puntos por cada like recibido en tu video"
-                        value={getActionValue('video_like_received')}
-                        onChange={(value) => updateAction('video_like_received', value)}
-                        showInStore={findRule('video_like_received')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('video_like_received', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('video_comment_received')}
-                        label={findRule('video_comment_received')?.action_name || 'Recibir comentario en video'}
-                        description="Puntos por cada comentario recibido en tu video"
-                        value={getActionValue('video_comment_received')}
-                        onChange={(value) => updateAction('video_comment_received', value)}
-                        showInStore={findRule('video_comment_received')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('video_comment_received', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('photo_like_received')}
-                        label={findRule('photo_like_received')?.action_name || 'Recibir like en foto'}
-                        description="Puntos por cada like recibido en tu foto"
-                        value={getActionValue('photo_like_received')}
-                        onChange={(value) => updateAction('photo_like_received', value)}
-                        showInStore={findRule('photo_like_received')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('photo_like_received', isChecked)}
-                    />
-                    
-                    {/* Interacción del Usuario (Activa) */}
-                    <ActionPointsInput
-                        icon={getIconForAction('give_like')}
-                        label={findRule('give_like')?.action_name || 'Dar me gusta'}
-                        description="Puntos por dar like a contenido"
-                        value={getActionValue('give_like')}
-                        onChange={(value) => updateAction('give_like', value)}
-                        showInStore={findRule('give_like')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('give_like', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('give_comment')}
-                        label={findRule('give_comment')?.action_name || 'Comentar'}
-                        description="Puntos por comentar contenido"
-                        value={getActionValue('give_comment')}
-                        onChange={(value) => updateAction('give_comment', value)}
-                        showInStore={findRule('give_comment')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('give_comment', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('share_content')}
-                        label={findRule('share_content')?.action_name || 'Compartir contenido'}
-                        description="Puntos por compartir un video/foto"
-                        value={getActionValue('share_content')}
-                        onChange={(value) => updateAction('share_content', value)}
-                        showInStore={findRule('share_content')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('share_content', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('video_view')}
-                        label={findRule('video_view')?.action_name || 'Recibir vista en video'}
-                        description="Puntos cuando alguien ve tu video completamente"
-                        value={getActionValue('video_view')}
-                        onChange={(value) => updateAction('video_view', value)}
-                        showInStore={findRule('video_view')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('video_view', isChecked)}
-                    />
-                    
-                    {/* Recompensas/Actividad Diaria */}
-                    <ActionPointsInput
-                        icon={getIconForAction('daily_login')}
-                        label={findRule('daily_login')?.action_name || 'Inicio de sesión diario'}
-                        description="Puntos al iniciar sesión"
-                        value={getActionValue('daily_login')}
-                        onChange={(value) => updateAction('daily_login', value)}
-                        showInStore={findRule('daily_login')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('daily_login', isChecked)}
-                    />
-                    <ActionPointsInput
-                        icon={getIconForAction('gift_points_received')}
-                        label={findRule('gift_points_received')?.action_name || 'Puntos recibidos por regalo'}
-                        description="Puntos ganados cuando otro usuario te regala puntos"
-                        value={getActionValue('gift_points_received')}
-                        onChange={(value) => updateAction('gift_points_received', value)}
-                        showInStore={findRule('gift_points_received')?.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore('gift_points_received', isChecked)}
-                    />
-                  </div>
-
+                  {actionRules.length > 0 ? (
+                    actionRules.map(rule => (
+                      <ActionPointsInput
+                        key={rule.action_type}
+                        icon={getIconForAction(rule.action_type)}
+                        label={rule.action_name}
+                        description={rule.description || `ID: ${rule.action_type}`}
+                        value={rule.points_amount}
+                        onChange={(value) => updateAction(rule.action_type, value)}
+                        highlight={rule.action_type.includes('upload') || rule.action_type.includes('base')}
+                        showInStore={rule.show_in_store}
+                        onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-500">No se encontraron reglas de puntos en la base de datos.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1139,7 +993,7 @@ export default function PointsRulesEditor() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES (RESTAURADOS)
+// SUB-COMPONENTES
 // ============================================================================
 
 /**
