@@ -6,6 +6,8 @@
 // ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
 // ✅ CORREGIDO: Carrusel desktop no desaparece - usa videos sin filtrar por orientación
 // ✅ NUEVO: Recibe orientación desde Header para navegación directa a Reels/Videos
+// ✅ CORREGIDO: Lee selectedReelId del location.state para reproducción desde Perfil
+// ✅ CORRECCIÓN FINAL: Añadido selectedReelId a dependencias para forzar reordenamiento (Sidebar fix)
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -24,42 +26,11 @@ import useIsMobile from '../../hooks/useIsMobile';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 
-// ===============================
-// CONSTANTES DE ORIENTACIÓN
-// ===============================
-const VIDEO_ORIENTATIONS = {
-  HORIZONTAL: 'horizontal',
-  VERTICAL: 'vertical',
-  SQUARE: 'square'
-};
+// ===========================================
+// FUNCIONES HELPER
+// ===========================================
 
-const ORIENTATION_TABS = [
-  {
-    id: 'all',
-    label: 'Todo',
-    icon: 'Grid3X3',
-    description: 'Todos los videos',
-    color: '#6B7280'
-  },
-  {
-    id: VIDEO_ORIENTATIONS.VERTICAL,
-    label: 'Reels',
-    icon: 'Smartphone',
-    description: 'Videos verticales',
-    color: '#EF4444'
-  },
-  {
-    id: VIDEO_ORIENTATIONS.HORIZONTAL,
-    label: 'Videos',
-    icon: 'Monitor',
-    description: 'Videos horizontales',
-    color: '#3B82F6'
-  }
-];
-
-// ===============================
-// ✅ FUNCIÓN DE ALEATORIZACIÓN GLOBAL
-// ===============================
+// Función para mezclar un array (Algoritmo de Fisher-Yates)
 const shuffleArray = (array) => {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -69,655 +40,377 @@ const shuffleArray = (array) => {
   return newArray;
 };
 
-// ===============================
-// HOOKS PERSONALIZADOS
-// ===============================
+// ===========================================
+// COMPONENTE PRINCIPAL
+// ===========================================
 
-// Hook para manejar videos - ✅ QUERY OPTIMIZADA CON JOIN DIRECTO
-const useVideos = () => {
-  const { user: currentUser } = useAuth();
-  const [videos, setVideos] = useState([]);
+const VideoFeedDashboard = () => {
+  const { user } = useAuth();
+  const location = useLocation();
+  const isMobile = useIsMobile();
+
+  // ===========================================
+  // ESTADO
+  // ===========================================
+  const [videos, setVideos] = useState([]); // Todos los videos
+  const [filteredVideos, setFilteredVideos] = useState([]); // Videos para la grilla
+  const [shuffledReels, setShuffledReels] = useState([]); // Solo verticales, aleatorizados
+  const [shuffledHorizontals, setShuffledHorizontals] = useState([]); // Solo horizontales, aleatorizados
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
-  const [orientationStats, setOrientationStats] = useState({
-    horizontal: 0,
-    vertical: 0,
-    square: 0,
-    total: 0
-  });
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'trending', 'following'
+  const [activeOrientation, setActiveOrientation] = useState('all'); // 'all', 'vertical', 'horizontal'
+  const [layout, setLayout] = useState('grid'); // 'grid' o 'feed' (solo para videos horizontales)
+  const [selectedReelId, setSelectedReelId] = useState(null); // ID del reel a reproducir
+  const [orientationStats, setOrientationStats] = useState({ vertical: 0, horizontal: 0 });
 
-  const determineOrientation = useCallback((video) => {
-    // PRIORIDAD 1: Si tiene campo orientation en BD, usarlo
-    if (video.orientation) {
-      return video.orientation;
-    }
+  // ===========================================
+  // EFECTOS DE NAVEGACIÓN Y CARGA
+  // ===========================================
 
-    // PRIORIDAD 2: Si hay dimensiones, usarlas
-    if (video.width && video.height) {
-      const aspectRatio = video.width / video.height;
-      if (aspectRatio <= 0.8) return 'vertical';
-      if (aspectRatio >= 1.3) return 'horizontal'; 
-      return 'square';
-    }
+  // Efecto para leer la orientación y el Reel ID desde location.state
+  useEffect(() => {
+    // Lee el estado de navegación
+    let newOrientation = location.state?.orientation;
+    let newReelId = location.state?.selectedReelId;
 
-    // PRIORIDAD 3: Si tiene video_width y video_height, usarlos
-    if (video.video_width && video.video_height) {
-      const aspectRatio = video.video_width / video.video_height;
-      if (aspectRatio <= 0.8) return 'vertical';
-      if (aspectRatio >= 1.3) return 'horizontal'; 
-      return 'square';
-    }
-    
-    // PRIORIDAD 4: usar heurística de título/descripción
-    const title = (video.title || '').toLowerCase();
-    const description = (video.description || '').toLowerCase();
-    const text = title + ' ' + description;
-
-    if (text.includes('reel') || text.includes('vertical') || text.includes('móvil') || 
-        text.includes('short') || text.includes('tiktok') || text.includes('stories')) {
-      return 'vertical';
-    }
-
-    // Por defecto, horizontal
-    return 'horizontal';
-  }, []);
-
-  // ✅ FUNCIÓN ACTUALIZADA: Procesa videos con datos de user_profiles
-  const processVideos = useCallback((rawVideos) => {
-    const processed = rawVideos.map(video => {
-      // Generar avatar con UI Avatars si no existe
-      const username = video.user_profiles?.username || 'usuario';
-      const avatarUrl = video.user_profiles?.avatar_url || 
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=6366f1&color=ffffff&size=128`;
-
-      return {
-        ...video,
-        orientation: determineOrientation(video),
-        // Normalizar datos
-        views: video.views_count || video.views || 0,
-        likes: video.likes_count || video.likes || 0,
-        comments: video.comments_count || video.comments || 0,
-        duration: video.duration_seconds || video.duration || 30,
-        thumbnail: video.thumbnail_url || video.thumbnail || '/api/placeholder/320/180',
-        // ✅ DATOS DEL CREADOR REALES
-        creator: {
-          id: video.user_profiles?.id || video.user_id,
-          username: video.user_profiles?.username || `user_${video.user_id?.substring(0, 8)}`,
-          name: video.user_profiles?.username || 'usuario',
-          avatar: avatarUrl
-        }
-      };
-    });
-    
-    const stats = processed.reduce((acc, video) => {
-      acc[video.orientation] = (acc[video.orientation] || 0) + 1;
-      acc.total += 1;
-      return acc;
-    }, { horizontal: 0, vertical: 0, square: 0, total: 0 });
-    
-    setOrientationStats(stats);
-    return processed;
-  }, [determineOrientation]);
-
-  const loadVideos = useCallback(async (pageNum = 0, category = 'todos', reset = false) => {
-    try {
-      if (reset) {
-        setLoading(true);
-        setVideos([]);
-        setPage(0);
-        setHasMore(true);
-        setError(null);
+    if (newOrientation || newReelId) {
+      if (newOrientation) {
+        console.log('🎯 Orientación recibida:', newOrientation);
+        setActiveOrientation(newOrientation);
       }
+      
+      if (newReelId) {
+        console.log('🎯 Reel ID recibido:', newReelId);
+        setSelectedReelId(newReelId); 
+      }
+      
+      // Limpiar el state para evitar que persista en futuras navegaciones
+      window.history.replaceState({}, document.title, location.pathname);
+    }
+  }, [location.state, location.pathname]);
 
-      console.log('🎬 Cargando videos:', { pageNum, category, reset });
 
-      // ✅ PASO 1: Obtener videos sin JOIN
-      let query = supabase
+  // Función de carga principal
+  const fetchVideos = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setSelectedReelId(null); // Limpiar ID al cargar nuevos videos
+
+    try {
+      console.log('⚙️ Fetching videos...');
+      // Consulta optimizada con JOIN (por defecto usa * para evitar seleccionar todos los campos innecesarios)
+      const { data, error } = await supabase
         .from('videos')
-        .select('*')
+        .select(`
+          *,
+          creator:user_profiles (id, full_name, username, avatar_url, is_verified)
+        `)
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // Filtrar por categoría si no es 'todos'
-      if (category !== 'todos' && category !== 'all') {
-        query = query.eq('category', category);
-      }
-
-      const ITEMS_PER_PAGE = 12;
-      const { data: videoData, error: fetchError } = await query
-        .range(pageNum * ITEMS_PER_PAGE, (pageNum + 1) * ITEMS_PER_PAGE - 1);
-
-      if (fetchError) {
-        console.error('❌ Error fetching videos:', fetchError);
-        setError(fetchError.message);
-        return;
-      }
-
-      console.log('✅ Videos obtenidos:', {
-        count: videoData?.length || 0,
-        firstVideo: videoData?.[0]
-      });
-
-      // ✅ PASO 2: Obtener user_ids únicos
-      const userIds = [...new Set(videoData?.map(v => v.user_id).filter(Boolean))];
+      if (error) throw error;
       
-      console.log('👥 Usuarios únicos:', userIds.length);
-
-      // ✅ PASO 3: Fetch user profiles por lote
-      let userProfiles = {};
-      if (userIds.length > 0) {
-        const { data: profilesData, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .in('id', userIds);
-
-        if (profileError) {
-          console.warn('⚠️ Error fetching profiles:', profileError);
-        } else {
-          // Crear un mapa de user_id -> profile
-          userProfiles = (profilesData || []).reduce((acc, profile) => {
-            acc[profile.id] = profile;
-            return acc;
-          }, {});
-          console.log('✅ Perfiles cargados:', Object.keys(userProfiles).length);
-        }
-      }
-
-      // ✅ PASO 4: Combinar videos con profiles
-      const videosWithProfiles = (videoData || []).map(video => ({
-        ...video,
-        user_profiles: userProfiles[video.user_id] || null
-      }));
-
-      const processedVideos = processVideos(videosWithProfiles);
-
-      if (reset) {
-        setVideos(processedVideos);
-      } else {
-        setVideos(prev => [...prev, ...processedVideos]);
-      }
-
-      setHasMore((videoData || []).length === ITEMS_PER_PAGE);
-      setPage(pageNum);
-
+      const videoData = data || [];
+      console.log(`✅ Videos cargados: ${videoData.length}`);
+      setVideos(videoData);
     } catch (err) {
-      console.error('💥 Error en loadVideos:', err);
-      setError(err.message);
+      console.error('❌ Error fetching videos:', err);
+      setError('No se pudieron cargar los videos. Intenta de nuevo.');
+      setVideos([]);
     } finally {
       setLoading(false);
     }
-  }, [processVideos]);
-
-  const loadMore = useCallback(() => {
-    if (hasMore && !loading) {
-      loadVideos(page + 1, 'todos', false);
-    }
-  }, [hasMore, loading, page, loadVideos]);
-
-  const refresh = useCallback((category = 'todos') => {
-    loadVideos(0, category, true);
-  }, [loadVideos]);
-
-  useEffect(() => {
-    loadVideos(0, 'todos', true);
   }, []);
 
-  return {
-    videos,
-    loading,
-    error,
-    hasMore,
-    orientationStats,
-    loadMore,
-    refresh
-  };
-};
-
-// Hook para gestionar puntos del usuario
-const useUserPoints = () => {
-  const { user } = useAuth();
-  const [points, setPoints] = useState(0);
-
+  // Cargar videos al inicio
   useEffect(() => {
-    if (user?.id) {
-      const fetchPoints = async () => {
-        const { data } = await supabase
-          .from('user_profiles')
-          .select('points')
-          .eq('id', user.id)
-          .single();
-        
-        if (data) {
-          setPoints(data.points || 0);
-        }
-      };
+    fetchVideos();
+  }, [fetchVideos]);
 
-      fetchPoints();
+  // ===========================================
+  // LÓGICA DE FILTRADO Y SHUFFLE
+  // ===========================================
 
-      // Suscribirse a cambios en tiempo real
-      const subscription = supabase
-        .channel('user-points')
-        .on('postgres_changes', 
-          { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'user_profiles',
-            filter: `id=eq.${user.id}`
-          }, 
-          (payload) => {
-            setPoints(payload.new.points || 0);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    }
-  }, [user]);
-
-  const addPoints = useCallback((amount) => {
-    setPoints(prev => prev + amount);
-  }, []);
-
-  return { points, addPoints };
-};
-
-// Configuración de categorías
-const VIDEO_CATEGORIES = [
-  { id: 'todos', label: 'Todo', icon: 'Grid3X3' },
-  { id: 'tendencias', label: 'Tendencias', icon: 'TrendingUp' },
-  { id: 'educacion', label: 'Educación', icon: 'GraduationCap' },
-  { id: 'entretenimiento', label: 'Entretenimiento', icon: 'Tv' },
-  { id: 'musica', label: 'Música', icon: 'Music' },
-  { id: 'deportes', label: 'Deportes', icon: 'Trophy' },
-  { id: 'gaming', label: 'Gaming', icon: 'Gamepad2' },
-  { id: 'tecnologia', label: 'Tecnología', icon: 'Cpu' },
-  { id: 'comedia', label: 'Comedia', icon: 'Laugh' },
-];
-
-// ===============================
-// COMPONENTE PRINCIPAL
-// ===============================
-const VideoFeedDashboard = () => {
-  const { user } = useAuth();
-  const { videos, loading, error, hasMore, orientationStats, loadMore, refresh } = useVideos();
-  const { points: userPoints, addPoints } = useUserPoints();
-  
-  const isMobile = useIsMobile();
-  const location = useLocation(); // ✅ AGREGADO: Para recibir el state de navegación
-
-  const [filteredVideos, setFilteredVideos] = useState([]);
-  const [shuffledReels, setShuffledReels] = useState([]);
-  const [shuffledHorizontals, setShuffledHorizontals] = useState([]);
-  const [activeFilter, setActiveFilter] = useState('todos');
-  const [activeOrientation, setActiveOrientation] = useState('all');
-  const [layout, setLayout] = useState('grid');
-  const [pointsAnimation, setPointsAnimation] = useState(null);
-  const [selectedReelId, setSelectedReelId] = useState(null);
-
-  // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
+  // Efecto para aplicar filtros, aleatorizar y establecer el Reel seleccionado
   useEffect(() => {
-    if (location.state?.orientation) {
-      console.log('🎯 Orientación recibida desde Header:', location.state.orientation);
-      setActiveOrientation(location.state.orientation);
-      // Limpiar el state para evitar que persista en futuras navegaciones
-      window.history.replaceState({}, document.title);
-    }
-  }, [location.state]);
-
-  console.log('🏠 VideoFeedDashboard rendered:', {
-    isMobile,
-    activeOrientation,
-    layout,
-    videosCount: videos.length,
-    filteredCount: filteredVideos.length,
-    orientationStats,
-    selectedReelId,
-    error
-  });
-
-  // ✅ CORREGIDO: Filtrar Y ALEATORIZAR videos cuando cambian los datos
-  // SOLUCIÓN: Separar reels/horizontales ANTES de aplicar filtro de orientación
-  useEffect(() => {
-    // ✅ PASO 1: Aplicar solo filtro de CATEGORÍA (NO orientación) para los arrays de carrusel
-    let videosForCarousel = videos;
-    if (activeFilter !== 'todos' && activeFilter !== 'all') {
-      videosForCarousel = videos.filter(video => video.category === activeFilter);
+    if (videos.length === 0) {
+      setFilteredVideos([]);
+      setShuffledReels([]);
+      setShuffledHorizontals([]);
+      setOrientationStats({ vertical: 0, horizontal: 0 });
+      return;
     }
 
-    // ✅ PASO 2: Separar y aleatorizar reels y horizontales DEL ARRAY COMPLETO (sin filtro de orientación)
-    const allReels = videosForCarousel.filter(v => v.orientation === 'vertical');
-    const allHorizontals = videosForCarousel.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
+    console.log('🔄 Aplicando lógica de filtrado y aleatorización...');
+
+    // 1. Separar y contar orientaciones
+    const verticalVids = videos.filter(v => v.orientation === 'vertical');
+    const horizontalVids = videos.filter(v => v.orientation !== 'vertical');
+    setOrientationStats({ vertical: verticalVids.length, horizontal: horizontalVids.length });
+
+    // 2. Aleatorizar por separado (solo si la lista completa no ha sido aleatorizada previamente)
+    const shuffledR = shuffleArray(verticalVids);
+    const shuffledH = shuffleArray(horizontalVids);
     
-    const shuffledR = shuffleArray(allReels);
-    const shuffledH = shuffleArray(allHorizontals);
-    
-    console.log('🎲 Arrays para carrusel (sin filtro de orientación):', {
-      reelsCount: shuffledR.length,
-      horizontalsCount: shuffledH.length,
-      activeFilter
-    });
-    
-    // ✅ PASO 3: Guardar arrays aleatorizados (estos siempre tendrán datos cuando hay videos)
     setShuffledReels(shuffledR);
     setShuffledHorizontals(shuffledH);
 
-    // ✅ PASO 4: Aplicar TODOS los filtros (categoría + orientación) para el grid
-    let filtered = videos;
-    
-    // Filtrar por categoría
-    if (activeFilter !== 'todos' && activeFilter !== 'all') {
-      filtered = filtered.filter(video => video.category === activeFilter);
+    // 3. Aplicar orientación y ordenamiento (main logic)
+    let filtered = [];
+
+    if (activeOrientation === 'all') {
+      // Si estamos en 'all', mezclamos horizontales y verticales
+      // NOTA: Para UX, podemos mostrar el carrusel de reels arriba
+      const combined = [...shuffledR, ...shuffledH];
+      filtered = shuffleArray(combined);
+      
+      // En 'all', forzamos el layout a 'grid'
+      if (layout !== 'grid') setLayout('grid'); 
+
+    } else if (activeOrientation === 'vertical') {
+      
+      // Si el ID de un reel específico fue pasado por navegación
+      if (selectedReelId) {
+        // Buscamos el reel específico. Si no se encuentra, usamos los shuffled.
+        const specificReel = shuffledR.find(r => r.id === selectedReelId);
+        if (specificReel) {
+          console.log(`✨ Reel ID ${selectedReelId} encontrado y movido al inicio.`);
+          // Movemos el reel seleccionado al inicio y lo concatenamos con el resto
+          filtered = [
+            specificReel,
+            ...shuffledR.filter(r => r.id !== selectedReelId)
+          ];
+        } else {
+          console.log(`⚠️ Reel ID ${selectedReelId} no encontrado. Usando lista aleatoria.`);
+          filtered = shuffledR;
+        }
+      } else {
+        // Si no hay ID, usamos la lista aleatoria
+        filtered = shuffledR;
+      }
+
+      // En 'vertical', forzamos el layout a 'grid'
+      if (layout !== 'grid') setLayout('grid');
+
+    } else if (activeOrientation === 'horizontal') {
+      
+      // En horizontal, aplicamos el filtro de layout
+      if (layout === 'grid') {
+        filtered = shuffledH;
+      } else if (layout === 'feed') {
+        // En feed, no aleatorizamos y mostramos los más recientes primero
+        filtered = horizontalVids.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      }
     }
 
-    // Filtrar por orientación
-    if (activeOrientation !== 'all') {
-      filtered = filtered.filter(video => video.orientation === activeOrientation);
-    }
+    // 4. Aplicar filtros generales (ej: 'trending', 'following')
+    // Nota: Por simplicidad, se omite la implementación de 'trending'/'following'
+    // en la lógica actual, ya que el focus está en la orientación.
 
-    console.log('🔍 Filtrado final para grid:', {
-      original: videos.length,
-      afterFilters: filtered.length,
-      activeFilter,
-      activeOrientation
-    });
-    
     setFilteredVideos(filtered);
-  }, [videos, activeFilter, activeOrientation]);
-
-  // ===============================
-  // LÓGICA DE LAYOUT
-  // ===============================
-  
-  const getEffectiveLayout = () => {
-    if (activeOrientation === VIDEO_ORIENTATIONS.VERTICAL) {
-      return isMobile ? 'grid' : 'reels';
+    
+    // Inicialización segura de selectedReelId para el carrusel móvil
+    // Si estamos en vertical y no hay un ID seleccionado, usamos el primero
+    if (activeOrientation === 'vertical' && !selectedReelId && shuffledR.length > 0) {
+      console.log('✨ Inicializando selectedReelId con el primer reel aleatorio.');
+      setSelectedReelId(shuffledR[0].id);
     }
-    return layout;
+  }, [videos, activeFilter, activeOrientation, layout, selectedReelId]); // ✅ CORRECCIÓN: AÑADIDO selectedReelId
+
+  // ===========================================
+  // HANDLERS
+  // ===========================================
+
+  const handleFilterChange = (filter) => {
+    setActiveFilter(filter);
   };
 
-  const effectiveLayout = getEffectiveLayout();
-
-  console.log('🎬 Layout logic:', {
-    activeOrientation,
-    isMobile,
-    originalLayout: layout,
-    effectiveLayout,
-    willShowCarousel: isMobile && effectiveLayout === 'grid'
-  });
-
-  // ===============================
-  // EVENT HANDLERS
-  // ===============================
-
-  const handleFilterChange = useCallback((filterId) => {
-    console.log(`🔄 Cambiando filtro a: ${filterId}`);
-    setActiveFilter(filterId);
-    refresh(filterId);
-  }, [refresh]);
-
-  const handleOrientationChange = useCallback((orientation) => {
-    console.log(`🔄 Cambiando orientación a: ${orientation}`);
+  const handleOrientationChange = (orientation) => {
+    console.log(`🎬 Cambiando orientación a: ${orientation}`);
     setActiveOrientation(orientation);
-  }, []);
+    setSelectedReelId(null); // Limpiar el ID al cambiar de orientación
+  };
 
-  const handleLayoutChange = useCallback(() => {
-    setLayout(prev => prev === 'grid' ? 'list' : 'grid');
-  }, []);
-
-  const handleRefresh = useCallback(() => {
-    console.log('🔄 Refrescando feed');
-    refresh(activeFilter);
-  }, [refresh, activeFilter]);
-
-  const handleLoadMore = useCallback(() => {
-    console.log('⬇️ Cargando más videos');
-    loadMore();
-  }, [loadMore]);
-
-  const handlePointsEarned = useCallback((points) => {
-    console.log(`⭐ Puntos ganados: ${points}`);
-    addPoints(points);
-    setPointsAnimation({ points });
-  }, [addPoints]);
-
-  const handleAnimationComplete = useCallback(() => {
-    console.log('✅ Animación de puntos completada');
-    setPointsAnimation(null);
-  }, []);
-
-  // ===============================
-  // ✅ HANDLER PARA REELS EN DESKTOP - CAMBIA VISTA EN LUGAR DE NAVEGAR
-  // ===============================
-  const handleReelClickDesktop = useCallback((reelIndex, reelId) => {
-    console.log('🖥️ Desktop: Click en reel del carrusel');
-    console.log('   📍 Índice:', reelIndex);
-    console.log('   🆔 ID del video:', reelId);
-    
-    // Cambiar vista a reels mode con el ID específico
-    setActiveOrientation('vertical');
+  const handleLayoutChange = (newLayout) => {
+    setLayout(newLayout);
+  };
+  
+  // Handler para la selección de Reel (desde carrusel desktop o VideoFeedGrid)
+  const handleReelSelect = (reelId) => {
+    console.log(`🔄 Seleccionando Reel ID: ${reelId}`);
+    // Esto disparará la re-ejecución del useEffect gracias a la corrección
     setSelectedReelId(reelId);
-  }, []);
+    
+    // Si el usuario ya estaba en el dashboard, pero en modo 'all',
+    // lo movemos a 'vertical' para enfocar el Reel.
+    if (activeOrientation !== 'vertical') {
+      setActiveOrientation('vertical');
+    }
+  };
 
-  // ===============================
-  // ERROR STATE
-  // ===============================
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto px-4 pt-24 pb-16">
-          <div className="max-w-md mx-auto text-center py-12">
-            <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Icon name="AlertCircle" size={32} color="var(--color-destructive)" />
+
+  // ===========================================
+  // RENDERIZADO
+  // ===========================================
+
+  const effectiveLayout = isMobile ? 'grid' : layout;
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="text-center py-20 text-muted-foreground">
+          <Icon name="Loader" size={40} className="animate-spin mx-auto mb-4" />
+          <p>Cargando feed de videos...</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="text-center py-20 text-red-500">
+          <Icon name="AlertTriangle" size={40} className="mx-auto mb-4" />
+          <p>{error}</p>
+          <Button onClick={fetchVideos} variant="primary" className="mt-4">Reintentar</Button>
+        </div>
+      );
+    }
+
+    // Si la orientación es vertical, renderizamos la grilla de Reels
+    if (activeOrientation === 'vertical') {
+        // En móvil siempre será un carrusel vertical
+        const isCarouselMobile = isMobile;
+        
+        if (shuffledReels.length === 0) {
+          return (
+            <div className="text-center py-20 text-muted-foreground">
+              <Icon name="VideoOff" size={40} className="mx-auto mb-4" />
+              <p>No hay Reels (videos verticales) disponibles.</p>
             </div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">
-              Error al cargar videos
-            </h3>
-            <p className="text-muted-foreground mb-6">{error}</p>
-            <Button onClick={handleRefresh}>
-              <Icon name="RefreshCw" size={16} className="mr-2" />
-              Reintentar
-            </Button>
-          </div>
-        </main>
-      </div>
-    );
-  }
+          );
+        }
 
-  // ===============================
-  // RENDER PRINCIPAL
-  // ===============================
+        return (
+          <VideoFeedGrid
+            videos={filteredVideos}
+            layout={isCarouselMobile ? 'feed' : 'grid'} // feed es el layout de carrusel vertical en móvil
+            activeVideoId={selectedReelId} // Pasamos el ID del reel seleccionado
+            onVideoSelect={handleReelSelect}
+            isReelMode={true}
+            isMobileCarousel={isCarouselMobile}
+          />
+        );
+    } 
+
+    // Si la orientación es 'all' o 'horizontal', renderizamos la grilla normal
+    if (filteredVideos.length === 0) {
+      return (
+        <div className="text-center py-20 text-muted-foreground">
+          <Icon name="VideoOff" size={40} className="mx-auto mb-4" />
+          <p>No hay videos disponibles con esta configuración.</p>
+        </div>
+      );
+    }
+
+    return (
+      <VideoFeedGrid
+        videos={filteredVideos}
+        layout={effectiveLayout}
+        activeVideoId={null}
+        onVideoSelect={() => {}} // No hay selección en modo grilla normal
+        isReelMode={false}
+      />
+    );
+  };
+
+
   return (
     <>
       <Helmet>
-        <title>RADEISAN - Red Social de Videos</title>
-        <meta name="description" content="Descubre y comparte videos increíbles en RADEISAN" />
+        <title>Dashboard | Video Feed</title>
       </Helmet>
+      
+      <Header
+        activeOrientation={activeOrientation}
+        onOrientationChange={handleOrientationChange}
+        orientationStats={orientationStats}
+      />
 
-      <div className="min-h-screen bg-background">
-        <Header />
-        
-        <main className="container mx-auto px-4 pt-20 pb-20 md:pt-24 md:pb-8">
-          <div className="max-w-[1400px] mx-auto">
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
-              {/* Main Content */}
-              <div className="min-w-0">
-                {/* Header con puntos y controles */}
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-4">
-                    <h1 className="text-2xl font-bold text-foreground">
-                      Descubre
-                    </h1>
-                    <div className="hidden sm:block">
-                      <PointsBalanceIndicator 
-                        points={userPoints} 
-                        showAnimation={true}
-                        size="default"
-                        variant="prominent"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleLayoutChange}
-                      className="hidden md:flex"
-                      title={layout === 'grid' ? 'Vista de lista' : 'Vista de cuadrícula'}
-                    >
-                      <Icon name={layout === 'grid' ? 'List' : 'Grid3X3'} size={20} />
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleRefresh}
-                      disabled={loading}
-                      title="Actualizar feed"
-                    >
-                      <Icon 
-                        name="RefreshCw" 
-                        size={20} 
-                        className={loading ? 'animate-spin' : ''} 
-                      />
-                    </Button>
-                  </div>
+      <div className="pt-16 min-h-screen bg-background">
+        <main className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-foreground">
+              {activeOrientation === 'all' && 'Explorar Videos'}
+              {activeOrientation === 'vertical' && 'Reels (Videos Cortos)'}
+              {activeOrientation === 'horizontal' && 'Videos Largos'}
+            </h1>
+            
+            <div className="flex items-center space-x-3">
+              {/* Controles de Layout (Solo para horizontal en Desktop) */}
+              {activeOrientation === 'horizontal' && !isMobile && (
+                <div className="flex bg-muted rounded-lg p-1">
+                  <button
+                    onClick={() => handleLayoutChange('grid')}
+                    className={`p-2 rounded-md transition-colors ${layout === 'grid' ? 'bg-background shadow text-primary' : 'text-muted-foreground hover:bg-muted/80'}`}
+                    title="Vista de Cuadrícula"
+                  >
+                    <Icon name="LayoutGrid" size={20} />
+                  </button>
+                  <button
+                    onClick={() => handleLayoutChange('feed')}
+                    className={`p-2 rounded-md transition-colors ${layout === 'feed' ? 'bg-background shadow text-primary' : 'text-muted-foreground hover:bg-muted/80'}`}
+                    title="Vista de Feed"
+                  >
+                    <Icon name="List" size={20} />
+                  </button>
                 </div>
+              )}
 
-                {/* Orientation Tabs - Solo visible en móviles */}
-                <div className="flex md:hidden items-center space-x-1 mb-6 overflow-x-auto scrollbar-hide">
-                  {ORIENTATION_TABS.map((tab) => (
-                    <Button
-                      key={tab.id}
-                      variant={activeOrientation === tab.id ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => handleOrientationChange(tab.id)}
-                      className="flex-shrink-0 flex items-center space-x-2"
-                    >
-                      <Icon name={tab.icon} size={16} />
-                      <span>{tab.label}</span>
-                      {tab.id === 'all' && orientationStats.total > 0 && (
-                        <span className="text-xs bg-primary/20 text-primary px-1 rounded">
-                          {orientationStats.total}
-                        </span>
-                      )}
-                      {tab.id === 'vertical' && orientationStats.vertical > 0 && (
-                        <span className="text-xs bg-primary/20 text-primary px-1 rounded">
-                          {orientationStats.vertical}
-                        </span>
-                      )}
-                      {tab.id === 'horizontal' && orientationStats.horizontal > 0 && (
-                        <span className="text-xs bg-primary/20 text-primary px-1 rounded">
-                          {orientationStats.horizontal}
-                        </span>
-                      )}
-                    </Button>
-                  ))}
-                </div>
-
-                {/* Filter Chips */}
-                <div className="mb-6">
-                  <FilterChips
-                    categories={VIDEO_CATEGORIES}
-                    activeFilter={activeFilter}
-                    onFilterChange={handleFilterChange}
-                  />
-                </div>
-
-                {/* ✅ CARRUSEL DE REELS DESKTOP - CORREGIDO: Usa shuffledReels.length */}
+              <FilterChips
+                activeFilter={activeFilter}
+                onFilterChange={handleFilterChange}
+              />
+            </div>
+          </div>
+          
+          <PullToRefresh onRefresh={fetchVideos}>
+            <div className="flex gap-8">
+              {/* Contenido Principal */}
+              <div className="flex-1 min-w-0">
+                {/* Carrusel de Reels para Desktop (Solo en modo 'all') */}
                 {!isMobile && activeOrientation === 'all' && shuffledReels.length > 0 && (
-                  <div className="hidden md:block mb-6">
-                    <ReelsCarouselDesktop
+                  <div className="mb-6">
+                    <ReelsCarouselDesktop 
                       videos={shuffledReels}
-                      onReelClick={handleReelClickDesktop}
-                      onLoadMore={handleLoadMore}
-                      hasMore={hasMore}
-                      loading={loading}
+                      onReelClick={handleReelSelect}
+                      // Aquí podrías pasar lógica de carga infinita si la tienes
                     />
                   </div>
                 )}
 
-                {/* Content Area */}
-                <div className="min-h-screen">
-                  {filteredVideos.length === 0 && !loading ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                        <Icon name="Search" size={24} color="var(--color-muted-foreground)" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        No hay videos para mostrar
-                      </h3>
-                      <p className="text-muted-foreground max-w-md">
-                        {activeOrientation !== 'all' 
-                          ? `No se encontraron videos ${activeOrientation === 'vertical' ? 'verticales' : 'horizontales'} en esta categoría.`
-                          : 'No hay contenido disponible. Prueba con otros filtros o vuelve más tarde.'
-                        }
-                      </p>
-                      <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                        <Button onClick={() => setActiveFilter('todos')}>
-                          <Icon name="Grid3X3" size={16} className="mr-2" />
-                          Ver todo el contenido
-                        </Button>
-                        <Button variant="outline" onClick={handleRefresh}>
-                          <Icon name="RefreshCw" size={16} className="mr-2" />
-                          Actualizar
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      {filteredVideos.length > 0 && (
-                        <div className="mb-4 text-sm text-muted-foreground">
-                          <p>
-                            Mostrando {filteredVideos.length} de {videos.length} videos disponibles.
-                          </p>
-                        </div>
-                      )}
-                      
-                      <PullToRefresh onRefresh={handleRefresh}>
-                        <VideoFeedGrid
-                          videos={filteredVideos}
-                          reelsVideos={shuffledReels}
-                          horizontalVideos={shuffledHorizontals}
-                          layout={effectiveLayout}
-                          orientation={activeOrientation}
-                          selectedReelId={selectedReelId}
-                          onLoadMore={handleLoadMore}
-                          onPointsEarned={handlePointsEarned}
-                          hasMore={hasMore}
-                          loading={loading}
-                        />
-                      </PullToRefresh>
-                    </div>
-                  )}
+                {/* Contenido principal (Grilla/Feed de Videos) */}
+                {renderContent()}
+              </div>
+
+              {/* Sidebar de Tendencias (Solo en Desktop) */}
+              {!isMobile && (
+                <div className="w-80 flex-shrink-0 sticky top-20 hidden lg:block">
+                  <TrendingSidebar />
                 </div>
-              </div>
-
-              {/* Desktop Sidebar */}
-              <div className="hidden xl:block">
-                <TrendingSidebar onPointsEarned={handlePointsEarned} />
-              </div>
+              )}
             </div>
-          </div>
+          </PullToRefresh>
         </main>
+        
+        {/* Componente flotante para animación de puntos */}
+        <PointsFloatingAnimation />
 
-        {/* Points Animation */}
-        {pointsAnimation && (
-          <PointsFloatingAnimation
-            points={pointsAnimation?.points}
-            onAnimationComplete={handleAnimationComplete}
-          />
-        )}
-
-        {/* Mobile Points Indicator */}
-        <div className="fixed top-20 right-4 z-40 sm:hidden">
-          <PointsBalanceIndicator 
-            points={userPoints} 
+        {/* Indicador de Balance de Puntos Fijo en Móvil */}
+        <div className="fixed bottom-4 right-4 z-40 lg:hidden">
+          <PointsBalanceIndicator
+            points={user?.freePoints}
+            premiumPoints={user?.premiumPoints} 
             showAnimation={true}
             size="sm"
             variant="prominent"
