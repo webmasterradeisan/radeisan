@@ -3,6 +3,7 @@
 // VERSION FINAL ESTABLE
 // ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
 // ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
+// ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -24,6 +25,8 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
+// ✅ NUEVA IMPORTACIÓN
+import GiftPointsModal from 'components/GiftPointsModal'; 
 
 // Definición de la animación simple para el feedback 
 const styleSheet = document.styleSheets[0] || document.createElement('style');
@@ -65,6 +68,9 @@ const VideoPlayerPage = () => {
     views: 0,
     comments: 0
   });
+  
+  // ✅ NUEVO ESTADO: Control del Modal de Regalo
+  const [showGiftModal, setShowGiftModal] = useState(false); 
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -793,6 +799,25 @@ const VideoPlayerPage = () => {
       }
     }
   };
+  
+  // ✅ NUEVA FUNCIÓN: Abrir Modal de Regalo
+  const handleGift = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (user.id === video.user_id) {
+      showUserFeedback('No puedes regalar puntos a tu propio video.', 'restriction');
+      return;
+    }
+    setShowGiftModal(true);
+  };
+  
+  // ✅ NUEVA FUNCIÓN: Manejar el éxito del regalo
+  const handleGiftSuccess = (amount) => {
+    showUserFeedback(`¡Regalo enviado! ${amount} puntos para el creador.`, 'success');
+    // Si necesitas actualizar cualquier contador del video (ej. contador de regalos), hazlo aquí.
+  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareLink);
@@ -1390,6 +1415,19 @@ const VideoPlayerPage = () => {
                         <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span>
                       </button>
                     </div>
+                    
+                    {/* ✅ NUEVO BOTÓN: Regalar Puntos */}
+                    {user?.id !== video.user_id && (
+                        <button
+                            onClick={handleGift}
+                            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"
+                            title="Regalar Puntos al Creador"
+                        >
+                            <span className="text-lg font-extrabold text-yellow-600 mr-0.5 leading-none">R</span>
+                            <Icon name="Gift" size={18} className="fill-current text-yellow-600" />
+                            <span className="font-medium text-sm hidden sm:inline">Regalar</span>
+                        </button>
+                    )}
 
                     <button
                       onClick={handleShare}
@@ -1635,8 +1673,8 @@ const VideoPlayerPage = () => {
           </div>
         </div>
       </div>
-
-      {/* MINI-PLAYER FLOTANTE */}
+      
+      {/* MINI-PLAYER FLOTANTE (sin cambios) */}
       {isMinimized && video && (
         <div
           ref={miniPlayerRef}
@@ -1748,7 +1786,7 @@ const VideoPlayerPage = () => {
         </div>
       )}
 
-      {/* Modal de compartir */}
+      {/* Modal de compartir (sin cambios) */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-lg max-w-md w-full p-4 md:p-6">
@@ -1824,6 +1862,17 @@ const VideoPlayerPage = () => {
           </div>
         </div>
       )}
+      
+      {/* ✅ NUEVO: MODAL DE REGALO DE PUNTOS */}
+      <GiftPointsModal
+        isOpen={showGiftModal}
+        onClose={() => setShowGiftModal(false)}
+        receiverId={video.user_id}
+        receiverUsername={video.creator?.username || video.creator?.name || 'Creador'}
+        contentId={videoId}
+        contentType="video"
+        onSuccess={handleGiftSuccess}
+      />
     </>
   );
 };
