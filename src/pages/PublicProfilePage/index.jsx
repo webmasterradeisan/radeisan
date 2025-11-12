@@ -1,5 +1,6 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ CORREGIDO: Lógica de carga de fotos para PublicProfilePage
+// ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
+// ✅ CORREGIDO: Lógica de carga de fotos defensiva para evitar errores de JOIN en Supabase.
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -80,18 +81,29 @@ const PublicProfilePage = () => {
       }
       
       // =========================================================================
-      // ✅ CORRECCIÓN DE LA CARGA DE FOTOS
-      // Aseguramos que cargue la foto y los datos del usuario que la creó (el perfil actual)
+      // ✅ CORRECCIÓN DE LA CARGA DE FOTOS (Simplificación de consulta)
       // =========================================================================
-      const { data: photosData, error: photosError } = await supabase
+      const { data: rawPhotosData, error: photosError } = await supabase
         .from('photos')
-        .select('*, user_profiles(id, username, full_name)') 
-        .eq('user_id', profile.id) // Cargar solo las fotos del usuario actual
+        .select('*') // Consulta más simple para evitar el error de JOIN/RLS
+        .eq('user_id', profile.id)
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
       if (photosError) throw photosError;
-      setUserPhotos(photosData || []);
+      
+      // Manualmente adjuntamos los datos del perfil a cada foto 
+      // para que el PhotoDetailModal funcione correctamente.
+      const photosWithProfile = (rawPhotosData || []).map(photo => ({
+          ...photo,
+          user_profiles: {
+              id: profile.id,
+              username: profile.username,
+              full_name: profile.full_name,
+          }
+      }));
+
+      setUserPhotos(photosWithProfile);
       // =========================================================================
 
       const { data: videosData } = await supabase
@@ -139,7 +151,7 @@ const PublicProfilePage = () => {
         bio: profile.bio,
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
-        photosCount: (photosData || []).length, // ✅ Usar el conteo real de fotos
+        photosCount: (photosWithProfile || []).length, // Usar el conteo corregido
         videosCount: horizontalOnly.length,
         reelsCount: verticalVideos.length,
         totalViews: totalViews,
@@ -152,7 +164,8 @@ const PublicProfilePage = () => {
       setLoading(false);
     } catch (err) {
       console.error('❌ Error al cargar perfil:', err);
-      setError('Error al cargar el perfil');
+      // Cambiamos el mensaje a uno más genérico si el error no es "Usuario no encontrado"
+      setError(err.message === 'Usuario no encontrado' ? 'Usuario no encontrado' : 'Error al cargar el perfil');
       setLoading(false);
     }
   };
