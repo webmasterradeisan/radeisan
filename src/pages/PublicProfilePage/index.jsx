@@ -1,6 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
-// ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
-// ✅ CORREGIDO: Lógica para abrir PhotoDetailModal
+// ✅ CORREGIDO: Lógica de carga de fotos para PublicProfilePage
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -12,7 +11,6 @@ import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 import Image from '../../components/AppImage';
 import useIsMobile from '../../hooks/useIsMobile';
-// ✅ NUEVA IMPORTACIÓN
 import PhotoDetailModal from '../../components/PhotoDetailModal'; 
 
 const PublicProfilePage = () => {
@@ -31,7 +29,6 @@ const PublicProfilePage = () => {
   const [userPhotos, setUserPhotos] = useState([]);
   const [activeTab, setActiveTab] = useState('videos');
   
-  // ✅ NUEVOS ESTADOS PARA EL MODAL DE FOTOS
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
   const [showPhotoModal, setShowPhotoModal] = useState(false); 
 
@@ -81,6 +78,21 @@ const PublicProfilePage = () => {
         navigate('/profile');
         return;
       }
+      
+      // =========================================================================
+      // ✅ CORRECCIÓN DE LA CARGA DE FOTOS
+      // Aseguramos que cargue la foto y los datos del usuario que la creó (el perfil actual)
+      // =========================================================================
+      const { data: photosData, error: photosError } = await supabase
+        .from('photos')
+        .select('*, user_profiles(id, username, full_name)') 
+        .eq('user_id', profile.id) // Cargar solo las fotos del usuario actual
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+
+      if (photosError) throw photosError;
+      setUserPhotos(photosData || []);
+      // =========================================================================
 
       const { data: videosData } = await supabase
         .from('videos')
@@ -96,17 +108,10 @@ const PublicProfilePage = () => {
 
       const verticalVideos = processedVideos.filter(v => v.orientation === 'vertical');
       const horizontalOnly = processedVideos.filter(v => v.orientation === 'horizontal' || v.orientation === 'square');
-
+      
       setAllVideos(processedVideos);
       setReels(verticalVideos);
       setHorizontalVideos(horizontalOnly);
-
-      const { data: photosData } = await supabase
-        .from('photos')
-        .select('*, user_profiles(id, username, full_name)') // ✅ Incluye perfil para el modal
-        .eq('user_id', profile.id)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
 
       if (currentUser) {
         const { data: followData } = await supabase
@@ -134,7 +139,7 @@ const PublicProfilePage = () => {
         bio: profile.bio,
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
-        photosCount: photosData?.length || 0,
+        photosCount: (photosData || []).length, // ✅ Usar el conteo real de fotos
         videosCount: horizontalOnly.length,
         reelsCount: verticalVideos.length,
         totalViews: totalViews,
@@ -144,7 +149,6 @@ const PublicProfilePage = () => {
         created_at: profile.created_at,
       });
 
-      setUserPhotos(photosData || []);
       setLoading(false);
     } catch (err) {
       console.error('❌ Error al cargar perfil:', err);
@@ -191,7 +195,6 @@ const PublicProfilePage = () => {
     }
   };
   
-  // ✅ NUEVOS HANDLERS PARA EL MODAL DE FOTOS
   const handlePhotoClick = useCallback((index) => {
     setSelectedPhotoIndex(index);
     setShowPhotoModal(true);
@@ -275,7 +278,7 @@ const PublicProfilePage = () => {
 
         <main className="pt-16">
           <div className="max-w-6xl mx-auto">
-            {/* ✅ HEADER - Portada arriba, TODO debajo */}
+            {/* HEADER - Portada arriba, TODO debajo */}
             <div className="bg-card border-b border-border">
               {/* Cover Image - AL FONDO */}
               <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
@@ -529,7 +532,7 @@ const PublicProfilePage = () => {
                       {userPhotos.map((photo, index) => (
                         <div 
                           key={photo.id}
-                          // ✅ AÑADIDO: Click handler para abrir el modal
+                          // Click handler para abrir el modal
                           onClick={() => handlePhotoClick(index)} 
                           className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group relative"
                         >
@@ -554,7 +557,7 @@ const PublicProfilePage = () => {
         </main>
       </div>
       
-      {/* ✅ RENDERIZADO DEL MODAL DE FOTOS */}
+      {/* RENDERIZADO DEL MODAL DE FOTOS */}
       {showPhotoModal && selectedPhotoIndex !== null && userPhotos.length > 0 && (
           <PhotoDetailModal 
               photos={userPhotos}
