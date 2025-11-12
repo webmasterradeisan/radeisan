@@ -15,6 +15,29 @@ import CategorySelector from '../video-upload-studio/components/CategorySelector
 import { calculateVideoPointsFull as calculateVideoPoints } from '../../services/pointsService';
 
 // =================================================================
+// FUNCIÓN LOCAL DE PREVISUALIZACIÓN DE PUNTOS (Seguro en el cliente)
+// Esto evita el error de llamada a la función posicional
+// =================================================================
+const calculateLocalPreview = (duration, multiplier, orientation) => {
+    // FÓRMULA DE CAÍDA BASADA EN REGLAS COMUNES (ej. de pointsService.js)
+    const basePoints = 50;
+    const pointsPerMinute = 10;
+    const verticalBonus = 10;
+    
+    const durationPoints = Math.floor(duration / 60) * pointsPerMinute;
+    
+    let subtotal = (basePoints + durationPoints) * multiplier;
+    
+    // Bono por orientación vertical 
+    if (orientation === 'vertical') {
+        subtotal += verticalBonus;
+    }
+    
+    return Math.round(subtotal);
+};
+
+
+// =================================================================
 // ESTADO INICIAL DEL FORMULARIO (para edición)
 // =================================================================
 const initialFormData = {
@@ -60,7 +83,7 @@ const VideoEditStudio = () => {
       setLoading(true);
       console.log('🎬 Cargando datos del video:', videoId);
 
-      // Primero intentamos cargar sin el JOIN para diagnosticar mejor
+      // Paso 1: Cargar datos del video
       const { data: videoData, error: fetchError } = await supabase
         .from('videos')
         .select('*')
@@ -69,23 +92,16 @@ const VideoEditStudio = () => {
 
       if (fetchError) {
         console.error('❌ Error de Supabase:', fetchError);
-        
-        // Si el error es PGRST116, significa que no se encontró el registro
         if (fetchError.code === 'PGRST116') {
-          console.error('❌ Video no encontrado con ID:', videoId);
           setErrors({ general: 'Video no encontrado.' });
           setLoading(false);
-          // Solo redirigir a 404 si realmente no existe el video
           setTimeout(() => navigate('/profile', { replace: true }), 2000);
           return;
         }
-        
-        // Para otros errores, mostrar mensaje pero no redirigir
         throw fetchError;
       }
 
       if (!videoData) {
-        console.error('❌ No se recibieron datos del video');
         setErrors({ general: 'Video no encontrado.' });
         setLoading(false);
         setTimeout(() => navigate('/profile', { replace: true }), 2000);
@@ -102,7 +118,7 @@ const VideoEditStudio = () => {
         return;
       }
 
-      // Cargar la categoría por separado (más seguro)
+      // Paso 2: Cargar la categoría para obtener el multiplicador
       let categoryMultiplier = 1.0;
       if (videoData.category_id) {
         const { data: categoryData } = await supabase
@@ -111,25 +127,26 @@ const VideoEditStudio = () => {
           .eq('id', videoData.category_id)
           .single();
 
-        if (categoryData && categoryData.is_multiplier_enabled !== false) {
-          categoryMultiplier = categoryData.points_multiplier || 1.0;
+        if (categoryData) {
+          // Si el multiplicador está deshabilitado, forzar a 1.0
+          if (categoryData.is_multiplier_enabled === false) {
+             categoryMultiplier = 1.0;
+          } else {
+             categoryMultiplier = categoryData.points_multiplier || 1.0;
+          }
         }
       }
       
-      // Mapear los datos de la BD al estado del formulario
+      // Paso 3: Mapear datos
       setFormData({
         title: videoData.title || '',
         description: videoData.description || '',
         category_id: videoData.category_id || '', 
         tags: videoData.tags?.join(', ') || '',
-        
-        // Datos del video (solo lectura en esta página)
         video_url: videoData.video_url,
         thumbnail_url: videoData.thumbnail_url,
         duration_seconds: videoData.duration_seconds || 0,
         orientation: videoData.orientation || 'horizontal',
-
-        // Multiplicador (usado para la previsualización de puntos)
         points_multiplier: categoryMultiplier,
       });
 
@@ -142,7 +159,6 @@ const VideoEditStudio = () => {
         general: 'Error al cargar el video. Por favor, intenta de nuevo.' 
       });
       setLoading(false);
-      // No redirigir automáticamente, dejar que el usuario vea el error
     }
   }, [videoId, navigate, user]);
 
@@ -163,11 +179,13 @@ const VideoEditStudio = () => {
   // Efecto para recalcular puntos cada vez que cambian los campos relevantes
   useEffect(() => {
     if (formData.duration_seconds > 0) {
-      const calculatedPoints = calculateVideoPoints({
-        duration_seconds: formData.duration_seconds,
-        orientation: formData.orientation,
-        points_multiplier: formData.points_multiplier,
-      });
+      // 🛑 CORRECCIÓN APLICADA: Usamos la función local de cálculo para el preview.
+      const calculatedPoints = calculateLocalPreview(
+        formData.duration_seconds,
+        formData.points_multiplier,
+        formData.orientation
+      );
+      
       setPointsPreview(calculatedPoints);
     } else {
       setPointsPreview(0);
@@ -232,7 +250,7 @@ const VideoEditStudio = () => {
       
       // 2. Éxito
       alert('Video actualizado correctamente. Los puntos serán recalculados en el servidor si la categoría cambió.');
-      // Usar el ID del usuario en el objeto 'user' o asumir una ruta de perfil genérica
+      // Usar el ID del usuario para volver a su perfil
       navigate(`/profile/${user?.id || ''}`); 
 
     } catch (error) {
