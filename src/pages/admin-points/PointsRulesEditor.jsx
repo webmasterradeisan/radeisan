@@ -1,7 +1,7 @@
 // src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
-// ✅ FIX: Alineación de 'video_upload_base' con 'video_base' usado en pointsService.js.
 // ✅ FIX: Lógica de Multiplicadores actualizada para usar 'is_multiplier_enabled'.
+// ✅ REORGANIZACIÓN SEGURA: Agrupación visual de reglas de Subida/Bono para coherencia.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -368,8 +368,8 @@ export default function PointsRulesEditor() {
       profile_complete: 'UserCheck',
       email_verified: 'Mail',
       video_base: 'Upload', 
-      video_upload_per_minute: 'Upload',
-      vertical_video_bonus: 'Upload',
+      video_upload_per_minute: 'Clock',
+      vertical_video_bonus: 'Smartphone',
       video_view: 'Play',
       video_like_received: 'HeartHandshake',
       video_comment_received: 'MessageCircle',
@@ -401,6 +401,19 @@ export default function PointsRulesEditor() {
       </div>
     );
   }
+
+  // Función auxiliar para obtener las reglas de interacción/misceláneas que no son de subida de video
+  const getInteractionRules = () => {
+    const creationRules = [
+        'video_base', 'video_upload_per_minute', 'vertical_video_bonus', 'photo_upload'
+    ];
+    return actionRules.filter(rule => !creationRules.includes(rule.action_type));
+  };
+  
+  const rulesByActionType = actionRules.reduce((acc, rule) => {
+    acc[rule.action_type] = rule;
+    return acc;
+  }, {});
 
   // ============================================================================
   // RENDER PRINCIPAL
@@ -494,7 +507,7 @@ export default function PointsRulesEditor() {
 
         <div className="p-6">
           {/* =================================== */}
-          {/* Tab: Acciones (CORREGIDA)           */}
+          {/* Tab: Acciones (REORGANIZADO SEGURO) */}
           {/* =================================== */}
           {activeTab === 'actions' && (
             <div className="space-y-6">
@@ -507,25 +520,88 @@ export default function PointsRulesEditor() {
                   Define cuántos puntos gratis ganan los usuarios por cada acción
                 </p>
 
-                {/* Renderizado dinámico desde 'actionRules' */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {actionRules.length > 0 ? (
-                    actionRules.map(rule => (
-                      <ActionPointsInput
-                        key={rule.action_type}
-                        icon={getIconForAction(rule.action_type)}
-                        label={rule.action_name}
-                        description={rule.description || `ID: ${rule.action_type}`}
-                        value={rule.points_amount}
-                        onChange={(value) => updateAction(rule.action_type, value)}
-                        highlight={rule.action_type.includes('upload') || rule.action_type.includes('base')}
-                        showInStore={rule.show_in_store}
-                        onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
-                      />
-                    ))
-                  ) : (
-                    <p className="text-gray-500">No se encontraron reglas de puntos en la base de datos.</p>
-                  )}
+                  
+                  {/* --- SECCIÓN 1: REGLAS DE CREACIÓN DE CONTENIDO (Agrupadas) --- */}
+                  <div className="md:col-span-2 space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-md font-bold text-blue-800">
+                        <AppIcon name="UploadCloud" className="w-4 h-4 inline-block mr-2" />
+                        Reglas de Subida de Contenido
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Subir Video (Base) */}
+                        {rulesByActionType['video_base'] && (
+                            <ActionPointsInput
+                                icon={getIconForAction('video_base')}
+                                label={rulesByActionType['video_base'].action_name || 'Subir Video (Base)'}
+                                description="Puntos por subir cualquier contenido de video"
+                                value={getActionValue('video_base')}
+                                onChange={(value) => updateAction('video_base', value)}
+                                highlight={true}
+                                showInStore={rulesByActionType['video_base'].show_in_store}
+                                onShowInStoreChange={(isChecked) => updateActionShowInStore('video_base', isChecked)}
+                            />
+                        )}
+                        {/* Subir Video (Por Minuto) */}
+                        {rulesByActionType['video_upload_per_minute'] && (
+                            <ActionPointsInput
+                                icon={getIconForAction('video_upload_per_minute')}
+                                label={rulesByActionType['video_upload_per_minute'].action_name || 'Subir Video (Por Minuto)'}
+                                description="Puntos adicionales por cada minuto de video"
+                                value={getActionValue('video_upload_per_minute')}
+                                onChange={(value) => updateAction('video_upload_per_minute', value)}
+                                highlight={true}
+                                showInStore={rulesByActionType['video_upload_per_minute'].show_in_store}
+                                onShowInStoreChange={(isChecked) => updateActionShowInStore('video_upload_per_minute', isChecked)}
+                            />
+                        )}
+                        {/* Bono Video Vertical */}
+                        {rulesByActionType['vertical_video_bonus'] && (
+                            <ActionPointsInput
+                                icon={getIconForAction('vertical_video_bonus')}
+                                label={rulesByActionType['vertical_video_bonus'].action_name || 'Bono Video Vertical (Reel)'}
+                                description="Puntos extra por subir un video vertical (Reel)"
+                                value={getActionValue('vertical_video_bonus')}
+                                onChange={(value) => updateAction('vertical_video_bonus', value)}
+                                highlight={true}
+                                showInStore={rulesByActionType['vertical_video_bonus'].show_in_store}
+                                onShowInStoreChange={(isChecked) => updateActionShowInStore('vertical_video_bonus', isChecked)}
+                            />
+                        )}
+                        {/* Subir Foto */}
+                        {rulesByActionType['photo_upload'] && (
+                            <ActionPointsInput
+                                icon={getIconForAction('photo_upload')}
+                                label={rulesByActionType['photo_upload'].action_name || 'Subir foto'}
+                                description="Puntos por subir una foto"
+                                value={getActionValue('photo_upload')}
+                                onChange={(value) => updateAction('photo_upload', value)}
+                                highlight={true}
+                                showInStore={rulesByActionType['photo_upload'].show_in_store}
+                                onShowInStoreChange={(isChecked) => updateActionShowInStore('photo_upload', isChecked)}
+                            />
+                        )}
+                    </div>
+                  </div>
+                  
+                  {/* --- SECCIÓN 2: OTRAS ACCIONES (Interacciones/General) --- */}
+                  {/* Filtramos las reglas de interacción/general y las mapeamos */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:col-span-2">
+                    {getInteractionRules().map(rule => (
+                        <ActionPointsInput
+                            key={rule.action_type}
+                            icon={getIconForAction(rule.action_type)}
+                            label={rule.action_name || rule.action_type}
+                            description={rule.description || `ID: ${rule.action_type}`}
+                            value={getActionValue(rule.action_type)}
+                            onChange={(value) => updateAction(rule.action_type, value)}
+                            showInStore={rule.show_in_store}
+                            onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
+                        />
+                    ))}
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -993,7 +1069,7 @@ export default function PointsRulesEditor() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES
+// SUB-COMPONENTES (RESTAURADOS)
 // ============================================================================
 
 /**
