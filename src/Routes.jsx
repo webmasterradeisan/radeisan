@@ -1,4 +1,4 @@
-// src/Routes.jsx - CORREGIDO: Ajuste de ruta para el archivo real
+// src/Routes.jsx - CORREGIDO: Ajuste de todas las rutas de administración
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -39,11 +39,12 @@ import PurchasePointsPage from './pages/PurchasePointsPage';
 // PÁGINAS DE ADMINISTRACIÓN
 // ===============================
 import AdminDashboard from './pages/admin-dashboard';
-// 🛠️ CORRECCIÓN FINAL: Usar la ruta y el nombre del archivo correctos
+// 🛠️ CORRECCIÓN 1: Usar la ruta y nombre de archivo exactos
 import AdminUserManagement from './pages/admin-users/UserManagement'; 
 import CategoryManagement from './pages/admin-categories/CategoryManagement';
 import PointsRulesEditor from './pages/admin-points/PointsRulesEditor';
-import AdminLogs from './pages/admin-logs';
+// 🛠️ CORRECCIÓN 2: Asumir que el archivo se llama AdminLogs.jsx o index.jsx dentro de la carpeta
+import AdminLogs from './pages/admin-logs/index.jsx'; // Usamos index.jsx, ya que es el patrón más común
 
 // ✅ NUEVO - COMPONENTE DE EDICIÓN DE VIDEO
 import VideoEditStudio from './pages/VideoEditStudio'; 
