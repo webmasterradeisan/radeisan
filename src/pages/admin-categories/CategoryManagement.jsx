@@ -1,5 +1,6 @@
 // src/pages/admin-categories/CategoryManagement.jsx
 // ✅ SPRINT 4 - Gestión Completa de Categorías
+// ✅ FIX: Añadida columna 'is_multiplier_enabled' al formulario y lógica de guardado.
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { supabase } from '../../lib/supabase';
@@ -25,6 +26,8 @@ const CategoryManagement = () => {
     color: '#3b82f6',
     points_multiplier: 1.0,
     is_active: true,
+    // ✅ NUEVO: Columna para controlar el multiplicador
+    is_multiplier_enabled: true, 
     display_order: 0
   });
   
@@ -123,6 +126,8 @@ const CategoryManagement = () => {
       color: '#3b82f6',
       points_multiplier: 1.0,
       is_active: true,
+      // ✅ NUEVO: Estado por defecto para la nueva categoría
+      is_multiplier_enabled: true, 
       display_order: categories.length
     });
     setIsEditing(false);
@@ -142,6 +147,8 @@ const CategoryManagement = () => {
       color: category.color || '#3b82f6',
       points_multiplier: category.points_multiplier || 1.0,
       is_active: category.is_active ?? true,
+      // ✅ NUEVO: Cargar estado del multiplicador existente
+      is_multiplier_enabled: category.is_multiplier_enabled ?? true, 
       display_order: category.display_order || 0
     });
     setSelectedCategory(category);
@@ -159,20 +166,24 @@ const CategoryManagement = () => {
     try {
       setSaving(true);
 
+      const categoryData = {
+        name: formData.name,
+        slug: formData.slug,
+        description: formData.description,
+        icon: formData.icon,
+        color: formData.color,
+        points_multiplier: parseFloat(formData.points_multiplier),
+        is_active: formData.is_active,
+        // ✅ CRUCIAL: Incluir el nuevo campo en la data
+        is_multiplier_enabled: formData.is_multiplier_enabled, 
+        display_order: formData.display_order
+      };
+
       if (isEditing && selectedCategory) {
         // Actualizar categoría existente
         const { error } = await supabase
           .from('content_categories')
-          .update({
-            name: formData.name,
-            slug: formData.slug,
-            description: formData.description,
-            icon: formData.icon,
-            color: formData.color,
-            points_multiplier: parseFloat(formData.points_multiplier),
-            is_active: formData.is_active,
-            display_order: formData.display_order
-          })
+          .update(categoryData)
           .eq('id', selectedCategory.id);
 
         if (error) throw error;
@@ -181,16 +192,7 @@ const CategoryManagement = () => {
         // Crear nueva categoría
         const { error } = await supabase
           .from('content_categories')
-          .insert({
-            name: formData.name,
-            slug: formData.slug,
-            description: formData.description,
-            icon: formData.icon,
-            color: formData.color,
-            points_multiplier: parseFloat(formData.points_multiplier),
-            is_active: formData.is_active,
-            display_order: formData.display_order
-          });
+          .insert(categoryData);
 
         if (error) throw error;
       }
@@ -339,7 +341,7 @@ const CategoryManagement = () => {
   }, [formData.name, isEditing]);
 
   // ===============================
-  // RENDER: MODAL DE CATEGORÍA
+  // RENDER: MODAL DE CATEGORÍA (MODIFICADO)
   // ===============================
   const renderCategoryModal = () => {
     if (!showCategoryModal) return null;
@@ -381,8 +383,13 @@ const CategoryManagement = () => {
                     <p className="font-semibold text-foreground">
                       {formData.name || 'Nombre de la categoría'}
                     </p>
+                    {/* ✅ ACTUALIZADO: Muestra si el multiplicador está habilitado o no */}
                     <p className="text-sm text-muted-foreground">
-                      Multiplicador: {formData.points_multiplier}x puntos
+                      Multiplicador: 
+                      {formData.is_multiplier_enabled ? 
+                        ` ${formData.points_multiplier}x puntos` : 
+                        ` Desactivado (Usará 1.0x)`
+                      }
                     </p>
                   </div>
                 </div>
@@ -496,28 +503,50 @@ const CategoryManagement = () => {
               </div>
 
               {/* Multiplicador de Puntos */}
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Multiplicador de Puntos *
-                </label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  max="10"
-                  value={formData.points_multiplier}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    points_multiplier: parseFloat(e.target.value) || 1 
-                  })}
-                  error={errors.points_multiplier}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Los videos en esta categoría ganarán {formData.points_multiplier}x puntos base
-                </p>
-                {errors.points_multiplier && (
-                  <p className="text-xs text-error mt-1">{errors.points_multiplier}</p>
-                )}
+              <div className="p-4 bg-background rounded-lg border border-border">
+                {/* Checkbox para activar/desactivar el multiplicador */}
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="font-medium text-foreground">Multiplicador Habilitado</p>
+                    <p className="text-sm text-muted-foreground">
+                      Activa o desactiva la aplicación del multiplicador a los puntos
+                    </p>
+                  </div>
+                  <Checkbox
+                    checked={formData.is_multiplier_enabled}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      is_multiplier_enabled: e.target.checked 
+                    })}
+                  />
+                </div>
+                
+                {/* Input del Multiplicador (Deshabilitado si está OFF) */}
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">
+                    Valor del Multiplicador *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="10"
+                    value={formData.points_multiplier}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      points_multiplier: parseFloat(e.target.value) || 1 
+                    })}
+                    error={errors.points_multiplier}
+                    disabled={!formData.is_multiplier_enabled} // ✅ CRUCIAL: Deshabilita el input
+                    className={!formData.is_multiplier_enabled ? 'opacity-50 cursor-not-allowed' : ''}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Los videos en esta categoría usarán este multiplicador.
+                  </p>
+                  {errors.points_multiplier && (
+                    <p className="text-xs text-error mt-1">{errors.points_multiplier}</p>
+                  )}
+                </div>
               </div>
 
               {/* Orden de visualización */}
@@ -539,10 +568,10 @@ const CategoryManagement = () => {
                 </p>
               </div>
 
-              {/* Estado Activo */}
+              {/* Estado Activo (General) */}
               <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
                 <div>
-                  <p className="font-medium text-foreground">Categoría Activa</p>
+                  <p className="font-medium text-foreground">Categoría Activa (General)</p>
                   <p className="text-sm text-muted-foreground">
                     Los usuarios podrán seleccionar esta categoría
                   </p>
@@ -844,6 +873,10 @@ const CategoryManagement = () => {
                     </div>
                     <p className="text-lg font-bold text-foreground">
                       {category.points_multiplier}x
+                      {/* ✅ Muestra el estado ON/OFF en la tarjeta de la lista */}
+                      {category.is_multiplier_enabled === false && (
+                        <span className="text-xs text-warning ml-1">(OFF)</span>
+                      )}
                     </p>
                   </div>
                 </div>
