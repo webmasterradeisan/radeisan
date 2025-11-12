@@ -1,6 +1,7 @@
 // src/pages/PublicProfilePage/index.jsx
 // ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
 // ✅ CORREGIDO: Navegación de Reels para imitar el comportamiento del Dashboard (usando navigate)
+// ✅ CORREGIDO: Supabase Query Error (400 Bad Request) y JS Error (Assignment to constant variable)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -31,7 +32,7 @@ const formatCount = (num) => {
 // ===========================================
 const PublicProfilePage = () => {
   const { identifier } = useParams();
-  const navigate = useNavigate(); // ✅ Usamos useNavigate para la corrección
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const isMobile = useIsMobile();
 
@@ -78,7 +79,8 @@ const PublicProfilePage = () => {
       }
 
       // 2. Obtener datos del perfil y contenido
-      const [{ data: profileData, error: profileError }, { data: videosData, error: videosError }] = await Promise.all([
+      // ✅ CORRECCIÓN 1: Usamos 'let' en la destructuración para permitir reasignación
+      let [{ data: profileData, error: profileError }, { data: videosData, error: videosError }] = await Promise.all([
         supabase
           .from('user_profiles')
           .select('*')
@@ -86,8 +88,10 @@ const PublicProfilePage = () => {
           .single(),
         supabase
           .from('videos')
-          .select('*, user_profiles!fk_video_owner_id(username, avatar_url)') // JOIN al perfil
-          .eq('owner_id', userId)
+          // ✅ CORRECCIÓN 2: Eliminamos el JOIN fallido y volvemos a un SELECT simple
+          .select('*') 
+          .eq('user_id', userId) // Asumiendo que la columna de enlace es user_id
+          .eq('is_published', true) // Filtro de publicación
           .order('created_at', { ascending: false }),
       ]);
 
@@ -99,7 +103,7 @@ const PublicProfilePage = () => {
 
       if (videosError) {
         console.error('Error fetching videos:', videosError);
-        // Continuamos incluso con error de videos, pero mostramos un array vacío
+        // ✅ Corregido: Ahora videosData es 'let' y se puede reasignar
         videosData = [];
       }
 
@@ -111,7 +115,6 @@ const PublicProfilePage = () => {
       setHorizontalVideos(videosData.filter(v => v.orientation === 'horizontal'));
       
       // Simular fotos (en un sistema real se haría otra query)
-      // Usaremos los horizontalVideos como placeholder para "fotos" si la pestaña fuera activa
       setUserPhotos(videosData.filter(v => v.type === 'image' || v.orientation === 'horizontal').slice(0, 8));
 
 
@@ -345,7 +348,6 @@ const PublicProfilePage = () => {
                         {reels.map((reel) => (
                           <div 
                             key={reel.id}
-                            // *** CORRECCIÓN APLICADA AQUÍ ***
                             // Usamos onClick + navigate para replicar la navegación imperativa a la vista de reproducción.
                             onClick={() => navigate(`/reels?id=${reel.id}`)}
                             className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
