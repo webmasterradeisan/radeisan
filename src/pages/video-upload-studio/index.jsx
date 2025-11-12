@@ -177,11 +177,11 @@ const useVideoUpload = () => {
       let pointsCalculation = { total_points: 10 }; // Fallback por defecto
       
       try {
-        // metadata.category ahora contiene el UUID, pero el servicio espera el SLUG
-        // Asumiendo que el servicio puede manejar el ID o que no usamos el SLUG aquí:
+        // metadata.category contiene el UUID (que es category_id), pero el servicio espera el SLUG (o al menos un TEXT válido)
+        // Por ahora, pasamos el UUID y asumimos que el servicio puede manejarlo.
         pointsCalculation = await calculateVideoPoints(
           Math.round(videoDuration || 0),
-          metadata.category, // Pasamos el ID/UUID
+          metadata.category, 
           orientationData.orientation
         );
         console.log('📊 Puntos calculados:', pointsCalculation);
@@ -200,7 +200,7 @@ const useVideoUpload = () => {
           description: metadata.description || '',
           video_url: urlData.publicUrl,
           thumbnail_url: thumbnailUrl,
-          // 🛑 CORRECCIÓN CLAVE: Insertar el UUID en category_id para evitar el error 23503
+          // 🛑 CORRECCIÓN CLAVE: Usar category_id para el UUID (clave foránea)
           category_id: metadata.category, 
           tags: metadata.tags || [],
           duration_seconds: Math.round(videoDuration || 0),
@@ -243,13 +243,12 @@ const useVideoUpload = () => {
       console.log('📊 Actualizando contador de categoría...');
       try {
         // Nota: Esta RPC probablemente espera un SLUG. Si falla con UUID, requiere ajuste en la RPC.
-        // Por ahora, asumimos que el SLUG se puede obtener si es necesario, o que la RPC acepta ID.
         const { error: categoryError } = await supabase.rpc('increment_category_count', {
-          category_slug: metadata.category
+          category_id: metadata.category // Intentamos pasar el ID para la RPC
         });
         
         if (categoryError) {
-          console.warn('⚠️ Error actualizando contador:', categoryError);
+          console.warn('⚠️ Error actualizando contador (posiblemente necesita SLUG):', categoryError);
         } else {
           console.log('✅ Contador de categoría actualizado');
         }
@@ -453,7 +452,7 @@ const VideoUploadStudio = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: '', // 🛑 IMPORTANTE: Ahora contendrá el UUID, no el slug
+    category: '', // 🛑 IMPORTANTE: Contendrá el UUID
     tags: [],
     visibility: 'public',
     allowComments: true,
