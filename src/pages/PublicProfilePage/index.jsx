@@ -1,6 +1,5 @@
 // src/pages/PublicProfilePage/index.jsx
 // ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
-// ✅ CORREGIDO: Navegación de Reels para imitar el comportamiento del Dashboard (usando navigate a /dashboard con state)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -453,20 +452,10 @@ const PublicProfilePage = () => {
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {reels.map((reel) => (
-                        <div 
+                        <Link 
                           key={reel.id}
-                          // *** CORRECCIÓN APLICADA AQUÍ ***
-                          // 1. Reemplazamos <Link> por <div> para usar onClick.
-                          // 2. Usamos navigate a /dashboard con el state para replicar el comportamiento de apertura interna del Dashboard.
-                          onClick={() => navigate('/dashboard', { 
-                            state: { 
-                              orientation: 'vertical',
-                              selectedReelId: reel.id // El Dashboard intercepta este ID para abrir el reproductor.
-                            } 
-                          })}
-                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                          role="button"
-                          tabIndex={0}
+                          to={`/reels?id=${reel.id}`}
+                          className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
                         >
                           <div className="relative aspect-[9/16] bg-muted">
                             <img 
@@ -488,7 +477,7 @@ const PublicProfilePage = () => {
                               </span>
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   )}
