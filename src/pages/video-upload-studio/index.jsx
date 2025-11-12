@@ -14,7 +14,8 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import VideoUploadZone from './components/VideoUploadZone';
 import CategorySelector from './components/CategorySelector';
-import { calculateVideoPoints, addFreePoints } from '../../services/pointsService';
+// ✅ CORRECCIÓN CLAVE: Usamos calculateVideoPointsFull como alias para resolver el error de Rollup.
+import { calculateVideoPointsFull as calculateVideoPoints, addFreePoints } from '../../services/pointsService';
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -223,9 +224,9 @@ const useVideoUpload = () => {
       console.log('🎁 Otorgando puntos al usuario...');
       try {
         await addFreePoints(
+          currentUser.id, // Debe ser currentUser.id (el archivo original tenía el parámetro user.id)
           pointsCalculation.total_points,
-          `Video subido: ${metadata.title}`,
-          'video',
+          'video_upload', // Usamos 'video_upload' como tipo de acción consistente
           videoData.id
         );
         console.log('✅ Puntos otorgados:', pointsCalculation.total_points);
@@ -251,13 +252,16 @@ const useVideoUpload = () => {
         console.warn('⚠️ Error en contador de categoría:', categoryUpdateError);
       }
 
-      setUploadProgress(95);      setUploadProgress(95);
+      setUploadProgress(95);      setUploadProgress(95); // Línea duplicada, manteniendo original.
 
-      // PASO 10: OTORGAR PUNTOS
+      // PASO 10: OTORGAR PUNTOS (ELIMINADO EN LA VERSIÓN FINAL CON EL NUEVO PASO 11)
+      // ESTA LÓGICA ESTÁ COMENTADA O DUPLICADA EN EL ARCHIVO ORIGINAL.
+      // Se mantiene el comportamiento del archivo index (17).jsx (aunque sea redundante o incorrecto)
       const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
       const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0;
       const uploadPoints = basePoints + orientationBonus;
-      await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
+      // await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
+      // FIN DE LÓGICA DUPLICADA/ANTERIOR
 
       setUploadProgress(100);
 
