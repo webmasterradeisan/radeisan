@@ -1,10 +1,8 @@
 // src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
 // ✅ CHECKLIST AÑADIDO: Integrado el checklist 'show_in_store'
-//    - 'handleSave' ahora guarda 'show_in_store'.
-//    - 'ActionPointsInput' ahora renderiza el checklist.
-//    - Añadida 'updateActionShowInStore' para manejar el estado del checklist.
 // ✅ NUEVA ACCIÓN: Añadida 'gift_points_received' a getIconForAction.
+// 🛠️ FIX: Alineación de 'video_upload_base' con 'video_base' usado en pointsService.js.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -295,7 +293,7 @@ export default function PointsRulesEditor() {
   };
 
   // ============================================================================
-  // FUNCIONES DE PREVIEW (CORREGIDAS)
+  // FUNCIONES DE PREVIEW (CORREGIDAS: Alineación de action_type)
   // ============================================================================
 
   const getActionValue = (actionType) => {
@@ -303,10 +301,14 @@ export default function PointsRulesEditor() {
   };
 
   const calculatePreview = () => {
+    // Usamos 'gaming' como ejemplo para el preview
     const category = categories.find(c => c.slug === 'gaming') || categories[0];
     const multiplier = category?.points_multiplier || 1.0;
 
-    const uploadVideoPoints = getActionValue('video_upload_base');
+    // 🛠️ FIX: Usar 'video_base' en lugar de 'video_upload_base' para alineación con pointsService.js
+    const uploadVideoPoints = getActionValue('video_base'); 
+    
+    // Las otras acciones parecen correctas
     const watchVideoPoints = getActionValue('video_view');
     const giveLikePoints = getActionValue('give_like');
 
@@ -349,7 +351,7 @@ export default function PointsRulesEditor() {
       daily_login: 'LogIn',
       profile_complete: 'UserCheck',
       email_verified: 'Mail',
-      video_upload_base: 'Upload',
+      video_base: 'Upload', // 🛠️ FIX: Cambiado de video_upload_base a video_base
       video_upload_per_minute: 'Upload',
       vertical_video_bonus: 'Upload',
       video_view: 'Play',
@@ -501,7 +503,7 @@ export default function PointsRulesEditor() {
                         description={rule.description || `ID: ${rule.action_type}`}
                         value={rule.points_amount}
                         onChange={(value) => updateAction(rule.action_type, value)}
-                        highlight={rule.action_type.includes('upload')}
+                        highlight={rule.action_type.includes('upload') || rule.action_type.includes('base')}
                         // ✅ CHECKLIST AÑADIDO: Pasar los nuevos props
                         showInStore={rule.show_in_store}
                         onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
@@ -567,10 +569,10 @@ export default function PointsRulesEditor() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="text-sm text-gray-600">
-                          {getActionValue('video_upload_base')} pts
+                          {getActionValue('video_base')} pts {/* 🛠️ FIX: Alineado con video_base */}
                         </div>
                         <div className="text-lg font-bold text-blue-600">
-                          {Math.round(getActionValue('video_upload_base') * category.points_multiplier)} pts
+                          {Math.round(getActionValue('video_base') * category.points_multiplier)} pts {/* 🛠️ FIX: Alineado con video_base */}
                         </div>
                       </div>
                     </div>
