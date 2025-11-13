@@ -5,6 +5,7 @@
 //    las columnas correctas ('action_name', 'points_amount', 'metadata').
 // ✅ FIX: La carga de reglas ahora filtra por 'show_in_store = true'
 //    para que solo muestre las que el admin seleccionó.
+// ❌ ELIMINADO: Toda la lógica y JSX del Historial de Transacciones.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -15,13 +16,13 @@ import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import RewardCard from './components/RewardCard';
 import PointsBalanceCard from './components/PointsBalanceCard';
-import TransactionHistory from './components/TransactionHistory';
+// ❌ import TransactionHistory from './components/TransactionHistory';
 import RedemptionModal from './components/RedemptionModal';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { redeemReward } from '../../services/rewardsService'; 
-import { getUserPointsHistory } from '../../services/pointsService'; 
+// ❌ import { getUserPointsHistory } from '../../services/pointsService'; 
 
 
 // ===============================
@@ -131,10 +132,7 @@ const PointsRewardsStore = () => {
   const [sortBy, setSortBy] = useState('popular');
   const [viewMode, setViewMode] = useState(VIEW_MODES.GRID);
   
-  // ESTADOS PARA EL HISTORIAL
-  const [showTransactions, setShowTransactions] = useState(false);
-  const [transactions, setTransactions] = useState([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  // ❌ ESTADOS PARA EL HISTORIAL (ELIMINADOS)
   
   // ESTADO PARA ESTADÍSTICAS
   const [stats, setStats] = useState({ earnedToday: 0, earnedAllTime: 0, spentAllTime: 0 });
@@ -142,15 +140,10 @@ const PointsRewardsStore = () => {
   
   // ✅ ESTADO PARA REGLAS DE PUNTOS
   const [pointsRules, setPointsRules] = useState([]);
-  const [rulesLoading, setRulesLoading] = useState(true); // <-- Nuevo estado de carga
+  const [rulesLoading, setRulesLoading] = useState(true); 
   
-  // ESTADOS PARA FILTRO Y PAGINACIÓN
-  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month', 'custom'
-  const [page, setPage] = useState(1);
-  const [hasMorePages, setHasMorePages] = useState(false);
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  
+  // ❌ ESTADOS PARA FILTRO Y PAGINACIÓN DEL HISTORIAL (ELIMINADOS)
+
   const nextRewardThreshold = 300;
   
   const pageLoading = rewardsLoading || pointsLoading || statsLoading || rulesLoading; 
@@ -207,23 +200,20 @@ const PointsRewardsStore = () => {
     const fetchPointsRules = async () => {
       setRulesLoading(true);
       try {
-        // ✅ Carga solo las reglas marcadas para mostrar en la tienda
-        // ✅ Selecciona las columnas correctas ('action_name', 'points_amount', 'metadata')
         const { data, error } = await supabase
           .from('points_rules') 
           .select('id, action_name, points_amount, metadata') 
-          .eq('show_in_store', true) // <-- Solo las que marcaste
+          .eq('show_in_store', true) 
           .gt('points_amount', 0) 
           .order('action_name', { ascending: true });
 
         if (error) throw error;
         
-        // Mapea los datos a un formato simple
         const rules = data.map(rule => ({
           id: rule.id,
-          icon: rule.metadata?.icon || 'Check', // <-- Lee el ícono desde metadata
-          text: rule.action_name, // <-- Usa 'action_name'
-          points: rule.points_amount // <-- Usa 'points_amount'
+          icon: rule.metadata?.icon || 'Check', 
+          text: rule.action_name, 
+          points: rule.points_amount 
         }));
         setPointsRules(rules);
 
@@ -235,58 +225,11 @@ const PointsRewardsStore = () => {
     };
     
     fetchPointsRules();
-  }, []); // Se ejecuta solo una vez al cargar la página
+  }, []); 
 
 
-  // FUNCIÓN PARA CARGAR EL HISTORIAL (PAGINADO)
-  const loadHistory = useCallback(async (pageNum, reset = false) => {
-    if (!user?.id) return;
-    setTransactionsLoading(true);
-
-    let startDate = null;
-    let endDate = null;
-    const now = new Date();
-    
-    if (dateFilter === 'today') {
-      startDate = new Date(now.setHours(0, 0, 0, 0));
-    } else if (dateFilter === 'week') {
-      const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-      startDate = new Date(firstDayOfWeek.setHours(0, 0, 0, 0));
-    } else if (dateFilter === 'month') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (dateFilter === 'custom') {
-        if (customStartDate) startDate = new Date(customStartDate);
-        if (customEndDate) {
-            endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-        }
-    }
-
-    const result = await getUserPointsHistory(user.id, {
-      startDate,
-      endDate,
-      page: pageNum
-    });
-
-    if (result.success) {
-      if (reset) {
-        setTransactions(result.data);
-      } else {
-        setTransactions(prev => [...prev, ...result.data]);
-      }
-      setHasMorePages(result.hasMore);
-    } else {
-      console.error("Error al cargar historial:", result.error);
-    }
-    
-    setTransactionsLoading(false);
-  }, [user, dateFilter, customStartDate, customEndDate]);
-
-  // EFECTO PARA CARGAR EL HISTORIAL
-  useEffect(() => {
-    setPage(1); 
-    loadHistory(1, true);
-  }, [user, dateFilter, customStartDate, customEndDate, loadHistory]);
+  // ❌ FUNCIÓN PARA CARGAR EL HISTORIAL (ELIMINADA)
+  // ❌ EFECTO PARA CARGAR EL HISTORIAL (ELIMINADO)
 
   // Filtrado y Asequibilidad (Sin cambios)
   const filteredRewards = useMemo(() => {
@@ -362,8 +305,7 @@ const PointsRewardsStore = () => {
         
         await refreshRewards();
         
-        setPage(1);
-        loadHistory(1, true); // Refresca el historial
+        // ❌ Ya no refrescamos el historial aquí
         
         setIsRedemptionModalOpen(false);
         setSelectedReward(null);
@@ -381,7 +323,7 @@ const PointsRewardsStore = () => {
     } finally {
       setRedemptionLoading(false);
     }
-  }, [selectedReward, refreshPoints, refreshRewards, loadHistory]);
+  }, [selectedReward, refreshPoints, refreshRewards]); // ❌ 'loadHistory' eliminado de dependencias
 
   const handleWaitlist = (reward) => {
     alert(`Te avisaremos cuando ${reward.title} esté disponible.`);
@@ -399,31 +341,7 @@ const PointsRewardsStore = () => {
     setSortBy(sort);
   }, []);
 
-  // HANDLERS PARA FILTROS Y PAGINACIÓN
-  const handleLoadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    loadHistory(nextPage, false);
-  };
-  
-  const handleDateFilterChange = (newDateFilter) => {
-    setPage(1); 
-    setDateFilter(newDateFilter);
-    setCustomStartDate('');
-    setCustomEndDate('');
-  };
-
-  const handleCustomStartDateChange = (date) => {
-    setPage(1);
-    setCustomStartDate(date);
-    setDateFilter('custom');
-  };
-
-  const handleCustomEndDateChange = (date) => {
-    setPage(1);
-    setCustomEndDate(date);
-    setDateFilter('custom');
-  };
+  // ❌ HANDLERS PARA FILTROS Y PAGINACIÓN DEL HISTORIAL (ELIMINADOS)
 
 
   // ===============================
@@ -639,36 +557,8 @@ const PointsRewardsStore = () => {
                   </div>
                 </div>
 
-                {/* Historial de Puntos (Movido aquí) */}
-                <div className="bg-card rounded-lg border p-6 mb-8">
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    onClick={() => setShowTransactions(!showTransactions)}
-                    iconName={showTransactions ? "ChevronUp" : "ChevronDown"}
-                    iconPosition="right"
-                  >
-                    {showTransactions ? 'Ocultar' : 'Ver'} Historial de Puntos
-                  </Button>
-                  
-                  {showTransactions && (
-                    <div className="mt-4">
-                      <TransactionHistory
-                        transactions={transactions}
-                        loading={transactionsLoading}
-                        dateFilter={dateFilter}
-                        onDateFilterChange={handleDateFilterChange}
-                        hasMore={hasMorePages}
-                        onLoadMore={handleLoadMore}
-                        startDate={customStartDate}
-                        endDate={customEndDate}
-                        onStartDateChange={handleCustomStartDateChange}
-                        onEndDateChange={handleCustomEndDateChange}
-                      />
-                    </div>
-                  )}
-                </div>
-
+                {/* ❌ Historial de Puntos (ELIMINADO DE AQUÍ) */}
+                
                 {/* Featured Rewards */}
                 {featuredRewards.length > 0 && activeCategory === 'all' && !searchQuery && (
                   <div className="mb-8">
