@@ -2,11 +2,10 @@
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
 // ✅ FIX: Corregido ReferenceError en ListTab asegurando que se use la prop 'missions'.
-// ✅ MODIFICACIÓN: Añadido el nuevo tipo de misión 'upload_pack'.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import * as missionsService from '../../services/missionsService';
+import *as missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 
 // ============================================================================
@@ -569,9 +568,10 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
       )}
 
       {/* Contador de resultados */}
+      {/* 🛑 CORRECCIÓN: Usar la prop 'missions' (filteredMissions) para el conteo */}
       {missions.length > 0 && (
         <div className="text-sm text-gray-600 text-center">
-          Mostrando {filteredMissions.length} misión{filteredMissions.length !== 1 ? 'es' : ''}
+          Mostrando {missions.length} misión{missions.length !== 1 ? 'es' : ''}
         </div>
       )}
     </div>
