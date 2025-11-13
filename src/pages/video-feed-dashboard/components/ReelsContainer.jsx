@@ -1,6 +1,13 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// ✅ CORRECCIÓN CRÍTICA FINAL: Defensa contra 'null is not iterable' en la carga de datos.
+// REELS CONTAINER - Integrado con Sistema de Puntos
+// ✅ CORREGIDO: Verificaciones de seguridad para comment.user
+// ✅ CORREGIDO: Estructura JSX del modal
+// ✅ NUEVO: Avisos de puntos cerca del botón like
+// ✅ CORREGIDO: Sistema de tracking persistente para likes
+// ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
+// ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
+// 🟢 CORREGIDO: [BUG FIX] Eliminada la asignación directa de 5 puntos en handleLike.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -10,6 +17,7 @@ import { usePoints } from 'contexts/PointsContext';
 import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
+// ✅ CORRECCIÓN DE RUTA DE IMPORTACIÓN (usando alias absoluto asumido o ajustando)
 import GiftPointsModal from 'components/GiftPointsModal'; 
 
 // ===============================
@@ -30,10 +38,10 @@ const ReelsContainer = ({
   // ✅ INTEGRACIÓN CON SISTEMA DE PUNTOS
   const { addPoints } = usePoints();
 
-  // Estados principales (Inicializados como Sets vacíos)
+  // Estados principales
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [mutedVideos, setMutedVideos] = useState(new Set());
+  const [mutedVideos, setMutedVideos] = new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
@@ -48,7 +56,7 @@ const ReelsContainer = ({
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
-  const [replyingTo, setReplyingTo] = null;
+  const [replyingTo, setReplyingTo] = useState(null);
   const [showReplies, setShowReplies] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   
@@ -90,7 +98,7 @@ const ReelsContainer = ({
     isMobile,
     isDesktop,
     showCommentsModal,
-    showGiftModal 
+    showGiftModal // ✅ Nuevo estado de debug
   });
 
   // ✅ NUEVO: Función para mostrar notificación de puntos
@@ -192,26 +200,28 @@ const ReelsContainer = ({
             .select('video_id')
             .eq('user_id', user.id);
           
-          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
-          const likedIds = new Set(Array.from(likesData || []).map(l => l.video_id));
-          setLikedVideos(likedIds);
-          
+          if (likesData) {
+            const likedIds = new Set(likesData.map(l => l.video_id));
+            setLikedVideos(likedIds);
+          }
 
           // ✅ CARGAR VIDEOS POR LOS QUE YA GANÓ PUNTOS (tracking persistente)
+          // Esta consulta debe traer TODOS los videos por los que el usuario ya ganó puntos
+          // independientemente de si actualmente tienen like o no
           const { data: pointsEarnedData } = await supabase
             .from('user_video_points')
             .select('video_id')
             .eq('user_id', user.id)
             .eq('action_type', 'like');
           
-          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
-          const videosWithPointsEarned = new Set(Array.from(pointsEarnedData || []).map(p => p.video_id));
-          console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
-          setActionsPerformed(prev => ({
-            ...prev,
-            likes: videosWithPointsEarned
-          }));
-          
+          if (pointsEarnedData) {
+            const videosWithPointsEarned = new Set(pointsEarnedData.map(p => p.video_id));
+            console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
+            setActionsPerformed(prev => ({
+              ...prev,
+              likes: videosWithPointsEarned
+            }));
+          }
 
           // ✅ CARGAR VIDEOS GUARDADOS
           const { data: savedData } = await supabase
@@ -219,23 +229,23 @@ const ReelsContainer = ({
             .select('video_id')
             .eq('user_id', user.id);
           
-          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
-          const savedIds = new Set(Array.from(savedData || []).map(s => s.video_id));
-          setSavedVideos(savedIds);
+          if (savedData) {
+            const savedIds = new Set(savedData.map(s => s.video_id));
+            setSavedVideos(savedIds);
             
-          // Cargar tracking de puntos por guardar
-          const { data: savedPointsData } = await supabase
+            // Cargar tracking de puntos por guardar
+            const { data: savedPointsData } = await supabase
               .from('user_video_points')
               .select('video_id')
               .eq('user_id', user.id)
               .eq('action_type', 'save');
             
-          if (savedPointsData) {
-            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
-            setActionsPerformed(prev => ({
-              ...prev,
-              saves: new Set(Array.from(savedPointsData || []).map(p => p.video_id))
-            }));
+            if (savedPointsData) {
+              setActionsPerformed(prev => ({
+                ...prev,
+                saves: new Set(savedPointsData.map(p => p.video_id))
+              }));
+            }
           }
 
           // ✅ CARGAR SEGUIDORES
@@ -244,23 +254,23 @@ const ReelsContainer = ({
             .select('following_id')
             .eq('follower_id', user.id);
           
-          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
-          const followedIds = new Set(Array.from(followsData || []).map(f => f.following_id));
-          setFollowedCreators(followedIds);
+          if (followsData) {
+            const followedIds = new Set(followsData.map(f => f.following_id));
+            setFollowedCreators(followedIds);
             
-          // Cargar tracking de puntos por seguir
-          const { data: followPointsData } = await supabase
+            // Cargar tracking de puntos por seguir
+            const { data: followPointsData } = await supabase
               .from('user_video_points')
               .select('content_id')
               .eq('user_id', user.id)
               .eq('action_type', 'follow');
             
-          if (followPointsData) {
-            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
-            setActionsPerformed(prev => ({
-              ...prev,
-              follows: new Set(Array.from(followPointsData || []).map(p => p.content_id))
-            }));
+            if (followPointsData) {
+              setActionsPerformed(prev => ({
+                ...prev,
+                follows: new Set(followPointsData.map(p => p.content_id))
+              }));
+            }
           }
 
           // ✅ CARGAR TRACKING DE COMENTARIOS Y COMPARTIDOS
@@ -271,10 +281,9 @@ const ReelsContainer = ({
             .eq('action_type', 'comment');
           
           if (commentsPointsData) {
-            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
             setActionsPerformed(prev => ({
               ...prev,
-              comments: new Set(Array.from(commentsPointsData || []).map(p => p.video_id))
+              comments: new Set(commentsPointsData.map(p => p.video_id))
             }));
           }
 
@@ -285,10 +294,9 @@ const ReelsContainer = ({
             .eq('action_type', 'share');
           
           if (sharesPointsData) {
-            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
             setActionsPerformed(prev => ({
               ...prev,
-              shares: new Set(Array.from(sharesPointsData || []).map(p => p.video_id))
+              shares: new Set(sharesPointsData.map(p => p.video_id))
             }));
           }
         }
@@ -436,7 +444,7 @@ const ReelsContainer = ({
               currentVideo.muted = true;
               currentVideo.play()
                 .then(() => setIsAutoPlaying(true))
-                .catch(e => console.error('❌ Error:', e));
+                .catch(e => console.log('Error:', e));
             });
         }
       } else if (isAutoPlaying) {
@@ -632,9 +640,8 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ REFUERZO DEFENSA
-      const newLikedVideos = new Set(likedVideos || []);
-      const newDislikedVideos = new Set(dislikedVideos || []);
+      const newLikedVideos = new Set(likedVideos);
+      const newDislikedVideos = new Set(dislikedVideos);
       
       // ✅ VERIFICAR SI YA GANÓ PUNTOS CON ESTE VIDEO ANTES
       const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
@@ -672,6 +679,8 @@ const ReelsContainer = ({
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
         
         console.log('✅ Like removido (los puntos ya ganados NO se pierden)');
+        // ✅ IMPORTANTE: NO removemos de actionsPerformed.likes
+        // El usuario ya ganó puntos con este video, ese registro es permanente
         
       } else {
         // ==============================
@@ -697,46 +706,51 @@ const ReelsContainer = ({
         // ✅ VERIFICAR SI YA GANÓ PUNTOS CON ESTE VIDEO
         if (!hasEarnedPointsBefore) {
           // ==============================
-          // PRIMERA VEZ - OTORGAR PUNTOS Y MISIONES
+          // PRIMERA VEZ - OTORGAR PUNTOS (SOLO POR MISIÓN)
           // ==============================
+          console.log('🎉 Primera vez dando like a este video - revisando misión');
           
           try {
-            // 1. TRACKEAR LA ACCIÓN (Esto verifica las reglas/misiones)
+            // ✅ VERIFICAR MISIÓN Y OTORGAR PUNTOS SÓLO SI ESTÁ COMPLETA
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
-            // ✅ LÓGICA DE PREMIO: Solo otorga puntos si la misión se ha completado.
             if (missionResult.completed) { 
               const pointsEarned = missionResult.reward.points || 5; 
               
+              // ✅ Solamente llamar a addPoints si la misión terminó
               await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
-              
               showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId);
 
-              // 2. Registrar en BD los puntos de misión
-              await supabase
+              // ✅ Registrar acción con el tipo de MISIÓN
+              const { error: trackError } = await supabase
                 .from('user_video_points')
                 .insert({
                   user_id: user.id,
                   video_id: videoId,
-                  action_type: 'mission_like_complete', // Usamos un tipo de acción claro para la misión
+                  action_type: 'mission_like_complete', // Usar el tipo de acción correcto para misiones
                   points_earned: pointsEarned,
                   created_at: new Date().toISOString()
                 });
-                
+
+              if (trackError) {
+                console.error('⚠️ Error al registrar tracking de puntos de misión:', trackError);
+              } else {
+                console.log('✅ Tracking de puntos de misión registrado en BD');
+              }
+              
             } else {
-                 // 3. Si no se ganan puntos, solo se notifica el progreso/acción registrada
+                 // ✅ Solo notificar el progreso, NO dar puntos directos
                 showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId);
             }
             
-            // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a intentar dar puntos directos
-            // Refuerzo defensa: Usar || new Set()
+            // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a intentar dar puntos (la lógica de puntos se movió a la misión)
             setActionsPerformed(prev => ({
               ...prev,
-              likes: new Set([...(prev.likes || new Set()), videoId]) 
+              likes: new Set([...prev.likes, videoId]) // Se registra la acción para no volver a ejecutar la lógica de "primera vez"
             }));
-            
+
           } catch (pointsError) {
-            console.error('❌ Error al otorgar puntos/misión:', pointsError);
+            console.error('❌ Error al procesar puntos o misión:', pointsError);
           }
         } else {
           // ==============================
@@ -767,9 +781,8 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ REFUERZO DEFENSA
-      const newDislikedVideos = new Set(dislikedVideos || []);
-      const newLikedVideos = new Set(likedVideos || []);
+      const newDislikedVideos = new Set(dislikedVideos);
+      const newLikedVideos = new Set(likedVideos);
       
       if (newDislikedVideos.has(videoId)) {
         newDislikedVideos.delete(videoId);
@@ -808,8 +821,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ REFUERZO DEFENSA
-      const newSavedVideos = new Set(savedVideos || []);
+      const newSavedVideos = new Set(savedVideos);
       const hasEarnedPointsBefore = actionsPerformed.saves.has(videoId);
       
       if (newSavedVideos.has(videoId)) {
@@ -843,10 +855,9 @@ const ReelsContainer = ({
                 created_at: new Date().toISOString()
               });
             
-            // ✅ REFUERZO DEFENSA
             setActionsPerformed(prev => ({
               ...prev,
-              saves: new Set([...(prev.saves || new Set()), videoId])
+              saves: new Set([...prev.saves, videoId])
             }));
           } catch (pointsError) {
             console.error('Error al otorgar puntos:', pointsError);
@@ -899,8 +910,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ REFUERZO DEFENSA
-      const newFollowedCreators = new Set(followedCreators || []);
+      const newFollowedCreators = new Set(followedCreators);
       const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
       const hasEarnedPointsBefore = actionsPerformed.follows.has(creatorId);
 
@@ -947,10 +957,9 @@ const ReelsContainer = ({
               await addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
-            // ✅ REFUERZO DEFENSA
             setActionsPerformed(prev => ({
               ...prev,
-              follows: new Set([...(prev.follows || new Set()), creatorId])
+              follows: new Set([...prev.follows, creatorId])
             }));
           } catch (pointsError) {
             console.error('Error al otorgar puntos:', pointsError);
@@ -1012,10 +1021,9 @@ const ReelsContainer = ({
               await addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
-            // ✅ REFUERZO DEFENSA
             setActionsPerformed(prev => ({
               ...prev,
-              shares: new Set([...(prev.shares || new Set()), video.id])
+              shares: new Set([...prev.shares, video.id])
             }));
           }
         } catch (pointsError) {
@@ -1235,7 +1243,7 @@ const ReelsContainer = ({
           
           setActionsPerformed(prev => ({
             ...prev,
-            comments: new Set([...(prev.comments || []), videoId])
+            comments: new Set([...prev.comments, videoId])
           }));
           console.log('✅ Puntos otorgados');
         } catch (pointsError) {
