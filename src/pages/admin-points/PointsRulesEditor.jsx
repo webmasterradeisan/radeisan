@@ -996,7 +996,7 @@ export default function PointsRulesEditor() {
                         className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <div className="text-sm text-gray-600">
-                        1 premium = {config.general.premium_to_free_exchange_rate} gratis
+                        1 premium = {config.general.premium_to-free_exchange_rate} gratis
                       </div>
                     </div>
                   </div>
@@ -1185,11 +1185,13 @@ function RebateConfigInput({
   onRebateChange,
   onShowInStoreChange
 }) {
+    // Los valores de rebateAmount deben leerse desde metadata, usando 2 como fallback seguro.
     const activationAmount = rule.points_amount || 5;
     const rebateAmount = rule.metadata?.rebate_amount || 2;
     const icon = 'BadgeDollarSign';
 
     return (
+        // Usamos md:col-span-2 para que ocupe todo el ancho de la rejilla de 2 columnas
         <div className="p-4 border rounded-lg transition-colors border-purple-300 bg-purple-50/50 md:col-span-2">
             <div className="flex items-start gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-purple-100">
@@ -1206,7 +1208,7 @@ function RebateConfigInput({
             </div>
             
             <div className="grid grid-cols-2 gap-4 border-t border-purple-200 pt-4">
-                {/* Monto de Activación (X puntos) */}
+                {/* Monto de Activación (X puntos) - Mapea a points_amount */}
                 <div className="space-y-2">
                     <label className="block text-sm font-semibold text-gray-700">
                         1. Monto de Regalo que Activa el Reembolso (X)
@@ -1224,7 +1226,7 @@ function RebateConfigInput({
                     <p className="text-xs text-gray-500">El usuario debe regalar exactamente esta cantidad.</p>
                 </div>
                 
-                {/* Monto de Reembolso (Y puntos) */}
+                {/* Monto de Reembolso (Y puntos) - Mapea a metadata.rebate_amount */}
                 <div className="space-y-2">
                     <label className="block text-sm font-semibold text-gray-700">
                         2. Puntos Ganados por Reembolso (Y)
