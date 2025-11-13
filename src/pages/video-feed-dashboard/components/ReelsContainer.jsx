@@ -1,7 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
-// ✅ CORRECCIÓN CRÍTICA FINAL: Defensa contra 'null is not iterable' en la copia de Sets.
+// ✅ CORRECCIÓN CRÍTICA FINAL: Defensa contra 'null is not iterable' en la copia de Sets (solución definitiva).
+// ✅ FIX BUG: El Like ahora solo premia si la misión/regla lo aprueba (solución a los +5 pts no deseados).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -194,7 +195,7 @@ const ReelsContainer = ({
             .eq('user_id', user.id);
           
           if (likesData) {
-            // ✅ Uso defensivo: Array.from(likesData || [])
+            // Utilizamos Array.from() para defensiva en caso de que likesData sea null o no iterable.
             const likedIds = new Set(Array.from(likesData || []).map(l => l.video_id));
             setLikedVideos(likedIds);
           }
@@ -207,7 +208,6 @@ const ReelsContainer = ({
             .eq('action_type', 'like');
           
           if (pointsEarnedData) {
-            // ✅ Uso defensivo: Array.from(pointsEarnedData || [])
             const videosWithPointsEarned = new Set(Array.from(pointsEarnedData || []).map(p => p.video_id));
             console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
             setActionsPerformed(prev => ({
@@ -223,7 +223,6 @@ const ReelsContainer = ({
             .eq('user_id', user.id);
           
           if (savedData) {
-            // ✅ Uso defensivo: Array.from(savedData || [])
             const savedIds = new Set(Array.from(savedData || []).map(s => s.video_id));
             setSavedVideos(savedIds);
             
@@ -235,7 +234,6 @@ const ReelsContainer = ({
               .eq('action_type', 'save');
             
             if (savedPointsData) {
-              // ✅ Uso defensivo: Array.from(savedPointsData || [])
               setActionsPerformed(prev => ({
                 ...prev,
                 saves: new Set(Array.from(savedPointsData || []).map(p => p.video_id))
@@ -250,7 +248,6 @@ const ReelsContainer = ({
             .eq('follower_id', user.id);
           
           if (followsData) {
-            // ✅ Uso defensivo: Array.from(followsData || [])
             const followedIds = new Set(Array.from(followsData || []).map(f => f.following_id));
             setFollowedCreators(followedIds);
             
@@ -262,7 +259,6 @@ const ReelsContainer = ({
               .eq('action_type', 'follow');
             
             if (followPointsData) {
-              // ✅ Uso defensivo: Array.from(followPointsData || [])
               setActionsPerformed(prev => ({
                 ...prev,
                 follows: new Set(Array.from(followPointsData || []).map(p => p.content_id))
@@ -278,7 +274,6 @@ const ReelsContainer = ({
             .eq('action_type', 'comment');
           
           if (commentsPointsData) {
-            // ✅ Uso defensivo: Array.from(commentsPointsData || [])
             setActionsPerformed(prev => ({
               ...prev,
               comments: new Set(Array.from(commentsPointsData || []).map(p => p.video_id))
@@ -292,7 +287,6 @@ const ReelsContainer = ({
             .eq('action_type', 'share');
           
           if (sharesPointsData) {
-            // ✅ Uso defensivo: Array.from(sharesPointsData || [])
             setActionsPerformed(prev => ({
               ...prev,
               shares: new Set(Array.from(sharesPointsData || []).map(p => p.video_id))
@@ -443,7 +437,7 @@ const ReelsContainer = ({
               currentVideo.muted = true;
               currentVideo.play()
                 .then(() => setIsAutoPlaying(true))
-                .catch(e => console.error('❌ Error:', e));
+                .catch(e => console.error('Error:', e));
             });
         }
       } else if (isAutoPlaying) {
@@ -639,7 +633,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ CORRECCIÓN DEFENSA: Asegurar que el estado sea un Set antes de copiar
+      // ✅ REFUERZO DEFENSA: Inicializar sets si son null, previendo el "not iterable"
       const newLikedVideos = new Set(likedVideos || []);
       const newDislikedVideos = new Set(dislikedVideos || []);
       
@@ -679,7 +673,6 @@ const ReelsContainer = ({
         await supabase.rpc('decrement_video_likes', { video_id: videoId });
         
         console.log('✅ Like removido (los puntos ya ganados NO se pierden)');
-        // ✅ IMPORTANTE: NO removemos de actionsPerformed.likes
         
       } else {
         // ==============================
@@ -712,13 +705,13 @@ const ReelsContainer = ({
             // 1. TRACKEAR LA ACCIÓN (Esto verifica las reglas/misiones)
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
-            // ✅ CORRECCIÓN CLAVE: Solo otorga puntos si la MISIÓN se ha completado.
-            if (missionResult.completed) { 
-              const pointsEarned = missionResult.reward.points || 5; 
+            // ✅ LÓGICA DE PREMIO: Solo si la misión/regla otorga puntos
+            if (missionResult.points_earned > 0) { 
+              const pointsEarned = missionResult.points_earned; 
               
-              await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
+              await addPoints(pointsEarned, missionResult.message || 'Puntos ganados por acción', 'free'); 
               
-              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId);
+              showPointsNotification(`+${pointsEarned} puntos 🎉`, videoId);
 
               // 2. Registrar en BD los puntos de misión
               await supabase
@@ -726,20 +719,40 @@ const ReelsContainer = ({
                 .insert({
                   user_id: user.id,
                   video_id: videoId,
-                  action_type: 'mission_like_complete', // Usamos un tipo de acción claro para la misión
+                  // Si el premio es directo (5pts) o de misión, se registra aquí.
+                  action_type: 'like', 
                   points_earned: pointsEarned,
                   created_at: new Date().toISOString()
                 });
                 
+            } else if (missionResult.completed) {
+                // 3. Caso Misión Completada (y el premio fue devuelto en missionResult.reward)
+                const pointsEarned = missionResult.reward.points || 5; 
+
+                await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
+                showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId);
+
+                // Registrar el premio de la misión (opcional si el service no lo hace)
+                await supabase
+                  .from('user_video_points')
+                  .insert({
+                    user_id: user.id,
+                    video_id: videoId,
+                    action_type: 'mission_like_complete', 
+                    points_earned: pointsEarned,
+                    created_at: new Date().toISOString()
+                  });
+            
             } else {
-                 // 3. Si no se ganan puntos, solo se notifica el progreso/acción registrada
+                 // 4. Si no se ganan puntos, solo se notifica el progreso/acción registrada
                 showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId);
             }
             
             // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a intentar dar puntos directos
+            // Refuerzo defensa: Usar || new Set()
             setActionsPerformed(prev => ({
               ...prev,
-              likes: new Set([...(prev.likes || []), videoId]) // ✅ DOBLE DEFENSA
+              likes: new Set([...(prev.likes || new Set()), videoId]) 
             }));
             
           } catch (pointsError) {
@@ -774,7 +787,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ CORRECCIÓN DEFENSA
+      // ✅ REFUERZO DEFENSA
       const newDislikedVideos = new Set(dislikedVideos || []);
       const newLikedVideos = new Set(likedVideos || []);
       
@@ -815,7 +828,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ CORRECCIÓN DEFENSA
+      // ✅ REFUERZO DEFENSA
       const newSavedVideos = new Set(savedVideos || []);
       const hasEarnedPointsBefore = actionsPerformed.saves.has(videoId);
       
@@ -850,10 +863,10 @@ const ReelsContainer = ({
                 created_at: new Date().toISOString()
               });
             
-            // ✅ CORRECCIÓN DEFENSA
+            // ✅ REFUERZO DEFENSA
             setActionsPerformed(prev => ({
               ...prev,
-              saves: new Set([...(prev.saves || []), videoId])
+              saves: new Set([...(prev.saves || new Set()), videoId])
             }));
           } catch (pointsError) {
             console.error('Error al otorgar puntos:', pointsError);
@@ -906,7 +919,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ CORRECCIÓN DEFENSA
+      // ✅ REFUERZO DEFENSA
       const newFollowedCreators = new Set(followedCreators || []);
       const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
       const hasEarnedPointsBefore = actionsPerformed.follows.has(creatorId);
@@ -954,10 +967,10 @@ const ReelsContainer = ({
               await addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
-            // ✅ CORRECCIÓN DEFENSA
+            // ✅ REFUERZO DEFENSA
             setActionsPerformed(prev => ({
               ...prev,
-              follows: new Set([...(prev.follows || []), creatorId])
+              follows: new Set([...(prev.follows || new Set()), creatorId])
             }));
           } catch (pointsError) {
             console.error('Error al otorgar puntos:', pointsError);
@@ -1019,10 +1032,10 @@ const ReelsContainer = ({
               await addPoints(missionResult.reward.points, missionResult.message, 'free');
             }
             
-            // ✅ CORRECCIÓN DEFENSA
+            // ✅ REFUERZO DEFENSA
             setActionsPerformed(prev => ({
               ...prev,
-              shares: new Set([...(prev.shares || []), video.id])
+              shares: new Set([...(prev.shares || new Set()), video.id])
             }));
           }
         } catch (pointsError) {
@@ -1762,7 +1775,7 @@ const ReelsContainer = ({
               onClick={(e) => handleSave(currentVideo.id, e)} 
               className="flex flex-col items-center space-y-1 group"
             >
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'text-yellow-400' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
                 <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
               </div>
             </button>
