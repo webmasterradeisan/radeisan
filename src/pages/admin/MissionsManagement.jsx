@@ -599,7 +599,7 @@ function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
       complete_profile: 'Completar perfil',
       login_daily: 'Login diario',
       watch_reels: 'Ver reels',
-      upload_pack: 'Paquete de Publicación' // <--- CORRECCIÓN APLICADA
+      upload_pack: 'Paquete de Publicación' 
     };
     return types[type] || type;
   };
@@ -733,7 +733,7 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
     setFormData(prev => ({ ...prev, [field]: value }));
   };
   
-  // Lógica para ocultar 'Meta (cantidad)' si es 'upload_pack' <--- CORRECCIÓN APLICADA
+  // Lógica para ocultar 'Meta (cantidad)' si es 'upload_pack'
   const showTargetCount = formData.mission_type !== 'upload_pack';
 
   return (
@@ -797,7 +797,7 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 <option value="complete_profile">Completar perfil</option>
                 <option value="login_daily">Login diario</option>
                 <option value="watch_reels">Ver reels</option>
-                <option value="upload_pack">Paquete de Publicación</option> {/* <-- CORRECCIÓN APLICADA */}
+                <option value="upload_pack">Paquete de Publicación</option> 
               </select>
             </div>
 
@@ -820,7 +820,7 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
             </div>
 
             {/* Meta (target count) */}
-            {showTargetCount && ( {/* <-- CORRECCIÓN APLICADA */}
+            {showTargetCount && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Meta (cantidad) *
