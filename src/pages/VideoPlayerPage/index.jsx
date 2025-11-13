@@ -4,8 +4,8 @@
 // ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
 // ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
 // ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
-// ✅ 4. (CORREGIDO) handleLike: Añadidas las notificaciones de progreso y "ya ganado",
-//    igualando la lógica de ReelsContainer.
+// ✅ 4. (CORREGIDO) handleLike: Añadidas las notificaciones de progreso y "ya ganado".
+// ✅ 5. (NUEVO) Notificación de Like flotante (estilo Reels) añadida al botón.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -97,10 +97,18 @@ const VideoPlayerPage = () => {
   const [shareLink, setShareLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
 
+  // Estado para notificaciones grandes (centro de pantalla)
   const [userFeedback, setUserFeedback] = useState({
     show: false,
     message: '',
     type: 'success', 
+  });
+  
+  // ✅ NUEVO ESTADO: Notificación específica para 'Like'
+  const [likeNotification, setLikeNotification] = useState({
+    show: false,
+    message: '',
+    type: 'success' 
   });
 
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -122,13 +130,22 @@ const VideoPlayerPage = () => {
   const DESCRIPTION_MAX_LENGTH = 150;
 
   // ===============================
-  // FUNCIONES DE FEEDBACK (sin cambios)
+  // FUNCIONES DE FEEDBACK
   // ===============================
 
+  // Notificación GRANDE (centro de pantalla)
   const showUserFeedback = useCallback((message, type = 'success', duration = 2500) => {
     setUserFeedback({ show: true, message, type });
     setTimeout(() => {
       setUserFeedback({ show: false, message: '', type: 'success' });
+    }, duration);
+  }, []);
+  
+  // ✅ NUEVA NOTIFICACIÓN: Pequeña, al lado del botón 'Like'
+  const showLikeNotification = useCallback((message, type = 'success', duration = 2000) => {
+    setLikeNotification({ show: true, message, type });
+    setTimeout(() => {
+      setLikeNotification({ show: false, message: '', type: 'success' });
     }, duration);
   }, []);
   
@@ -189,7 +206,7 @@ const VideoPlayerPage = () => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [volume, isMinimized]); // Dependencias simplificadas (togglePlayPause, etc. se definen con useCallback o no cambian)
+  }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); // Dependencias añadidas
 
   // ===============================
   // FUNCIONES DE DRAG & DROP (sin cambios)
@@ -468,7 +485,7 @@ const VideoPlayerPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [videoId, user]);
+  }, [videoId, user]); // 'loadRelatedVideos' se quitó de dependencias, se llama manualmente
 
   // ✅ CORRECCIÓN DE VIDEOS RELACIONADOS (CRASH FIX)
   const loadRelatedVideos = async () => {
@@ -612,6 +629,7 @@ const VideoPlayerPage = () => {
 
       if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
         updatePointsContext(result.points_earned);
+        // Usamos la notificación grande para esto, ya que es menos frecuente
         showUserFeedback(`+${result.points_earned} PUNTOS por ver 30 segundos 🎉`, 'success');
       }
 
@@ -664,45 +682,39 @@ const VideoPlayerPage = () => {
         // ================================================================
         
         if (!hasEarnedLikePoints) {
-          // Es la primera vez que da like (o al menos la primera vez que
-          // se registrará para puntos/misión).
           setHasEarnedLikePoints(true); 
           
           try {
             const result = await trackGiveLike('video', videoId); 
-            
             console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
 
-            // Caso 1: Misión completada, puntos ganados
             if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
               updatePointsContext(result.points_earned);
-              showUserFeedback(`+${result.points_earned} PUNTOS. ¡Misión completada! 🎉`, 'success');
+              // ✅ Usa la notificación pequeña
+              showLikeNotification(`+${result.points_earned} PUNTOS. ¡Misión completada! 🎉`, 'success');
             } 
-            // Caso 2: Progreso registrado (ej. 2/10 likes)
             else if (result.result === 'progress_updated') {
-              showUserFeedback('Acción registrada. ¡Sigue dando Likes!', 'success');
+              // ✅ Usa la notificación pequeña
+              showLikeNotification('Acción registrada. ¡Sigue dando Likes!', 'success');
             }
-            // Caso 3: Anti-farming (DB bloqueó el 'like' duplicado)
             else if (result.result === 'already_paid') {
-              showUserFeedback('PUNTOS YA GANADOS por este Like.', 'restriction'); 
+              // ✅ Usa la notificación pequeña
+              showLikeNotification('PUNTOS YA GANADOS por este Like.', 'restriction'); 
             } 
-            // Caso 4: Misión ya completada hoy
             else if (result.result === 'already_completed') {
-               showUserFeedback('Misión de Likes ya completada hoy.', 'restriction');
+               // ✅ Usa la notificación pequeña
+               showLikeNotification('Misión de Likes ya completada hoy.', 'restriction');
             }
-            // Caso 5: Error o 'mission_not_found'
             else if (result.result === 'error') {
                setHasEarnedLikePoints(false); // Permitir reintento
             }
-            // (No mostramos nada si es 'mission_not_found' o 'registered' sin progreso)
-
           } catch (pointsError) {
              console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
              setHasEarnedLikePoints(false); // Permitir reintento
           }
         } else {
-          // El usuario YA ha ganado puntos por esta acción en el pasado.
-          showUserFeedback('Ya has ganado puntos por esta acción.', 'restriction');
+          // ✅ Usa la notificación pequeña
+          showLikeNotification('Ya has ganado puntos por esta acción.', 'restriction');
         }
         // ================================================================
         // ✅ FIN: LÓGICA DE NOTIFICACIONES
@@ -740,6 +752,8 @@ const VideoPlayerPage = () => {
 
       } else {
         if (liked) {
+          // Llamamos a handleLike, que ahora manejará su propio estado
+          // (quitará el like y no mostrará notificación)
           await handleLike(); 
         }
 
@@ -785,6 +799,7 @@ const VideoPlayerPage = () => {
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
         }
+        // Usamos la notificación grande para esto
         showUserFeedback('Video guardado en favoritos', 'success', 1500);
       }
     } catch (err) {
@@ -810,6 +825,7 @@ const VideoPlayerPage = () => {
 
         if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
           updatePointsContext(result.points_earned);
+          // Usamos la notificación grande
           showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
         } else if (result.result === 'already_paid') {
           showUserFeedback('PUNTOS YA GANADOS por compartir este contenido.', 'restriction');
@@ -830,6 +846,7 @@ const VideoPlayerPage = () => {
       return;
     }
     if (user.id === video.user_id) {
+      // Usamos la notificación grande
       showUserFeedback('No puedes regalar puntos a tu propio video.', 'restriction');
       return;
     }
@@ -838,6 +855,7 @@ const VideoPlayerPage = () => {
   
   // ✅ NUEVA FUNCIÓN: Manejar el éxito del regalo
   const handleGiftSuccess = (amount) => {
+    // Usamos la notificación grande
     showUserFeedback(`¡Regalo enviado! ${amount} puntos para el creador.`, 'success');
     // Si necesitas actualizar cualquier contador del video (ej. contador de regalos), hazlo aquí.
   };
@@ -878,6 +896,7 @@ const VideoPlayerPage = () => {
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
         }
+        // Usamos la notificación grande
         showUserFeedback('Ahora sigues a este creador', 'success', 1500);
       }
     } catch (err) {
@@ -937,11 +956,11 @@ const VideoPlayerPage = () => {
         
         try {
           const result = await trackComment('video', videoId);
-          
           console.log('--- RESPUESTA DE TRACK COMMENT (DEBUG) ---', result); 
 
           if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
             updatePointsContext(result.points_earned);
+            // Usamos la notificación grande
             showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
           } else if (result.result === 'progress_updated') {
             showUserFeedback('Comentario registrado. ¡Sigue así!', 'success');
@@ -956,10 +975,7 @@ const VideoPlayerPage = () => {
           console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
           setHasEarnedCommentPoints(false);
         }
-      } else {
-        // Ya ganó puntos, no mostrar nada (evita spam de notificaciones)
       }
-
 
       if (replyingTo) {
         setComments(prev => prev.map(comment => {
@@ -1006,7 +1022,7 @@ const VideoPlayerPage = () => {
     }
   };
 
-  const togglePlayPause = () => {
+  const togglePlayPause = useCallback(() => { // ✅ Añadido useCallback
     const currentVideo = videoRef.current;
     if (!currentVideo) return;
 
@@ -1017,9 +1033,9 @@ const VideoPlayerPage = () => {
       currentVideo.pause();
       setIsPlaying(false);
     }
-  };
+  }, []); // Sin dependencias
 
-  const handleVolumeChange = (e) => {
+  const handleVolumeChange = useCallback((e) => { // ✅ Añadido useCallback
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
 
@@ -1027,9 +1043,9 @@ const VideoPlayerPage = () => {
     if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
 
     setIsMuted(newVolume === 0);
-  };
+  }, []); // Sin dependencias
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => { // ✅ Añadido useCallback
     const newMuted = !isMuted;
     setIsMuted(newMuted);
 
@@ -1043,7 +1059,7 @@ const VideoPlayerPage = () => {
       if (videoRef.current) videoRef.current.volume = 0.5;
       if (miniVideoRef.current) miniVideoRef.current.volume = 0.5;
     }
-  };
+  }, [isMuted, volume]); // Dependencias: isMuted, volume
 
   const handleTimeUpdate = () => {
     const currentVideo = videoRef.current;
@@ -1065,7 +1081,7 @@ const VideoPlayerPage = () => {
     videoRef.current.currentTime = pos * videoRef.current.duration;
   };
 
-  const toggleFullscreen = async () => {
+  const toggleFullscreen = useCallback(async () => { // ✅ Añadido useCallback
     if (!containerRef.current) return;
 
     try {
@@ -1091,7 +1107,7 @@ const VideoPlayerPage = () => {
     } catch (err) {
       console.error('Fullscreen error:', err);
     }
-  };
+  }, [isMobile]); // Dependencia: isMobile
 
   const handleMouseMovePlayer = () => {
     setShowControls(true);
@@ -1202,7 +1218,7 @@ const VideoPlayerPage = () => {
 
       <Header />
 
-      {/* NUEVO FEEDBACK VISUAL: CENTRADO Y GRANDE */}
+      {/* ❌ FEEDBACK VISUAL GRANDE (Ahora solo para acciones generales) */}
       {userFeedback.show && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4 backdrop-blur-sm bg-black/10">
           <div 
@@ -1411,8 +1427,12 @@ const VideoPlayerPage = () => {
                     )}
                   </div>
 
+                  {/* ================================================== */}
+                  {/* ✅ GRUPO DE BOTONES CON NOTIFICACIÓN              */}
+                  {/* ================================================== */}
                   <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                    <div className="flex items-center bg-muted rounded-full overflow-hidden">
+                    {/* ✅ AÑADIDO 'relative' a este contenedor */}
+                    <div className="relative flex items-center bg-muted rounded-full overflow-hidden">
                       <button
                         onClick={handleLike}
                         className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${
@@ -1432,6 +1452,16 @@ const VideoPlayerPage = () => {
                         <Icon name="ThumbsDown" size={18} className={disliked ? 'fill-current' : ''} />
                         <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span>
                       </button>
+                      
+                      {/* ✅ NOTIFICACIÓN DE PUNTOS DE LIKE AÑADIDA */}
+                      {likeNotification.show && (
+                        <div 
+                          className={`absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg shadow-lg text-white font-bold text-xs whitespace-nowrap animate-bounce z-20
+                          ${likeNotification.type === 'success' ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-gray-500 to-gray-600'}
+                        `}>
+                          {likeNotification.message}
+                        </div>
+                      )}
                     </div>
                     
                     {/* ✅ NUEVO BOTÓN: Regalar Puntos */}
