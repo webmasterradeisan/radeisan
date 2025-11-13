@@ -599,7 +599,8 @@ function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
       complete_profile: 'Completar perfil',
       login_daily: 'Login diario',
       watch_reels: 'Ver reels',
-      upload_pack: 'Paquete de Publicación' 
+      upload_pack: 'Paquete de Publicación',
+      all_missions_streak: 'Racha de Misiones' // <-- NUEVO TIPO AÑADIDO
     };
     return types[type] || type;
   };
@@ -733,8 +734,10 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
     setFormData(prev => ({ ...prev, [field]: value }));
   };
   
-  // Lógica para ocultar 'Meta (cantidad)' si es 'upload_pack'
+  // --- LÓGICA CONDICIONAL DE FORMULARIO ---
   const showTargetCount = formData.mission_type !== 'upload_pack';
+  const isUploadPack = formData.mission_type === 'upload_pack';
+  const isStreakMission = formData.mission_type === 'all_missions_streak';
 
   return (
     <div className="max-w-4xl">
@@ -797,8 +800,16 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 <option value="complete_profile">Completar perfil</option>
                 <option value="login_daily">Login diario</option>
                 <option value="watch_reels">Ver reels</option>
-                <option value="upload_pack">Paquete de Publicación</option> 
+                <option value="upload_pack">Paquete de Publicación</option>
+                <option value="all_missions_streak">Racha de Misiones Diarias</option> {/* <-- NUEVO TIPO AÑADIDO */}
               </select>
+              
+              {/* === AVISO CONDICIONAL 1 (UPLOAD_PACK) === */}
+              {isUploadPack && (
+                <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded-md mt-2">
+                  <strong>Paquete Implícito:</strong> Recompensa por (1 Video + 1 Reel + 1 Foto). La lógica se gestiona en el backend.
+                </p>
+              )}
             </div>
 
             {/* Frecuencia */}
@@ -834,9 +845,17 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                     onChange={e => updateField('target_count', parseInt(e.target.value) || 1)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Cuántas veces debe realizar la acción
-                  </p>
+                  
+                  {/* === AVISO CONDICIONAL 2 (STREAK) === */}
+                  {isStreakMission ? (
+                     <p className="text-xs text-gray-500 mt-1">
+                       Número de <strong>días seguidos</strong> necesarios para la racha.
+                     </p>
+                  ) : (
+                     <p className="text-xs text-gray-500 mt-1">
+                       Cuántas veces debe realizar la acción.
+                     </p>
+                  )}
                 </div>
             )}
 
@@ -1148,7 +1167,7 @@ function StatsTab({ stats, topMissions, loading }) {
             </div>
             <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Rachas activas</p>
+                <p className="text-sm text-gray-60Am-1">Rachas activas</p>
                 <p className="text-2xl font-bold text-purple-600">
                   {stats.active_streaks || 0}
                 </p>
