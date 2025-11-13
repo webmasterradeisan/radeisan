@@ -39,6 +39,7 @@ export default function MissionsManagement() {
     title: '',
     description: '',
     mission_type: 'watch_video',
+    mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
     target_count: 1,
     points_reward: 10,
     frequency: 'daily',
@@ -199,6 +200,7 @@ export default function MissionsManagement() {
           title: '',
           description: '',
           mission_type: 'watch_video',
+          mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
           target_count: 1,
           points_reward: 10,
           frequency: 'daily',
@@ -239,6 +241,7 @@ export default function MissionsManagement() {
           title: '',
           description: '',
           mission_type: 'watch_video',
+          mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
           target_count: 1,
           points_reward: 10,
           frequency: 'daily',
@@ -316,6 +319,7 @@ export default function MissionsManagement() {
       title: mission.title,
       description: mission.description,
       mission_type: mission.mission_type,
+      mission_key: mission.mission_key, // <-- CORRECCIÓN AÑADIDA
       target_count: mission.target_count,
       points_reward: mission.points_reward,
       frequency: mission.frequency,
@@ -335,6 +339,7 @@ export default function MissionsManagement() {
       title: '',
       description: '',
       mission_type: 'watch_video',
+      mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
       target_count: 1,
       points_reward: 10,
       frequency: 'daily',
@@ -600,7 +605,7 @@ function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
       login_daily: 'Login diario',
       watch_reels: 'Ver reels',
       upload_pack: 'Paquete de Publicación',
-      all_missions_streak: 'Racha de Misiones' // <-- NUEVO TIPO AÑADIDO
+      all_missions_streak: 'Racha de Misiones'
     };
     return types[type] || type;
   };
@@ -730,8 +735,20 @@ function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
 function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, saving }) {
   const availableIcons = missionsService.getAvailableMissionIcons();
 
+  // --- CORRECCIÓN APLICADA AQUÍ ---
   const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      // Crea el nuevo objeto de estado
+      const newState = { ...prev, [field]: value };
+      
+      // Si el campo que cambió es 'mission_type',
+      // actualiza también 'mission_key' para que coincida.
+      if (field === 'mission_type') {
+        newState.mission_key = value;
+      }
+      
+      return newState;
+    });
   };
   
   // --- LÓGICA CONDICIONAL DE FORMULARIO ---
@@ -801,7 +818,7 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 <option value="login_daily">Login diario</option>
                 <option value="watch_reels">Ver reels</option>
                 <option value="upload_pack">Paquete de Publicación</option>
-                <option value="all_missions_streak">Racha de Misiones Diarias</option> {/* <-- NUEVO TIPO AÑADIDO */}
+                <option value="all_missions_streak">Racha de Misiones Diarias</option>
               </select>
               
               {/* === AVISO CONDICIONAL 1 (UPLOAD_PACK) === */}
