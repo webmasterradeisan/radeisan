@@ -2,10 +2,12 @@
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
 // ... (comentarios de cabecera) ...
-// 🟢 NUEVO (11/13 v2): Eliminado el estado 'pointsNotification' y la función
-//    'showPointsNotification'.
-// 🟢 NUEVO (11/13 v2): Integración de SweetAlert2 (Toasts) para todas las
-//    notificaciones de puntos y acciones.
+// 🟢 REVERTIDO (11/13 v3): Eliminado SweetAlert2.
+// 🟢 RESTAURADO (11/13 v3): Vuelve el estado 'pointsNotification' y la
+//    función 'showPointsNotification'.
+// 🟢 NUEVO (11/13 v3): La notificación ahora se renderiza en el CENTRO
+//    del reproductor de video (sobre el reel) para garantizar visibilidad.
+// 🟢 MANTIENE (11/13): Diagnóstico de RLS en 'loadComments'.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,22 +19,11 @@ import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
 import GiftPointsModal from 'components/GiftPointsModal'; 
 
-// ✅ NUEVO: Importar SweetAlert2
-import Swal from 'sweetalert2';
+// ❌ ELIMINADO: Importar SweetAlert2
+// import Swal from 'sweetalert2';
 
-// ✅ NUEVO: Crear una instancia de Toast reutilizable
-// Aparecerá arriba a la derecha, no interferirá con el clic y durará 2.5 seg
-const Toast = Swal.mixin({
-  toast: true,
-  position: 'top-end',
-  showConfirmButton: false,
-  timer: 2500,
-  timerProgressBar: true,
-  didOpen: (toast) => {
-    toast.addEventListener('mouseenter', Swal.stopTimer);
-    toast.addEventListener('mouseleave', Swal.resumeTimer);
-  }
-});
+// ❌ ELIMINADO: Instancia de Toast
+// const Toast = Swal.mixin({ ... });
 
 
 // ===============================
@@ -78,8 +69,13 @@ const ReelsContainer = ({
   // ✅ NUEVO: Estado para el Modal de Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
 
-  // ❌ ELIMINADO: Estado de 'pointsNotification' ya no es necesario
-  // const [pointsNotification, setPointsNotification] = useState(...);
+  // ✅ RESTAURADO: Estado para notificaciones de puntos
+  const [pointsNotification, setPointsNotification] = useState({
+    show: false,
+    message: '',
+    videoId: null,
+    type: 'success' // Añadido para controlar el color
+  });
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
@@ -109,11 +105,28 @@ const ReelsContainer = ({
     isMobile,
     isDesktop,
     showCommentsModal,
-    showGiftModal // ✅ Nuevo estado de debug
+    showGiftModal 
   });
 
-  // ❌ ELIMINADO: La función 'showPointsNotification' ya no es necesaria
-  // const showPointsNotification = (...) => { ... };
+  // ✅ RESTAURADO: Función para mostrar notificación de puntos
+  const showPointsNotification = (message, videoId, type = 'success') => {
+    setPointsNotification({
+      show: true,
+      message,
+      videoId,
+      type // Añadimos tipo para controlar color
+    });
+    
+    // Auto ocultar después de 2 segundos
+    setTimeout(() => {
+      setPointsNotification({
+        show: false,
+        message: '',
+        videoId: null,
+        type: 'success'
+      });
+    }, 2000);
+  };
 
   // ===============================
   // FUNCIÓN: Convertir ID del video a índice
@@ -272,8 +285,6 @@ const ReelsContainer = ({
           if (savedData) {
             const savedIds = new Set(savedData.map(s => s.video_id));
             setSavedVideos(savedIds);
-            
-            // 🛑 ELIMINADO: 'user_video_points' no existe
           }
 
           // ✅ CARGAR SEGUIDORES
@@ -285,11 +296,8 @@ const ReelsContainer = ({
           if (followsData) {
             const followedIds = new Set(followsData.map(f => f.following_id));
             setFollowedCreators(followedIds);
-            
-            // 🛑 ELIMINADO: 'user_video_points' no existe
           }
 
-          // 🛑 ELIMINADO: 'user_video_points' no existe
         }
       } catch (error) {
         console.error('Error cargando usuario y acciones:', error);
@@ -297,7 +305,7 @@ const ReelsContainer = ({
     };
     
     loadCurrentUserAndActions();
-  }, [videos]); // Dependencia de 'videos' para actualizar el set de 'likes'
+  }, [videos]); 
 
   // ===============================
   // INICIALIZAR CONTADORES DE VIDEOS
@@ -314,7 +322,6 @@ const ReelsContainer = ({
     setVideoCounters(initialCounters);
   }, [videos]);
 
-  // ... (El resto de useEffects de reproducción, navegación y tracking no cambian) ...
   // ===============================
   // FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
   // ===============================
@@ -382,7 +389,7 @@ const ReelsContainer = ({
         if (e.deltaY > 0 && currentIndex < videos.length - 1) {
           setCurrentIndex(prev => prev + 1);
         } else if (e.deltaY < 0 && currentIndex > 0) {
-          setCurrentIndex(prev => prev + 1);
+          setCurrentIndex(prev => prev - 1);
         }
       }, 150);
     };
@@ -607,7 +614,7 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
 
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE LIKE (Integrado con SweetAlert2)
+  // ✅✅✅ ACCIÓN DE LIKE (Restaurado a 'showPointsNotification')
   // ==========================================================
   
   const handleLike = async (videoId, e) => {
@@ -707,18 +714,15 @@ const ReelsContainer = ({
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
             // ================================================================
-            // ✅ INICIO: LÓGICA DE NOTIFICACIONES (SweetAlert2)
+            // ✅ INICIO: LÓGICA DE NOTIFICACIONES (Restaurada)
             // ================================================================
             if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
               // 1. MISIÓN COMPLETA
               const pointsEarned = missionResult.points_earned; 
               await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
               
-              // ✅ SWEETALERT2
-              Toast.fire({
-                icon: 'success',
-                title: `Misión Completa: +${pointsEarned} puntos 🎉`
-              });
+              // ✅ RESTAURADO
+              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId, 'success');
               
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
@@ -726,20 +730,14 @@ const ReelsContainer = ({
             } else if (missionResult.result === 'progress_updated') {
               // 2. PROGRESO REGISTRADO
               
-              // ✅ SWEETALERT2
-              Toast.fire({
-                icon: 'info', // 'info' es mejor que 'success' aquí
-                title: 'Acción registrada. Sigue dando Likes!'
-              });
+              // ✅ RESTAURADO
+              showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId, 'success');
                  
             } else if (missionResult.result === 'already_completed') {
               // 3. ANTI-FARMING (Misión ya completada hoy)
               
-              // ✅ SWEETALERT2
-              Toast.fire({
-                icon: 'warning', // 'warning' o 'info'
-                title: 'Ya completaste la misión de Likes hoy.'
-              });
+              // ✅ RESTAURADO
+              showPointsNotification(`Ya completaste la misión de Likes hoy.`, videoId, 'restriction');
 
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
@@ -757,11 +755,8 @@ const ReelsContainer = ({
           // ==============================
           console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
           
-          // ✅ SWEETALERT2
-          Toast.fire({
-            icon: 'info',
-            title: 'Ya completaste esta misión hoy.'
-          });
+          // ✅ RESTAURADO
+          showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
         }
 
       } catch (error) {
@@ -791,6 +786,7 @@ const ReelsContainer = ({
   // ==========================================================
   
   const handleDislike = async (videoId, e) => {
+    // ... (sin cambios en la lógica, no tenía notificaciones) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -885,7 +881,7 @@ const ReelsContainer = ({
   };
 
   const handleSave = async (videoId, e) => {
-    // ... (La lógica de handleSave no cambia, no tenía notificaciones) ...
+    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -921,7 +917,7 @@ const ReelsContainer = ({
   };
   
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE REGALO (Integrado con SweetAlert2)
+  // ✅✅✅ ACCIÓN DE REGALO (Restaurado a 'showPointsNotification')
   // ==========================================================
   const handleGiftClick = (video, e) => {
       if (e) {
@@ -935,11 +931,8 @@ const ReelsContainer = ({
       }
       
       if (currentUser.id === video.creator?.id) {
-          // ✅ SWEETALERT2
-          Toast.fire({
-            icon: 'error',
-            title: 'No puedes regalar puntos a tu propio reel.'
-          });
+          // ✅ RESTAURADO
+          showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id, 'restriction');
           return;
       }
       
@@ -947,14 +940,12 @@ const ReelsContainer = ({
   };
   
   const handleGiftSuccess = (amount) => {
-      // ✅ SWEETALERT2
-      Toast.fire({
-        icon: 'success',
-        title: `¡Regalo enviado! ${amount} puntos para el creador.`
-      });
+      const currentVideo = videos[currentIndex];
+      // ✅ RESTAURADO
+      showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id, 'success');
   };
 
-  // ... (handleFollow, handleShare, handleMuteToggle no cambian) ...
+  // ... (handleFollow no cambia) ...
   const handleFollow = async (creatorId, e) => {
     if (e) {
       e.stopPropagation();
@@ -972,7 +963,6 @@ const ReelsContainer = ({
       const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
 
       if (isCurrentlyFollowing) {
-        // Dejar de seguir
         newFollowedCreators.delete(creatorId);
         
         await supabase
@@ -983,7 +973,6 @@ const ReelsContainer = ({
         
         console.log('✅ Dejaste de seguir al creador:', creatorId);
       } else {
-        // Seguir
         newFollowedCreators.add(creatorId);
         
         await supabase
@@ -1001,6 +990,7 @@ const ReelsContainer = ({
   };
 
   const handleShare = async (video, e) => {
+    // ... (sin cambios, la notificación en clipboard era de SweetAlert) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1015,11 +1005,8 @@ const ReelsContainer = ({
         });
       } else {
         navigator.clipboard.writeText(window.location.href);
-        // ✅ SWEETALERT2 (Mejora)
-        Toast.fire({
-            icon: 'success',
-            title: 'Enlace copiado al portapapeles'
-        });
+        // La notificación toast era de SweetAlert, la original era un 'alert'
+        alert('Enlace copiado al portapapeles');
       }
     } catch (error) {
       console.error('Error compartiendo:', error);
@@ -1027,6 +1014,7 @@ const ReelsContainer = ({
   };
 
   const handleMuteToggle = (videoId, e) => {
+    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1052,6 +1040,7 @@ const ReelsContainer = ({
   // ===============================
   
   const loadComments = async (videoId, retryCount = 0) => {
+    // ... (sin cambios, mantiene el diagnóstico RLS) ...
     try {
       let { data, error } = await supabase
         .from('video_comments')
@@ -1365,6 +1354,26 @@ const ReelsContainer = ({
                   onError={(e) => console.error('Error de video:', e)}
                 />
 
+                {/* ================================================== */}
+                {/* ✅ NUEVA NOTIFICACIÓN (SOBRE EL REPRODUCTOR)      */}
+                {/* ================================================== */}
+                {pointsNotification.show && pointsNotification.videoId === video.id && (
+                  <div 
+                    className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
+                      px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-center
+                      backdrop-blur-md animate-bounce
+                      ${pointsNotification.type === 'success' 
+                        ? 'bg-gradient-to-r from-yellow-400/80 to-orange-500/80' // Color de éxito original
+                        : 'bg-gradient-to-r from-gray-500/80 to-gray-600/80' // Color de restricción original
+                      }
+                    `}
+                    // Añadimos pointer-events-none para no bloquear el play/pause
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {pointsNotification.message}
+                  </div>
+                )}
+
                 {loadingVideo && index === currentIndex && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
                     <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
@@ -1547,7 +1556,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* ✅ BOTÓN DE LIKE (SIN NOTIFICACIÓN CSS) */}
+            {/* ✅ BOTÓN DE LIKE (SIN NOTIFICACIÓN CSS AQUÍ) */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1558,8 +1567,8 @@ const ReelsContainer = ({
                 </div>
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
-
-              {/* ❌ ELIMINADO: Notificación de puntos CSS */}
+              
+              {/* ❌ ELIMINADO: Notificación de puntos de al lado del botón */}
             </div>
 
             <button 
@@ -1672,7 +1681,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* ✅ BOTÓN DE LIKE - DESKTOP (SIN NOTIFICACIÓN CSS) */}
+            {/* ✅ BOTÓN DE LIKE - DESKTOP (SIN NOTIFICACIÓN CSS AQUÍ) */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1686,7 +1695,7 @@ const ReelsContainer = ({
                 </span>
               </button>
 
-              {/* ❌ ELIMINADO: Notificación de puntos CSS */}
+              {/* ❌ ELIMINADO: Notificación de puntos de al lado del botón */}
             </div>
 
             <button 
@@ -1767,6 +1776,7 @@ const ReelsContainer = ({
         {/* PANEL DE COMENTARIOS - DESKTOP */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4">
+            {/* ... (sin cambios en el panel de comentarios) ... */}
             {/* Header del panel */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
@@ -1873,7 +1883,7 @@ const ReelsContainer = ({
                   <span className="text-sm text-blue-700">Respondiendo...</span>
                   <button
                     onClick={handleCancelReply}
-                    className="text-blue-600 hover:text-blue-7T00"
+                    className="text-blue-600 hover:text-blue-700"
                   >
                     <Icon name="X" size={16} />
                   </button>
@@ -1910,6 +1920,7 @@ const ReelsContainer = ({
             className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* ... (sin cambios en el modal de comentarios) ... */}
             {/* Header del modal */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
