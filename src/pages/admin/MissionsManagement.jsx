@@ -1,12 +1,13 @@
 // ============================================================================
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
-// ✅ MODIFICACIÓN: Añadido el nuevo tipo de misión 'upload_pack' (Publicar Video/Reel/Foto) 
-//                 con lógica condicional en el Formulario.
+// Componente completo para gestionar el sistema de misiones desde el admin panel
+// Incluye: CRUD completo, estadísticas, activar/desactivar, reordenamiento
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import *s missionsService from '../../services/missionsService';
+// 🛑 CORRECCIÓN: Cambiado '*s' a '* as' para sintaxis correcta de importación.
+import * as missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 
 // ============================================================================
@@ -190,18 +191,11 @@ export default function MissionsManagement() {
     try {
       setSaving(true);
       setError(null);
-      
-      const missionData = {
-          ...formData,
-          // Si es 'upload_pack', el target_count es simbólico
-          target_count: formData.mission_type === 'upload_pack' ? 1 : formData.target_count
-      };
 
-      const result = await missionsService.createMission(missionData);
+      const result = await missionsService.createMission(formData);
 
       if (result.success) {
         setSuccess('Misión creada exitosamente');
-        // Resetear el formulario al estado inicial
         setFormData({
           title: '',
           description: '',
@@ -236,19 +230,12 @@ export default function MissionsManagement() {
     try {
       setSaving(true);
       setError(null);
-      
-      const missionData = {
-          ...formData,
-          // Si es 'upload_pack', el target_count es simbólico
-          target_count: formData.mission_type === 'upload_pack' ? 1 : formData.target_count
-      };
 
-      const result = await missionsService.updateMission(editingMission.id, missionData);
+      const result = await missionsService.updateMission(editingMission.id, formData);
 
       if (result.success) {
         setSuccess('Misión actualizada exitosamente');
         setEditingMission(null);
-        // Resetear el formulario al estado inicial
         setFormData({
           title: '',
           description: '',
