@@ -1,7 +1,7 @@
 // src/pages/admin-points/PointsRulesEditor.jsx
 // ============================================================================
 // ✅ FIX: Lógica de Multiplicadores actualizada para usar 'is_multiplier_enabled'.
-// ✅ REORGANIZACIÓN SEGURA: Agrupación visual de reglas de Subida/Bono para coherencia.
+// ✅ NUEVO: INTEGRACIÓN DE REGLA DINÁMICA DE REEMBOLSO DE PUNTOS
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -132,7 +132,7 @@ export default function PointsRulesEditor() {
   };
 
   // ============================================================================
-  // FUNCIONES DE GUARDADO (CORREGIDA)
+  // FUNCIONES DE GUARDADO (CORREGIDA para manejar metadata)
   // ============================================================================
 
   const handleSave = async () => {
@@ -161,25 +161,31 @@ export default function PointsRulesEditor() {
 
       if (upsertError) throw upsertError;
 
-      // 2. Guardar 'actionRules'
-      const updates = actionRules.map(rule => 
-        supabase
-          .from('points_rules')
-          .update({ 
+      // 2. Guardar 'actionRules' (incluyendo points_amount, show_in_store, y metadata)
+      const updates = actionRules.map(rule => {
+        const updatePayload = { 
             points_amount: rule.points_amount,
             show_in_store: rule.show_in_store 
-          })
-          .eq('action_type', rule.action_type)
-      );
+        };
+        
+        // ✅ AÑADIDO: Guarda el objeto metadata completo si existe
+        if (rule.metadata) {
+            updatePayload.metadata = rule.metadata; 
+        }
+
+        return supabase
+          .from('points_rules')
+          .update(updatePayload)
+          .eq('action_type', rule.action_type);
+      });
       
       // 3. Guardar categorías (Asegura que los cambios en puntos y el multiplicador estén guardados)
       const categoryUpdates = categories.map(cat => 
           supabase
               .from('categories')
               .update({
-                  points_multiplier: cat.points_multiplier, // Guarda el valor editado
-                  is_multiplier_enabled: cat.is_multiplier_enabled // Guarda el estado del switch
-                  // Nota: También se podría guardar name, slug, description, etc. si se hubieran editado aquí.
+                  points_multiplier: cat.points_multiplier, 
+                  is_multiplier_enabled: cat.is_multiplier_enabled 
               })
               .eq('id', cat.id)
       );
@@ -219,7 +225,7 @@ export default function PointsRulesEditor() {
   // FUNCIONES DE ACTUALIZACIÓN (ADAPTADAS)
   // ============================================================================
 
-  // Esta función actualiza el input de puntos
+  // Esta función actualiza el input de puntos (points_amount)
   const updateAction = (actionType, value) => {
     setActionRules(prev =>
       prev.map(rule =>
@@ -230,6 +236,25 @@ export default function PointsRulesEditor() {
     );
     setHasChanges(true);
   };
+  
+  // ✅ NUEVA FUNCIÓN: Actualiza valores dentro del objeto metadata
+  const updateRuleMetadata = (actionType, key, value) => {
+    setActionRules(prev =>
+        prev.map(rule =>
+            rule.action_type === actionType
+                ? { 
+                    ...rule, 
+                    metadata: { 
+                        ...rule.metadata, 
+                        [key]: parseInt(value) || 0 
+                    } 
+                  }
+                : rule
+        )
+    );
+    setHasChanges(true);
+  };
+
 
   // Función para manejar el estado del checkbox de 'show_in_store'
   const updateActionShowInStore = (actionType, isChecked) => {
@@ -378,10 +403,24 @@ export default function PointsRulesEditor() {
       give_like: 'Heart',
       give_comment: 'MessageCircle',
       share_content: 'Share2',
-      gift_points_received: 'Gift' 
+      gift_points_received: 'Gift',
+      gift_rebate_config: 'BadgeDollarSign', // ✅ NUEVO ÍCONO DE CONFIGURACIÓN
     };
     return map[actionType] || 'Zap';
   };
+
+  // Función auxiliar para obtener las reglas de interacción/misceláneas que no son de subida de video
+  const getInteractionRules = () => {
+    const creationRules = [
+        'video_base', 'video_upload_per_minute', 'vertical_video_bonus', 'photo_upload'
+    ];
+    return actionRules.filter(rule => !creationRules.includes(rule.action_type));
+  };
+  
+  const rulesByActionType = actionRules.reduce((acc, rule) => {
+    acc[rule.action_type] = rule;
+    return acc;
+  }, {});
 
   // ============================================================================
   // RENDER - LOADING STATE
@@ -401,19 +440,6 @@ export default function PointsRulesEditor() {
       </div>
     );
   }
-
-  // Función auxiliar para obtener las reglas de interacción/misceláneas que no son de subida de video
-  const getInteractionRules = () => {
-    const creationRules = [
-        'video_base', 'video_upload_per_minute', 'vertical_video_bonus', 'photo_upload'
-    ];
-    return actionRules.filter(rule => !creationRules.includes(rule.action_type));
-  };
-  
-  const rulesByActionType = actionRules.reduce((acc, rule) => {
-    acc[rule.action_type] = rule;
-    return acc;
-  }, {});
 
   // ============================================================================
   // RENDER PRINCIPAL
@@ -585,21 +611,40 @@ export default function PointsRulesEditor() {
                     </div>
                   </div>
                   
-                  {/* --- SECCIÓN 2: OTRAS ACCIONES (Interacciones/General) --- */}
-                  {/* Filtramos las reglas de interacción/general y las mapeamos */}
+                  {/* --- SECCIÓN 2: OTRAS ACCIONES (Interacciones/General/Configuración) --- */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:col-span-2">
-                    {getInteractionRules().map(rule => (
-                        <ActionPointsInput
-                            key={rule.action_type}
-                            icon={getIconForAction(rule.action_type)}
-                            label={rule.action_name || rule.action_type}
-                            description={rule.description || `ID: ${rule.action_type}`}
-                            value={getActionValue(rule.action_type)}
-                            onChange={(value) => updateAction(rule.action_type, value)}
-                            showInStore={rule.show_in_store}
-                            onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
-                        />
-                    ))}
+                    {getInteractionRules().map(rule => {
+                        
+                        // ✅ RENDERIZAR COMPONENTE DE CONFIGURACIÓN DE REEMBOLSO
+                        if (rule.action_type === 'gift_rebate_config') {
+                            return (
+                                <RebateConfigInput
+                                    key={rule.action_type}
+                                    rule={rule}
+                                    // points_amount (monto de activación)
+                                    onActivationChange={(value) => updateAction(rule.action_type, value)}
+                                    // metadata.rebate_amount (monto de reembolso)
+                                    onRebateChange={(value) => updateRuleMetadata(rule.action_type, 'rebate_amount', value)}
+                                    // show_in_store
+                                    onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
+                                />
+                            );
+                        }
+                        
+                        // RENDERIZAR ACCIONES ESTÁNDAR
+                        return (
+                            <ActionPointsInput
+                                key={rule.action_type}
+                                icon={getIconForAction(rule.action_type)}
+                                label={rule.action_name || rule.action_type}
+                                description={rule.description || `ID: ${rule.action_type}`}
+                                value={getActionValue(rule.action_type)}
+                                onChange={(value) => updateAction(rule.action_type, value)}
+                                showInStore={rule.show_in_store}
+                                onShowInStoreChange={(isChecked) => updateActionShowInStore(rule.action_type, isChecked)}
+                            />
+                        );
+                    })}
                   </div>
 
                 </div>
@@ -1069,11 +1114,11 @@ export default function PointsRulesEditor() {
 }
 
 // ============================================================================
-// SUB-COMPONENTES (RESTAURADOS)
+// SUB-COMPONENTES DE CONFIGURACIÓN
 // ============================================================================
 
 /**
- * Input para configurar puntos de una acción
+ * Input para configurar puntos de una acción estándar
  */
 function ActionPointsInput({ 
   icon, 
@@ -1082,7 +1127,6 @@ function ActionPointsInput({
   value, 
   onChange, 
   highlight = false,
-  // ✅ CHECKLIST AÑADIDO: Nuevos props
   showInStore,
   onShowInStoreChange
 }) {
@@ -1114,7 +1158,6 @@ function ActionPointsInput({
             <span className="text-sm text-gray-600 font-medium">puntos</span>
           </div>
 
-          {/* ✅ CHECKLIST AÑADIDO: Renderizado del checkbox */}
           <div className="mt-3 pt-3 border-t border-gray-200">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -1131,6 +1174,88 @@ function ActionPointsInput({
       </div>
     </div>
   );
+}
+
+/**
+ * ✅ NUEVO COMPONENTE: Input para configurar la regla de Reembolso Dinámico
+ */
+function RebateConfigInput({ 
+  rule, 
+  onActivationChange, 
+  onRebateChange,
+  onShowInStoreChange
+}) {
+    const activationAmount = rule.points_amount || 5;
+    const rebateAmount = rule.metadata?.rebate_amount || 2;
+    const icon = 'BadgeDollarSign';
+
+    return (
+        <div className="p-4 border rounded-lg transition-colors border-purple-300 bg-purple-50/50 md:col-span-2">
+            <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-purple-100">
+                    <AppIcon name={icon} className="w-5 h-5 text-purple-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <label className="block font-medium text-gray-900 mb-1">
+                        Configuración de Reembolso por Regalo
+                    </label>
+                    <p className="text-xs text-gray-600">
+                        Define la regla: "Si un usuario regala **X** puntos, gana **Y** puntos de reembolso."
+                    </p>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-t border-purple-200 pt-4">
+                {/* Monto de Activación (X puntos) */}
+                <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-gray-700">
+                        1. Monto de Regalo que Activa el Reembolso (X)
+                    </label>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="number"
+                            min="1"
+                            value={activationAmount}
+                            onChange={(e) => onActivationChange(e.target.value)}
+                            className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-center font-semibold"
+                        />
+                        <span className="text-sm text-gray-600 font-medium">puntos</span>
+                    </div>
+                    <p className="text-xs text-gray-500">El usuario debe regalar exactamente esta cantidad.</p>
+                </div>
+                
+                {/* Monto de Reembolso (Y puntos) */}
+                <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-gray-700">
+                        2. Puntos Ganados por Reembolso (Y)
+                    </label>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="number"
+                            min="0"
+                            value={rebateAmount}
+                            onChange={(e) => onRebateChange(e.target.value)}
+                            className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-center font-semibold"
+                        />
+                        <span className="text-sm text-gray-600 font-medium">puntos</span>
+                    </div>
+                     <p className="text-xs text-gray-500">Cantidad que el usuario recupera.</p>
+                </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-purple-200">
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={!!rule.show_in_store} 
+                        onChange={(e) => onShowInStoreChange(e.target.checked)}
+                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                    />
+                    <span className="text-sm text-gray-700">Mostrar Reembolso en Tienda/Reglas Públicas</span>
+                </label>
+            </div>
+        </div>
+    );
 }
 
 /**
