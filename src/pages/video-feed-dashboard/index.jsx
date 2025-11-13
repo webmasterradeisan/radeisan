@@ -6,6 +6,7 @@
 // ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
 // ✅ CORREGIDO: Carrusel desktop no desaparece - usa videos sin filtrar por orientación
 // ✅ NUEVO: Recibe orientación desde Header para navegación directa a Reels/Videos
+// ✅ NUEVO: Reemplazada TrendingSidebar por PointsBalanceCard
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -16,8 +17,9 @@ import Header from '../../components/ui/Header';
 import FilterChips from './components/FilterChips';
 import VideoFeedGrid from './components/VideoFeedGrid';
 import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
-import TrendingSidebar from './components/TrendingSidebar';
-// ✅ NUEVA IMPORTACIÓN AÑADIDA
+// ❌ TrendingSidebar ya no se usa
+// import TrendingSidebar from './components/TrendingSidebar'; 
+// ✅ NUEVA IMPORTACIÓN (del paso anterior)
 import PointsBalanceCard from '../points-rewards-store/components/PointsBalanceCard';
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
 import PullToRefresh from './components/PullToRefresh';
@@ -287,7 +289,7 @@ const useUserPoints = () => {
       const fetchPoints = async () => {
         const { data } = await supabase
           .from('user_profiles')
-          .select('points')
+          .select('points') // ⚠️ NOTA: Solo trae 'points' (total)
           .eq('id', user.id)
           .single();
         
@@ -359,6 +361,25 @@ const VideoFeedDashboard = () => {
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
   const [selectedReelId, setSelectedReelId] = useState(null);
+
+  // ⚠️ DATOS DE MISIONES (FICTICIOS POR AHORA)
+  // TODO: Necesitamos un nuevo hook que cargue estos datos.
+  const [missions, setMissions] = useState([]);
+  const [pointsData, setPointsData] = useState({
+      freePoints: 0,
+      premiumPoints: 0,
+      pointsEarnedToday: 0,
+      nextRewardThreshold: 0
+  });
+  
+  // Sincronizar los puntos totales con el desglose (temporal)
+  useEffect(() => {
+      setPointsData(prev => ({
+          ...prev,
+          freePoints: userPoints // Usamos el total de puntos como "Gratis"
+      }));
+  }, [userPoints]);
+
 
   // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
   useEffect(() => {
@@ -501,7 +522,6 @@ const VideoFeedDashboard = () => {
     
     // Cambiar vista a reels mode con el ID específico
     setActiveOrientation('vertical');
-D.D. 
     setSelectedReelId(reelId);
   }, []);
 
@@ -701,9 +721,23 @@ D.D.
                 </div>
               </div>
 
-              {/* Desktop Sidebar */}
+              {/* ================================================== */}
+              {/* ✅ REEMPLAZO DE SIDEBAR                           */}
+              {/* =DEsktop Sidebar                                 */}
+              {/* ================================================== */}
               <div className="hidden xl:block">
-                <TrendingSidebar onPointsEarned={handlePointsEarned} />
+                {/* ❌ TrendingSidebar ELIMINADO */}
+                {/* <TrendingSidebar onPointsEarned={handlePointsEarned} /> */}
+                
+                {/* ✅ PointsBalanceCard AÑADIDO */}
+                <PointsBalanceCard
+                  freePoints={pointsData.freePoints}
+                  premiumPoints={pointsData.premiumPoints}
+                  pointsEarnedToday={pointsData.pointsEarnedToday}
+                  nextRewardThreshold={pointsData.nextRewardThreshold}
+                  missions={missions}
+                  loading={loading} // Reutilizamos el 'loading' principal por ahora
+                />
               </div>
             </div>
           </div>
