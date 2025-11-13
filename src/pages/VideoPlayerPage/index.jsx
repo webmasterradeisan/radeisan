@@ -6,6 +6,8 @@
 // ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
 // ✅ 4. (CORREGIDO) handleLike: Añadidas las notificaciones de progreso y "ya ganado".
 // ✅ 5. (NUEVO) Notificación de Like flotante (estilo Reels) añadida al botón.
+// ✅ 6. (BUG FIX) Movidas las definiciones de togglePlayPause, toggleMute, etc., 
+//    antes del useEffect(handleKeyPress) para evitar ReferenceError (el crash).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -149,8 +151,81 @@ const VideoPlayerPage = () => {
     }, duration);
   }, []);
   
+  // =================================================================
+  // ✅ INICIO: FUNCIONES DE CONTROL DE VIDEO (MOVIDAS AQUÍ PARA EVITAR ERROR)
+  // =================================================================
+  const togglePlayPause = useCallback(() => { 
+    const currentVideo = videoRef.current;
+    if (!currentVideo) return;
+
+    if (currentVideo.paused) {
+      currentVideo.play();
+      setIsPlaying(true);
+    } else {
+      currentVideo.pause();
+      setIsPlaying(false);
+    }
+  }, []); // Sin dependencias
+
+  const handleVolumeChange = useCallback((e) => { 
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+
+    if (videoRef.current) videoRef.current.volume = newVolume;
+    if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
+
+    setIsMuted(newVolume === 0);
+  }, []); // Sin dependencias
+
+  const toggleMute = useCallback(() => { 
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+
+    if (videoRef.current) videoRef.current.muted = newMuted;
+    if (miniVideoRef.current) miniVideoRef.current.muted = newMuted;
+
+    if (newMuted) {
+      setVolume(0);
+    } else if (volume === 0) {
+      setVolume(0.5);
+      if (videoRef.current) videoRef.current.volume = 0.5;
+      if (miniVideoRef.current) miniVideoRef.current.volume = 0.5;
+    }
+  }, [isMuted, volume]); // Dependencias: isMuted, volume
+  
+  const toggleFullscreen = useCallback(async () => { 
+    if (!containerRef.current) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+
+        if (isMobile && screen.orientation && screen.orientation.lock) {
+          try {
+            await screen.orientation.lock('landscape');
+          } catch (err) {
+            console.log('No se pudo bloquear orientación:', err);
+          }
+        }
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+
+        if (isMobile && screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+    }
+  }, [isMobile]); // Dependencia: isMobile
+  // =================================================================
+  // ✅ FIN: FUNCIONES DE CONTROL DE VIDEO
+  // =================================================================
+
   // ===============================
-  // CONTROLES DE TECLADO (sin cambios)
+  // CONTROLES DE TECLADO (CORREGIDO)
   // ===============================
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -206,7 +281,8 @@ const VideoPlayerPage = () => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); // Dependencias añadidas
+    // ✅ Dependencias correctas, ahora que las funciones están definidas arriba
+  }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); 
 
   // ===============================
   // FUNCIONES DE DRAG & DROP (sin cambios)
@@ -485,7 +561,7 @@ const VideoPlayerPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [videoId, user]); // 'loadRelatedVideos' se quitó de dependencias, se llama manualmente
+  }, [videoId, user]);
 
   // ✅ CORRECCIÓN DE VIDEOS RELACIONADOS (CRASH FIX)
   const loadRelatedVideos = async () => {
@@ -664,7 +740,8 @@ const VideoPlayerPage = () => {
 
       } else {
         if (disliked) {
-          await handleDislike();
+          // Llamamos a handleDislike (corregido)
+          await handleDislike(); 
         }
 
         setLiked(true);
@@ -1022,44 +1099,11 @@ const VideoPlayerPage = () => {
     }
   };
 
-  const togglePlayPause = useCallback(() => { // ✅ Añadido useCallback
-    const currentVideo = videoRef.current;
-    if (!currentVideo) return;
-
-    if (currentVideo.paused) {
-      currentVideo.play();
-      setIsPlaying(true);
-    } else {
-      currentVideo.pause();
-      setIsPlaying(false);
-    }
-  }, []); // Sin dependencias
-
-  const handleVolumeChange = useCallback((e) => { // ✅ Añadido useCallback
-    const newVolume = parseFloat(e.target.value);
-    setVolume(newVolume);
-
-    if (videoRef.current) videoRef.current.volume = newVolume;
-    if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
-
-    setIsMuted(newVolume === 0);
-  }, []); // Sin dependencias
-
-  const toggleMute = useCallback(() => { // ✅ Añadido useCallback
-    const newMuted = !isMuted;
-    setIsMuted(newMuted);
-
-    if (videoRef.current) videoRef.current.muted = newMuted;
-    if (miniVideoRef.current) miniVideoRef.current.muted = newMuted;
-
-    if (newMuted) {
-      setVolume(0);
-    } else if (volume === 0) {
-      setVolume(0.5);
-      if (videoRef.current) videoRef.current.volume = 0.5;
-      if (miniVideoRef.current) miniVideoRef.current.volume = 0.5;
-    }
-  }, [isMuted, volume]); // Dependencias: isMuted, volume
+  // ❌ FUNCIONES MOVIDAS A LA PARTE SUPERIOR DEL COMPONENTE
+  // togglePlayPause
+  // handleVolumeChange
+  // toggleMute
+  // toggleFullscreen
 
   const handleTimeUpdate = () => {
     const currentVideo = videoRef.current;
@@ -1080,34 +1124,6 @@ const VideoPlayerPage = () => {
     const pos = (e.clientX - rect.left) / rect.width;
     videoRef.current.currentTime = pos * videoRef.current.duration;
   };
-
-  const toggleFullscreen = useCallback(async () => { // ✅ Añadido useCallback
-    if (!containerRef.current) return;
-
-    try {
-      if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen();
-        setIsFullscreen(true);
-
-        if (isMobile && screen.orientation && screen.orientation.lock) {
-          try {
-            await screen.orientation.lock('landscape');
-          } catch (err) {
-            console.log('No se pudo bloquear orientación:', err);
-          }
-        }
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-
-        if (isMobile && screen.orientation && screen.orientation.unlock) {
-          screen.orientation.unlock();
-        }
-      }
-    } catch (err) {
-      console.error('Fullscreen error:', err);
-    }
-  }, [isMobile]); // Dependencia: isMobile
 
   const handleMouseMovePlayer = () => {
     setShowControls(true);
