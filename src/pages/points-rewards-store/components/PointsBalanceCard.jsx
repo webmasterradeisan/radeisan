@@ -3,6 +3,7 @@
 // ✅ NUEVO: Añadida sección de "Progreso de Misiones"
 //    Ahora este componente acepta una prop `missions = []`
 // ✅ CORREGIDO: El botón "Ver Videos" ahora apunta a /dashboard
+// ✅ CORREGIDO: El botón "Historial" ahora apunta a /profile#historial-puntos
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -15,7 +16,7 @@ const PointsBalanceCard = ({
   premiumPoints = 0,
   pointsEarnedToday = 0, 
   nextRewardThreshold,
-  missions = [], // ✅ NUEVA PROP: Array de misiones activas
+  missions = [], 
   loading = false,
   className = '' 
 }) => {
@@ -137,38 +138,33 @@ const PointsBalanceCard = ({
           </div>
         </div>
       )}
+      
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
-        {/* ================================================== */}
-        {/* ✅ CORRECCIÓN DE RUTA AQUÍ                       */}
-        {/* ================================================== */}
+        {/* Botón "Ver Videos" (Corregido) */}
         <Link to="/dashboard"> 
           <Button variant="outline" size="sm" fullWidth iconName="Play" iconPosition="left">
             Ver Videos
           </Button>
         </Link>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          fullWidth 
-          iconName="History" 
-          iconPosition="left"
-          onClick={() => {
-            // Este scroll-to solo funcionará en la página de /rewards
-            // En el dashboard, simplemente no hará nada.
-            const historySection = document.getElementById('transaction-history');
-            if (historySection) {
-              historySection?.scrollIntoView({ behavior: 'smooth' });
-            }
-          }}
-        >
-          Historial
-        </Button>
+        
+        {/* ================================================== */}
+        {/* ✅ CORRECCIÓN DE RUTA "HISTORIAL"                */}
+        {/* ================================================== */}
+        <Link to="/profile#historial-puntos">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            fullWidth 
+            iconName="History" 
+            iconPosition="left"
+          >
+            Historial
+          </Button>
+        </Link>
       </div>
       
-      {/* ================================================== */}
-      {/* ✅ NUEVO: Sección de Progreso de Misiones          */}
-      {/* ================================================== */}
+      {/* Sección de Progreso de Misiones */}
       <div className="border-t border-border pt-6 mt-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">
           Progreso de Misiones
