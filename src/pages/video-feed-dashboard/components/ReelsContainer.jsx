@@ -13,6 +13,11 @@
 //    escriben en 'user_video_points' y 'handleLike' usa la lógica de misión.
 // 🟢 CORREGIDO: Solucionado crash 'handlePlayPause is not defined'
 //    envolviendo funciones en useCallback y añadiéndolas a las dependencias del useEffect.
+// 🟢 NUEVO (11/13): 'handleLike' y 'handleDislike' ahora revierten el estado
+//    si la base de datos falla, asegurando la sincronización del contador.
+// 🟢 NUEVO (11/13): 'handleDislike' ahora escribe en la base de datos
+//    (asume la tabla 'video_dislikes').
+// 🟢 NUEVO (11/13): Añadido diagnóstico de RLS a 'loadComments'.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -212,6 +217,18 @@ const ReelsContainer = ({
             const likedIds = new Set(likesData.map(l => l.video_id));
             setLikedVideos(likedIds);
           }
+          
+          // ✅ CARGAR DISLIKES ACTUALES (para UI)
+          const { data: dislikesData } = await supabase
+            .from('video_dislikes') // 🟢 ASUNCIÓN: La tabla se llama 'video_dislikes'
+            .select('video_id')
+            .eq('user_id', user.id);
+          
+          if (dislikesData) {
+            const dislikedIds = new Set(dislikesData.map(l => l.video_id));
+            setDislikedVideos(dislikedIds);
+          }
+
 
           // ================================================================
           // ✅ 2. SINCRONIZACIÓN: Cargar 'mission_progress' para anti-farming
@@ -607,9 +624,9 @@ const ReelsContainer = ({
     // ✅ CORREGIDO: Añadidas dependencias
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
 
-  // ===============================
-  // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA)
-  // ===============================
+  // ==========================================================
+  // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA CON REVERSIÓN)
+  // ==========================================================
   
   const handleLike = async (videoId, e) => {
     if (e) {
@@ -617,76 +634,101 @@ const ReelsContainer = ({
       e.preventDefault();
     }
     
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
-        return;
-      }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
 
-      const newLikedVideos = new Set(likedVideos);
-      const newDislikedVideos = new Set(dislikedVideos);
+    const newLikedVideos = new Set(likedVideos);
+    const newDislikedVideos = new Set(dislikedVideos);
+    
+    // ✅ VERIFICAR SI YA COMPLETÓ LA MISIÓN DE LIKES HOY
+    const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
+    
+    // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE
+    const isCurrentlyLiked = newLikedVideos.has(videoId);
+    
+    console.log('👍 Estado del like:', {
+      videoId,
+      hasEarnedPointsBefore,
+      isCurrentlyLiked
+    });
+    
+    if (isCurrentlyLiked) {
+      // ==============================
+      // QUITAR LIKE (Optimistic Update)
+      // ==============================
+      newLikedVideos.delete(videoId);
+      setLikedVideos(newLikedVideos);
       
-      // ✅ VERIFICAR SI YA COMPLETÓ LA MISIÓN DE LIKES HOY
-      const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
+      setVideoCounters(prev => ({
+        ...prev,
+        [videoId]: {
+          ...prev[videoId],
+          likes: Math.max(0, (prev[videoId]?.likes || 0) - 1)
+        }
+      }));
       
-      // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE
-      const isCurrentlyLiked = newLikedVideos.has(videoId);
-      
-      console.log('👍 Estado del like:', {
-        videoId,
-        hasEarnedPointsBefore,
-        isCurrentlyLiked
-      });
-      
-      if (isCurrentlyLiked) {
-        // ==============================
-        // QUITAR LIKE
-        // ==============================
-        newLikedVideos.delete(videoId);
-        
-        setVideoCounters(prev => ({
-          ...prev,
-          [videoId]: {
-            ...prev[videoId],
-            likes: Math.max(0, (prev[videoId]?.likes || 0) - 1)
-          }
-        }));
-        
-        await supabase
+      try {
+        // Acción de base de datos
+        const { error } = await supabase
           .from('video_likes')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-
-        // ❌ ELIMINADO: RPC 'decrement_video_likes' que fallaba
-        // await supabase.rpc('decrement_video_likes', { video_id: videoId });
         
-      } else {
-        // ==============================
-        // DAR LIKE
-        // ==============================
+        if (error) throw error;
+        
+      } catch (error) {
+        console.error('❌ Error al quitar like, revirtiendo UI:', error);
+        
+        // ⏪ REVERSIÓN DE ESTADO EN CASO DE ERROR
         newLikedVideos.add(videoId);
-        if (newDislikedVideos.has(videoId)) {
-            newDislikedVideos.delete(videoId);
-        }
-
+        setLikedVideos(new Set(newLikedVideos));
+        
         setVideoCounters(prev => ({
           ...prev,
           [videoId]: {
             ...prev[videoId],
-            likes: (prev[videoId]?.likes || 0) + 1
+            likes: (prev[videoId]?.likes || 0) + 1 // Revertir el contador
           }
         }));
+      }
+      
+    } else {
+      // ==============================
+      // DAR LIKE (Optimistic Update)
+      // ==============================
+      newLikedVideos.add(videoId);
+      setLikedVideos(newLikedVideos);
+      
+      if (newDislikedVideos.has(videoId)) {
+          newDislikedVideos.delete(videoId);
+          setDislikedVideos(newDislikedVideos); // Quitar dislike de UI
+      }
 
-        await supabase
+      setVideoCounters(prev => ({
+        ...prev,
+        [videoId]: {
+          ...prev[videoId],
+          likes: (prev[videoId]?.likes || 0) + 1
+        }
+      }));
+
+      try {
+        // Acción de base de datos
+        const { error } = await supabase
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
+        
+        if (error) throw error;
 
-        // ❌ ELIMINADO: RPC 'increment_video_likes' que fallaba
+        // 🛑 ELIMINADO: RPC 'increment_video_likes' que fallaba
         // await supabase.rpc('increment_video_likes', { video_id: videoId });
 
         // ✅ VERIFICAR SI YA GANÓ PUNTOS HOY
+        // Esta lógica se ejecuta solo si la DB fue exitosa.
         if (!hasEarnedPointsBefore) {
           // ==============================
           // MISIÓN NO COMPLETA HOY
@@ -733,46 +775,132 @@ const ReelsContainer = ({
           console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
           showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
         }
+
+      } catch (error) {
+        console.error('❌ Error al dar like, revirtiendo UI:', error);
+        
+        // ⏪ REVERSIÓN DE ESTADO EN CASO DE ERROR
+        newLikedVideos.delete(videoId);
+        setLikedVideos(new Set(newLikedVideos));
+        
+        // Si quitamos un dislike, revertirlo también
+        if (newDislikedVideos.has(videoId)) {
+            newDislikedVideos.add(videoId);
+            setDislikedVideos(new Set(newDislikedVideos));
+        }
+        
+        setVideoCounters(prev => ({
+          ...prev,
+          [videoId]: {
+            ...prev[videoId],
+            likes: Math.max(0, (prev[videoId]?.likes || 0) - 1) // Revertir contador
+          }
+        }));
       }
-      
-      setLikedVideos(newLikedVideos);
-      setDislikedVideos(newDislikedVideos);
-    } catch (error) {
-      console.error('❌ Error en like:', error);
     }
   };
 
+  // ==========================================================
+  // ✅✅✅ ACCIÓN DE DISLIKE (SINCRONIZADA CON REVERSIÓN)
+  // ==========================================================
+  
   const handleDislike = async (videoId, e) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
-        return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    const newDislikedVideos = new Set(dislikedVideos);
+    const newLikedVideos = new Set(likedVideos);
+    const isCurrentlyDisliked = newDislikedVideos.has(videoId);
+    const isCurrentlyLiked = newLikedVideos.has(videoId);
+
+    if (isCurrentlyDisliked) {
+      // ==============================
+      // QUITAR DISLIKE (Optimistic Update)
+      // ==============================
+      newDislikedVideos.delete(videoId);
+      setDislikedVideos(newDislikedVideos);
+      
+      try {
+        const { error } = await supabase
+          .from('video_dislikes') // 🟢 ASUNCIÓN: Tabla 'video_dislikes'
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
+          
+        if (error) throw error;
+        
+      } catch (error) {
+        console.error('❌ Error al quitar dislike, revirtiendo UI:', error);
+        // ⏪ REVERSIÓN
+        newDislikedVideos.add(videoId);
+        setDislikedVideos(new Set(newDislikedVideos));
       }
 
-      const newDislikedVideos = new Set(dislikedVideos);
-      const newLikedVideos = new Set(likedVideos);
-      
-      if (newDislikedVideos.has(videoId)) {
-        newDislikedVideos.delete(videoId);
-      } else {
-        newDislikedVideos.add(videoId);
-        
-        if (newLikedVideos.has(videoId)) {
-          // Si tenía like, llamamos a handleLike para quitarlo
-          // (handleLike ya no da puntos, así que es seguro)
-          await handleLike(videoId, e);
-        }
+    } else {
+      // ==============================
+      // DAR DISLIKE (Optimistic Update)
+      // ==============================
+      newDislikedVideos.add(videoId);
+      setDislikedVideos(newDislikedVideos);
+
+      // Si tenía like, lo quitamos de la UI
+      if (isCurrentlyLiked) {
+        newLikedVideos.delete(videoId);
+        setLikedVideos(newLikedVideos);
+        // Actualizamos el contador de likes también
+        setVideoCounters(prev => ({
+          ...prev,
+          [videoId]: {
+            ...prev[videoId],
+            likes: Math.max(0, (prev[videoId]?.likes || 0) - 1)
+          }
+        }));
       }
       
-      setDislikedVideos(newDislikedVideos);
-    } catch (error) {
-      console.error('Error en dislike:', error);
+      try {
+        const { error } = await supabase
+          .from('video_dislikes') // 🟢 ASUNCIÓN: Tabla 'video_dislikes'
+          .insert({ video_id: videoId, user_id: user.id });
+          
+        if (error) throw error;
+
+        // Si tenía like, ahora lo quitamos de la DB
+        if (isCurrentlyLiked) {
+          await supabase
+            .from('video_likes')
+            .delete()
+            .eq('video_id', videoId)
+            .eq('user_id', user.id);
+        }
+        
+      } catch (error) {
+        console.error('❌ Error al dar dislike, revirtiendo UI:', error);
+        
+        // ⏪ REVERSIÓN
+        newDislikedVideos.delete(videoId);
+        setDislikedVideos(new Set(newDislikedVideos));
+        
+        // Si quitamos un like, lo revertimos
+        if (isCurrentlyLiked) {
+          newLikedVideos.add(videoId);
+          setLikedVideos(new Set(newLikedVideos));
+          setVideoCounters(prev => ({
+            ...prev,
+            [videoId]: {
+              ...prev[videoId],
+              likes: (prev[videoId]?.likes || 0) + 1
+            }
+          }));
+        }
+      }
     }
   };
 
@@ -1032,16 +1160,23 @@ const ReelsContainer = ({
       if (data && data.length > 0) {
         const userIds = [...new Set(data.map(comment => comment.user_id))];
         
+        // 🚨 AQUÍ ES DONDE PUEDE FALLAR RLS 🚨
         const { data: usersData, error: usersError } = await supabase
           .from('user_profiles')
           .select('id, name, avatar, username')
           .in('id', userIds);
+          
+        if (usersError) {
+            console.error("Error al cargar perfiles de usuario:", usersError);
+        }
 
         if (!usersError && usersData) {
           const usersMap = {};
           usersData.forEach(user => {
             usersMap[user.id] = user;
           });
+          
+          console.log("Perfiles de usuario cargados:", usersMap);
 
           data = data.map(comment => {
             const userProfile = usersMap[comment.user_id];
@@ -1053,10 +1188,11 @@ const ReelsContainer = ({
                 avatar: userProfile.avatar,
                 username: userProfile.username || userProfile.name || 'usuario'
               } : {
+                // 🟢 NUEVO: Diagnóstico de RLS. Si ves esto, RLS está bloqueando la lectura.
                 id: comment.user_id,
-                name: 'Usuario',
+                name: 'Usuario (Error RLS)',
                 avatar: null,
-                username: 'usuario'
+                username: 'usuario_error'
               },
               replies: []
             };
@@ -1322,6 +1458,13 @@ const ReelsContainer = ({
             onTouchMove={isMobile ? handleTouchMove : undefined}
             onTouchEnd={isMobile ? handleTouchEnd : undefined}
           >
+            {/* 🟢 NOTA SOBRE EL AUTOR DEL REEL ('video.creator'):
+              Si el nombre del autor del reel (video.creator) aparece como 'usuario',
+              es el MISMO problema de RLS.
+              El componente PADRE que carga la lista de 'videos' debe hacer un JOIN
+              con 'user_profiles'. Esa consulta (en el padre) está siendo bloqueada
+              por la RLS. La solución es la misma: permitir SELECT en 'user_profiles'.
+            */}
             {videos.map((video, index) => (
               <div 
                 key={video.id} 
@@ -1535,9 +1678,10 @@ const ReelsContainer = ({
 
               {/* ================================================== */}
               {/* ✅ NOTIFICACIÓN DE PUNTOS (CON ESTILO DINÁMICO)   */}
+              {/* 🟢 CORREGIDO: Posicionamiento CSS */}
               {/* ================================================== */}
               {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className={`absolute -left-32 top-0 px-3 py-2 rounded-lg shadow-xl animate-bounce font-bold text-xs whitespace-nowrap
+                <div className={`absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg shadow-xl animate-bounce font-bold text-xs whitespace-nowrap
                   ${pointsNotification.type === 'success' 
                     ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
                     : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
@@ -1673,8 +1817,9 @@ const ReelsContainer = ({
               </button>
 
               {/* ✅ NOTIFICACIÓN DE PUNTOS AL LADO DEL LIKE - DESKTOP */}
+              {/* 🟢 CORREGIDO: Posicionamiento CSS */}
               {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className={`absolute -left-40 top-2 px-4 py-2 rounded-xl shadow-2xl animate-bounce font-bold text-sm whitespace-nowrap z-50
+                <div className={`absolute -top-16 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl shadow-2xl animate-bounce font-bold text-sm whitespace-nowrap z-50
                   ${pointsNotification.type === 'success' 
                     ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
                     : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
@@ -1793,6 +1938,7 @@ const ReelsContainer = ({
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
+                          {/* 🟢 Renderizado de nombre de usuario de comentario */}
                           <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
                           <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
                         </div>
@@ -1936,6 +2082,7 @@ const ReelsContainer = ({
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
+                          {/* 🟢 Renderizado de nombre de usuario de comentario */}
                           <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
                           <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
                         </div>
