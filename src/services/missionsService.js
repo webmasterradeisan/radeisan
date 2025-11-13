@@ -621,12 +621,19 @@ export async function getTopMissions(limit = 10) {
   }
 }
 
+// ============================================================================
+// --- SECCIÓN DE ADMIN (AQUÍ ESTÁ LA CORRECCIÓN) ---
+// ============================================================================
+
 export async function createMission(missionData) {
   try {
+    // --- CORRECCIÓN ---
+    // De-estructuramos todos los campos del formData, incluyendo mission_key
     const {
       title,
       description,
       mission_type,
+      mission_key, // <-- CAMPO AÑADIDO
       target_count,
       points_reward,
       frequency = 'daily',
@@ -641,6 +648,7 @@ export async function createMission(missionData) {
         title,
         description,
         mission_type,
+        mission_key, // <-- CAMPO AÑADIDO
         target_count,
         points_reward,
         frequency,
@@ -669,10 +677,35 @@ export async function createMission(missionData) {
 
 export async function updateMission(missionId, updates) {
   try {
+    // --- CORRECCIÓN (Mejora) ---
+    // De-estructuramos 'updates' para pasar solo los campos permitidos
+    // Esto es más seguro y asegura que 'mission_key' se incluya.
+    const {
+      title,
+      description,
+      mission_type,
+      mission_key,
+      target_count,
+      points_reward,
+      frequency,
+      icon,
+      is_active,
+      display_order
+    } = updates;
+
     const { data, error } = await supabase
       .from('daily_missions')
       .update({
-        ...updates,
+        title,
+        description,
+        mission_type,
+        mission_key, // <-- CAMPO AÑADIDO
+        target_count,
+        points_reward,
+        frequency,
+        icon,
+        is_active,
+        display_order,
         updated_at: new Date().toISOString()
       })
       .eq('id', missionId)
@@ -744,6 +777,10 @@ export async function reorderMissions(missionOrders) {
     };
   }
 }
+
+// ============================================================================
+// FUNCIONES DE UTILIDAD (Sin cambios)
+// ============================================================================
 
 export async function canCompleteMissionToday(missionId) {
   try {
