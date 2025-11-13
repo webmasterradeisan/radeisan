@@ -17,6 +17,8 @@ import FilterChips from './components/FilterChips';
 import VideoFeedGrid from './components/VideoFeedGrid';
 import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
 import TrendingSidebar from './components/TrendingSidebar';
+// ✅ NUEVA IMPORTACIÓN AÑADIDA
+import PointsBalanceCard from '../points-rewards-store/components/PointsBalanceCard';
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
 import PullToRefresh from './components/PullToRefresh';
 import PointsBalanceIndicator from '../../components/ui/PointsBalanceIndicator';
@@ -180,7 +182,7 @@ const useVideos = () => {
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // Filtrar por categoría si no es 'todos'
+      // Filtrar por categoría si no es 'todos' y category !== 'all'
       if (category !== 'todos' && category !== 'all') {
         query = query.eq('category', category);
       }
@@ -499,6 +501,7 @@ const VideoFeedDashboard = () => {
     
     // Cambiar vista a reels mode con el ID específico
     setActiveOrientation('vertical');
+D.D. 
     setSelectedReelId(reelId);
   }, []);
 
