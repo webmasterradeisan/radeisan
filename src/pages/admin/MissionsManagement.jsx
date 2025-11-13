@@ -1,12 +1,11 @@
 // ============================================================================
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
-// Componente completo para gestionar el sistema de misiones desde el admin panel
-// Incluye: CRUD completo, estadísticas, activar/desactivar, reordenamiento
+// ✅ MODIFICACIÓN: Añadido el nuevo tipo de misión 'upload_pack' (Publicar Video/Reel/Foto) 
+//                 con lógica condicional en el Formulario.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-// 🛑 CORRECCIÓN: Cambiado '*s' a '* as' para sintaxis correcta de importación.
 import * as missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 
@@ -191,11 +190,18 @@ export default function MissionsManagement() {
     try {
       setSaving(true);
       setError(null);
+      
+      const missionData = {
+          ...formData,
+          // Si es 'upload_pack', el target_count es simbólico
+          target_count: formData.mission_type === 'upload_pack' ? 1 : formData.target_count
+      };
 
-      const result = await missionsService.createMission(formData);
+      const result = await missionsService.createMission(missionData);
 
       if (result.success) {
         setSuccess('Misión creada exitosamente');
+        // Resetear el formulario al estado inicial
         setFormData({
           title: '',
           description: '',
@@ -230,12 +236,19 @@ export default function MissionsManagement() {
     try {
       setSaving(true);
       setError(null);
+      
+      const missionData = {
+          ...formData,
+          // Si es 'upload_pack', el target_count es simbólico
+          target_count: formData.mission_type === 'upload_pack' ? 1 : formData.target_count
+      };
 
-      const result = await missionsService.updateMission(editingMission.id, formData);
+      const result = await missionsService.updateMission(editingMission.id, missionData);
 
       if (result.success) {
         setSuccess('Misión actualizada exitosamente');
         setEditingMission(null);
+        // Resetear el formulario al estado inicial
         setFormData({
           title: '',
           description: '',
@@ -736,7 +749,7 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
   const updateField = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
-  
+
   // Condición para mostrar u ocultar el campo de Meta (target_count)
   const showTargetCount = formData.mission_type !== 'upload_pack' && formData.mission_type !== 'complete_profile';
 
