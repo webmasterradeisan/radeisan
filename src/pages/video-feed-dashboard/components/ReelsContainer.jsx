@@ -8,6 +8,7 @@
 // ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
 // ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
 // 🟢 CORREGIDO: [BUG FIX] Eliminada la asignación directa de 5 puntos en handleLike.
+// 🟢 CORREGIDO: [SYNTAX FIX] Corregido error 'new Set()' en línea 44.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,7 +42,7 @@ const ReelsContainer = ({
   // Estados principales
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [mutedVideos, setMutedVideos] = new Set());
+  const [mutedVideos, setMutedVideos] = useState(new Set()); // 🟢 CORRECCIÓN DE SINTAXIS AQUÍ
   const [likedVideos, setLikedVideos] = useState(new Set());
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
@@ -212,11 +213,12 @@ const ReelsContainer = ({
             .from('user_video_points')
             .select('video_id')
             .eq('user_id', user.id)
-            .eq('action_type', 'like');
+            // 🟢 NOTA: Buscamos tanto 'like' antiguo como 'mission_like_complete'
+            .in('action_type', ['like', 'mission_like_complete']);
           
           if (pointsEarnedData) {
             const videosWithPointsEarned = new Set(pointsEarnedData.map(p => p.video_id));
-            console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
+            console.log('🎯 Videos que ya otorgaron puntos (Likes o Misión):', Array.from(videosWithPointsEarned));
             setActionsPerformed(prev => ({
               ...prev,
               likes: videosWithPointsEarned
@@ -744,9 +746,10 @@ const ReelsContainer = ({
             }
             
             // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a intentar dar puntos (la lógica de puntos se movió a la misión)
+            // Se registra la acción para no volver a ejecutar la lógica de "primera vez"
             setActionsPerformed(prev => ({
               ...prev,
-              likes: new Set([...prev.likes, videoId]) // Se registra la acción para no volver a ejecutar la lógica de "primera vez"
+              likes: new Set([...prev.likes, videoId]) 
             }));
 
           } catch (pointsError) {
@@ -757,7 +760,8 @@ const ReelsContainer = ({
           // YA GANÓ PUNTOS ANTES
           // ==============================
           console.log('ℹ️ El usuario ya ganó puntos con este video anteriormente');
-          showPointsNotification('Ya ganaste puntos con este reel', videoId);
+          // 🟢 NOTA: Se puede comentar la siguiente línea si no queremos notificar al usuario
+          // showPointsNotification('Ya ganaste puntos con este reel', videoId);
         }
       }
       
