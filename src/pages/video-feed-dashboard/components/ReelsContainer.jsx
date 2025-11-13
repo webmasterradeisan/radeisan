@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
-// ✅ CORRECCIÓN CRÍTICA: Eliminada la asignación de 5 puntos codificada.
-//    Ahora, el Like solo otorga puntos si la misión/regla (missionsService) lo aprueba.
+// ✅ CORRECCIÓN CRÍTICA: La lógica de puntos del Like ahora SOLO otorga puntos si la misión se completa,
+//    eliminando la posibilidad de premios directos no deseados.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -51,7 +51,7 @@ const ReelsContainer = ({
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
-  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyingTo, setReplyingTo] = null;
   const [showReplies, setShowReplies] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   
@@ -707,30 +707,28 @@ const ReelsContainer = ({
             // 1. TRACKEAR LA ACCIÓN (Esto verifica las reglas/misiones)
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
-            const pointsEarned = missionResult.points_earned || (missionResult.completed ? missionResult.reward.points : 0);
-            
-            if (pointsEarned > 0) {
-              // 2. Si missionsService otorga puntos (directo o por misión completada)
+            // ✅ CORRECCIÓN CLAVE: Solo otorga puntos si la MISIÓN se ha completado.
+            if (missionResult.completed) { 
+              const pointsEarned = missionResult.reward.points || 5; 
               
-              // Asumiendo que missionService *no* llama a addPoints, lo hacemos aquí:
-              await addPoints(pointsEarned, missionResult.message || 'Puntos ganados por acción', 'free'); 
+              await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
               
-              showPointsNotification(`+${pointsEarned} puntos 🎉`, videoId);
+              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId);
 
-              // 3. Registrar en BD que la acción fue realizada y ya se procesaron los puntos/misión
+              // 2. Registrar en BD los puntos de misión
               await supabase
                 .from('user_video_points')
                 .insert({
                   user_id: user.id,
                   video_id: videoId,
-                  action_type: 'like', // Registrar que la acción fue realizada y ya se procesaron los puntos/misión
+                  action_type: 'mission_like_complete', // Usamos un tipo de acción claro para la misión
                   points_earned: pointsEarned,
                   created_at: new Date().toISOString()
                 });
                 
             } else {
-                 // 4. Si no se ganan puntos, solo se notifica que la acción fue registrada
-                showPointsNotification(`Acción registrada (Misión: ${missionResult.current_progress || 0}/10)`, videoId);
+                 // 3. Si no se ganan puntos, solo se notifica el progreso/acción registrada
+                showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId);
             }
             
             // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a intentar dar puntos directos
