@@ -7,6 +7,12 @@
 // ✅ CORREGIDO: Sistema de tracking persistente para likes
 // ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
 // ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
+// 🟢 SINCRONIZADO: 'loadCurrentUserAndActions' ahora consulta 'mission_progress'
+//    para el anti-farming diario (en lugar de 'user_video_points').
+// 🟢 SINCRONIZADO: 'handleLike', 'handleSave' y 'handleAddComment' ya no
+//    escriben en 'user_video_points' y 'handleLike' usa la lógica de misión.
+// 🟢 CORREGIDO: Solucionado crash 'handlePlayPause is not defined'
+//    envolviendo funciones en useCallback y añadiéndolas a las dependencias del useEffect.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -66,13 +72,14 @@ const ReelsContainer = ({
   const [pointsNotification, setPointsNotification] = useState({
     show: false,
     message: '',
-    videoId: null
+    videoId: null,
+    type: 'success' // Añadido para controlar el color
   });
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
   const [actionsPerformed, setActionsPerformed] = useState({
-    likes: new Set(),
+    likes: new Set(), // Esto ahora significa "misión de like completa hoy"
     saves: new Set(),
     follows: new Set(),
     comments: new Set(),
@@ -101,11 +108,12 @@ const ReelsContainer = ({
   });
 
   // ✅ NUEVO: Función para mostrar notificación de puntos
-  const showPointsNotification = (message, videoId) => {
+  const showPointsNotification = (message, videoId, type = 'success') => {
     setPointsNotification({
       show: true,
       message,
-      videoId
+      videoId,
+      type // Añadimos tipo para controlar color
     });
     
     // Auto ocultar después de 2 segundos
@@ -113,7 +121,8 @@ const ReelsContainer = ({
       setPointsNotification({
         show: false,
         message: '',
-        videoId: null
+        videoId: null,
+        type: 'success'
       });
     }, 2000);
   };
@@ -204,22 +213,53 @@ const ReelsContainer = ({
             setLikedVideos(likedIds);
           }
 
-          // ✅ CARGAR VIDEOS POR LOS QUE YA GANÓ PUNTOS (tracking persistente)
-          // Esta consulta debe traer TODOS los videos por los que el usuario ya ganó puntos
-          // independientemente de si actualmente tienen like o no
-          const { data: pointsEarnedData } = await supabase
-            .from('user_video_points')
-            .select('video_id')
-            .eq('user_id', user.id)
-            .eq('action_type', 'like');
-          
-          if (pointsEarnedData) {
-            const videosWithPointsEarned = new Set(pointsEarnedData.map(p => p.video_id));
-            console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
-            setActionsPerformed(prev => ({
-              ...prev,
-              likes: videosWithPointsEarned
-            }));
+          // ================================================================
+          // ✅ 2. SINCRONIZACIÓN: Cargar 'mission_progress' para anti-farming
+          //    Revisamos si la misión 'like_videos' ya se completó HOY.
+          // ================================================================
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 2a. Buscar el ID de la misión 'like_videos'
+            const { data: mission } = await supabase
+              .from('daily_missions')
+              .select('id')
+              .eq('mission_type', 'like_videos') //
+              .single();
+
+            if (mission) {
+              // 2b. Buscar si el usuario ya completó esa misión HOY
+              const { data: progressData, error: progressError } = await supabase
+                .from('mission_progress') //
+                .select('is_completed')
+                .eq('user_id', user.id)
+                .eq('mission_id', mission.id)
+                .eq('date', today)
+                .single();
+
+              if (progressError && progressError.code !== 'PGRST116') {
+                throw progressError; // Lanzar error si no es "fila no encontrada"
+              }
+
+              if (progressData && progressData.is_completed) {
+                // Si la misión de "like_videos" está completa HOY,
+                // marcamos TODOS los videos como 'hasEarnedPointsBefore'
+                const allVideoIds = videos.map(v => v.id);
+                setActionsPerformed(prev => ({
+                  ...prev,
+                  likes: new Set(allVideoIds) // Activamos anti-farming para todos
+                }));
+              } else {
+                // Aún no completa la misión de like hoy
+                setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
+              }
+            } else {
+              // No existe la misión 'like_videos', desactivamos anti-farming
+              setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
+            }
+          } catch (err) {
+            console.error("Error al verificar progreso de misión 'like_videos':", err);
+            setActionsPerformed(prev => ({ ...prev, likes: new Set() })); // Ser permisivo
           }
 
           // ✅ CARGAR VIDEOS GUARDADOS
@@ -232,19 +272,7 @@ const ReelsContainer = ({
             const savedIds = new Set(savedData.map(s => s.video_id));
             setSavedVideos(savedIds);
             
-            // Cargar tracking de puntos por guardar
-            const { data: savedPointsData } = await supabase
-              .from('user_video_points')
-              .select('video_id')
-              .eq('user_id', user.id)
-              .eq('action_type', 'save');
-            
-            if (savedPointsData) {
-              setActionsPerformed(prev => ({
-                ...prev,
-                saves: new Set(savedPointsData.map(p => p.video_id))
-              }));
-            }
+            // 🛑 ELIMINADO: 'user_video_points' no existe
           }
 
           // ✅ CARGAR SEGUIDORES
@@ -257,47 +285,10 @@ const ReelsContainer = ({
             const followedIds = new Set(followsData.map(f => f.following_id));
             setFollowedCreators(followedIds);
             
-            // Cargar tracking de puntos por seguir
-            const { data: followPointsData } = await supabase
-              .from('user_video_points')
-              .select('content_id')
-              .eq('user_id', user.id)
-              .eq('action_type', 'follow');
-            
-            if (followPointsData) {
-              setActionsPerformed(prev => ({
-                ...prev,
-                follows: new Set(followPointsData.map(p => p.content_id))
-              }));
-            }
+            // 🛑 ELIMINADO: 'user_video_points' no existe
           }
 
-          // ✅ CARGAR TRACKING DE COMENTARIOS Y COMPARTIDOS
-          const { data: commentsPointsData } = await supabase
-            .from('user_video_points')
-            .select('video_id')
-            .eq('user_id', user.id)
-            .eq('action_type', 'comment');
-          
-          if (commentsPointsData) {
-            setActionsPerformed(prev => ({
-              ...prev,
-              comments: new Set(commentsPointsData.map(p => p.video_id))
-            }));
-          }
-
-          const { data: sharesPointsData } = await supabase
-            .from('user_video_points')
-            .select('video_id')
-            .eq('user_id', user.id)
-            .eq('action_type', 'share');
-          
-          if (sharesPointsData) {
-            setActionsPerformed(prev => ({
-              ...prev,
-              shares: new Set(sharesPointsData.map(p => p.video_id))
-            }));
-          }
+          // 🛑 ELIMINADO: 'user_video_points' no existe
         }
       } catch (error) {
         console.error('Error cargando usuario y acciones:', error);
@@ -305,7 +296,7 @@ const ReelsContainer = ({
     };
     
     loadCurrentUserAndActions();
-  }, []);
+  }, [videos]); // Dependencia de 'videos' para actualizar el set de 'likes'
 
   // ===============================
   // INICIALIZAR CONTADORES DE VIDEOS
@@ -542,41 +533,43 @@ const ReelsContainer = ({
   // ===============================
   // PLAY/PAUSE
   // ===============================
-  const handlePlayPause = (e) => {
-    if (e.target.tagName === 'VIDEO') {
-      const currentVideo = videoRefs.current[currentIndex];
-      if (currentVideo) {
-        if (currentVideo.paused) {
-          console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
-          currentVideo.play();
-          setIsAutoPlaying(true);
-        } else {
-          console.log('⏸️ Pausando en:', currentVideo.currentTime);
-          currentVideo.pause();
-          setIsAutoPlaying(false);
-        }
+  const handlePlayPause = useCallback((e) => { // ✅ CORREGIDO: Envuelto en useCallback
+    // Si el evento 'e' existe, es un click en el video.
+    // Si 'e' no existe, fue llamado por el atajo de teclado.
+    if (e && e.target.tagName !== 'VIDEO') return;
+    
+    const currentVideo = videoRefs.current[currentIndex];
+    if (currentVideo) {
+      if (currentVideo.paused) {
+        console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
+        currentVideo.play();
+        setIsAutoPlaying(true);
+      } else {
+        console.log('⏸️ Pausando en:', currentVideo.currentTime);
+        currentVideo.pause();
+        setIsAutoPlaying(false);
       }
     }
-  };
+  }, [currentIndex]); // Dependencia: currentIndex
 
   // ===============================
   // NAVEGACIÓN
   // ===============================
-  const navigateNext = () => {
+  const navigateNext = useCallback(() => { // ✅ CORREGIDO: Envuelto en useCallback
     if (currentIndex < videos.length - 1) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev + 1);
       setIsAutoPlaying(true);
     }
-  };
+  }, [currentIndex, videos.length]); // Dependencias
 
-  const navigatePrevious = () => {
+  const navigatePrevious = useCallback(() => { // ✅ CORREGIDO: Envuelto en useCallback
     if (currentIndex > 0) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev - 1);
       setIsAutoPlaying(true);
     }
-  };
+  }, [currentIndex]); // Dependencia
 
   const handleTouchStart = (e) => {
     touchStartY.current = e.touches[0].clientY;
@@ -602,16 +595,7 @@ const ReelsContainer = ({
       if (e.key === 'ArrowUp') navigatePrevious();
       if (e.key === ' ') {
         e.preventDefault();
-        const currentVideo = videoRefs.current[currentIndex];
-        if (currentVideo) {
-          if (currentVideo.paused) {
-            currentVideo.play();
-            setIsAutoPlaying(true);
-          } else {
-            currentVideo.pause();
-            setIsAutoPlaying(false);
-          }
-        }
+        handlePlayPause(); // ✅ CORREGIDO: Llama a la función 'handlePlayPause'
       }
       if (e.key === 'Escape' && showCommentsModal) {
         handleCloseComments();
@@ -620,10 +604,11 @@ const ReelsContainer = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, videos.length, showCommentsModal]);
+    // ✅ CORREGIDO: Añadidas dependencias
+  }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
 
   // ===============================
-  // ✅✅✅ ACCIONES - LIKE CON TRACKING PERSISTENTE CORREGIDO ✅✅✅
+  // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA)
   // ===============================
   
   const handleLike = async (videoId, e) => {
@@ -642,7 +627,7 @@ const ReelsContainer = ({
       const newLikedVideos = new Set(likedVideos);
       const newDislikedVideos = new Set(dislikedVideos);
       
-      // ✅ VERIFICAR SI YA GANÓ PUNTOS CON ESTE VIDEO ANTES
+      // ✅ VERIFICAR SI YA COMPLETÓ LA MISIÓN DE LIKES HOY
       const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
       
       // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE
@@ -651,8 +636,7 @@ const ReelsContainer = ({
       console.log('👍 Estado del like:', {
         videoId,
         hasEarnedPointsBefore,
-        isCurrentlyLiked,
-        actionsPerformed: Array.from(actionsPerformed.likes)
+        isCurrentlyLiked
       });
       
       if (isCurrentlyLiked) {
@@ -675,18 +659,17 @@ const ReelsContainer = ({
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        await supabase.rpc('decrement_video_likes', { video_id: videoId });
-        
-        console.log('✅ Like removido (los puntos ya ganados NO se pierden)');
-        // ✅ IMPORTANTE: NO removemos de actionsPerformed.likes
-        // El usuario ya ganó puntos con este video, ese registro es permanente
+        // ❌ ELIMINADO: RPC 'decrement_video_likes' que fallaba
+        // await supabase.rpc('decrement_video_likes', { video_id: videoId });
         
       } else {
         // ==============================
         // DAR LIKE
         // ==============================
         newLikedVideos.add(videoId);
-        newDislikedVideos.delete(videoId);
+        if (newDislikedVideos.has(videoId)) {
+            newDislikedVideos.delete(videoId);
+        }
 
         setVideoCounters(prev => ({
           ...prev,
@@ -700,57 +683,55 @@ const ReelsContainer = ({
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        await supabase.rpc('increment_video_likes', { video_id: videoId });
+        // ❌ ELIMINADO: RPC 'increment_video_likes' que fallaba
+        // await supabase.rpc('increment_video_likes', { video_id: videoId });
 
-        // ✅ VERIFICAR SI YA GANÓ PUNTOS CON ESTE VIDEO
+        // ✅ VERIFICAR SI YA GANÓ PUNTOS HOY
         if (!hasEarnedPointsBefore) {
           // ==============================
-          // PRIMERA VEZ - OTORGAR PUNTOS
+          // MISIÓN NO COMPLETA HOY
           // ==============================
-          console.log('🎉 Primera vez dando like a este video - ganando puntos');
-          showPointsNotification('+5 puntos 🎉', videoId);
-          
           try {
-            // ✅ OTORGAR PUNTOS usando el PointsContext
-            await addPoints(5, 'Like en video', 'free');
-            
-            // ✅ REGISTRAR EN LA BASE DE DATOS que ya ganó puntos por este video
-            const { error: trackError } = await supabase
-              .from('user_video_points')
-              .insert({
-                user_id: user.id,
-                video_id: videoId,
-                action_type: 'like',
-                points_earned: 5,
-                created_at: new Date().toISOString()
-              });
-            
-            if (trackError) {
-              console.error('⚠️ Error al registrar tracking de puntos:', trackError);
-            } else {
-              console.log('✅ Tracking de puntos registrado en BD');
-            }
-            
-            // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a dar puntos
-            setActionsPerformed(prev => ({
-              ...prev,
-              likes: new Set([...prev.likes, videoId])
-            }));
-            
-            // ✅ VERIFICAR MISIONES
+            // ✅ Llamamos a la función SQL (que ya no falla)
             const missionResult = await missionsService.trackGiveLike('video', videoId);
-            if (missionResult.completed) {
-              await addPoints(missionResult.reward.points, missionResult.message, 'free');
+            
+            // ================================================================
+            // ✅ INICIO: LÓGICA DE NOTIFICACIONES SINCRONIZADA
+            // ================================================================
+            if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
+              // 1. MISIÓN COMPLETA
+              const pointsEarned = missionResult.points_earned; 
+              await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
+              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId, 'success');
+              
+              // Marcar TODOS los videos como 'hechos' para hoy
+              const allVideoIds = videos.map(v => v.id);
+              setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
+
+            } else if (missionResult.result === 'progress_updated') {
+              // 2. PROGRESO REGISTRADO
+              showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId, 'success');
+                 
+            } else if (missionResult.result === 'already_completed') {
+              // 3. ANTI-FARMING (Misión ya completada hoy)
+              showPointsNotification(`Ya completaste la misión de Likes hoy.`, videoId, 'restriction');
+               // Marcar TODOS los videos como 'hechos' para hoy
+              const allVideoIds = videos.map(v => v.id);
+              setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
             }
+            // ================================================================
+            // ✅ FIN: LÓGICA DE NOTIFICACIONES
+            // ================================================================
+
           } catch (pointsError) {
-            console.error('❌ Error al otorgar puntos:', pointsError);
+            console.error('❌ Error al procesar puntos o misión:', pointsError);
           }
         } else {
           // ==============================
-          // YA GANÓ PUNTOS ANTES
+          // YA GANÓ PUNTOS HOY
           // ==============================
-          console.log('ℹ️ El usuario ya ganó puntos con este video anteriormente');
-          showPointsNotification('Ya ganaste puntos con este reel', videoId);
+          console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
+          showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
         }
       }
       
@@ -783,19 +764,13 @@ const ReelsContainer = ({
         newDislikedVideos.add(videoId);
         
         if (newLikedVideos.has(videoId)) {
-          newLikedVideos.delete(videoId);
-          await supabase
-            .from('video_likes')
-            .delete()
-            .eq('video_id', videoId)
-            .eq('user_id', user.id);
-          
-          await supabase.rpc('decrement_video_likes', { video_id: videoId });
+          // Si tenía like, llamamos a handleLike para quitarlo
+          // (handleLike ya no da puntos, así que es seguro)
+          await handleLike(videoId, e);
         }
       }
       
       setDislikedVideos(newDislikedVideos);
-      setLikedVideos(newLikedVideos);
     } catch (error) {
       console.error('Error en dislike:', error);
     }
@@ -815,7 +790,8 @@ const ReelsContainer = ({
       }
 
       const newSavedVideos = new Set(savedVideos);
-      const hasEarnedPointsBefore = actionsPerformed.saves.has(videoId);
+      // 🛑 Lógica 'hasEarnedPointsBefore' de 'save' deshabilitada
+      // const hasEarnedPointsBefore = actionsPerformed.saves.has(videoId);
       
       if (newSavedVideos.has(videoId)) {
         // Quitar de guardados
@@ -832,30 +808,24 @@ const ReelsContainer = ({
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // ✅ OTORGAR PUNTOS solo si es primera vez
-        if (!hasEarnedPointsBefore) {
-          try {
-            await addPoints(2, 'Video guardado', 'free');
+        // ✅ OTORGAR PUNTOS (Lógica antigua mantenida, necesita migración a 'trackMissionProgress')
+        // if (!hasEarnedPointsBefore) {
+        //   try {
+        //     await addPoints(2, 'Video guardado', 'free');
             
-            // ✅ REGISTRAR EN BD
-            await supabase
-              .from('user_video_points')
-              .insert({
-                user_id: user.id,
-                video_id: videoId,
-                action_type: 'save',
-                points_earned: 2,
-                created_at: new Date().toISOString()
-              });
+        //     // 🛑 ERROR: Esta tabla no existe.
+        //     // await supabase
+        //     //   .from('user_video_points')
+        //     // ...
             
-            setActionsPerformed(prev => ({
-              ...prev,
-              saves: new Set([...prev.saves, videoId])
-            }));
-          } catch (pointsError) {
-            console.error('Error al otorgar puntos:', pointsError);
-          }
-        }
+        //     setActionsPerformed(prev => ({
+        //       ...prev,
+        //       saves: new Set([...prev.saves, videoId])
+        //     }));
+        //   } catch (pointsError) {
+        //     console.error('Error al otorgar puntos:', pointsError);
+        //   }
+        // }
       }
       
       setSavedVideos(newSavedVideos);
@@ -877,7 +847,7 @@ const ReelsContainer = ({
       }
       
       if (currentUser.id === video.creator?.id) {
-          showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id);
+          showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id, 'restriction');
           return;
       }
       
@@ -886,7 +856,8 @@ const ReelsContainer = ({
   
   const handleGiftSuccess = (amount) => {
       // El modal se encarga de la lógica de puntos, solo mostramos una notificación
-      showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id);
+      const currentVideo = videos[currentIndex];
+      showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id, 'success');
   };
 
 
@@ -905,7 +876,8 @@ const ReelsContainer = ({
 
       const newFollowedCreators = new Set(followedCreators);
       const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
-      const hasEarnedPointsBefore = actionsPerformed.follows.has(creatorId);
+      // 🛑 Lógica 'hasEarnedPointsBefore' de 'follow' deshabilitada
+      // const hasEarnedPointsBefore = actionsPerformed.follows.has(creatorId);
 
       if (isCurrentlyFollowing) {
         // Dejar de seguir
@@ -929,35 +901,29 @@ const ReelsContainer = ({
             following_id: creatorId 
           });
 
-        // ✅ OTORGAR PUNTOS solo si es primera vez
-        if (!hasEarnedPointsBefore) {
-          try {
-            await addPoints(10, 'Seguiste a un creador', 'free');
+        // ✅ OTORGAR PUNTOS (Lógica antigua mantenida)
+        // if (!hasEarnedPointsBefore) {
+        //   try {
+        //     await addPoints(10, 'Seguiste a un creador', 'free');
             
-            // ✅ REGISTRAR EN BD
-            await supabase
-              .from('user_video_points')
-              .insert({
-                user_id: user.id,
-                content_id: creatorId,
-                action_type: 'follow',
-                points_earned: 10,
-                created_at: new Date().toISOString()
-              });
+        //     // 🛑 ERROR: Esta tabla no existe.
+        //     // await supabase
+        //     //   .from('user_video_points')
+        //     // ...
             
-            const missionResult = await missionsService.trackFollowUser(creatorId);
-            if (missionResult.completed) {
-              await addPoints(missionResult.reward.points, missionResult.message, 'free');
-            }
+        //     const missionResult = await missionsService.trackFollowUser(creatorId);
+        //     if (missionResult.completed) {
+        //       await addPoints(missionResult.reward.points, missionResult.message, 'free');
+        //     }
             
-            setActionsPerformed(prev => ({
-              ...prev,
-              follows: new Set([...prev.follows, creatorId])
-            }));
-          } catch (pointsError) {
-            console.error('Error al otorgar puntos:', pointsError);
-          }
-        }
+        //     setActionsPerformed(prev => ({
+        //       ...prev,
+        //       follows: new Set([...prev.follows, creatorId])
+        //     }));
+        //   } catch (pointsError) {
+        //     console.error('Error al otorgar puntos:', pointsError);
+        //   }
+        // }
       }
       
       setFollowedCreators(newFollowedCreators);
@@ -973,7 +939,8 @@ const ReelsContainer = ({
     }
     
     try {
-      const hasEarnedPointsBefore = actionsPerformed.shares.has(video.id);
+      // 🛑 Lógica 'hasEarnedPointsBefore' de 'share' deshabilitada
+      // const hasEarnedPointsBefore = actionsPerformed.shares.has(video.id);
 
       if (navigator.share) {
         await navigator.share({
@@ -986,43 +953,37 @@ const ReelsContainer = ({
         alert('Enlace copiado al portapapeles');
       }
 
-      // ✅ OTORGAR PUNTOS solo si es primera vez
-      if (!hasEarnedPointsBefore) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await addPoints(3, 'Video compartido', 'free');
+      // ✅ OTORGAR PUNTOS (Lógica antigua mantenida)
+      // if (!hasEarnedPointsBefore) {
+      //   try {
+      //     const { data: { user } } = await supabase.auth.getUser();
+      //     if (user) {
+      //       await addPoints(3, 'Video compartido', 'free');
             
-            // ✅ REGISTRAR EN BD
-            await supabase
-              .from('user_video_points')
-              .insert({
-                user_id: user.id,
-                video_id: video.id,
-                action_type: 'share',
-                points_earned: 3,
-                created_at: new Date().toISOString()
-              });
+      //       // 🛑 ERROR: Esta tabla no existe.
+      //       // await supabase
+      //       //   .from('user_video_points')
+      //       // ...
             
-            const missionResult = await missionsService.trackShareContent(
-              'video', 
-              video.id, 
-              navigator.share ? 'native' : 'clipboard'
-            );
+      //       const missionResult = await missionsService.trackShareContent(
+      //         'video', 
+      //         video.id, 
+      //         navigator.share ? 'native' : 'clipboard'
+      //       );
             
-            if (missionResult.completed) {
-              await addPoints(missionResult.reward.points, missionResult.message, 'free');
-            }
+      //       if (missionResult.completed) {
+      //         await addPoints(missionResult.reward.points, missionResult.message, 'free');
+      //       }
             
-            setActionsPerformed(prev => ({
-              ...prev,
-              shares: new Set([...prev.shares, video.id])
-            }));
-          }
-        } catch (pointsError) {
-          console.error('Error al otorgar puntos:', pointsError);
-        }
-      }
+      //       setActionsPerformed(prev => ({
+      //         ...prev,
+      //         shares: new Set([...prev.shares, video.id])
+      //       }));
+      //     }
+      //   } catch (pointsError) {
+      //     console.error('Error al otorgar puntos:', pointsError);
+      //   }
+      // }
     } catch (error) {
       console.error('Error compartiendo:', error);
     }
@@ -1211,38 +1172,33 @@ const ReelsContainer = ({
         }
       }
 
-      const hasEarnedPointsBefore = actionsPerformed.comments.has(videoId);
+      // 🛑 Lógica 'hasEarnedPointsBefore' de 'comment' deshabilitada
+      // const hasEarnedPointsBefore = actionsPerformed.comments.has(videoId);
 
-      if (!hasEarnedPointsBefore) {
-        try {
-          console.log('🎁 Otorgando puntos...');
-          await addPoints(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado', 'free');
+      // if (!hasEarnedPointsBefore) {
+      //   try {
+      //     console.log('🎁 Otorgando puntos...');
+      //     await addPoints(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado', 'free');
           
-          // ✅ REGISTRAR EN BD
-          await supabase
-            .from('user_video_points')
-            .insert({
-              user_id: user.id,
-              video_id: videoId,
-              action_type: 'comment',
-              points_earned: 3,
-              created_at: new Date().toISOString()
-            });
+      //     // 🛑 ERROR: Esta tabla no existe.
+      //     // await supabase
+      //     //   .from('user_video_points')
+      //     // ...
           
-          const missionResult = await missionsService.trackComment('video', videoId);
-          if (missionResult.completed) {
-            await addPoints(missionResult.reward.points, missionResult.message, 'free');
-          }
+      //     const missionResult = await missionsService.trackComment('video', videoId);
+      //     if (missionResult.completed) {
+      //       await addPoints(missionResult.reward.points, missionResult.message, 'free');
+      //     }
           
-          setActionsPerformed(prev => ({
-            ...prev,
-            comments: new Set([...prev.comments, videoId])
-          }));
-          console.log('✅ Puntos otorgados');
-        } catch (pointsError) {
-          console.error('⚠️ Error al otorgar puntos:', pointsError);
-        }
-      }
+      //     setActionsPerformed(prev => ({
+      //       ...prev,
+      //       comments: new Set([...prev.comments, videoId])
+      //     }));
+      //     console.log('✅ Puntos otorgados');
+      //   } catch (pointsError) {
+      //     console.error('⚠️ Error al otorgar puntos:', pointsError);
+      //   }
+      // }
 
       if (!replyingTo) {
         setVideoCounters(prev => ({
@@ -1577,9 +1533,16 @@ const ReelsContainer = ({
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
 
-              {/* ✅ NOTIFICACIÓN DE PUNTOS AL LADO DEL LIKE */}
+              {/* ================================================== */}
+              {/* ✅ NOTIFICACIÓN DE PUNTOS (CON ESTILO DINÁMICO)   */}
+              {/* ================================================== */}
               {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className="absolute -left-32 top-0 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-2 rounded-lg shadow-xl animate-bounce font-bold text-xs whitespace-nowrap">
+                <div className={`absolute -left-32 top-0 px-3 py-2 rounded-lg shadow-xl animate-bounce font-bold text-xs whitespace-nowrap
+                  ${pointsNotification.type === 'success' 
+                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
+                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                  }
+                `}>
                   {pointsNotification.message}
                 </div>
               )}
@@ -1711,7 +1674,12 @@ const ReelsContainer = ({
 
               {/* ✅ NOTIFICACIÓN DE PUNTOS AL LADO DEL LIKE - DESKTOP */}
               {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className="absolute -left-40 top-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-2 rounded-xl shadow-2xl animate-bounce font-bold text-sm whitespace-nowrap z-50">
+                <div className={`absolute -left-40 top-2 px-4 py-2 rounded-xl shadow-2xl animate-bounce font-bold text-sm whitespace-nowrap z-50
+                  ${pointsNotification.type === 'success' 
+                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
+                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                  }
+                `}>
                   {pointsNotification.message}
                 </div>
               )}
