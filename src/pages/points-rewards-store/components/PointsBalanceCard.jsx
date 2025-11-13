@@ -2,6 +2,7 @@
 // ============================================================================
 // ✅ NUEVO: Añadida sección de "Progreso de Misiones"
 //    Ahora este componente acepta una prop `missions = []`
+// ✅ CORREGIDO: El botón "Ver Videos" ahora apunta a /dashboard
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -138,7 +139,10 @@ const PointsBalanceCard = ({
       )}
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
-        <Link to="/video-feed-dashboard">
+        {/* ================================================== */}
+        {/* ✅ CORRECCIÓN DE RUTA AQUÍ                       */}
+        {/* ================================================== */}
+        <Link to="/dashboard"> 
           <Button variant="outline" size="sm" fullWidth iconName="Play" iconPosition="left">
             Ver Videos
           </Button>
