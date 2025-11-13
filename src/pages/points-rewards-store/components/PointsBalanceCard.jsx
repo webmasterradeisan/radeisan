@@ -1,7 +1,7 @@
 // src/pages/points-rewards-store/components/PointsBalanceCard.jsx
 // ============================================================================
-// ✅ FIX: Eliminada la sección "Cómo ganar más puntos" (earningTips)
-//    ya que ahora se maneja dinámicamente en el componente padre.
+// ✅ NUEVO: Añadida sección de "Progreso de Misiones"
+//    Ahora este componente acepta una prop `missions = []`
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -14,6 +14,7 @@ const PointsBalanceCard = ({
   premiumPoints = 0,
   pointsEarnedToday = 0, 
   nextRewardThreshold,
+  missions = [], // ✅ NUEVA PROP: Array de misiones activas
   loading = false,
   className = '' 
 }) => {
@@ -35,7 +36,7 @@ const PointsBalanceCard = ({
 
   if (loading && totalDisplayValue === 0 && freePoints === 0 && premiumPoints === 0) {
      return (
-      <div className={`flex flex-col items-center justify-center p-6 bg-card border border-border rounded-lg shadow-elevation-1 min-h-[250px] ${className}`}>
+      <div className={`flex flex-col items-center justify-center p-6 bg-card border border-border rounded-lg shadow-elevation-1 min-h-[350px] ${className}`}>
         <Icon name="Loader" className="animate-spin text-accent w-8 h-8 mb-3" />
         <p className="text-sm text-muted-foreground">Obteniendo saldo...</p>
       </div>
@@ -47,8 +48,6 @@ const PointsBalanceCard = ({
 
   const pointsNeeded = nextRewardThreshold ? 
     Math.max(nextRewardThreshold - totalDisplayValue, 0) : 0;
-
-  // ✅ FIX: 'earningTips' ha sido eliminado de este archivo.
 
   return (
     <div className={`bg-gradient-to-br from-primary/5 to-accent/5 border border-border rounded-lg p-6 ${className}`}>
@@ -119,7 +118,7 @@ const PointsBalanceCard = ({
       )}
       
       {/* Progress to Next Reward */}
-      {nextRewardThreshold > 0 && ( // <-- Añadida comprobación
+      {nextRewardThreshold > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-foreground">
@@ -138,7 +137,7 @@ const PointsBalanceCard = ({
         </div>
       )}
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3"> {/* ✅ FIX: Eliminado mb-6 */}
+      <div className="grid grid-cols-2 gap-3">
         <Link to="/video-feed-dashboard">
           <Button variant="outline" size="sm" fullWidth iconName="Play" iconPosition="left">
             Ver Videos
@@ -151,6 +150,8 @@ const PointsBalanceCard = ({
           iconName="History" 
           iconPosition="left"
           onClick={() => {
+            // Este scroll-to solo funcionará en la página de /rewards
+            // En el dashboard, simplemente no hará nada.
             const historySection = document.getElementById('transaction-history');
             if (historySection) {
               historySection?.scrollIntoView({ behavior: 'smooth' });
@@ -161,7 +162,74 @@ const PointsBalanceCard = ({
         </Button>
       </div>
       
-      {/* ✅ FIX: Sección "Earning Tips" eliminada de aquí */}
+      {/* ================================================== */}
+      {/* ✅ NUEVO: Sección de Progreso de Misiones          */}
+      {/* ================================================== */}
+      <div className="border-t border-border pt-6 mt-6">
+        <h3 className="text-sm font-semibold text-foreground mb-4">
+          Progreso de Misiones
+        </h3>
+        
+        {/* Estado de Carga */}
+        {loading && missions.length === 0 && (
+          <div className="space-y-3 animate-pulse">
+            <div className="h-4 bg-muted rounded w-3/4"></div>
+            <div className="h-2 bg-muted rounded w-full"></div>
+            <div className="h-4 bg-muted rounded w-2/4"></div>
+            <div className="h-2 bg-muted rounded w-full"></div>
+          </div>
+        )}
+
+        {/* Misiones Cargadas */}
+        {!loading && missions.length > 0 && (
+          <div className="space-y-4">
+            {missions.map((mission) => {
+              // Calcular progreso
+              const progress = mission.target_count > 0 
+                ? Math.min(Math.round((mission.current_count / mission.target_count) * 100), 100)
+                : (mission.is_completed ? 100 : 0);
+
+              return (
+                <div key={mission.id}>
+                  <div className="flex items-center justify-between mb-1.5 text-sm">
+                    <div className="flex items-center">
+                      <Icon 
+                        name={mission.icon || 'Target'} 
+                        size={14} 
+                        className="text-accent mr-2" 
+                      />
+                      <span className="font-medium text-foreground truncate" title={mission.title}>
+                        {mission.title}
+                      </span>
+                    </div>
+                    {/* Mostrar progreso solo si no está completada */}
+                    {!mission.is_completed ? (
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {mission.current_count}/{mission.target_count}
+                      </span>
+                    ) : (
+                      <Icon name="CheckCircle" size={16} className="text-success" />
+                    )}
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div 
+                      className={`h-1.5 rounded-full transition-all ${mission.is_completed ? 'bg-success' : 'bg-accent'}`}
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Sin misiones activas */}
+        {!loading && missions.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-2">
+            ¡Todas las misiones completadas por hoy!
+          </p>
+        )}
+      </div>
       
     </div>
   );
