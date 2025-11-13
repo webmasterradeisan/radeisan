@@ -1,8 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - Integrado con Sistema de Puntos
-// ✅ CORRECCIÓN CRÍTICA FINAL: Defensa contra 'null is not iterable' en la copia de Sets (solución definitiva).
-// ✅ FIX BUG: El Like ahora solo premia si la misión/regla lo aprueba (solución a los +5 pts no deseados).
+// ✅ CORRECCIÓN CRÍTICA FINAL: Defensa contra 'null is not iterable' en la carga de datos.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -194,11 +192,10 @@ const ReelsContainer = ({
             .select('video_id')
             .eq('user_id', user.id);
           
-          if (likesData) {
-            // Utilizamos Array.from() para defensiva en caso de que likesData sea null o no iterable.
-            const likedIds = new Set(Array.from(likesData || []).map(l => l.video_id));
-            setLikedVideos(likedIds);
-          }
+          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
+          const likedIds = new Set(Array.from(likesData || []).map(l => l.video_id));
+          setLikedVideos(likedIds);
+          
 
           // ✅ CARGAR VIDEOS POR LOS QUE YA GANÓ PUNTOS (tracking persistente)
           const { data: pointsEarnedData } = await supabase
@@ -207,14 +204,14 @@ const ReelsContainer = ({
             .eq('user_id', user.id)
             .eq('action_type', 'like');
           
-          if (pointsEarnedData) {
-            const videosWithPointsEarned = new Set(Array.from(pointsEarnedData || []).map(p => p.video_id));
-            console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
-            setActionsPerformed(prev => ({
-              ...prev,
-              likes: videosWithPointsEarned
-            }));
-          }
+          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
+          const videosWithPointsEarned = new Set(Array.from(pointsEarnedData || []).map(p => p.video_id));
+          console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
+          setActionsPerformed(prev => ({
+            ...prev,
+            likes: videosWithPointsEarned
+          }));
+          
 
           // ✅ CARGAR VIDEOS GUARDADOS
           const { data: savedData } = await supabase
@@ -222,23 +219,23 @@ const ReelsContainer = ({
             .select('video_id')
             .eq('user_id', user.id);
           
-          if (savedData) {
-            const savedIds = new Set(Array.from(savedData || []).map(s => s.video_id));
-            setSavedVideos(savedIds);
+          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
+          const savedIds = new Set(Array.from(savedData || []).map(s => s.video_id));
+          setSavedVideos(savedIds);
             
-            // Cargar tracking de puntos por guardar
-            const { data: savedPointsData } = await supabase
+          // Cargar tracking de puntos por guardar
+          const { data: savedPointsData } = await supabase
               .from('user_video_points')
               .select('video_id')
               .eq('user_id', user.id)
               .eq('action_type', 'save');
             
-            if (savedPointsData) {
-              setActionsPerformed(prev => ({
-                ...prev,
-                saves: new Set(Array.from(savedPointsData || []).map(p => p.video_id))
-              }));
-            }
+          if (savedPointsData) {
+            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
+            setActionsPerformed(prev => ({
+              ...prev,
+              saves: new Set(Array.from(savedPointsData || []).map(p => p.video_id))
+            }));
           }
 
           // ✅ CARGAR SEGUIDORES
@@ -247,23 +244,23 @@ const ReelsContainer = ({
             .select('following_id')
             .eq('follower_id', user.id);
           
-          if (followsData) {
-            const followedIds = new Set(Array.from(followsData || []).map(f => f.following_id));
-            setFollowedCreators(followedIds);
+          // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
+          const followedIds = new Set(Array.from(followsData || []).map(f => f.following_id));
+          setFollowedCreators(followedIds);
             
-            // Cargar tracking de puntos por seguir
-            const { data: followPointsData } = await supabase
+          // Cargar tracking de puntos por seguir
+          const { data: followPointsData } = await supabase
               .from('user_video_points')
               .select('content_id')
               .eq('user_id', user.id)
               .eq('action_type', 'follow');
             
-            if (followPointsData) {
-              setActionsPerformed(prev => ({
-                ...prev,
-                follows: new Set(Array.from(followPointsData || []).map(p => p.content_id))
-              }));
-            }
+          if (followPointsData) {
+            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
+            setActionsPerformed(prev => ({
+              ...prev,
+              follows: new Set(Array.from(followPointsData || []).map(p => p.content_id))
+            }));
           }
 
           // ✅ CARGAR TRACKING DE COMENTARIOS Y COMPARTIDOS
@@ -274,6 +271,7 @@ const ReelsContainer = ({
             .eq('action_type', 'comment');
           
           if (commentsPointsData) {
+            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
             setActionsPerformed(prev => ({
               ...prev,
               comments: new Set(Array.from(commentsPointsData || []).map(p => p.video_id))
@@ -287,6 +285,7 @@ const ReelsContainer = ({
             .eq('action_type', 'share');
           
           if (sharesPointsData) {
+            // ✅ APLICAR DEFENSA AL MAPEO DE DATOS
             setActionsPerformed(prev => ({
               ...prev,
               shares: new Set(Array.from(sharesPointsData || []).map(p => p.video_id))
@@ -437,7 +436,7 @@ const ReelsContainer = ({
               currentVideo.muted = true;
               currentVideo.play()
                 .then(() => setIsAutoPlaying(true))
-                .catch(e => console.error('Error:', e));
+                .catch(e => console.error('❌ Error:', e));
             });
         }
       } else if (isAutoPlaying) {
@@ -633,7 +632,7 @@ const ReelsContainer = ({
         return;
       }
 
-      // ✅ REFUERZO DEFENSA: Inicializar sets si son null, previendo el "not iterable"
+      // ✅ REFUERZO DEFENSA
       const newLikedVideos = new Set(likedVideos || []);
       const newDislikedVideos = new Set(dislikedVideos || []);
       
@@ -705,13 +704,13 @@ const ReelsContainer = ({
             // 1. TRACKEAR LA ACCIÓN (Esto verifica las reglas/misiones)
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
-            // ✅ LÓGICA DE PREMIO: Solo si la misión/regla otorga puntos
-            if (missionResult.points_earned > 0) { 
-              const pointsEarned = missionResult.points_earned; 
+            // ✅ LÓGICA DE PREMIO: Solo otorga puntos si la misión se ha completado.
+            if (missionResult.completed) { 
+              const pointsEarned = missionResult.reward.points || 5; 
               
-              await addPoints(pointsEarned, missionResult.message || 'Puntos ganados por acción', 'free'); 
+              await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
               
-              showPointsNotification(`+${pointsEarned} puntos 🎉`, videoId);
+              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId);
 
               // 2. Registrar en BD los puntos de misión
               await supabase
@@ -719,32 +718,13 @@ const ReelsContainer = ({
                 .insert({
                   user_id: user.id,
                   video_id: videoId,
-                  // Si el premio es directo (5pts) o de misión, se registra aquí.
-                  action_type: 'like', 
+                  action_type: 'mission_like_complete', // Usamos un tipo de acción claro para la misión
                   points_earned: pointsEarned,
                   created_at: new Date().toISOString()
                 });
                 
-            } else if (missionResult.completed) {
-                // 3. Caso Misión Completada (y el premio fue devuelto en missionResult.reward)
-                const pointsEarned = missionResult.reward.points || 5; 
-
-                await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
-                showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId);
-
-                // Registrar el premio de la misión (opcional si el service no lo hace)
-                await supabase
-                  .from('user_video_points')
-                  .insert({
-                    user_id: user.id,
-                    video_id: videoId,
-                    action_type: 'mission_like_complete', 
-                    points_earned: pointsEarned,
-                    created_at: new Date().toISOString()
-                  });
-            
             } else {
-                 // 4. Si no se ganan puntos, solo se notifica el progreso/acción registrada
+                 // 3. Si no se ganan puntos, solo se notifica el progreso/acción registrada
                 showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId);
             }
             
@@ -1775,7 +1755,7 @@ const ReelsContainer = ({
               onClick={(e) => handleSave(currentVideo.id, e)} 
               className="flex flex-col items-center space-y-1 group"
             >
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'text-yellow-400' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
                 <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
               </div>
             </button>
