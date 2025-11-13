@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
-// ✅ CORRECCIÓN CRÍTICA: La lógica de puntos del Like ahora SOLO otorga puntos si la misión se completa,
-//    eliminando la posibilidad de premios directos no deseados.
+// ✅ CORRECCIÓN CRÍTICA: Lógica defensiva para inicialización de Sets con datos nulos de Supabase.
+// ✅ CORRECCIÓN FINAL: Like solo otorga puntos si la misión/regla lo aprueba.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -196,13 +196,12 @@ const ReelsContainer = ({
             .eq('user_id', user.id);
           
           if (likesData) {
-            const likedIds = new Set(likesData.map(l => l.video_id));
+            // ✅ CORRECCIÓN DEFENSIVA 1: Asegurar que likesData no es null/undefined antes de map
+            const likedIds = new Set((likesData || []).map(l => l.video_id));
             setLikedVideos(likedIds);
           }
 
           // ✅ CARGAR VIDEOS POR LOS QUE YA GANÓ PUNTOS (tracking persistente)
-          // Esta consulta debe traer TODOS los videos por los que el usuario ya ganó puntos
-          // independientemente de si actualmente tienen like o no
           const { data: pointsEarnedData } = await supabase
             .from('user_video_points')
             .select('video_id')
@@ -210,7 +209,8 @@ const ReelsContainer = ({
             .eq('action_type', 'like');
           
           if (pointsEarnedData) {
-            const videosWithPointsEarned = new Set(pointsEarnedData.map(p => p.video_id));
+            // ✅ CORRECCIÓN DEFENSIVA 2: Asegurar que pointsEarnedData no es null/undefined
+            const videosWithPointsEarned = new Set((pointsEarnedData || []).map(p => p.video_id));
             console.log('🎯 Videos que ya otorgaron puntos:', Array.from(videosWithPointsEarned));
             setActionsPerformed(prev => ({
               ...prev,
@@ -225,7 +225,8 @@ const ReelsContainer = ({
             .eq('user_id', user.id);
           
           if (savedData) {
-            const savedIds = new Set(savedData.map(s => s.video_id));
+            // ✅ CORRECCIÓN DEFENSIVA 3: Asegurar que savedData no es null/undefined
+            const savedIds = new Set((savedData || []).map(s => s.video_id));
             setSavedVideos(savedIds);
             
             // Cargar tracking de puntos por guardar
@@ -236,9 +237,10 @@ const ReelsContainer = ({
               .eq('action_type', 'save');
             
             if (savedPointsData) {
+              // ✅ CORRECCIÓN DEFENSIVA 4: Asegurar que savedPointsData no es null/undefined
               setActionsPerformed(prev => ({
                 ...prev,
-                saves: new Set(savedPointsData.map(p => p.video_id))
+                saves: new Set((savedPointsData || []).map(p => p.video_id))
               }));
             }
           }
@@ -250,7 +252,8 @@ const ReelsContainer = ({
             .eq('follower_id', user.id);
           
           if (followsData) {
-            const followedIds = new Set(followsData.map(f => f.following_id));
+            // ✅ CORRECCIÓN DEFENSIVA 5: Asegurar que followsData no es null/undefined
+            const followedIds = new Set((followsData || []).map(f => f.following_id));
             setFollowedCreators(followedIds);
             
             // Cargar tracking de puntos por seguir
@@ -261,9 +264,10 @@ const ReelsContainer = ({
               .eq('action_type', 'follow');
             
             if (followPointsData) {
+              // ✅ CORRECCIÓN DEFENSIVA 6: Asegurar que followPointsData no es null/undefined
               setActionsPerformed(prev => ({
                 ...prev,
-                follows: new Set(followPointsData.map(p => p.content_id))
+                follows: new Set((followPointsData || []).map(p => p.content_id))
               }));
             }
           }
@@ -276,9 +280,10 @@ const ReelsContainer = ({
             .eq('action_type', 'comment');
           
           if (commentsPointsData) {
+            // ✅ CORRECCIÓN DEFENSIVA 7: Asegurar que commentsPointsData no es null/undefined
             setActionsPerformed(prev => ({
               ...prev,
-              comments: new Set(commentsPointsData.map(p => p.video_id))
+              comments: new Set((commentsPointsData || []).map(p => p.video_id))
             }));
           }
 
@@ -289,9 +294,10 @@ const ReelsContainer = ({
             .eq('action_type', 'share');
           
           if (sharesPointsData) {
+            // ✅ CORRECCIÓN DEFENSIVA 8: Asegurar que sharesPointsData no es null/undefined
             setActionsPerformed(prev => ({
               ...prev,
-              shares: new Set(sharesPointsData.map(p => p.video_id))
+              shares: new Set((sharesPointsData || []).map(p => p.video_id))
             }));
           }
         }
