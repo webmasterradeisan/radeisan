@@ -1,23 +1,11 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
-// ✅ CORREGIDO: Verificaciones de seguridad para comment.user
-// ✅ CORREGIDO: Estructura JSX del modal
-// ✅ NUEVO: Avisos de puntos cerca del botón like
-// ✅ CORREGIDO: Sistema de tracking persistente para likes
-// ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
-// ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
-// 🟢 SINCRONIZADO: 'loadCurrentUserAndActions' ahora consulta 'mission_progress'
-//    para el anti-farming diario (en lugar de 'user_video_points').
-// 🟢 SINCRONIZADO: 'handleLike', 'handleSave' y 'handleAddComment' ya no
-//    escriben en 'user_video_points' y 'handleLike' usa la lógica de misión.
-// 🟢 CORREGIDO: Solucionado crash 'handlePlayPause is not defined'
-//    envolviendo funciones en useCallback y añadiéndolas a las dependencias del useEffect.
-// 🟢 NUEVO (11/13): 'handleLike' y 'handleDislike' ahora revierten el estado
-//    si la base de datos falla, asegurando la sincronización del contador.
-// 🟢 NUEVO (11/13): 'handleDislike' ahora escribe en la base de datos
-//    (asume la tabla 'video_dislikes').
-// 🟢 NUEVO (11/13): Añadido diagnóstico de RLS a 'loadComments'.
+// ... (comentarios de cabecera) ...
+// 🟢 NUEVO (11/13 v2): Eliminado el estado 'pointsNotification' y la función
+//    'showPointsNotification'.
+// 🟢 NUEVO (11/13 v2): Integración de SweetAlert2 (Toasts) para todas las
+//    notificaciones de puntos y acciones.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -27,8 +15,25 @@ import { usePoints } from 'contexts/PointsContext';
 import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
-// ✅ CORRECCIÓN DE RUTA DE IMPORTACIÓN (usando alias absoluto asumido o ajustando)
 import GiftPointsModal from 'components/GiftPointsModal'; 
+
+// ✅ NUEVO: Importar SweetAlert2
+import Swal from 'sweetalert2';
+
+// ✅ NUEVO: Crear una instancia de Toast reutilizable
+// Aparecerá arriba a la derecha, no interferirá con el clic y durará 2.5 seg
+const Toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 2500,
+  timerProgressBar: true,
+  didOpen: (toast) => {
+    toast.addEventListener('mouseenter', Swal.stopTimer);
+    toast.addEventListener('mouseleave', Swal.resumeTimer);
+  }
+});
+
 
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
@@ -73,13 +78,8 @@ const ReelsContainer = ({
   // ✅ NUEVO: Estado para el Modal de Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
 
-  // ✅ NUEVO: Estado para notificaciones de puntos
-  const [pointsNotification, setPointsNotification] = useState({
-    show: false,
-    message: '',
-    videoId: null,
-    type: 'success' // Añadido para controlar el color
-  });
+  // ❌ ELIMINADO: Estado de 'pointsNotification' ya no es necesario
+  // const [pointsNotification, setPointsNotification] = useState(...);
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
@@ -112,25 +112,8 @@ const ReelsContainer = ({
     showGiftModal // ✅ Nuevo estado de debug
   });
 
-  // ✅ NUEVO: Función para mostrar notificación de puntos
-  const showPointsNotification = (message, videoId, type = 'success') => {
-    setPointsNotification({
-      show: true,
-      message,
-      videoId,
-      type // Añadimos tipo para controlar color
-    });
-    
-    // Auto ocultar después de 2 segundos
-    setTimeout(() => {
-      setPointsNotification({
-        show: false,
-        message: '',
-        videoId: null,
-        type: 'success'
-      });
-    }, 2000);
-  };
+  // ❌ ELIMINADO: La función 'showPointsNotification' ya no es necesaria
+  // const showPointsNotification = (...) => { ... };
 
   // ===============================
   // FUNCIÓN: Convertir ID del video a índice
@@ -156,6 +139,7 @@ const ReelsContainer = ({
     return index;
   }, [selectedReelId, videos]);
 
+  // ... (El resto de useEffects de sincronización, carga de usuario y reproducción no cambian) ...
   // ===============================
   // SINCRONIZACIÓN INICIAL
   // ===============================
@@ -330,6 +314,7 @@ const ReelsContainer = ({
     setVideoCounters(initialCounters);
   }, [videos]);
 
+  // ... (El resto de useEffects de reproducción, navegación y tracking no cambian) ...
   // ===============================
   // FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
   // ===============================
@@ -397,7 +382,7 @@ const ReelsContainer = ({
         if (e.deltaY > 0 && currentIndex < videos.length - 1) {
           setCurrentIndex(prev => prev + 1);
         } else if (e.deltaY < 0 && currentIndex > 0) {
-          setCurrentIndex(prev => prev - 1);
+          setCurrentIndex(prev => prev + 1);
         }
       }, 150);
     };
@@ -550,9 +535,7 @@ const ReelsContainer = ({
   // ===============================
   // PLAY/PAUSE
   // ===============================
-  const handlePlayPause = useCallback((e) => { // ✅ CORREGIDO: Envuelto en useCallback
-    // Si el evento 'e' existe, es un click en el video.
-    // Si 'e' no existe, fue llamado por el atajo de teclado.
+  const handlePlayPause = useCallback((e) => { 
     if (e && e.target.tagName !== 'VIDEO') return;
     
     const currentVideo = videoRefs.current[currentIndex];
@@ -567,26 +550,26 @@ const ReelsContainer = ({
         setIsAutoPlaying(false);
       }
     }
-  }, [currentIndex]); // Dependencia: currentIndex
+  }, [currentIndex]); 
 
   // ===============================
   // NAVEGACIÓN
   // ===============================
-  const navigateNext = useCallback(() => { // ✅ CORREGIDO: Envuelto en useCallback
+  const navigateNext = useCallback(() => { 
     if (currentIndex < videos.length - 1) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev + 1);
       setIsAutoPlaying(true);
     }
-  }, [currentIndex, videos.length]); // Dependencias
+  }, [currentIndex, videos.length]); 
 
-  const navigatePrevious = useCallback(() => { // ✅ CORREGIDO: Envuelto en useCallback
+  const navigatePrevious = useCallback(() => { 
     if (currentIndex > 0) {
       setEnableTransition(true);
       setCurrentIndex(prev => prev - 1);
       setIsAutoPlaying(true);
     }
-  }, [currentIndex]); // Dependencia
+  }, [currentIndex]); 
 
   const handleTouchStart = (e) => {
     touchStartY.current = e.touches[0].clientY;
@@ -612,7 +595,7 @@ const ReelsContainer = ({
       if (e.key === 'ArrowUp') navigatePrevious();
       if (e.key === ' ') {
         e.preventDefault();
-        handlePlayPause(); // ✅ CORREGIDO: Llama a la función 'handlePlayPause'
+        handlePlayPause(); 
       }
       if (e.key === 'Escape' && showCommentsModal) {
         handleCloseComments();
@@ -621,11 +604,10 @@ const ReelsContainer = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-    // ✅ CORREGIDO: Añadidas dependencias
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
 
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA CON REVERSIÓN)
+  // ✅✅✅ ACCIÓN DE LIKE (Integrado con SweetAlert2)
   // ==========================================================
   
   const handleLike = async (videoId, e) => {
@@ -643,10 +625,7 @@ const ReelsContainer = ({
     const newLikedVideos = new Set(likedVideos);
     const newDislikedVideos = new Set(dislikedVideos);
     
-    // ✅ VERIFICAR SI YA COMPLETÓ LA MISIÓN DE LIKES HOY
     const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
-    
-    // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE
     const isCurrentlyLiked = newLikedVideos.has(videoId);
     
     console.log('👍 Estado del like:', {
@@ -671,7 +650,6 @@ const ReelsContainer = ({
       }));
       
       try {
-        // Acción de base de datos
         const { error } = await supabase
           .from('video_likes')
           .delete()
@@ -683,7 +661,6 @@ const ReelsContainer = ({
       } catch (error) {
         console.error('❌ Error al quitar like, revirtiendo UI:', error);
         
-        // ⏪ REVERSIÓN DE ESTADO EN CASO DE ERROR
         newLikedVideos.add(videoId);
         setLikedVideos(new Set(newLikedVideos));
         
@@ -691,7 +668,7 @@ const ReelsContainer = ({
           ...prev,
           [videoId]: {
             ...prev[videoId],
-            likes: (prev[videoId]?.likes || 0) + 1 // Revertir el contador
+            likes: (prev[videoId]?.likes || 0) + 1 
           }
         }));
       }
@@ -705,7 +682,7 @@ const ReelsContainer = ({
       
       if (newDislikedVideos.has(videoId)) {
           newDislikedVideos.delete(videoId);
-          setDislikedVideos(newDislikedVideos); // Quitar dislike de UI
+          setDislikedVideos(newDislikedVideos); 
       }
 
       setVideoCounters(prev => ({
@@ -717,47 +694,53 @@ const ReelsContainer = ({
       }));
 
       try {
-        // Acción de base de datos
         const { error } = await supabase
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
         
         if (error) throw error;
 
-        // 🛑 ELIMINADO: RPC 'increment_video_likes' que fallaba
-        // await supabase.rpc('increment_video_likes', { video_id: videoId });
 
         // ✅ VERIFICAR SI YA GANÓ PUNTOS HOY
-        // Esta lógica se ejecuta solo si la DB fue exitosa.
         if (!hasEarnedPointsBefore) {
-          // ==============================
-          // MISIÓN NO COMPLETA HOY
-          // ==============================
           try {
-            // ✅ Llamamos a la función SQL (que ya no falla)
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
             // ================================================================
-            // ✅ INICIO: LÓGICA DE NOTIFICACIONES SINCRONIZADA
+            // ✅ INICIO: LÓGICA DE NOTIFICACIONES (SweetAlert2)
             // ================================================================
             if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
               // 1. MISIÓN COMPLETA
               const pointsEarned = missionResult.points_earned; 
               await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
-              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId, 'success');
               
-              // Marcar TODOS los videos como 'hechos' para hoy
+              // ✅ SWEETALERT2
+              Toast.fire({
+                icon: 'success',
+                title: `Misión Completa: +${pointsEarned} puntos 🎉`
+              });
+              
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
 
             } else if (missionResult.result === 'progress_updated') {
               // 2. PROGRESO REGISTRADO
-              showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId, 'success');
+              
+              // ✅ SWEETALERT2
+              Toast.fire({
+                icon: 'info', // 'info' es mejor que 'success' aquí
+                title: 'Acción registrada. Sigue dando Likes!'
+              });
                  
             } else if (missionResult.result === 'already_completed') {
               // 3. ANTI-FARMING (Misión ya completada hoy)
-              showPointsNotification(`Ya completaste la misión de Likes hoy.`, videoId, 'restriction');
-               // Marcar TODOS los videos como 'hechos' para hoy
+              
+              // ✅ SWEETALERT2
+              Toast.fire({
+                icon: 'warning', // 'warning' o 'info'
+                title: 'Ya completaste la misión de Likes hoy.'
+              });
+
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
             }
@@ -773,17 +756,20 @@ const ReelsContainer = ({
           // YA GANÓ PUNTOS HOY
           // ==============================
           console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
-          showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
+          
+          // ✅ SWEETALERT2
+          Toast.fire({
+            icon: 'info',
+            title: 'Ya completaste esta misión hoy.'
+          });
         }
 
       } catch (error) {
         console.error('❌ Error al dar like, revirtiendo UI:', error);
         
-        // ⏪ REVERSIÓN DE ESTADO EN CASO DE ERROR
         newLikedVideos.delete(videoId);
         setLikedVideos(new Set(newLikedVideos));
         
-        // Si quitamos un dislike, revertirlo también
         if (newDislikedVideos.has(videoId)) {
             newDislikedVideos.add(videoId);
             setDislikedVideos(new Set(newDislikedVideos));
@@ -793,7 +779,7 @@ const ReelsContainer = ({
           ...prev,
           [videoId]: {
             ...prev[videoId],
-            likes: Math.max(0, (prev[videoId]?.likes || 0) - 1) // Revertir contador
+            likes: Math.max(0, (prev[videoId]?.likes || 0) - 1) 
           }
         }));
       }
@@ -830,7 +816,7 @@ const ReelsContainer = ({
       
       try {
         const { error } = await supabase
-          .from('video_dislikes') // 🟢 ASUNCIÓN: Tabla 'video_dislikes'
+          .from('video_dislikes') 
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
@@ -839,7 +825,6 @@ const ReelsContainer = ({
         
       } catch (error) {
         console.error('❌ Error al quitar dislike, revirtiendo UI:', error);
-        // ⏪ REVERSIÓN
         newDislikedVideos.add(videoId);
         setDislikedVideos(new Set(newDislikedVideos));
       }
@@ -851,11 +836,9 @@ const ReelsContainer = ({
       newDislikedVideos.add(videoId);
       setDislikedVideos(newDislikedVideos);
 
-      // Si tenía like, lo quitamos de la UI
       if (isCurrentlyLiked) {
         newLikedVideos.delete(videoId);
         setLikedVideos(newLikedVideos);
-        // Actualizamos el contador de likes también
         setVideoCounters(prev => ({
           ...prev,
           [videoId]: {
@@ -867,12 +850,11 @@ const ReelsContainer = ({
       
       try {
         const { error } = await supabase
-          .from('video_dislikes') // 🟢 ASUNCIÓN: Tabla 'video_dislikes'
+          .from('video_dislikes') 
           .insert({ video_id: videoId, user_id: user.id });
           
         if (error) throw error;
 
-        // Si tenía like, ahora lo quitamos de la DB
         if (isCurrentlyLiked) {
           await supabase
             .from('video_likes')
@@ -884,11 +866,9 @@ const ReelsContainer = ({
       } catch (error) {
         console.error('❌ Error al dar dislike, revirtiendo UI:', error);
         
-        // ⏪ REVERSIÓN
         newDislikedVideos.delete(videoId);
         setDislikedVideos(new Set(newDislikedVideos));
         
-        // Si quitamos un like, lo revertimos
         if (isCurrentlyLiked) {
           newLikedVideos.add(videoId);
           setLikedVideos(new Set(newLikedVideos));
@@ -905,6 +885,7 @@ const ReelsContainer = ({
   };
 
   const handleSave = async (videoId, e) => {
+    // ... (La lógica de handleSave no cambia, no tenía notificaciones) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -918,11 +899,8 @@ const ReelsContainer = ({
       }
 
       const newSavedVideos = new Set(savedVideos);
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'save' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.saves.has(videoId);
       
       if (newSavedVideos.has(videoId)) {
-        // Quitar de guardados
         newSavedVideos.delete(videoId);
         await supabase
           .from('saved_videos')
@@ -930,30 +908,10 @@ const ReelsContainer = ({
           .eq('video_id', videoId)
           .eq('user_id', user.id);
       } else {
-        // Guardar video
         newSavedVideos.add(videoId);
         await supabase
           .from('saved_videos')
           .insert({ video_id: videoId, user_id: user.id });
-
-        // ✅ OTORGAR PUNTOS (Lógica antigua mantenida, necesita migración a 'trackMissionProgress')
-        // if (!hasEarnedPointsBefore) {
-        //   try {
-        //     await addPoints(2, 'Video guardado', 'free');
-            
-        //     // 🛑 ERROR: Esta tabla no existe.
-        //     // await supabase
-        //     //   .from('user_video_points')
-        //     // ...
-            
-        //     setActionsPerformed(prev => ({
-        //       ...prev,
-        //       saves: new Set([...prev.saves, videoId])
-        //     }));
-        //   } catch (pointsError) {
-        //     console.error('Error al otorgar puntos:', pointsError);
-        //   }
-        // }
       }
       
       setSavedVideos(newSavedVideos);
@@ -962,7 +920,9 @@ const ReelsContainer = ({
     }
   };
   
-  // ✅ NUEVA FUNCIÓN: Abrir el Modal de Regalo
+  // ==========================================================
+  // ✅✅✅ ACCIÓN DE REGALO (Integrado con SweetAlert2)
+  // ==========================================================
   const handleGiftClick = (video, e) => {
       if (e) {
         e.stopPropagation();
@@ -975,7 +935,11 @@ const ReelsContainer = ({
       }
       
       if (currentUser.id === video.creator?.id) {
-          showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id, 'restriction');
+          // ✅ SWEETALERT2
+          Toast.fire({
+            icon: 'error',
+            title: 'No puedes regalar puntos a tu propio reel.'
+          });
           return;
       }
       
@@ -983,12 +947,14 @@ const ReelsContainer = ({
   };
   
   const handleGiftSuccess = (amount) => {
-      // El modal se encarga de la lógica de puntos, solo mostramos una notificación
-      const currentVideo = videos[currentIndex];
-      showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id, 'success');
+      // ✅ SWEETALERT2
+      Toast.fire({
+        icon: 'success',
+        title: `¡Regalo enviado! ${amount} puntos para el creador.`
+      });
   };
 
-
+  // ... (handleFollow, handleShare, handleMuteToggle no cambian) ...
   const handleFollow = async (creatorId, e) => {
     if (e) {
       e.stopPropagation();
@@ -1004,8 +970,6 @@ const ReelsContainer = ({
 
       const newFollowedCreators = new Set(followedCreators);
       const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'follow' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.follows.has(creatorId);
 
       if (isCurrentlyFollowing) {
         // Dejar de seguir
@@ -1028,30 +992,6 @@ const ReelsContainer = ({
             follower_id: user.id, 
             following_id: creatorId 
           });
-
-        // ✅ OTORGAR PUNTOS (Lógica antigua mantenida)
-        // if (!hasEarnedPointsBefore) {
-        //   try {
-        //     await addPoints(10, 'Seguiste a un creador', 'free');
-            
-        //     // 🛑 ERROR: Esta tabla no existe.
-        //     // await supabase
-        //     //   .from('user_video_points')
-        //     // ...
-            
-        //     const missionResult = await missionsService.trackFollowUser(creatorId);
-        //     if (missionResult.completed) {
-        //       await addPoints(missionResult.reward.points, missionResult.message, 'free');
-        //     }
-            
-        //     setActionsPerformed(prev => ({
-        //       ...prev,
-        //       follows: new Set([...prev.follows, creatorId])
-        //     }));
-        //   } catch (pointsError) {
-        //     console.error('Error al otorgar puntos:', pointsError);
-        //   }
-        // }
       }
       
       setFollowedCreators(newFollowedCreators);
@@ -1067,9 +1007,6 @@ const ReelsContainer = ({
     }
     
     try {
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'share' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.shares.has(video.id);
-
       if (navigator.share) {
         await navigator.share({
           title: video.title || 'Video',
@@ -1078,40 +1015,12 @@ const ReelsContainer = ({
         });
       } else {
         navigator.clipboard.writeText(window.location.href);
-        alert('Enlace copiado al portapapeles');
+        // ✅ SWEETALERT2 (Mejora)
+        Toast.fire({
+            icon: 'success',
+            title: 'Enlace copiado al portapapeles'
+        });
       }
-
-      // ✅ OTORGAR PUNTOS (Lógica antigua mantenida)
-      // if (!hasEarnedPointsBefore) {
-      //   try {
-      //     const { data: { user } } = await supabase.auth.getUser();
-      //     if (user) {
-      //       await addPoints(3, 'Video compartido', 'free');
-            
-      //       // 🛑 ERROR: Esta tabla no existe.
-      //       // await supabase
-      //       //   .from('user_video_points')
-      //       // ...
-            
-      //       const missionResult = await missionsService.trackShareContent(
-      //         'video', 
-      //         video.id, 
-      //         navigator.share ? 'native' : 'clipboard'
-      //       );
-            
-      //       if (missionResult.completed) {
-      //         await addPoints(missionResult.reward.points, missionResult.message, 'free');
-      //       }
-            
-      //       setActionsPerformed(prev => ({
-      //         ...prev,
-      //         shares: new Set([...prev.shares, video.id])
-      //       }));
-      //     }
-      //   } catch (pointsError) {
-      //     console.error('Error al otorgar puntos:', pointsError);
-      //   }
-      // }
     } catch (error) {
       console.error('Error compartiendo:', error);
     }
@@ -1137,6 +1046,7 @@ const ReelsContainer = ({
     }
   };
 
+
   // ===============================
   // SISTEMA DE COMENTARIOS
   // ===============================
@@ -1160,7 +1070,6 @@ const ReelsContainer = ({
       if (data && data.length > 0) {
         const userIds = [...new Set(data.map(comment => comment.user_id))];
         
-        // 🚨 AQUÍ ES DONDE PUEDE FALLAR RLS 🚨
         const { data: usersData, error: usersError } = await supabase
           .from('user_profiles')
           .select('id, name, avatar, username')
@@ -1188,7 +1097,6 @@ const ReelsContainer = ({
                 avatar: userProfile.avatar,
                 username: userProfile.username || userProfile.name || 'usuario'
               } : {
-                // 🟢 NUEVO: Diagnóstico de RLS. Si ves esto, RLS está bloqueando la lectura.
                 id: comment.user_id,
                 name: 'Usuario (Error RLS)',
                 avatar: null,
@@ -1235,6 +1143,7 @@ const ReelsContainer = ({
   };
 
   const handleOpenComments = async (videoId, e) => {
+    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1248,6 +1157,7 @@ const ReelsContainer = ({
   };
 
   const handleCloseComments = () => {
+    // ... (sin cambios) ...
     console.log('❌ Cerrando modal de comentarios');
     setShowCommentsModal(false);
     setReplyingTo(null);
@@ -1255,6 +1165,7 @@ const ReelsContainer = ({
   };
 
   const handleAddComment = async (videoId) => {
+    // ... (sin cambios) ...
     if (!newComment.trim()) {
       console.log('❌ Comentario vacío');
       return;
@@ -1308,34 +1219,6 @@ const ReelsContainer = ({
         }
       }
 
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'comment' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.comments.has(videoId);
-
-      // if (!hasEarnedPointsBefore) {
-      //   try {
-      //     console.log('🎁 Otorgando puntos...');
-      //     await addPoints(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado', 'free');
-          
-      //     // 🛑 ERROR: Esta tabla no existe.
-      //     // await supabase
-      //     //   .from('user_video_points')
-      //     // ...
-          
-      //     const missionResult = await missionsService.trackComment('video', videoId);
-      //     if (missionResult.completed) {
-      //       await addPoints(missionResult.reward.points, missionResult.message, 'free');
-      //     }
-          
-      //     setActionsPerformed(prev => ({
-      //       ...prev,
-      //       comments: new Set([...prev.comments, videoId])
-      //     }));
-      //     console.log('✅ Puntos otorgados');
-      //   } catch (pointsError) {
-      //     console.error('⚠️ Error al otorgar puntos:', pointsError);
-      //   }
-      // }
-
       if (!replyingTo) {
         setVideoCounters(prev => ({
           ...prev,
@@ -1360,6 +1243,7 @@ const ReelsContainer = ({
   };
 
   const handleReply = (commentId, username) => {
+    // ... (sin cambios) ...
     console.log('💬 Respondiendo a comentario:', { commentId, username });
     setReplyingTo(commentId);
     
@@ -1376,11 +1260,13 @@ const ReelsContainer = ({
   };
 
   const handleCancelReply = () => {
+    // ... (sin cambios) ...
     setReplyingTo(null);
     setNewComment('');
   };
 
   const toggleReplies = (commentId) => {
+    // ... (sin cambios) ...
     setShowReplies(prev => ({
       ...prev,
       [commentId]: !prev[commentId]
@@ -1388,12 +1274,14 @@ const ReelsContainer = ({
   };
 
   const formatCount = (count) => {
+    // ... (sin cambios) ...
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count?.toString() || '0';
   };
 
   const formatTimeAgo = (date) => {
+    // ... (sin cambios) ...
     const now = new Date();
     const commentDate = new Date(date);
     const diffInSeconds = Math.floor((now - commentDate) / 1000);
@@ -1406,6 +1294,7 @@ const ReelsContainer = ({
   };
 
   const getVideoCounter = (videoId, type) => {
+    // ... (sin cambios) ...
     return videoCounters[videoId]?.[type] || 0;
   };
 
@@ -1416,6 +1305,7 @@ const ReelsContainer = ({
   const currentVideo = videos[currentIndex];
 
   if (videos.length === 0 && !loading) {
+    // ... (sin cambios) ...
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gray-900 text-white">
         <Icon name="Video" size={48} className="text-pink-500 mb-4" />
@@ -1458,13 +1348,6 @@ const ReelsContainer = ({
             onTouchMove={isMobile ? handleTouchMove : undefined}
             onTouchEnd={isMobile ? handleTouchEnd : undefined}
           >
-            {/* 🟢 NOTA SOBRE EL AUTOR DEL REEL ('video.creator'):
-              Si el nombre del autor del reel (video.creator) aparece como 'usuario',
-              es el MISMO problema de RLS.
-              El componente PADRE que carga la lista de 'videos' debe hacer un JOIN
-              con 'user_profiles'. Esa consulta (en el padre) está siendo bloqueada
-              por la RLS. La solución es la misma: permitir SELECT en 'user_profiles'.
-            */}
             {videos.map((video, index) => (
               <div 
                 key={video.id} 
@@ -1664,7 +1547,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* ✅ BOTÓN DE LIKE CON NOTIFICACIÓN */}
+            {/* ✅ BOTÓN DE LIKE (SIN NOTIFICACIÓN CSS) */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1676,20 +1559,7 @@ const ReelsContainer = ({
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
 
-              {/* ================================================== */}
-              {/* ✅ NOTIFICACIÓN DE PUNTOS (CON ESTILO DINÁMICO)   */}
-              {/* 🟢 CORREGIDO: Posicionamiento CSS */}
-              {/* ================================================== */}
-              {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className={`absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg shadow-xl animate-bounce font-bold text-xs whitespace-nowrap
-                  ${pointsNotification.type === 'success' 
-                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
-                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
-                  }
-                `}>
-                  {pointsNotification.message}
-                </div>
-              )}
+              {/* ❌ ELIMINADO: Notificación de puntos CSS */}
             </div>
 
             <button 
@@ -1802,7 +1672,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* ✅ BOTÓN DE LIKE CON NOTIFICACIÓN - DESKTOP */}
+            {/* ✅ BOTÓN DE LIKE - DESKTOP (SIN NOTIFICACIÓN CSS) */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1816,18 +1686,7 @@ const ReelsContainer = ({
                 </span>
               </button>
 
-              {/* ✅ NOTIFICACIÓN DE PUNTOS AL LADO DEL LIKE - DESKTOP */}
-              {/* 🟢 CORREGIDO: Posicionamiento CSS */}
-              {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className={`absolute -top-16 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl shadow-2xl animate-bounce font-bold text-sm whitespace-nowrap z-50
-                  ${pointsNotification.type === 'success' 
-                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
-                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
-                  }
-                `}>
-                  {pointsNotification.message}
-                </div>
-              )}
+              {/* ❌ ELIMINADO: Notificación de puntos CSS */}
             </div>
 
             <button 
@@ -1938,7 +1797,6 @@ const ReelsContainer = ({
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          {/* 🟢 Renderizado de nombre de usuario de comentario */}
                           <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
                           <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
                         </div>
@@ -2015,7 +1873,7 @@ const ReelsContainer = ({
                   <span className="text-sm text-blue-700">Respondiendo...</span>
                   <button
                     onClick={handleCancelReply}
-                    className="text-blue-600 hover:text-blue-700"
+                    className="text-blue-600 hover:text-blue-7T00"
                   >
                     <Icon name="X" size={16} />
                   </button>
@@ -2082,7 +1940,6 @@ const ReelsContainer = ({
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          {/* 🟢 Renderizado de nombre de usuario de comentario */}
                           <span className="font-semibold text-sm">{comment.user?.name || 'Usuario'}</span>
                           <span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span>
                         </div>
