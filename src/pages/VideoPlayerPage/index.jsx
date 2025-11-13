@@ -4,6 +4,8 @@
 // ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
 // ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
 // ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
+// ✅ 4. (CORREGIDO) handleLike: Añadidas las notificaciones de progreso y "ya ganado",
+//    igualando la lógica de ReelsContainer.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -187,7 +189,7 @@ const VideoPlayerPage = () => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [volume, isMinimized]);
+  }, [volume, isMinimized]); // Dependencias simplificadas (togglePlayPause, etc. se definen con useCallback o no cambian)
 
   // ===============================
   // FUNCIONES DE DRAG & DROP (sin cambios)
@@ -430,7 +432,7 @@ const VideoPlayerPage = () => {
 
         if (videoData.user_id) {
           const { data: followData } = await supabase
-            .from('user_follows')
+            .from('user_follows') // 🛑 Asumido: 'user_follows'
             .select('*')
             .eq('follower_id', user.id)
             .eq('following_id', videoData.user_id)
@@ -438,23 +440,23 @@ const VideoPlayerPage = () => {
           setFollowing(!!followData);
         }
 
-        // INTEGRACIÓN: Leer 'points_transactions' para verificar si la acción ya fue registrada
+        // ✅ INTEGRACIÓN CORREGIDA:
+        // Leer 'user_video_points' para verificar si la acción ya fue registrada
         const { data: pointsData, error: pointsError } = await supabase
-          .from('points_transactions') 
-          .select('transaction_type')
+          .from('user_video_points') // ✅ Tabla correcta
+          .select('action_type')
           .eq('user_id', user.id)
-          .eq('reference_id', videoId);
+          .eq('video_id', videoId); // ✅ Referencia correcta
 
         if (pointsError) {
             console.error("Error al verificar puntos ganados: ", pointsError.message);
         }
           
         if (pointsData) {
-          const actions = pointsData.map(p => p.transaction_type);
-          // ✅ ASUMIMOS QUE LA DB USA 'other' (DE ACUERDO A LA CORRECCIÓN SQL)
-          setHasEarnedLikePoints(actions.includes('other'));
-          setHasEarnedCommentPoints(actions.includes('other'));
-          // (Esto es una suposición; idealmente, el RPC usaría 'give_like' y 'comment')
+          const actions = pointsData.map(p => p.action_type);
+          // ✅ Verificamos si CUALQUIER acción de like (antigua o misión) existe
+          setHasEarnedLikePoints(actions.includes('like') || actions.includes('mission_like_complete'));
+          setHasEarnedCommentPoints(actions.includes('comment'));
         }
       }
 
@@ -642,7 +644,6 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // 🛑 LÍNEA ELIMINADA: RPC de decremento
       } else {
         if (disliked) {
           await handleDislike();
@@ -658,9 +659,13 @@ const VideoPlayerPage = () => {
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // 🛑 LÍNEAS ELIMINADAS: RPC de incremento
-
+        // ================================================================
+        // ✅ INICIO: LÓGICA DE NOTIFICACIONES DE LIKE CORREGIDA
+        // ================================================================
+        
         if (!hasEarnedLikePoints) {
+          // Es la primera vez que da like (o al menos la primera vez que
+          // se registrará para puntos/misión).
           setHasEarnedLikePoints(true); 
           
           try {
@@ -668,21 +673,40 @@ const VideoPlayerPage = () => {
             
             console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
 
+            // Caso 1: Misión completada, puntos ganados
             if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
-              // ✅ NOTIFICACIÓN DE ÉXITO REAL
               updatePointsContext(result.points_earned);
-              showUserFeedback(`+${result.points_earned} PUNTOS por dar Like 🎉`, 'success');
-            } else if (result.result === 'already_paid') {
-              // 🛑 CORRECCIÓN: Notificación de restricción (Bloqueado por DB)
-              showUserFeedback('PUNTOS YA GANADOS por este Like.', 'restriction'); 
-            } else if (result.result === 'error') {
-               setHasEarnedLikePoints(false); 
+              showUserFeedback(`+${result.points_earned} PUNTOS. ¡Misión completada! 🎉`, 'success');
+            } 
+            // Caso 2: Progreso registrado (ej. 2/10 likes)
+            else if (result.result === 'progress_updated') {
+              showUserFeedback('Acción registrada. ¡Sigue dando Likes!', 'success');
             }
+            // Caso 3: Anti-farming (DB bloqueó el 'like' duplicado)
+            else if (result.result === 'already_paid') {
+              showUserFeedback('PUNTOS YA GANADOS por este Like.', 'restriction'); 
+            } 
+            // Caso 4: Misión ya completada hoy
+            else if (result.result === 'already_completed') {
+               showUserFeedback('Misión de Likes ya completada hoy.', 'restriction');
+            }
+            // Caso 5: Error o 'mission_not_found'
+            else if (result.result === 'error') {
+               setHasEarnedLikePoints(false); // Permitir reintento
+            }
+            // (No mostramos nada si es 'mission_not_found' o 'registered' sin progreso)
+
           } catch (pointsError) {
              console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
-             setHasEarnedLikePoints(false); 
+             setHasEarnedLikePoints(false); // Permitir reintento
           }
+        } else {
+          // El usuario YA ha ganado puntos por esta acción en el pasado.
+          showUserFeedback('Ya has ganado puntos por esta acción.', 'restriction');
         }
+        // ================================================================
+        // ✅ FIN: LÓGICA DE NOTIFICACIONES
+        // ================================================================
       }
     } catch (err) {
       console.error('Error en like:', err);
@@ -714,7 +738,6 @@ const VideoPlayerPage = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // 🛑 LÍNEA ELIMINADA: RPC de decremento
       } else {
         if (liked) {
           await handleLike(); 
@@ -730,7 +753,6 @@ const VideoPlayerPage = () => {
           .from('video_dislikes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // 🛑 LÍNEA ELIMINADA: RPC de incremento
       }
     } catch (err) {
       console.error('Error en dislike:', err);
@@ -758,6 +780,7 @@ const VideoPlayerPage = () => {
           .insert({ video_id: videoId, user_id: user.id });
         
         try {
+          // (Asumimos que 'save_video' es el tipo de misión correcto)
           trackMissionProgress('save_video', 'video', videoId); 
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Guardar:', missionError);
@@ -837,14 +860,14 @@ const VideoPlayerPage = () => {
       if (following) {
         setFollowing(false);
         await supabase
-          .from('user_follows')
+          .from('user_follows') // 🛑 Asumido: 'user_follows'
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', video.user_id);
       } else {
         setFollowing(true);
         await supabase
-          .from('user_follows')
+          .from('user_follows') // 🛑 Asumido: 'user_follows'
           .insert({
             follower_id: user.id,
             following_id: video.user_id
@@ -903,22 +926,13 @@ const VideoPlayerPage = () => {
         };
       }
 
-      // 🛑 LÍNEA ELIMINADA: RPC de incremento
       setVideoCounters(prev => ({
         ...prev,
         comments: prev.comments + 1
       }));
 
-      // ✅ VERIFICACIÓN DE PUNTOS
-      const { data: pointsData } = await supabase
-        .from('points_transactions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('reference_id', videoId)
-        .eq('transaction_type', 'comment') // Asumiendo que el RPC usa 'comment'
-        .limit(1);
-
-      if (!pointsData || pointsData.length === 0) {
+      // ✅ CORREGIDO: Lógica de notificación de comentarios
+      if (!hasEarnedCommentPoints) {
         setHasEarnedCommentPoints(true); 
         
         try {
@@ -929,18 +943,23 @@ const VideoPlayerPage = () => {
           if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
             updatePointsContext(result.points_earned);
             showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
+          } else if (result.result === 'progress_updated') {
+            showUserFeedback('Comentario registrado. ¡Sigue así!', 'success');
           } else if (result.result === 'already_paid') {
-            showUserFeedback('PUNTOS YA GANADOS por este Comentario.', 'restriction');
+            showUserFeedback('PUNTOS YA GANADOS por Comentar.', 'restriction');
+          } else if (result.result === 'already_completed') {
+            showUserFeedback('Misión de Comentarios ya completada hoy.', 'restriction');
           } else if (result.result === 'error') {
-             setHasEarnedCommentPoints(false);
+             setHasEarnedCommentPoints(false); // Permitir reintento
           }
         } catch (pointsError) {
           console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
           setHasEarnedCommentPoints(false);
         }
       } else {
-        setHasEarnedCommentPoints(true);
+        // Ya ganó puntos, no mostrar nada (evita spam de notificaciones)
       }
+
 
       if (replyingTo) {
         setComments(prev => prev.map(comment => {
@@ -975,7 +994,6 @@ const VideoPlayerPage = () => {
         .eq('id', commentId)
         .eq('user_id', user.id);
 
-      // 🛑 LÍNEA ELIMINADA: RPC de decremento
       setVideoCounters(prev => ({
         ...prev,
         comments: Math.max(0, prev.comments - 1)
@@ -1629,7 +1647,7 @@ const VideoPlayerPage = () => {
                                                 {new Date(reply.created_at).toLocaleDateString('es-ES')}
                                               </span>
                                             </div>
-                                            <p className="text-xs md:text-sm text-foreground mt-1">
+                                            <p className="text-xs md:text-sm text-foreground mt-0.5">
                                               {reply.content}
                                             </p>
                                             {user?.id === reply.user_id && (
