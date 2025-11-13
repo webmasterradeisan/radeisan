@@ -1,12 +1,12 @@
 // ============================================================================
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
-// Componente completo para gestionar el sistema de misiones desde el admin panel
-// Incluye: CRUD completo, estadísticas, activar/desactivar, reordenamiento
+// ✅ MODIFICACIÓN: Añadido el nuevo tipo de misión 'upload_pack' (Publicar Video/Reel/Foto) 
+//                 con lógica condicional en el Formulario.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import * as missionsService from '../../services/missionsService';
+import *s missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 
 // ============================================================================
@@ -190,11 +190,18 @@ export default function MissionsManagement() {
     try {
       setSaving(true);
       setError(null);
+      
+      const missionData = {
+          ...formData,
+          // Si es 'upload_pack', el target_count es simbólico
+          target_count: formData.mission_type === 'upload_pack' ? 1 : formData.target_count
+      };
 
-      const result = await missionsService.createMission(formData);
+      const result = await missionsService.createMission(missionData);
 
       if (result.success) {
         setSuccess('Misión creada exitosamente');
+        // Resetear el formulario al estado inicial
         setFormData({
           title: '',
           description: '',
@@ -229,12 +236,19 @@ export default function MissionsManagement() {
     try {
       setSaving(true);
       setError(null);
+      
+      const missionData = {
+          ...formData,
+          // Si es 'upload_pack', el target_count es simbólico
+          target_count: formData.mission_type === 'upload_pack' ? 1 : formData.target_count
+      };
 
-      const result = await missionsService.updateMission(editingMission.id, formData);
+      const result = await missionsService.updateMission(editingMission.id, missionData);
 
       if (result.success) {
         setSuccess('Misión actualizada exitosamente');
         setEditingMission(null);
+        // Resetear el formulario al estado inicial
         setFormData({
           title: '',
           description: '',
@@ -560,7 +574,7 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {missions.map(mission => (
+          {filteredMissions.map(mission => (
             <MissionCard
               key={mission.id}
               mission={mission}
@@ -575,7 +589,7 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
       {/* Contador de resultados */}
       {missions.length > 0 && (
         <div className="text-sm text-gray-600 text-center">
-          Mostrando {missions.length} misión{missions.length !== 1 ? 'es' : ''}
+          Mostrando {filteredMissions.length} misión{filteredMissions.length !== 1 ? 'es' : ''}
         </div>
       )}
     </div>
@@ -598,7 +612,9 @@ function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
       follow_user: 'Seguir usuarios',
       complete_profile: 'Completar perfil',
       login_daily: 'Login diario',
-      watch_reels: 'Ver reels'
+      watch_reels: 'Ver reels',
+      // ✅ NUEVO TIPO
+      upload_pack: 'Pack de Contenido' 
     };
     return types[type] || type;
   };
@@ -665,7 +681,9 @@ function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
             <div className="flex flex-wrap items-center gap-4 mt-4">
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <AppIcon name="Target" className="w-4 h-4" />
-                <span>Meta: {mission.target_count}x</span>
+                <span>
+                  Meta: {mission.mission_type === 'upload_pack' ? 'Video/Reel/Foto' : `${mission.target_count}x`}
+                </span>
               </div>
 
               <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
@@ -731,6 +749,10 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
   const updateField = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+  
+  // Condición para mostrar u ocultar el campo de Meta (target_count)
+  const showTargetCount = formData.mission_type !== 'upload_pack' && formData.mission_type !== 'complete_profile';
+
 
   return (
     <div className="max-w-4xl">
@@ -783,6 +805,7 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 onChange={e => updateField('mission_type', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
+                {/* Opciones existentes */}
                 <option value="watch_video">Ver videos</option>
                 <option value="upload_video">Subir video</option>
                 <option value="give_like">Dar likes</option>
@@ -793,6 +816,8 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 <option value="complete_profile">Completar perfil</option>
                 <option value="login_daily">Login diario</option>
                 <option value="watch_reels">Ver reels</option>
+                {/* ✅ NUEVA OPCIÓN */}
+                <option value="upload_pack">Publicar Pack (Video/Reel/Foto)</option>
               </select>
             </div>
 
@@ -814,25 +839,39 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
               </select>
             </div>
 
-            {/* Meta (target count) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Meta (cantidad) *
-              </label>
-              <input
-                type="number"
-                required
-                min="1"
-                placeholder="1"
-                value={formData.target_count}
-                onChange={e => updateField('target_count', parseInt(e.target.value) || 1)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Cuántas veces debe realizar la acción
-              </p>
-            </div>
-
+            {/* Meta (target count) - Oculto para 'upload_pack' */}
+            {showTargetCount && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Meta (cantidad) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="1"
+                    value={formData.target_count}
+                    onChange={e => updateField('target_count', parseInt(e.target.value) || 1)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cuántas veces debe realizar la acción
+                  </p>
+                </div>
+            )}
+            
+            {/* Mensaje para upload_pack */}
+            {formData.mission_type === 'upload_pack' && (
+                <div className="md:col-span-1">
+                    <p className="text-sm font-medium text-purple-600 pt-8">
+                        Esta misión requiere 1 video, 1 reel y 1 foto.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                        La meta de cantidad es ignorada para este tipo.
+                    </p>
+                </div>
+            )}
+            
             {/* Recompensa en puntos */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -912,7 +951,9 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1 text-sm text-gray-700">
                       <AppIcon name="Target" className="w-4 h-4" />
-                      <span>{formData.target_count}x</span>
+                      <span>
+                          {formData.mission_type === 'upload_pack' ? 'Video/Reel/Foto' : `${formData.target_count}x`}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 px-3 py-1 bg-purple-100 rounded-full">
                       <AppIcon name="Star" className="w-4 h-4 text-purple-600" />
