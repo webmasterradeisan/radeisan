@@ -8,6 +8,7 @@
 // ✅ NUEVO: Recibe orientación desde Header para navegación directa a Reels/Videos
 // ✅ NUEVO: Reemplazada TrendingSidebar por PointsBalanceCard
 // ✅ FUNCIONAL: El hook de puntos ahora carga Puntos Gratis/Premium y Misiones
+// ✅ FINAL: Añadido EarningTipsCard al sidebar
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -22,7 +23,9 @@ import VideoFeedGrid from './components/VideoFeedGrid';
 import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
 // ❌ TrendingSidebar ya no se usa
 // import TrendingSidebar from './components/TrendingSidebar'; 
+// ✅ Componentes del nuevo sidebar
 import PointsBalanceCard from '../points-rewards-store/components/PointsBalanceCard';
+import EarningTipsCard from './components/EarningTipsCard'; // ✅ AÑADIDO
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
 import PullToRefresh from './components/PullToRefresh';
 import PointsBalanceIndicator from '../../components/ui/PointsBalanceIndicator';
@@ -282,7 +285,7 @@ const useVideos = () => {
 };
 
 // ===============================
-// ✅ HOOK MODIFICADO: Ahora carga Puntos y Misiones
+// ✅ HOOK FUNCIONAL: Carga Puntos y Misiones
 // ===============================
 const useUserPointsAndMissions = () => {
   const { user } = useAuth();
@@ -314,21 +317,19 @@ const useUserPointsAndMissions = () => {
         });
       }
 
-      // 2. Cargar Misiones (usando el service que ya tienes)
-      // Usamos 'includeCompleted: false' para mostrar solo misiones activas
+      // 2. Cargar Misiones (usando el service)
       const missionResult = await missionsService.getDailyMissions({ 
         includeCompleted: false 
       });
 
       if (missionResult.success) {
         setMissions(missionResult.missions.active || []);
-        // Obtenemos los puntos ganados hoy del 'stats' de misiones
-        // (Asumimos que 'getDailyMissions' también calcula las ganancias de hoy)
+        
+        // 3. Cargar Estadísticas de Puntos Ganados Hoy
         const todayStats = await missionsService.getMissionStats();
         if (todayStats.success && todayStats.stats.daily_points_earned) {
             setPointsEarnedToday(todayStats.stats.daily_points_earned);
         } else {
-            // Fallback por si 'getMissionStats' no funciona como se espera
             setPointsEarnedToday(0); 
         }
       }
@@ -360,8 +361,6 @@ const useUserPointsAndMissions = () => {
               freePoints: payload.new.free_points || 0,
               premiumPoints: payload.new.premium_points || 0
             });
-            // Opcional: Refrescar misiones si los puntos cambian
-            // fetchAllData(user.id); 
           }
         )
         .subscribe();
@@ -425,10 +424,6 @@ const VideoFeedDashboard = () => {
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
   const [selectedReelId, setSelectedReelId] = useState(null);
-
-  // ❌ DATOS FICTICIOS ELIMINADOS
-  // const [missions, setMissions] = useState([]);
-  // const [pointsData, setPointsData] = useState({ ... });
   
   // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
   useEffect(() => {
@@ -771,9 +766,11 @@ const VideoFeedDashboard = () => {
               </div>
 
               {/* ================================================== */}
-              {/* ✅ REEMPLAZO DE SIDEBAR CON DATOS REALES        */}
+              {/* ✅ SIDEBAR FINAL CON AMBOS COMPONENTES          */}
               {/* ================================================== */}
-              <div className="hidden xl:block">
+              <div className="hidden xl:block space-y-6">
+                
+                {/* Panel de Puntos y Misiones */}
                 <PointsBalanceCard
                   freePoints={pointsData.freePoints}
                   premiumPoints={pointsData.premiumPoints}
@@ -782,6 +779,10 @@ const VideoFeedDashboard = () => {
                   missions={missions}
                   loading={sidebarLoading} 
                 />
+
+                {/* Panel de "Cómo ganar más puntos" */}
+                <EarningTipsCard />
+
               </div>
             </div>
           </div>
