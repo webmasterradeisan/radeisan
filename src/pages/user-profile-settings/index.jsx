@@ -1,5 +1,7 @@
 // src/pages/user-profile-settings/index.jsx
 // UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
+// ✅ CORREGIDO: El historial de puntos ahora usa el componente 'TransactionHistory'
+//    de la página de recompensas, con filtros y paginación.
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -9,7 +11,10 @@ import { usePoints } from '../../contexts/PointsContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import ProfileTabs from './components/ProfileTabs';
-import PointsHistory from './components/PointsHistory';
+// ❌ Componente de historial simple eliminado
+// import PointsHistory from './components/PointsHistory'; 
+// ✅ Componente de historial avanzado (de /rewards) importado
+import TransactionHistory from '../points-rewards-store/components/TransactionHistory'; 
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
 import PhotoQuickUpload from '../../components/PhotoQuickUpload';
@@ -22,6 +27,8 @@ import PhotoDetailModal from '../../components/PhotoDetailModal';
 
 // ⭐️ IMPORTACIÓN REQUERIDA PARA EL SISTEMA DE PUNTOS ⭐️
 import { trackUploadVideo } from '../../services/missionsService';
+// ✅ Importación del servicio de historial paginado
+import { getUserPointsHistory } from '../../services/pointsService'; 
 
 // ===============================
 // CONSTANTES
@@ -443,109 +450,8 @@ export const useUserPhotos = (userId) => { // 👈 CORRECCIÓN: export const
   };
 };
 
-// Hook para historial de puntos REAL
-const usePointsHistory = (userId) => {
-  const [transactions, setTransactions] = useState([]);
-  const [summary, setSummary] = useState({
-    currentBalance: 0,
-    totalEarned: 0,
-    totalSpent: 0,
-    freePoints: 0,
-    premiumPoints: 0
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const fetchPointsHistory = useCallback(async () => {
-    if (!userId) {
-      console.log('💰 No userId provided for points history');
-      setTransactions([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      console.log('💰 Fetching points history for user:', userId);
-
-      // Obtener transacciones
-      const { data: transactionsData, error: transError } = await supabase
-        .from('points_transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (transError) {
-        console.error('❌ Error fetching transactions:', transError);
-        throw transError;
-      }
-
-      // Obtener balance actual
-      const { data: pointsData, error: pointsError } = await supabase
-        .from('points_types')
-        .select('free_points, premium_points')
-        .eq('user_id', userId)
-        .single();
-
-      if (pointsError && pointsError.code !== 'PGRST116') {
-        console.error('❌ Error fetching points balance:', pointsError);
-      }
-
-      const freePoints = pointsData?.free_points || 0;
-      const premiumPoints = pointsData?.premium_points || 0;
-      const currentBalance = freePoints + premiumPoints;
-
-      // Calcular totales
-      const totalEarned = transactionsData
-        ?.filter(t => t.points_change > 0)
-        .reduce((sum, t) => sum + t.points_change, 0) || 0;
-
-      const totalSpent = Math.abs(
-        transactionsData
-          ?.filter(t => t.points_change < 0)
-          .reduce((sum, t) => sum + t.points_change, 0) || 0
-      );
-
-      console.log('✅ Points history fetched:', {
-        transactions: transactionsData?.length || 0,
-        currentBalance,
-        totalEarned,
-        totalSpent
-      });
-
-      setTransactions(transactionsData || []);
-      setSummary({
-        currentBalance,
-        totalEarned,
-        totalSpent,
-        freePoints,
-        premiumPoints
-      });
-
-    } catch (err) {
-      console.error('💥 Error in fetchPointsHistory:', err);
-      setError(err.message);
-      setTransactions([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    fetchPointsHistory();
-  }, [fetchPointsHistory]);
-
-  return {
-    transactions,
-    summary,
-    loading,
-    error,
-    refresh: fetchPointsHistory
-  };
-};
+// ❌ Hook 'usePointsHistory' ELIMINADO
+// (La lógica se movió al componente principal)
 
 // Hook para compras - MOCK
 const usePurchaseHistory = () => {
@@ -1101,6 +1007,16 @@ const UserProfileSettings = () => {
   // 🚨 ESTADOS PARA EL MODAL DE EDICIÓN
   const [showPhotoEditModal, setShowPhotoEditModal] = useState(false);
   const [photoToEditData, setPhotoToEditData] = useState(null); 
+  
+  // ✅ INICIO: Estados y lógica del Historial de Puntos (movido de /rewards)
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [hasMorePages, setHasMorePages] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  // ✅ FIN: Estados del Historial
 
   // Hooks de datos
   const {
@@ -1134,12 +1050,7 @@ const UserProfileSettings = () => {
     error: photosError // Captura el error de fotos
   } = useUserPhotos(user?.id);
 
-  const { 
-    transactions, 
-    summary,
-    loading: pointsHistoryLoading,
-    refresh: refreshPointsHistory
-  } = usePointsHistory(user?.id);
+  // ❌ Hook 'usePointsHistory' ELIMINADO
   
   const { purchases } = usePurchaseHistory();
 
@@ -1199,10 +1110,96 @@ const UserProfileSettings = () => {
     reels: reels.length,
     photos: photos.length,
     purchases: purchases.length,
-    points: transactions.length,
+    points: transactions.length, // ✅ Ahora usa el estado 'transactions' local
     liked: 0,
     playlists: 0
   }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
+
+  // ===============================
+  // ✅ INICIO: LÓGICA DE HISTORIAL DE PUNTOS
+  // ===============================
+  
+  // FUNCIÓN PARA CARGAR EL HISTORIAL (PAGINADO)
+  const loadHistory = useCallback(async (pageNum, reset = false) => {
+    if (!user?.id) return;
+    setTransactionsLoading(true);
+
+    let startDate = null;
+    let endDate = null;
+    const now = new Date();
+    
+    if (dateFilter === 'today') {
+      startDate = new Date(now.setHours(0, 0, 0, 0));
+    } else if (dateFilter === 'week') {
+      const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+      startDate = new Date(firstDayOfWeek.setHours(0, 0, 0, 0));
+    } else if (dateFilter === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (dateFilter === 'custom') {
+        if (customStartDate) startDate = new Date(customStartDate);
+        if (customEndDate) {
+            endDate = new Date(customEndDate);
+            endDate.setHours(23, 59, 59, 999);
+        }
+    }
+
+    const result = await getUserPointsHistory(user.id, {
+      startDate,
+      endDate,
+      page: pageNum
+    });
+
+    if (result.success) {
+      if (reset) {
+        setTransactions(result.data);
+      } else {
+        setTransactions(prev => [...prev, ...result.data]);
+      }
+      setHasMorePages(result.hasMore);
+    } else {
+      console.error("Error al cargar historial:", result.error);
+    }
+    
+    setTransactionsLoading(false);
+  }, [user, dateFilter, customStartDate, customEndDate]);
+
+  // EFECTO PARA CARGAR EL HISTORIAL (Solo cuando la tab esté activa)
+  useEffect(() => {
+    if (user?.id && activeTab === 'points') {
+      setPage(1); 
+      loadHistory(1, true);
+    }
+  }, [user, activeTab, dateFilter, customStartDate, customEndDate, loadHistory]); 
+
+  // HANDLERS PARA FILTROS Y PAGINACIÓN
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    loadHistory(nextPage, false);
+  };
+  
+  const handleDateFilterChange = (newDateFilter) => {
+    setPage(1); 
+    setDateFilter(newDateFilter);
+    setCustomStartDate('');
+    setCustomEndDate('');
+  };
+
+  const handleCustomStartDateChange = (date) => {
+    setPage(1);
+    setCustomStartDate(date);
+    setDateFilter('custom');
+  };
+
+  const handleCustomEndDateChange = (date) => {
+    setPage(1);
+    setCustomEndDate(date);
+    setDateFilter('custom');
+  };
+  
+  // ===============================
+  // ✅ FIN: LÓGICA DE HISTORIAL DE PUNTOS
+  // ===============================
 
   // ===============================
   // EVENT HANDLERS
@@ -1597,13 +1594,26 @@ const UserProfileSettings = () => {
       case 'purchases':
         return <PurchaseHistory purchases={purchases} />;
 
+      // ==================================================
+      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA
+      // ==================================================
       case 'points':
         return (
-          <PointsHistory 
-            transactions={transactions}
-            summary={summary}
-            loading={pointsHistoryLoading}
-          />
+          <div id="historial-puntos" className="bg-card rounded-lg border p-4 sm:p-6"> 
+            {/* Añadido ID para el ancla del link y padding responsivo */}
+            <TransactionHistory
+              transactions={transactions}
+              loading={transactionsLoading}
+              dateFilter={dateFilter}
+              onDateFilterChange={handleDateFilterChange}
+              hasMore={hasMorePages}
+              onLoadMore={handleLoadMore}
+              startDate={customStartDate}
+              endDate={customEndDate}
+              onStartDateChange={handleCustomStartDateChange}
+              onEndDateChange={handleCustomEndDateChange}
+            />
+          </div>
         );
 
       case 'settings':
