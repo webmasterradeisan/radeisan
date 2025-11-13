@@ -1,10 +1,13 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// ... (otros comentarios)
+// REELS CONTAINER - Integrado con Sistema de Puntos
+// ... (comentarios originales)
 // 🟢 SINCRONIZADO: 'loadCurrentUserAndActions' ahora consulta 'user_mission_progress'
-// 🟢 SINCRONIZADO: 'handleLike' ahora maneja 'progress_updated' y 'already_completed'.
-// ❌ ELIMINADO: Se quitaron las llamadas a RPC 'increment_video_likes' y
-//    'decrement_video_likes' que causaban el crash (Error 400).
+//    para el anti-farming diario (en lugar de 'user_video_points').
+// 🟢 SINCRONIZADO: 'handleLike', 'handleSave' y 'handleAddComment' ya no
+//    escriben en 'user_video_points' y 'handleLike' usa la lógica de misión.
+// 🟢 CORREGIDO: Solucionado crash 'handlePlayPause is not defined'
+//    envolviendo funciones en useCallback y añadiéndolas a las dependencias del useEffect.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -31,6 +34,8 @@ const ReelsContainer = ({
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
+
+  // ✅ INTEGRACIÓN CON SISTEMA DE PUNTOS
   const { addPoints } = usePoints();
 
   // Estados principales
@@ -43,6 +48,8 @@ const ReelsContainer = ({
   const [followedCreators, setFollowedCreators] = useState(new Set());
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
+  
+  // Estados de contadores en tiempo real (optimistic updates)
   const [videoCounters, setVideoCounters] = useState({});
   
   // Estados de comentarios
@@ -83,6 +90,18 @@ const ReelsContainer = ({
   const hasPlayedInitial = useRef(false);
   const lastNavigationIndex = useRef(-1);
 
+  console.log('🎬 ReelsContainer render:', {
+    videosCount: videos.length,
+    currentIndex,
+    selectedReelId,
+    enableTransition,
+    hasPlayedInitial: hasPlayedInitial.current,
+    isMobile,
+    isDesktop,
+    showCommentsModal,
+    showGiftModal // ✅ Nuevo estado de debug
+  });
+
   // ✅ NUEVO: Función para mostrar notificación de puntos
   const showPointsNotification = (message, videoId, type = 'success') => {
     setPointsNotification({
@@ -107,9 +126,23 @@ const ReelsContainer = ({
   // FUNCIÓN: Convertir ID del video a índice
   // ===============================
   const getInitialReelIndex = useCallback(() => {
-    if (!selectedReelId) return 0;
+    if (!selectedReelId) {
+      console.log('🔍 No hay ID seleccionado, iniciando en índice 0');
+      return 0;
+    }
+    
     const index = videos.findIndex(video => video.id === selectedReelId);
-    if (index < 0) return 0;
+    
+    console.log('🔍 Búsqueda de video por ID');
+    console.log('   🆔 ID buscado:', selectedReelId);
+    console.log('   📍 Índice encontrado:', index);
+    console.log('   📹 Video:', index >= 0 ? videos[index]?.title : 'No encontrado');
+    
+    if (index < 0) {
+      console.warn('⚠️ Video con ID', selectedReelId, 'no encontrado');
+      return 0;
+    }
+    
     return index;
   }, [selectedReelId, videos]);
 
@@ -118,14 +151,22 @@ const ReelsContainer = ({
   // ===============================
   useEffect(() => {
     if (videos.length === 0) return;
+    
     const correctIndex = getInitialReelIndex();
+    
+    console.log('🎯 Sincronizando estado inicial');
+    console.log('   🆔 selectedReelId:', selectedReelId);
+    console.log('   🎯 Índice calculado:', correctIndex);
+    console.log('   📹 Video a reproducir:', videos[correctIndex]?.title || 'No existe');
     
     if (isInitialMount.current) {
       setCurrentIndex(correctIndex);
       setEnableTransition(false);
+      
       setTimeout(() => {
         setEnableTransition(true);
         isInitialMount.current = false;
+        console.log('✅ Transiciones habilitadas');
       }, 100);
     } else {
       setCurrentIndex(correctIndex);
@@ -152,6 +193,8 @@ const ReelsContainer = ({
             avatar: null, 
             username: user.email?.split('@')[0] || 'usuario'
           };
+
+          console.log('👤 Usuario actual cargado:', userProfile);
           setCurrentUser(userProfile);
 
           // ✅ CARGAR LIKES ACTUALES (para UI)
@@ -176,13 +219,13 @@ const ReelsContainer = ({
             const { data: mission } = await supabase
               .from('daily_missions')
               .select('id')
-              .eq('mission_type', 'like_videos')
+              .eq('mission_type', 'like_videos') //
               .single();
 
             if (mission) {
               // 2b. Buscar si el usuario ya completó esa misión HOY
               const { data: progressData, error: progressError } = await supabase
-                .from('mission_progress')
+                .from('mission_progress') //
                 .select('is_completed')
                 .eq('user_id', user.id)
                 .eq('mission_id', mission.id)
@@ -213,9 +256,89 @@ const ReelsContainer = ({
             console.error("Error al verificar progreso de misión 'like_videos':", err);
             setActionsPerformed(prev => ({ ...prev, likes: new Set() })); // Ser permisivo
           }
+
+          // ✅ CARGAR VIDEOS GUARDADOS (Mantiene lógica original)
+          // (Esta sección AÚN USA 'user_video_points',
+          //  debería migrarse a 'user_mission_progress' si hay una misión 'save_video')
+          const { data: savedData } = await supabase
+            .from('saved_videos')
+            .select('video_id')
+            .eq('user_id', user.id);
           
-          // ... (Resto de la carga de 'saves', 'follows', 'comments'...)
+          if (savedData) {
+            const savedIds = new Set(savedData.map(s => s.video_id));
+            setSavedVideos(savedIds);
+            
+            // 🛑 ADVERTENCIA: Esta tabla 'user_video_points' no existe.
+            // Esta lógica fallará si se descomenta.
+            // Cargar tracking de puntos por guardar
+            // const { data: savedPointsData } = await supabase
+            //   .from('user_video_points') 
+            //   .select('video_id')
+            //   .eq('user_id', user.id)
+            //   .eq('action_type', 'save');
+            
+            // if (savedPointsData) {
+            //   setActionsPerformed(prev => ({
+            //     ...prev,
+            //     saves: new Set(savedPointsData.map(p => p.video_id))
+            //   }));
+            // }
+          }
+
+          // ✅ CARGAR SEGUIDORES
+          const { data: followsData } = await supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', user.id);
           
+          if (followsData) {
+            const followedIds = new Set(followsData.map(f => f.following_id));
+            setFollowedCreators(followedIds);
+            
+            // 🛑 ADVERTENCIA: Esta tabla 'user_video_points' no existe.
+            // Cargar tracking de puntos por seguir
+            // const { data: followPointsData } = await supabase
+            //   .from('user_video_points')
+            //   .select('content_id')
+            //   .eq('user_id', user.id)
+            //   .eq('action_type', 'follow');
+            
+            // if (followPointsData) {
+            //   setActionsPerformed(prev => ({
+            //     ...prev,
+            //     follows: new Set(followPointsData.map(p => p.content_id))
+            //   }));
+            // }
+          }
+
+          // ✅ CARGAR TRACKING DE COMENTARIOS Y COMPARTIDOS
+          // 🛑 ADVERTENCIA: Esta tabla 'user_video_points' no existe.
+          // const { data: commentsPointsData } = await supabase
+          //   .from('user_video_points')
+          //   .select('video_id')
+          //   .eq('user_id', user.id)
+          //   .eq('action_type', 'comment');
+          
+          // if (commentsPointsData) {
+          //   setActionsPerformed(prev => ({
+          //     ...prev,
+          //     comments: new Set(commentsPointsData.map(p => p.video_id))
+          //   }));
+          // }
+
+          // const { data: sharesPointsData } = await supabase
+          //   .from('user_video_points')
+          //   .select('video_id')
+          //   .eq('user_id', user.id)
+          //   .eq('action_type', 'share');
+          
+          // if (sharesPointsData) {
+          //   setActionsPerformed(prev => ({
+          //     ...prev,
+          //     shares: new Set(sharesPointsData.map(p => p.video_id))
+          //   }));
+          // }
         }
       } catch (error) {
         console.error('Error cargando usuario y acciones:', error);
@@ -225,18 +348,317 @@ const ReelsContainer = ({
     loadCurrentUserAndActions();
   }, [videos]); // Dependencia de 'videos' para actualizar el set de 'likes'
 
-  // ... (Hooks de Efecto: inicializar contadores, autoplay, tracking de vistas) ...
-  // ... (Se omite por brevedad)
-  
   // ===============================
-  // ACCIONES (PLAY/PAUSE, NAVEGACIÓN)
+  // INICIALIZAR CONTADORES DE VIDEOS
   // ===============================
-  
-  // ... (handlePlayPause, navigateNext, navigatePrevious, touch handlers, keydown) ...
-  // ... (Se omite por brevedad)
+  useEffect(() => {
+    const initialCounters = {};
+    videos.forEach(video => {
+      initialCounters[video.id] = {
+        likes: video.likes || video.likes_count || 0,
+        comments: video.comments || video.comments_count || 0,
+        views: video.views || video.views_count || 0
+      };
+    });
+    setVideoCounters(initialCounters);
+  }, [videos]);
 
   // ===============================
-  // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA Y CORREGIDA)
+  // FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
+  // ===============================
+  useEffect(() => {
+    if (hasPlayedInitial.current || videos.length === 0) return;
+
+    console.log('🎬 Intentando reproducir video inicial:', currentIndex);
+    
+    const attemptPlay = () => {
+      const currentVideo = videoRefs.current[currentIndex];
+      
+      if (!currentVideo) {
+        console.log('⏳ Video no disponible aún, reintentando...');
+        setTimeout(attemptPlay, 100);
+        return;
+      }
+
+      console.log('🎮 Video encontrado, reproduciendo');
+
+      videoRefs.current.forEach((video, index) => {
+        if (video && index !== currentIndex) {
+          video.pause();
+        }
+      });
+
+      currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
+      
+      const playPromise = currentVideo.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('✅ Video inicial reproduciendo correctamente');
+            hasPlayedInitial.current = true;
+            lastNavigationIndex.current = currentIndex;
+          })
+          .catch(err => {
+            console.error('❌ Error autoplay inicial:', err);
+            currentVideo.muted = true;
+            currentVideo.play()
+              .then(() => {
+                console.log('✅ Video inicial reproduciendo (muted)');
+                hasPlayedInitial.current = true;
+                lastNavigationIndex.current = currentIndex;
+              })
+              .catch(e => console.error('❌ Error crítico:', e));
+          });
+      }
+    };
+
+    setTimeout(attemptPlay, 250);
+  }, [videos, currentIndex, mutedVideos]);
+
+  // ===============================
+  // MOUSE WHEEL NAVIGATION (DESKTOP)
+  // ===============================
+  useEffect(() => {
+    if (!isDesktop) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      
+      clearTimeout(handleWheel.timeout);
+      handleWheel.timeout = setTimeout(() => {
+        if (e.deltaY > 0 && currentIndex < videos.length - 1) {
+          setCurrentIndex(prev => prev + 1);
+        } else if (e.deltaY < 0 && currentIndex > 0) {
+          setCurrentIndex(prev => prev - 1);
+        }
+      }, 150);
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }
+  }, [isDesktop, currentIndex, videos.length]);
+
+  // ===============================
+  // AUTOPLAY Y GESTIÓN DE VIDEOS
+  // ===============================
+  useEffect(() => {
+    if (videos.length === 0) return;
+    
+    const initialIndex = getInitialReelIndex();
+    if (!hasPlayedInitial.current && currentIndex === initialIndex) {
+      console.log('⏭️ Skipping autoplay - será manejado por useEffect dedicado');
+      return;
+    }
+
+    const currentVideo = videoRefs.current[currentIndex];
+    const isNavigationChange = lastNavigationIndex.current !== currentIndex;
+
+    if (currentVideo) {
+      videoRefs.current.forEach((video, index) => {
+        if (video && index !== currentIndex) {
+          video.pause();
+        }
+      });
+
+      currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
+      
+      if (isNavigationChange) {
+        console.log('🔄 Cambio de navegación detectado, auto-reproduciendo video');
+        currentVideo.currentTime = 0;
+        lastNavigationIndex.current = currentIndex;
+        
+        const playPromise = currentVideo.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Video auto-reproduciendo desde el inicio');
+              setIsAutoPlaying(true);
+            })
+            .catch(err => {
+              console.log('Autoplay bloqueado:', err);
+              currentVideo.muted = true;
+              currentVideo.play()
+                .then(() => setIsAutoPlaying(true))
+                .catch(e => console.log('Error:', e));
+            });
+        }
+      } else if (isAutoPlaying) {
+        console.log('⚡ Play/Pause - continúa desde:', currentVideo.currentTime);
+        
+        const playPromise = currentVideo.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Video reproduciendo desde:', currentVideo.currentTime);
+            })
+            .catch(err => {
+              console.log('Autoplay bloqueado:', err);
+              currentVideo.muted = true;
+              currentVideo.play().catch(e => console.log('Error:', e));
+            });
+        }
+      } else {
+        console.log('⏸️ Video pausado por usuario en:', currentVideo.currentTime);
+        currentVideo.pause();
+      }
+    }
+  }, [currentIndex, isAutoPlaying, videos, mutedVideos, getInitialReelIndex]);
+
+  // ===============================
+  // TRACKING DE VISUALIZACIÓN Y VISTAS
+  // ===============================
+  useEffect(() => {
+    const currentVideo = videoRefs.current[currentIndex];
+    const currentVideoData = videos[currentIndex];
+    
+    if (!currentVideo || !currentVideoData) return;
+
+    const handleLoadStart = () => setLoadingVideo(true);
+    const handleCanPlay = () => setLoadingVideo(false);
+    const handleLoadedData = () => setLoadingVideo(false);
+
+    let viewCounted = false;
+
+    const handleTimeUpdate = async () => {
+      const watchedPercent = (currentVideo.currentTime / currentVideo.duration) * 100;
+      
+      if (watchedPercent > 30 && !viewCounted && !videoWatchedIds.has(currentVideoData.id)) {
+        viewCounted = true;
+        
+        setVideoCounters(prev => ({
+          ...prev,
+          [currentVideoData.id]: {
+            ...prev[currentVideoData.id],
+            views: (prev[currentVideoData.id]?.views || 0) + 1
+          }
+        }));
+
+        try {
+          const { error } = await supabase.rpc('increment_video_views', { 
+            video_id: currentVideoData.id 
+          });
+          
+          if (error) {
+            console.error('Error incrementando vistas:', error);
+          } else {
+            console.log('✅ Vista registrada para video:', currentVideoData.id);
+          }
+        } catch (err) {
+          console.error('Error al incrementar vistas:', err);
+        }
+      }
+      
+      if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
+        setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
+        
+        missionsService.trackWatchVideo(currentVideoData.id, currentVideo.currentTime)
+          .then(result => {
+            if (result.completed) {
+              addPoints(result.reward.points, result.message, 'free');
+            }
+          })
+          .catch(error => console.error('Error tracking video:', error));
+      }
+    };
+
+    currentVideo.addEventListener('loadstart', handleLoadStart);
+    currentVideo.addEventListener('canplay', handleCanPlay);
+    currentVideo.addEventListener('loadeddata', handleLoadedData);
+    currentVideo.addEventListener('timeupdate', handleTimeUpdate);
+    
+    return () => {
+      currentVideo.removeEventListener('loadstart', handleLoadStart);
+      currentVideo.removeEventListener('canplay', handleCanPlay);
+      currentVideo.removeEventListener('loadeddata', handleLoadedData);
+      currentVideo.removeEventListener('timeupdate', handleTimeUpdate);
+    };
+  }, [currentIndex, videos, videoWatchedIds, addPoints]);
+
+  // ===============================
+  // PLAY/PAUSE
+  // ===============================
+  const handlePlayPause = useCallback((e) => { // ✅ CORREGIDO: Envuelto en useCallback
+    // Si el evento 'e' existe, es un click en el video.
+    // Si 'e' no existe, fue llamado por el atajo de teclado.
+    if (e && e.target.tagName !== 'VIDEO') return;
+    
+    const currentVideo = videoRefs.current[currentIndex];
+    if (currentVideo) {
+      if (currentVideo.paused) {
+        console.log('▶️ Reproduciendo desde:', currentVideo.currentTime);
+        currentVideo.play();
+        setIsAutoPlaying(true);
+      } else {
+        console.log('⏸️ Pausando en:', currentVideo.currentTime);
+        currentVideo.pause();
+        setIsAutoPlaying(false);
+      }
+    }
+  }, [currentIndex]); // Dependencia: currentIndex
+
+  // ===============================
+  // NAVEGACIÓN
+  // ===============================
+  const navigateNext = useCallback(() => { // ✅ CORREGIDO: Envuelto en useCallback
+    if (currentIndex < videos.length - 1) {
+      setEnableTransition(true);
+      setCurrentIndex(prev => prev + 1);
+      setIsAutoPlaying(true);
+    }
+  }, [currentIndex, videos.length]); // Dependencias
+
+  const navigatePrevious = useCallback(() => { // ✅ CORREGIDO: Envuelto en useCallback
+    if (currentIndex > 0) {
+      setEnableTransition(true);
+      setCurrentIndex(prev => prev - 1);
+      setIsAutoPlaying(true);
+    }
+  }, [currentIndex]); // Dependencia
+
+  const handleTouchStart = (e) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchStartY.current - touchEndY.current;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) navigateNext();
+      else navigatePrevious();
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowDown') navigateNext();
+      if (e.key === 'ArrowUp') navigatePrevious();
+      if (e.key === ' ') {
+        e.preventDefault();
+        handlePlayPause(); // ✅ CORREGIDO: Llama a la función 'handlePlayPause'
+      }
+      if (e.key === 'Escape' && showCommentsModal) {
+        handleCloseComments();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // ✅ CORREGIDO: Añadidas dependencias
+  }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
+
+  // ===============================
+  // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA)
   // ===============================
   
   const handleLike = async (videoId, e) => {
@@ -369,7 +791,7 @@ const ReelsContainer = ({
       console.error('❌ Error en like:', error);
     }
   };
-  
+
   const handleDislike = async (videoId, e) => {
     if (e) {
       e.stopPropagation();
@@ -405,8 +827,6 @@ const ReelsContainer = ({
   };
 
   const handleSave = async (videoId, e) => {
-    // ... (Esta función necesita ser sincronizada también,
-    //      pero la dejamos como estaba ya que no fue reportada como error)
     if (e) {
       e.stopPropagation();
       e.preventDefault();
