@@ -1502,19 +1502,19 @@ const VideoUploadStudio = () => {
                     <div className="flex items-start space-x-2">
                       <Icon name="Lightbulb" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
-                        Los videos educativos y de negocios ganan más puntos
+                        Los videos educativos y de negocios ganan más puntos (próximamente)
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <Icon name="Smartphone" size={16} color="var(--color-success)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
-                        Los Reels (videos verticales) reciben +10 puntos bonus
+                        Los Reels (videos verticales) reciben más puntos (próximamente)
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
                       <p className="text-muted-foreground">
-                        Videos más largos generan más puntos por minuto
+                        Videos más largos generan más puntos por minuto (próximamente)
                       </p>
                     </div>
                     <div className="flex items-start space-x-2">
