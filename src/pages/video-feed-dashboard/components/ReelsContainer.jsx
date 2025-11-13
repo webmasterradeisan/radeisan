@@ -1,12 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
-// ✅ CORREGIDO: Verificaciones de seguridad para comment.user
-// ✅ CORREGIDO: Estructura JSX del modal
-// ✅ NUEVO: Avisos de puntos cerca del botón like
-// ✅ CORREGIDO: Sistema de tracking persistente para likes
-// ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
-// ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
+// ✅ CORRECCIÓN CRÍTICA: Eliminada la asignación de 5 puntos codificada.
+//    Ahora, el Like solo otorga puntos si la misión/regla (missionsService) lo aprueba.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -97,7 +93,7 @@ const ReelsContainer = ({
     isMobile,
     isDesktop,
     showCommentsModal,
-    showGiftModal // ✅ Nuevo estado de debug
+    showGiftModal 
   });
 
   // ✅ NUEVO: Función para mostrar notificación de puntos
@@ -443,7 +439,7 @@ const ReelsContainer = ({
               currentVideo.muted = true;
               currentVideo.play()
                 .then(() => setIsAutoPlaying(true))
-                .catch(e => console.log('Error:', e));
+                .catch(e => console.error('Error:', e));
             });
         }
       } else if (isAutoPlaying) {
@@ -679,7 +675,6 @@ const ReelsContainer = ({
         
         console.log('✅ Like removido (los puntos ya ganados NO se pierden)');
         // ✅ IMPORTANTE: NO removemos de actionsPerformed.likes
-        // El usuario ya ganó puntos con este video, ese registro es permanente
         
       } else {
         // ==============================
@@ -705,45 +700,47 @@ const ReelsContainer = ({
         // ✅ VERIFICAR SI YA GANÓ PUNTOS CON ESTE VIDEO
         if (!hasEarnedPointsBefore) {
           // ==============================
-          // PRIMERA VEZ - OTORGAR PUNTOS
+          // PRIMERA VEZ - OTORGAR PUNTOS Y MISIONES
           // ==============================
-          console.log('🎉 Primera vez dando like a este video - ganando puntos');
-          showPointsNotification('+5 puntos 🎉', videoId);
           
           try {
-            // ✅ OTORGAR PUNTOS usando el PointsContext
-            await addPoints(5, 'Like en video', 'free');
+            // 1. TRACKEAR LA ACCIÓN (Esto verifica las reglas/misiones)
+            const missionResult = await missionsService.trackGiveLike('video', videoId);
             
-            // ✅ REGISTRAR EN LA BASE DE DATOS que ya ganó puntos por este video
-            const { error: trackError } = await supabase
-              .from('user_video_points')
-              .insert({
-                user_id: user.id,
-                video_id: videoId,
-                action_type: 'like',
-                points_earned: 5,
-                created_at: new Date().toISOString()
-              });
+            const pointsEarned = missionResult.points_earned || (missionResult.completed ? missionResult.reward.points : 0);
             
-            if (trackError) {
-              console.error('⚠️ Error al registrar tracking de puntos:', trackError);
+            if (pointsEarned > 0) {
+              // 2. Si missionsService otorga puntos (directo o por misión completada)
+              
+              // Asumiendo que missionService *no* llama a addPoints, lo hacemos aquí:
+              await addPoints(pointsEarned, missionResult.message || 'Puntos ganados por acción', 'free'); 
+              
+              showPointsNotification(`+${pointsEarned} puntos 🎉`, videoId);
+
+              // 3. Registrar en BD que la acción fue realizada y ya se procesaron los puntos/misión
+              await supabase
+                .from('user_video_points')
+                .insert({
+                  user_id: user.id,
+                  video_id: videoId,
+                  action_type: 'like', // Registrar que la acción fue realizada y ya se procesaron los puntos/misión
+                  points_earned: pointsEarned,
+                  created_at: new Date().toISOString()
+                });
+                
             } else {
-              console.log('✅ Tracking de puntos registrado en BD');
+                 // 4. Si no se ganan puntos, solo se notifica que la acción fue registrada
+                showPointsNotification(`Acción registrada (Misión: ${missionResult.current_progress || 0}/10)`, videoId);
             }
             
-            // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a dar puntos
+            // ✅ ACTUALIZAR ESTADO LOCAL para que no vuelva a intentar dar puntos directos
             setActionsPerformed(prev => ({
               ...prev,
               likes: new Set([...prev.likes, videoId])
             }));
             
-            // ✅ VERIFICAR MISIONES
-            const missionResult = await missionsService.trackGiveLike('video', videoId);
-            if (missionResult.completed) {
-              await addPoints(missionResult.reward.points, missionResult.message, 'free');
-            }
           } catch (pointsError) {
-            console.error('❌ Error al otorgar puntos:', pointsError);
+            console.error('❌ Error al otorgar puntos/misión:', pointsError);
           }
         } else {
           // ==============================
