@@ -4,18 +4,24 @@
 // ============================================================================
 // ✅ CORRECCIÓN CRÍTICA: Se blinda addPoints contra TypeError.
 // ✅ Se utiliza initializeUserPoints para la estabilidad de la DB.
+// ✅ MEJORADO: Centraliza la lógica de misiones y puntos ganados hoy.
+// ✅ TIEMPO REAL: Reemplaza el polling de 10s con suscripciones a Supabase
+//    para 'user_profiles', 'mission_progress' y 'daily_missions'.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
-// 🛑 IMPORTACIÓN DE SERVICIO: Importar funciones robustas del servicio con alias
+// 🛑 IMPORTACIÓN DE SERVICIOS: Importar funciones de AMBOS servicios
 import { 
   getUserPoints,
-  // Alias para evitar conflicto de nombres con las funciones del contexto
   addPoints as addPointsService, 
   deductPoints as deductPointsService, 
   initializeUserPoints 
 } from '../services/pointsService'; 
+import {
+  getDailyMissions,
+  getMissionStats
+} from '../services/missionsService'; // ✅ Importar servicios de misiones
 import { supabase } from 'lib/supabase';
 
 const PointsContext = createContext();
@@ -29,22 +35,27 @@ export const usePoints = () => {
 };
 
 // ============================================================================
-// CONSTANTES DE CONFIGURACIÓN
+// PROVEEDOR DEL CONTEXTO
 // ============================================================================
-const POLLING_INTERVAL = 10000; // 30 segundos
 
 export const PointsProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   
   // ============================================================================
-  // ESTADOS PRINCIPALES
+  // ESTADOS PRINCIPALES (AHORA CENTRALIZADOS)
   // ============================================================================
   const [points, setPoints] = useState({
     total: 0,
     free: 0,
     premium: 0,
-    loading: true
   });
+  
+  // ✅ Nuevos estados para misiones (movidos desde el Dashboard)
+  const [missions, setMissions] = useState([]);
+  const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
+  
+  // Estado de carga unificado
+  const [loading, setLoading] = useState(true);
 
   // Estado de animación (para notificaciones flotantes)
   const [pointsAnimation, setPointsAnimation] = useState({
@@ -56,45 +67,160 @@ export const PointsProvider = ({ children }) => {
 
   // Referencias para limpiar efectos
   const mountedRef = useRef(true);
-  const pollingIntervalRef = useRef(null);
   const animationTimeoutRef = useRef(null);
-
+  
   // ============================================================================
-  // LÓGICA DE CARGA Y POLLING
+  // LÓGICA DE CARGA DE DATOS (UNIFICADA)
   // ============================================================================
-  const loadPoints = useCallback(async () => {
+  
+  /**
+   * Carga TODOS los datos relacionados con puntos y misiones.
+   * Esta es ahora la única fuente de verdad.
+   */
+  const loadAllData = useCallback(async () => {
     if (!mountedRef.current) return;
     
     if (!user || !isAuthenticated) {
-        setPoints({ total: 0, free: 0, premium: 0, loading: false });
+        setPoints({ total: 0, free: 0, premium: 0 });
+        setMissions([]);
+        setPointsEarnedToday(0);
+        setLoading(false);
         return;
     }
     
-    setPoints(prev => ({ ...prev, loading: true }));
+    setLoading(true);
 
     try {
-      const userPoints = await getUserPoints(user.id);
+      // Inicializar el registro de puntos (seguridad)
+      await initializeUserPoints(user.id);
+      
+      // Cargar datos en paralelo
+      const [pointsResult, missionsResult, statsResult] = await Promise.all([
+        getUserPoints(user.id),
+        getDailyMissions({ includeCompleted: false }), // Solo misiones activas
+        getMissionStats()
+      ]);
       
       if (mountedRef.current) {
+        // 1. Actualizar Saldo de Puntos
         setPoints({
-          total: userPoints.total,
-          free: userPoints.free,
-          premium: userPoints.premium,
-          loading: false
+          total: pointsResult.total,
+          free: pointsResult.free,
+          premium: pointsResult.premium,
         });
-        console.log('✅ Puntos cargados:', userPoints);
-        return userPoints;
+
+        // 2. Actualizar Misiones
+        if (missionsResult.success) {
+          setMissions(missionsResult.missions.active || []);
+        }
+
+        // 3. Actualizar Puntos Ganados Hoy
+        if (statsResult.success) {
+          setPointsEarnedToday(statsResult.stats.daily_points_earned || 0);
+        }
+        
+        console.log('✅ [PointsContext] Datos unificados cargados:', {
+          points: pointsResult,
+          missions: missionsResult.missions.active?.length || 0,
+          earnedToday: statsResult.stats.daily_points_earned || 0
+        });
       }
     } catch (error) {
-      console.error('❌ Error cargando puntos:', error);
+      console.error('❌ Error cargando datos unificados en PointsContext:', error);
+    } finally {
       if (mountedRef.current) {
-        setPoints(prev => ({ ...prev, loading: false }));
+        setLoading(false);
       }
-      // Retorna 0 para que el código que llama no se quede esperando un objeto.
-      return { total: 0, free: 0, premium: 0 };
     }
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated]); // Dependencias de useCallback
 
+
+  // ============================================================================
+  // EFECTO: CARGA INICIAL Y SUSCRIPCIONES EN TIEMPO REAL
+  // ============================================================================
+  useEffect(() => {
+    if (user?.id && isAuthenticated) {
+      // 1. Carga inicial
+      loadAllData();
+
+      // 2. Suscripción a cambios en el SALDO (user_profiles)
+      const pointsSubscription = supabase
+        .channel('public:user_profiles')
+        .on('postgres_changes', 
+          { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'user_profiles',
+            filter: `id=eq.${user.id}`
+          }, 
+          (payload) => {
+            console.log('🔄 [Real-Time] Cambio de Saldo detectado!', payload.new);
+            setPoints({
+              total: payload.new.points || 0,
+              free: payload.new.free_points || 0,
+              premium: payload.new.premium_points || 0
+            });
+            // También refrescamos las stats por si este cambio fue por una misión
+            getMissionStats().then(statsResult => {
+              if (statsResult.success) {
+                setPointsEarnedToday(statsResult.stats.daily_points_earned || 0);
+              }
+            });
+          }
+        )
+        .subscribe();
+
+      // 3. Suscripción a cambios en el PROGRESO DE MISIONES (mission_progress)
+      const missionsSubscription = supabase
+        .channel('public:mission_progress')
+        .on('postgres_changes',
+          {
+            event: '*', // Escuchar INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'mission_progress',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔄 [Real-Time] Cambio de Progreso de Misión detectado!', payload);
+            // Un cambio en el progreso (ej. 2/10 -> 3/10)
+            // debe recargar la lista de misiones y las stats.
+            loadAllData();
+          }
+        )
+        .subscribe();
+
+      // 4. Suscripción a cambios en las MISIONES (daily_missions)
+      const adminMissionsSubscription = supabase
+        .channel('public:daily_missions')
+        .on('postgres_changes',
+          {
+            event: '*', // Escuchar INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'daily_missions'
+          },
+          (payload) => {
+            console.log('🔄 [Real-Time] Cambio de Admin en Misiones detectado!', payload);
+            // Si un admin cambia una misión, recargamos todo.
+            loadAllData();
+          }
+        )
+        .subscribe();
+
+      // Función de limpieza
+      return () => {
+        supabase.removeChannel(pointsSubscription);
+        supabase.removeChannel(missionsSubscription);
+        supabase.removeChannel(adminMissionsSubscription);
+      };
+      
+    } else {
+      // Si no hay usuario, limpiar todo
+      setPoints({ total: 0, free: 0, premium: 0 });
+      setMissions([]);
+      setPointsEarnedToday(0);
+      setLoading(false);
+    }
+  }, [user, isAuthenticated, loadAllData]);
 
   // ============================================================================
   // FUNCIÓN PARA ANIMACIÓN Y NOTIFICACIÓN
@@ -126,31 +252,26 @@ export const PointsProvider = ({ children }) => {
     
     try {
       // 1. Llamar a la función del servicio (que llama al RPC)
-      // Asumimos que el servicio ya maneja la lógica de transacción y devuelve un objeto de saldo.
-      const balanceResult = await addPointsService(user.id, amount, type, actionType, referenceId);
+      const result = await addPointsService(user.id, amount, type, actionType, referenceId);
       
-      // 🛑 CORRECCIÓN CRÍTICA: La línea que lanzaba TypeError:
-      // Si el servicio falló, el resultado puede ser null/undefined.
-      if (!balanceResult || balanceResult.error) {
-          throw new Error(balanceResult?.error?.message || 'El servidor falló al registrar la transacción de puntos.');
+      if (!result || !result.success) {
+          throw new Error(result?.error || 'El servidor falló al registrar la transacción de puntos.');
       }
       
-      // 2. Refrescar estado local (si la operación fue exitosa)
-      // loadPoints() actualizará el estado con el nuevo balance de la DB.
-      await loadPoints(); 
+      // 2. Refrescar estado local (la suscripción lo hará, pero forzamos por si acaso)
+      await loadAllData(); 
 
       // 3. Iniciar animación
       triggerAnimation(amount, 'earn', type);
       
-      return { success: true, newPoints: balanceResult };
+      return { success: true, newPoints: result.newPoints };
 
     } catch (error) {
       console.error('❌ Error en addPoints (Contexto):', error);
-      // Forzar un refresh en caso de fallo para recuperar el estado
-      loadPoints(); 
+      loadAllData(); // Forzar un refresh en caso de fallo
       return { success: false, error: error.message || 'Error al sumar puntos.' };
     }
-  }, [user, loadPoints, triggerAnimation]);
+  }, [user, loadAllData, triggerAnimation]);
 
   // ============================================================================
   // FUNCIÓN PARA DEDUCIR PUNTOS (INTERFAZ PÚBLICA)
@@ -160,88 +281,44 @@ export const PointsProvider = ({ children }) => {
 
     try {
       // 1. Llamar a la función del servicio (que llama al RPC)
-      // Asumimos que el servicio maneja la deducción con amount negativo o un flag.
-      const balanceResult = await deductPointsService(user.id, amount, type, actionType); 
+      const result = await deductPointsService(user.id, amount, type, actionType); 
       
-      // 🛑 CORRECCIÓN DE SEGURIDAD
-      if (!balanceResult || balanceResult.error) {
-          throw new Error(balanceResult?.error?.message || 'El servidor falló al procesar la deducción.');
+      if (!result || !result.success) {
+          throw new Error(result?.error || 'El servidor falló al procesar la deducción.');
       }
       
       // 2. Refrescar estado local
-      await loadPoints();
+      await loadAllData();
 
       // 3. Iniciar animación
       triggerAnimation(amount, 'deduct', type);
       
-      return { success: true, newPoints: balanceResult };
+      return { success: true, newPoints: result.newPoints };
       
     } catch (error) {
       console.error('❌ Fallo en deductPoints (Contexto):', error);
-      loadPoints();
+      loadAllData();
       return { success: false, error: error.message || 'Error al deducir puntos.' };
     }
-  }, [user, loadPoints, triggerAnimation]);
+  }, [user, loadAllData, triggerAnimation]);
 
-
-  // ============================================================================
-  // EFECTO: Carga inicial de puntos y Polling (Sincronización)
-  // ============================================================================
-  useEffect(() => {
-    // Limpieza de Polling al inicio
-    if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-    }
-
-    const setupPoints = async () => {
-        if (!user?.id) {
-            setPoints({ total: 0, free: 0, premium: 0, loading: false });
-            return;
-        }
-
-        // 🛑 CORRECCIÓN DE RUNTIME: Inicializar el registro de puntos.
-        // Esto previene que el RPC de lectura falle por 'no row found'.
-        await initializeUserPoints(user.id);
-
-        // Carga de puntos
-        await loadPoints();
-        
-        // Configurar Polling
-        if (mountedRef.current && isAuthenticated && user?.id) {
-            pollingIntervalRef.current = setInterval(loadPoints, POLLING_INTERVAL);
-        }
-    };
-    
-    setupPoints();
-
-    // Limpieza al desmontar o al cambiar de usuario
-    return () => {
-        if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-        }
-    };
-  }, [user, isAuthenticated, loadPoints, initializeUserPoints]); // Dependencia de initializeUserPoints es necesaria
 
   // ============================================================================
   // FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE
   // ============================================================================
   const refreshPoints = useCallback(() => {
-    return loadPoints();
-  }, [loadPoints]);
+    return loadAllData();
+  }, [loadAllData]);
 
   // ============================================================================
   // LIMPIAR AL DESMONTAR
   // ============================================================================
   useEffect(() => {
+    mountedRef.current = true; // Marcar como montado
     return () => {
-      mountedRef.current = false;
+      mountedRef.current = false; // Marcar como desmontado
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
-      }
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
       }
     };
   }, []);
@@ -251,11 +328,16 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   const value = {
     // Estado de puntos
-    points,
     totalPoints: points.total,
     freePoints: points.free,
     premiumPoints: points.premium,
-    loading: points.loading,
+    
+    // ✅ Nuevos estados
+    missions,
+    pointsEarnedToday,
+    
+    // Estado de carga
+    loading,
     
     // Animación
     pointsAnimation,
