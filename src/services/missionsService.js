@@ -129,39 +129,29 @@ export async function getDailyMissions(options = {}) {
   }
 }
 
+// ============================================================================
+// --- ESTA ES LA FUNCIÓN CORREGIDA ---
+// ============================================================================
 export async function getAllMissions(filters = {}) {
+  // ✅ CORRECCIÓN:
+  // Esta función ahora llama a 'get_all_missions_admin()' (Paso 1)
+  // para ignorar la RLS y obtener TODAS las misiones para el panel de admin.
+  // El filtrado (búsqueda, estado, etc.) se maneja en el componente
+  // 'MissionsManagement.jsx' que la llama.
   try {
-    let query = supabase
-      .from('daily_missions')
-      .select('*')
-      .order('display_order', { ascending: true });
-
-    if (filters.is_active !== undefined) {
-      query = query.eq('is_active', filters.is_active);
-    }
-
-    if (filters.frequency) {
-      query = query.eq('frequency', filters.frequency);
-    }
-
-    if (filters.mission_type) {
-      query = query.eq('mission_type', filters.mission_type);
-    }
-
-    if (filters.search) {
-      query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .rpc('get_all_missions_admin');
 
     if (error) throw error;
 
+    // 'data' ahora contendrá las 9 misiones
     return {
       success: true,
       missions: data || []
     };
+
   } catch (error) {
-    console.error('Error obteniendo todas las misiones:', error);
+    console.error('Error obteniendo todas las misiones (admin):', error);
     return {
       success: false,
       error: error.message,
@@ -169,6 +159,9 @@ export async function getAllMissions(filters = {}) {
     };
   }
 }
+// ============================================================================
+// --- FIN DE LA CORRECCIÓN ---
+// ============================================================================
 
 export async function getMissionProgress(missionId) {
   try {
