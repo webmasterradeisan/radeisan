@@ -130,6 +130,11 @@ const ActivityItem = ({ activity }) => {
         return { icon: 'Gift', color: 'text-orange-600', bg: 'bg-orange-100' };
       case 'points_earned':
         return { icon: 'Coins', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+      
+      // --- ✅ LÍNEA CORREGIDA ---
+      case 'admin_adjustment':
+        return { icon: 'Settings2', color: 'text-gray-600', bg: 'bg-gray-100' };
+
       default:
         return { icon: 'Activity', color: 'text-gray-600', bg: 'bg-gray-100' };
     }
