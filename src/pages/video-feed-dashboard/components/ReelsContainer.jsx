@@ -493,7 +493,7 @@ const ReelsContainer = ({
         }));
 
         try {
-          // ❌ ELIMINADO: RPC 'increment_video_views' (debería ser un trigger en DB)
+          // ❌ ELIMINADO: RPC 'increment_video_views'
           // const { error } = await supabase.rpc('increment_video_views', { 
           //   video_id: currentVideoData.id 
           // });
@@ -505,9 +505,6 @@ const ReelsContainer = ({
       if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
         setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
         
-        // 🛑 ADVERTENCIA: 'trackWatchVideo' usa 'trackMissionProgress'
-        // que fallará si la RLS es incorrecta (como 'trackGiveLike' fallaba)
-        // Se mantiene por ahora, asumiendo que el SQL corregido lo arregla.
         missionsService.trackWatchVideo(currentVideoData.id, currentVideo.currentTime)
           .then(result => {
             if (result.completed) {
