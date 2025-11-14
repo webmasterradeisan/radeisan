@@ -119,25 +119,22 @@ const StatsCard = ({
  */
 const ActivityItem = ({ activity }) => {
   const getActivityIcon = () => {
-    // --- ✅ SECCIÓN CORREGIDA ---
+    // --- ✅ ESTA SECCIÓN DEBE TENER TODOS LOS CASE ---
     // Ajustamos los 'case' para que coincidan con los datos
-    // que envía la base de datos (ej. 'video_upload' en lugar de 'video_uploaded')
+    // que envía la base de datos (ej. 'video_upload', 'like_videos')
     switch (activity.action_type) {
       case 'user_registered':
         return { icon: 'UserPlus', color: 'text-green-600', bg: 'bg-green-100' };
       
-      // Corregido
       case 'video_upload':
         return { icon: 'Video', color: 'text-blue-600', bg: 'bg-blue-100' };
       
-      // Corregido
       case 'photo_upload':
         return { icon: 'Image', color: 'text-purple-600', bg: 'bg-purple-100' };
       
       case 'reward_redeemed':
         return { icon: 'Gift', color: 'text-orange-600', bg: 'bg-orange-100' };
       
-      // Añadido
       case 'like_videos':
         return { icon: 'Heart', color: 'text-red-500', bg: 'bg-red-100' };
         
@@ -165,13 +162,13 @@ const ActivityItem = ({ activity }) => {
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-900 font-medium truncate">
           {activity.user_name || 'Usuario'}
-        </p> {/* --- ✅ LÍNEA 168 CORREGIDA (antes </Grama>) --- */}
+        </p> 
         <p className="text-sm text-gray-600 truncate">
           {activity.description}
         </p>
         <p className="text-xs text-gray-500 mt-0.5">
           {formatRelativeDate(activity.created_at)}
-        </p>
+        </s.
       </div>
     </div>
   );
@@ -347,7 +344,7 @@ const AdminDashboard = () => {
     }
   }, [roleLoading, isAdmin, loadData]);
 
-// ============================================
+  // ============================================
   // HANDLERS
   // ============================================
   const handleRefresh = () => {
@@ -444,7 +441,7 @@ const AdminDashboard = () => {
           loading={loading}
         />
 
-<StatsCard
+        <StatsCard
           title="Fotos"
           value={stats?.total_photos || 0}
           icon="Image"
