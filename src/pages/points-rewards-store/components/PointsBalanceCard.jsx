@@ -228,7 +228,9 @@ const PointsBalanceCard = ({
         {/* Sin misiones activas */}
         {!loading && missions.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-2">
-            ¡Todas las misiones completadas por hoy!
+            {/* El mensaje correcto se ve en la sección "Cómo ganar más puntos", 
+                pero si no hay misiones definidas, este es el mensaje de fallback: */}
+            No hay misiones activas disponibles.
           </p>
         )}
       </div>
