@@ -1295,9 +1295,12 @@ const VideoUploadStudio = () => {
                     <h2 className="text-2xl font-bold text-foreground mb-2">
                       {uploadSuccess.orientation === 'vertical' ? '¡Reel publicado exitosamente!' : '¡Video publicado exitosamente!'}
                     </h2>
+                    
+                    {/* ✅✅✅ INICIO DE LA CORRECCIÓN DE ERROR 1 ✅✅✅ */}
                     <p className="text-muted-foreground mb-6">
                       Tu {uploadSuccess.orientation === 'vertical' ? 'reel' : 'video'} está ahora disponible para la comunidad
-                    </f>
+                    </p>
+                    {/* ✅✅✅ FIN DE LA CORRECCIÓN DE ERROR 1 (era </f>) ✅✅✅ */}
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                       <div className="p-4 bg-muted/50 rounded-lg">
@@ -1330,20 +1333,166 @@ const VideoUploadStudio = () => {
                       </div>
                     </div>
 
-                    {/* 🆕 DESGLOSE DETALLADO DE PUNTOS (Ocultado, ya que la lógica fue removida) */}
-                    {uploadSuccess.pointsBreakdown && uploadSuccess.pointsBreakdown.total_points > 0 && (
-                      <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
-                          <Icon name="Info" size={16} className="mr-2" />
-                          Desglose de puntos
-                        </h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Puntos base (duración):</span>
-                            <span className="font-medium text-foreground">
-                              {uploadSuccess.pointsBreakdown.base_points} pts
-                            </span>
+                    {/* ✅✅✅ INICIO DE LA CORRECCIÓN DE ERROR 2 ✅✅✅ */}
+                    {/* El bloque "Desglose de puntos" se ha eliminado por completo
+                        porque 'uploadSuccess.pointsBreakdown' ya no es un objeto
+                        válido después de cambiar a 'missionsService'.
+                    */}
+                    {/* ✅✅✅ FIN DE LA CORRECCIÓN DE ERROR 2 ✅✅✅ */}
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <Button 
+                        onClick={() => navigate('/dashboard')}
+                        className="flex-1"
+                      >
+                        <Icon name="Eye" size={16} className="mr-2" />
+                        Ver en Feed
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={resetForm}
+                        className="flex-1"
+                      >
+                        <Icon name="Plus" size={16} className="mr-2" />
+                        Subir Otro Video
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Sidebar */}
+              <div className="space-y-6">
+                
+                {/* Upload Stats */}
+                {isUploading && (
+                  <div className="bg-card rounded-lg border p-6">
+                    <h3 className="font-medium text-foreground mb-4">Progreso de subida</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Progreso</span>
+                        <span>{Math.round(uploadProgress)}%</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      {uploadSpeed > 0 && (
+                        <>
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>Velocidad</span>
+                            <span>{formatSpeed(uploadSpeed)}</span>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">
-                              Multiplicador {uploadSuccess.pointsBreakda...
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>Tiempo restante</span>
+                            <span>{formatTime(estimatedTime)}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Uploads */}
+                <div className="bg-card rounded-lg border p-6">
+                  <h3 className="font-medium text-foreground mb-4">Videos recientes</h3>
+                  {recentLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center space-x-3 animate-pulse">
+                          <div className="w-16 h-12 bg-muted rounded" />
+                          <div className="flex-1">
+                            <div className="h-4 bg-muted rounded mb-2" />
+                            <div className="h-3 bg-muted rounded w-20" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : recentVideos.length > 0 ? (
+                    <div className="space-y-3">
+                      {recentVideos.map((video) => (
+                        <div key={video.id} className="flex items-center space-x-3">
+                          <div className="w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0 relative">
+                            <img 
+                              src={video.thumbnail} 
+                              alt={video.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-1 right-1">
+                              <Icon 
+                                name={video.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
+                                size={12} 
+                                color="white"
+                                className="bg-black/50 rounded p-0.5"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-foreground text-sm truncate">
+                              {video.title}
+                            </h4>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                video.status === 'published' 
+                                  ? 'bg-success/10 text-success' 
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {video.status === 'published' ? 'Publicado' : 'Borrador'}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {video.views} views
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No tienes videos aún
+                    </p>
+                  )}
+                </div>
+
+                {/* Tips */}
+                <div className="bg-card rounded-lg border p-6">
+                  <h3 className="font-medium text-foreground mb-4">Consejos para creadores</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Lightbulb" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Los videos educativos y de negocios ganan más puntos (próximamente)
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Smartphone" size={16} color="var(--color-success)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Los Reels (videos verticales) reciben más puntos (próximamente)
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        Videos más largos generan más puntos por minuto (próximamente)
+                      </U>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Icon name="Eye" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      <p className="text-muted-foreground">
+                        La vista previa se actualiza automáticamente al seleccionar miniaturas
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </>
+  );
+};
+
+export default VideoUploadStudio;
