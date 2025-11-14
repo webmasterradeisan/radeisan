@@ -119,7 +119,7 @@ const StatsCard = ({
  */
 const ActivityItem = ({ activity }) => {
   const getActivityIcon = () => {
-    // --- ✅ ESTA SECCIÓN DEBE TENER TODOS LOS CASE ---
+    // --- ✅ SECCIÓN CORREGIDA ---
     // Ajustamos los 'case' para que coincidan con los datos
     // que envía la base de datos (ej. 'video_upload', 'like_videos')
     switch (activity.action_type) {
@@ -168,7 +168,8 @@ const ActivityItem = ({ activity }) => {
         </p>
         <p className="text-xs text-gray-500 mt-0.5">
           {formatRelativeDate(activity.created_at)}
-        </s.
+        </p> 
+        {/* --- ✅ LÍNEA 171 CORREGIDA (antes </s.>) --- */}
       </div>
     </div>
   );
@@ -344,7 +345,7 @@ const AdminDashboard = () => {
     }
   }, [roleLoading, isAdmin, loadData]);
 
-  // ============================================
+// ============================================
   // HANDLERS
   // ============================================
   const handleRefresh = () => {
@@ -441,7 +442,7 @@ const AdminDashboard = () => {
           loading={loading}
         />
 
-        <StatsCard
+<StatsCard
           title="Fotos"
           value={stats?.total_photos || 0}
           icon="Image"
