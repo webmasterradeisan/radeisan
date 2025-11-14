@@ -16,7 +16,7 @@ const PointsBalanceCard = ({
   premiumPoints = 0,
   pointsEarnedToday = 0, 
   nextRewardThreshold,
-  missions = [], 
+  missions = [], // ✅ NUEVA PROP AÑADIDA
   loading = false,
   className = '' 
 }) => {
@@ -164,7 +164,9 @@ const PointsBalanceCard = ({
         </Link>
       </div>
       
-      {/* Sección de Progreso de Misiones */}
+      {/* ================================================== */}
+      {/* ✅ NUEVO: Sección de Progreso de Misiones          */}
+      {/* ================================================== */}
       <div className="border-t border-border pt-6 mt-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">
           Progreso de Misiones
