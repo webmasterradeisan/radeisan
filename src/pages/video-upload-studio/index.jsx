@@ -16,6 +16,8 @@ import VideoUploadZone from './components/VideoUploadZone';
 import CategorySelector from './components/CategorySelector';
 // ✅ CORRECCIÓN CLAVE: Se elimina 'pointsService' y se añade 'missionsService'
 import * as missionsService from '../../services/missionsService';
+// ✅ NUEVO: Importar 'usePoints' para las notificaciones globales
+import { usePoints } from '../../contexts/PointsContext';
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -212,10 +214,10 @@ const useVideoUpload = () => {
       // (Reemplaza el antiguo 'addFreePoints' directo)
       console.log('🔔 Reportando subida al sistema de misiones...');
       let pointsEarnedToday = 0;
-      let pointsBreakdown = {}; // El desglose detallado ya no está disponible aquí
+      let missionResult = null; // ✅ CORRECCIÓN: Capturar el resultado completo
 
       try {
-        const missionResult = await missionsService.trackMissionProgress(
+        missionResult = await missionsService.trackMissionProgress( // ✅ CORRECCIÓN: Asignar a la variable
             missionsService.MISSION_TYPES.UPLOAD_VIDEO, // 'upload_video'
             'video', // El tipo de referencia
             videoData.id // El ID del video que se creó
@@ -226,7 +228,6 @@ const useVideoUpload = () => {
         // Si la misión se completó y dio puntos, los guardamos para la UI
         if (missionResult.result === 'success' && missionResult.points_earned > 0) {
             pointsEarnedToday = missionResult.points_earned;
-            // Nota: 'pointsBreakdown' no es provisto por 'trackMissionProgress'
         }
         
       } catch (missionError) {
@@ -261,12 +262,11 @@ const useVideoUpload = () => {
         videoId: videoData.id,
         videoUrl: urlData.publicUrl,
         thumbnailUrl,
-        // ✅ CORRECCIÓN: Devuelve los puntos ganados desde el sistema de misiones
         pointsEarned: pointsEarnedToday,
-        pointsBreakdown: pointsBreakdown, // Desglose ya no disponible
         orientation: orientationData.orientation,
         aspectRatio: orientationData.aspectRatio,
-        detectionData: orientationData
+        detectionData: orientationData,
+        missionResult: missionResult // ✅ CORRECCIÓN: Devolver el resultado de la misión
       };
 
     } catch (error) {
@@ -420,6 +420,8 @@ const useUserVideos = () => {
 const VideoUploadStudio = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // ✅ NUEVO: Obtener 'triggerAnimation' de 'usePoints'
+  const { triggerAnimation } = usePoints();
   const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime, detectionResult } = useVideoUpload();
   const { recentVideos, loading: recentLoading } = useUserVideos();
 
@@ -637,6 +639,27 @@ const VideoUploadStudio = () => {
       if (result.success) {
         setUploadSuccess(result);
         setCurrentStep(3);
+
+        // ============================================================
+        // ✅ NUEVO: LÓGICA DE NOTIFICACIÓN GLOBAL
+        // ============================================================
+        const { missionResult } = result;
+        if (missionResult) {
+          if (missionResult.result === 'success' && missionResult.points_earned > 0) {
+            // 1. MISIÓN COMPLETA (Dispara la notificación global de puntos)
+            // (La función 'addPoints' en 'PointsContext' ya dispara la animación)
+            console.log('Notificación de Misión Completa (manejada por addPoints)');
+          } else if (missionResult.result === 'progress_updated') {
+            // 2. PROGRESO REGISTRADO (Dispara una notificación genérica)
+            triggerAnimation(0, 'earn', 'free'); // 0 puntos, pero activa la UI
+            console.log('Notificación de Progreso de Misión');
+          }
+          // 'already_completed' no se maneja aquí, ya que 'Revisando...' es suficiente.
+        }
+        // ============================================================
+        // ✅ FIN DE LA LÓGICA DE NOTIFICACIÓN
+        // ============================================================
+
       } else {
         // Muestra el error específico de la subida
         alert(`Error al subir el video: ${result.error || 'Violación de restricción de clave foránea.'}`);
@@ -1464,11 +1487,9 @@ const VideoUploadStudio = () => {
                     </div>
                     <div className="flex items-start space-x-2">
                       <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
-                      {/* ✅✅✅ INICIO DE LA CORRECCIÓN FINAL ✅✅✅ */}
                       <p className="text-muted-foreground">
                         Videos más largos generan más puntos por minuto (próximamente)
                       </p>
-                      {/* ✅✅✅ FIN DE LA CORRECCIÓN FINAL (era </U>) ✅✅✅ */}
                     </div>
                     <div className="flex items-start space-x-2">
                       <Icon name="Eye" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
