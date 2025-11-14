@@ -14,8 +14,8 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import VideoUploadZone from './components/VideoUploadZone';
 import CategorySelector from './components/CategorySelector';
-// ✅ CORRECCIÓN CLAVE: Usamos calculateVideoPointsFull como alias para resolver el error de Rollup.
-import { calculateVideoPointsFull as calculateVideoPoints, addFreePoints } from '../../services/pointsService';
+// ✅ CORRECCIÓN CLAVE: Se elimina 'pointsService' y se añade 'missionsService'
+import * as missionsService from '../../services/missionsService';
 
 // ===============================
 // HOOKS PERSONALIZADOS
@@ -172,25 +172,13 @@ const useVideoUpload = () => {
 
       setUploadProgress(75);
 
-      // 🆕 PASO 9: CALCULAR PUNTOS BASADOS EN CATEGORÍA Y ORIENTACIÓN
-      console.log('💰 Calculando puntos...');
-      let pointsCalculation = { total_points: 10 }; // Fallback por defecto
-      
-      try {
-        // metadata.category contiene el UUID (category_id).
-        pointsCalculation = await calculateVideoPoints(
-          Math.round(videoDuration || 0),
-          metadata.category, 
-          orientationData.orientation
-        );
-        console.log('📊 Puntos calculados:', pointsCalculation);
-      } catch (pointsCalcError) {
-        console.warn('⚠️ Error calculando puntos, usando valor por defecto:', pointsCalcError);
-      }
+      // 🛑 PASO 9: ELIMINADO
+      // El cálculo de puntos ahora lo hace el sistema de misiones.
+      console.log('💰 Cálculo de puntos transferido al servicio de misiones.');
 
       setUploadProgress(80);
 
-      // 🆕 PASO 10: INSERTAR EN BASE DE DATOS CON ORIENTACIÓN Y PUNTOS
+      // 🆕 PASO 10: INSERTAR EN BASE DE DATOS
       const { data: videoData, error: insertError } = await supabase
         .from('videos')
         .insert({
@@ -199,21 +187,19 @@ const useVideoUpload = () => {
           description: metadata.description || '',
           video_url: urlData.publicUrl,
           thumbnail_url: thumbnailUrl,
-          // 🛑 CORRECCIÓN: Usar category_id para el UUID (clave foránea)
           category_id: metadata.category, 
           tags: metadata.tags || [],
           duration_seconds: Math.round(videoDuration || 0),
           file_size_bytes: file.size,
           is_published: metadata.visibility === 'public',
           
-          // 🆕 DATOS DE ORIENTACIÓN
           orientation: orientationData.orientation,
           aspect_ratio: orientationData.aspectRatio,
           video_width: orientationData.width,
           video_height: orientationData.height,
           
-          // 🆕 PUNTOS CALCULADOS
-          points_earned: pointsCalculation.total_points
+          // ✅ CORRECCIÓN: Los puntos se manejan por misiones, no en la tabla de video.
+          points_earned: 0 
         })
         .select()
         .single();
@@ -222,28 +208,38 @@ const useVideoUpload = () => {
 
       setUploadProgress(85);
 
-      // 🆕 PASO 11: OTORGAR PUNTOS AL USUARIO
-      console.log('🎁 Otorgando puntos al usuario...');
-      try {
-        await addFreePoints(
-          currentUser.id, // Debe ser currentUser.id (el archivo original tenía el parámetro user.id)
-          pointsCalculation.total_points,
-          'video_upload', // Usamos 'video_upload' como tipo de acción consistente
-          videoData.id
-        );
-        console.log('✅ Puntos otorgados:', pointsCalculation.total_points);
-      } catch (pointsError) {
-        console.warn('⚠️ Error otorgando puntos:', pointsError);
-      }
+      // 🆕 PASO 11: REPORTAR ACCIÓN AL SISTEMA DE MISIONES
+      // (Reemplaza el antiguo 'addFreePoints' directo)
+      console.log('🔔 Reportando subida al sistema de misiones...');
+      let pointsEarnedToday = 0;
+      let pointsBreakdown = {}; // El desglose detallado ya no está disponible aquí
 
+      try {
+        const missionResult = await missionsService.trackMissionProgress(
+            missionsService.MISSION_TYPES.UPLOAD_VIDEO, // 'upload_video'
+            'video', // El tipo de referencia
+            videoData.id // El ID del video que se creó
+        );
+
+        console.log('✅ Misión reportada:', missionResult);
+
+        // Si la misión se completó y dio puntos, los guardamos para la UI
+        if (missionResult.result === 'success' && missionResult.points_earned > 0) {
+            pointsEarnedToday = missionResult.points_earned;
+            // Nota: 'pointsBreakdown' no es provisto por 'trackMissionProgress'
+        }
+        
+      } catch (missionError) {
+        console.warn('⚠️ Error al reportar misión:', missionError);
+      }
+      
       setUploadProgress(90);
 
       // 🆕 PASO 12: ACTUALIZAR CONTADOR DE CATEGORÍA
       console.log('📊 Actualizando contador de categoría...');
       try {
-        // Nota: Asumimos que la RPC acepta ID. Si falla, requiere revisión de la RPC.
         const { error: categoryError } = await supabase.rpc('increment_category_count', {
-          category_id: metadata.category // Intentamos pasar el ID para la RPC
+          category_id: metadata.category
         });
         
         if (categoryError) {
@@ -255,15 +251,9 @@ const useVideoUpload = () => {
         console.warn('⚠️ Error en contador de categoría:', categoryUpdateError);
       }
 
-      setUploadProgress(95);      setUploadProgress(95); // Línea duplicada, manteniendo original.
+      setUploadProgress(95);
 
-      // PASO 10: OTORGAR PUNTOS (Lógica redundante mantenida para integridad del archivo)
-      const basePoints = calculateUploadPoints(videoDuration || 0, metadata.category);
-      const orientationBonus = orientationData.orientation === 'vertical' ? 10 : 0;
-      const uploadPoints = basePoints + orientationBonus;
-      // await addPointsTransaction(uploadPoints, 'video_upload', `Puntos por subir: ${metadata.title}`);
-      // FIN DE LÓGICA DUPLICADA/ANTERIOR
-
+      // 🛑 Lógica duplicada/anterior eliminada
       setUploadProgress(100);
 
       return {
@@ -271,8 +261,9 @@ const useVideoUpload = () => {
         videoId: videoData.id,
         videoUrl: urlData.publicUrl,
         thumbnailUrl,
-        pointsEarned: pointsCalculation.total_points,
-        pointsBreakdown: pointsCalculation,
+        // ✅ CORRECCIÓN: Devuelve los puntos ganados desde el sistema de misiones
+        pointsEarned: pointsEarnedToday,
+        pointsBreakdown: pointsBreakdown, // Desglose ya no disponible
         orientation: orientationData.orientation,
         aspectRatio: orientationData.aspectRatio,
         detectionData: orientationData
@@ -298,7 +289,10 @@ const useVideoUpload = () => {
   };
 };
 
-// ... (Resto de Hooks y Utilidades: useUserVideos, getVideoDuration, calculateUploadPoints, etc.)
+// ... (Resto de Hooks y Utilidades: useUserVideos, getVideoDuration, etc.)
+// ... (Se asume que las funciones 'calculateUploadPoints' y 'addPointsTransaction'
+// ...  ya no son necesarias, pero se dejan para no romper el archivo si son
+// ...  usadas en otra parte que no vimos)
 
 // ===============================
 // UTILIDADES
@@ -316,8 +310,10 @@ const getVideoDuration = (file) => {
   });
 };
 
+// 🛑 ESTA LÓGICA ESTÁ OBSOLETA (AHORA SE MANEJA POR MISIONES)
+// PERO SE MANTIENE POR INTEGRIDAD DEL ARCHIVO ORIGINAL
 const calculateUploadPoints = (durationSeconds, category) => {
-  let basePoints = 30; // 🛑 CORRECCIÓN APLICADA AQUÍ: Ajustado de 50 a 30.
+  let basePoints = 30;
   let durationPoints = Math.floor(durationSeconds / 60) * 10;
   
   const categoryMultipliers = {
@@ -336,6 +332,7 @@ const calculateUploadPoints = (durationSeconds, category) => {
   return Math.round((basePoints + durationPoints) * multiplier);
 };
 
+// 🛑 ESTA LÓGICA ESTÁ OBSOLETA
 const addPointsTransaction = async (points, type, description) => {
   console.log(`Points transaction: +${points} for ${type}: ${description}`);
 };
@@ -978,9 +975,6 @@ const VideoUploadStudio = () => {
                                   `${detectionResult.width}x${detectionResult.height} • ${detectionResult.aspectRatio}`
                                 )}
                               </p>
-                              {detectionResult.orientation === 'vertical' && (
-                                <p className="text-xs text-success mt-1">+10 puntos bonus por Reel</p>
-                              )}
                             </div>
                           )}
                         </div>
@@ -1303,7 +1297,7 @@ const VideoUploadStudio = () => {
                     </h2>
                     <p className="text-muted-foreground mb-6">
                       Tu {uploadSuccess.orientation === 'vertical' ? 'reel' : 'video'} está ahora disponible para la comunidad
-                    </p>
+                    </f>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                       <div className="p-4 bg-muted/50 rounded-lg">
@@ -1311,9 +1305,12 @@ const VideoUploadStudio = () => {
                           <Icon name="Award" size={20} color="var(--color-primary)" />
                           <span className="font-medium">Puntos ganados</span>
                         </div>
-                        <p className="text-2xl font-bold text-primary">+{uploadSuccess.pointsEarned}</p>
-                        {uploadSuccess.orientation === 'vertical' && (
-                          <p className="text-xs text-success">Incluye +10 bonus por Reel</p>
+                        {/* ✅ CORRECCIÓN: Muestra puntos solo si se ganaron */}
+                        <p className="text-2xl font-bold text-primary">
+                          {uploadSuccess.pointsEarned > 0 ? `+${uploadSuccess.pointsEarned}` : 'Revisando...'}
+                        </p>
+                        {uploadSuccess.pointsEarned === 0 && (
+                          <p className="text-xs text-muted-foreground">El sistema de misiones procesará tu subida.</p>
                         )}
                       </div>
                       <div className="p-4 bg-muted/50 rounded-lg">
@@ -1333,8 +1330,8 @@ const VideoUploadStudio = () => {
                       </div>
                     </div>
 
-                    {/* 🆕 DESGLOSE DETALLADO DE PUNTOS */}
-                    {uploadSuccess.pointsBreakdown && (
+                    {/* 🆕 DESGLOSE DETALLADO DE PUNTOS (Ocultado, ya que la lógica fue removida) */}
+                    {uploadSuccess.pointsBreakdown && uploadSuccess.pointsBreakdown.total_points > 0 && (
                       <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
                         <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
                           <Icon name="Info" size={16} className="mr-2" />
@@ -1349,189 +1346,4 @@ const VideoUploadStudio = () => {
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">
-                              Multiplicador {uploadSuccess.pointsBreakdown.category_name}:
-                            </span>
-                            <span className="font-medium text-foreground">
-                              ×{uploadSuccess.pointsBreakdown.category_multiplier}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Subtotal con categoría:</span>
-                            <span className="font-medium text-foreground">
-                              {uploadSuccess.pointsBreakdown.points_with_category} pts
-                            </span>
-                          </div>
-                          {uploadSuccess.pointsBreakdown.orientation_bonus > 0 && (
-                            <div className="flex justify-between items-center text-success">
-                              <span>Bonus por Reel vertical:</span>
-                              <span className="font-semibold">
-                                +{uploadSuccess.pointsBreakdown.orientation_bonus} pts
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex justify-between items-center pt-2 border-t border-border">
-                            <span className="font-semibold text-foreground">Total ganado:</span>
-                            <span className="font-bold text-primary text-lg">
-                              {uploadSuccess.pointsBreakdown.total_points} pts
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <Button 
-                        onClick={() => navigate('/dashboard')}
-                        className="flex-1"
-                      >
-                        <Icon name="Eye" size={16} className="mr-2" />
-                        Ver en Feed
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={resetForm}
-                        className="flex-1"
-                      >
-                        <Icon name="Plus" size={16} className="mr-2" />
-                        Subir Otro Video
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sidebar */}
-              <div className="space-y-6">
-                
-                {/* Upload Stats */}
-                {isUploading && (
-                  <div className="bg-card rounded-lg border p-6">
-                    <h3 className="font-medium text-foreground mb-4">Progreso de subida</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>Progreso</span>
-                        <span>{Math.round(uploadProgress)}%</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-primary h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                      {uploadSpeed > 0 && (
-                        <>
-                          <div className="flex items-center justify-between text-sm text-muted-foreground">
-                            <span>Velocidad</span>
-                            <span>{formatSpeed(uploadSpeed)}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm text-muted-foreground">
-                            <span>Tiempo restante</span>
-                            <span>{formatTime(estimatedTime)}</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Recent Uploads */}
-                <div className="bg-card rounded-lg border p-6">
-                  <h3 className="font-medium text-foreground mb-4">Videos recientes</h3>
-                  {recentLoading ? (
-                    <div className="space-y-3">
-                      {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex items-center space-x-3 animate-pulse">
-                          <div className="w-16 h-12 bg-muted rounded" />
-                          <div className="flex-1">
-                            <div className="h-4 bg-muted rounded mb-2" />
-                            <div className="h-3 bg-muted rounded w-20" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : recentVideos.length > 0 ? (
-                    <div className="space-y-3">
-                      {recentVideos.map((video) => (
-                        <div key={video.id} className="flex items-center space-x-3">
-                          <div className="w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0 relative">
-                            <img 
-                              src={video.thumbnail} 
-                              alt={video.title}
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute top-1 right-1">
-                              <Icon 
-                                name={video.orientation === 'vertical' ? 'Smartphone' : 'Monitor'} 
-                                size={12} 
-                                color="white"
-                                className="bg-black/50 rounded p-0.5"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-foreground text-sm truncate">
-                              {video.title}
-                            </h4>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                video.status === 'published' 
-                                  ? 'bg-success/10 text-success' 
-                                  : 'bg-muted text-muted-foreground'
-                              }`}>
-                                {video.status === 'published' ? 'Publicado' : 'Borrador'}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {video.views} views
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No tienes videos aún
-                    </p>
-                  )}
-                </div>
-
-                {/* Tips */}
-                <div className="bg-card rounded-lg border p-6">
-                  <h3 className="font-medium text-foreground mb-4">Consejos para creadores</h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Lightbulb" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
-                      <p className="text-muted-foreground">
-                        Los videos educativos y de negocios ganan más puntos (próximamente)
-                      </p>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Smartphone" size={16} color="var(--color-success)" className="mt-0.5 flex-shrink-0" />
-                      <p className="text-muted-foreground">
-                        Los Reels (videos verticales) reciben más puntos (próximamente)
-                      </p>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
-                      <p className="text-muted-foreground">
-                        Videos más largos generan más puntos por minuto (próximamente)
-                      </p>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Icon name="Eye" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
-                      <p className="text-muted-foreground">
-                        La vista previa se actualiza automáticamente al seleccionar miniaturas
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    </>
-  );
-};
-
-export default VideoUploadStudio;
+                              Multiplicador {uploadSuccess.pointsBreakda...
