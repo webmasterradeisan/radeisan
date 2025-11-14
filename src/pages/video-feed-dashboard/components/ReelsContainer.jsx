@@ -2,11 +2,12 @@
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
 // ... (comentarios de cabecera) ...
-// 🟢 NUEVO (11/13 v4): Implementación de notificación "Garantizada".
-//    Se renderiza con 'position: fixed' y 'z-[9999]' para estar
-//    por encima de TODO, asegurando su visibilidad.
-// 🟢 MANTIENE (11/13): Diagnóstico de RLS en 'loadComments' y lógica de
-//    'handleLike' y 'handleDislike' con reversión.
+// 🟢 REVERTIDO (11/13 v3): Eliminado SweetAlert2.
+// 🟢 RESTAURADO (11/13 v3): Vuelve el estado 'pointsNotification' y la
+//    función 'showPointsNotification'.
+// 🟢 NUEVO (11/13 v3): La notificación ahora se renderiza en el CENTRO
+//    del reproductor de video (sobre el reel) para garantizar visibilidad.
+// 🟢 MANTIENE (11/13): Diagnóstico de RLS en 'loadComments'.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,6 +18,13 @@ import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
 import GiftPointsModal from 'components/GiftPointsModal'; 
+
+// ❌ ELIMINADO: Importar SweetAlert2
+// import Swal from 'sweetalert2';
+
+// ❌ ELIMINADO: Instancia de Toast
+// const Toast = Swal.mixin({ ... });
+
 
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
@@ -61,18 +69,18 @@ const ReelsContainer = ({
   // ✅ NUEVO: Estado para el Modal de Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
 
-  // ✅ ESTADO DE NOTIFICACIÓN (Se mantiene)
+  // ✅ RESTAURADO: Estado para notificaciones de puntos
   const [pointsNotification, setPointsNotification] = useState({
     show: false,
     message: '',
-    videoId: null, // Mantenemos el videoId por si acaso, aunque no lo usemos para mostrar
-    type: 'success' 
+    videoId: null,
+    type: 'success' // Añadido para controlar el color
   });
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
   const [actionsPerformed, setActionsPerformed] = useState({
-    likes: new Set(), 
+    likes: new Set(), // Esto ahora significa "misión de like completa hoy"
     saves: new Set(),
     follows: new Set(),
     comments: new Set(),
@@ -92,19 +100,24 @@ const ReelsContainer = ({
     videosCount: videos.length,
     currentIndex,
     selectedReelId,
+    enableTransition,
+    hasPlayedInitial: hasPlayedInitial.current,
+    isMobile,
+    isDesktop,
     showCommentsModal,
     showGiftModal 
   });
 
-  // ✅ FUNCIÓN DE NOTIFICACIÓN (Se mantiene)
+  // ✅ RESTAURADO: Función para mostrar notificación de puntos
   const showPointsNotification = (message, videoId, type = 'success') => {
     setPointsNotification({
       show: true,
       message,
       videoId,
-      type 
+      type // Añadimos tipo para controlar color
     });
     
+    // Auto ocultar después de 2 segundos
     setTimeout(() => {
       setPointsNotification({
         show: false,
@@ -139,6 +152,7 @@ const ReelsContainer = ({
     return index;
   }, [selectedReelId, videos]);
 
+  // ... (El resto de useEffects de sincronización, carga de usuario y reproducción no cambian) ...
   // ===============================
   // SINCRONIZACIÓN INICIAL
   // ===============================
@@ -215,10 +229,12 @@ const ReelsContainer = ({
 
           // ================================================================
           // ✅ 2. SINCRONIZACIÓN: Cargar 'mission_progress' para anti-farming
+          //    Revisamos si la misión 'like_videos' ya se completó HOY.
           // ================================================================
           try {
             const today = new Date().toISOString().split('T')[0];
             
+            // 2a. Buscar el ID de la misión 'like_videos'
             const { data: mission } = await supabase
               .from('daily_missions')
               .select('id')
@@ -226,6 +242,7 @@ const ReelsContainer = ({
               .single();
 
             if (mission) {
+              // 2b. Buscar si el usuario ya completó esa misión HOY
               const { data: progressData, error: progressError } = await supabase
                 .from('mission_progress') //
                 .select('is_completed')
@@ -235,24 +252,28 @@ const ReelsContainer = ({
                 .single();
 
               if (progressError && progressError.code !== 'PGRST116') {
-                throw progressError; 
+                throw progressError; // Lanzar error si no es "fila no encontrada"
               }
 
               if (progressData && progressData.is_completed) {
+                // Si la misión de "like_videos" está completa HOY,
+                // marcamos TODOS los videos como 'hasEarnedPointsBefore'
                 const allVideoIds = videos.map(v => v.id);
                 setActionsPerformed(prev => ({
                   ...prev,
-                  likes: new Set(allVideoIds) 
+                  likes: new Set(allVideoIds) // Activamos anti-farming para todos
                 }));
               } else {
+                // Aún no completa la misión de like hoy
                 setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
               }
             } else {
+              // No existe la misión 'like_videos', desactivamos anti-farming
               setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
             }
           } catch (err) {
             console.error("Error al verificar progreso de misión 'like_videos':", err);
-            setActionsPerformed(prev => ({ ...prev, likes: new Set() })); 
+            setActionsPerformed(prev => ({ ...prev, likes: new Set() })); // Ser permisivo
           }
 
           // ✅ CARGAR VIDEOS GUARDADOS
@@ -593,7 +614,7 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
 
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE LIKE (Llama a showPointsNotification)
+  // ✅✅✅ ACCIÓN DE LIKE (Restaurado a 'showPointsNotification')
   // ==========================================================
   
   const handleLike = async (videoId, e) => {
@@ -693,21 +714,29 @@ const ReelsContainer = ({
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
             // ================================================================
-            // ✅ INICIO: LÓGICA DE NOTIFICACIONES (Se mantiene)
+            // ✅ INICIO: LÓGICA DE NOTIFICACIONES (Restaurada)
             // ================================================================
             if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
+              // 1. MISIÓN COMPLETA
               const pointsEarned = missionResult.points_earned; 
               await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
               
+              // ✅ RESTAURADO
               showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId, 'success');
               
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
 
             } else if (missionResult.result === 'progress_updated') {
+              // 2. PROGRESO REGISTRADO
+              
+              // ✅ RESTAURADO
               showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId, 'success');
                  
             } else if (missionResult.result === 'already_completed') {
+              // 3. ANTI-FARMING (Misión ya completada hoy)
+              
+              // ✅ RESTAURADO
               showPointsNotification(`Ya completaste la misión de Likes hoy.`, videoId, 'restriction');
 
               const allVideoIds = videos.map(v => v.id);
@@ -721,7 +750,12 @@ const ReelsContainer = ({
             console.error('❌ Error al procesar puntos o misión:', pointsError);
           }
         } else {
+          // ==============================
+          // YA GANÓ PUNTOS HOY
+          // ==============================
           console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
+          
+          // ✅ RESTAURADO
           showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
         }
 
@@ -748,10 +782,11 @@ const ReelsContainer = ({
   };
 
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE DISLIKE (Se mantiene)
+  // ✅✅✅ ACCIÓN DE DISLIKE (SINCRONIZADA CON REVERSIÓN)
   // ==========================================================
   
   const handleDislike = async (videoId, e) => {
+    // ... (sin cambios en la lógica, no tenía notificaciones) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -846,6 +881,7 @@ const ReelsContainer = ({
   };
 
   const handleSave = async (videoId, e) => {
+    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -881,7 +917,7 @@ const ReelsContainer = ({
   };
   
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE REGALO (Llama a showPointsNotification)
+  // ✅✅✅ ACCIÓN DE REGALO (Restaurado a 'showPointsNotification')
   // ==========================================================
   const handleGiftClick = (video, e) => {
       if (e) {
@@ -895,6 +931,7 @@ const ReelsContainer = ({
       }
       
       if (currentUser.id === video.creator?.id) {
+          // ✅ RESTAURADO
           showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id, 'restriction');
           return;
       }
@@ -904,9 +941,11 @@ const ReelsContainer = ({
   
   const handleGiftSuccess = (amount) => {
       const currentVideo = videos[currentIndex];
+      // ✅ RESTAURADO
       showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id, 'success');
   };
 
+  // ... (handleFollow no cambia) ...
   const handleFollow = async (creatorId, e) => {
     if (e) {
       e.stopPropagation();
@@ -951,6 +990,7 @@ const ReelsContainer = ({
   };
 
   const handleShare = async (video, e) => {
+    // ... (sin cambios, la notificación en clipboard era de SweetAlert) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -965,6 +1005,7 @@ const ReelsContainer = ({
         });
       } else {
         navigator.clipboard.writeText(window.location.href);
+        // La notificación toast era de SweetAlert, la original era un 'alert'
         alert('Enlace copiado al portapapeles');
       }
     } catch (error) {
@@ -973,6 +1014,7 @@ const ReelsContainer = ({
   };
 
   const handleMuteToggle = (videoId, e) => {
+    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -998,6 +1040,7 @@ const ReelsContainer = ({
   // ===============================
   
   const loadComments = async (videoId, retryCount = 0) => {
+    // ... (sin cambios, mantiene el diagnóstico RLS) ...
     try {
       let { data, error } = await supabase
         .from('video_comments')
@@ -1043,7 +1086,6 @@ const ReelsContainer = ({
                 avatar: userProfile.avatar,
                 username: userProfile.username || userProfile.name || 'usuario'
               } : {
-                // 🟢 Diagnóstico de RLS
                 id: comment.user_id,
                 name: 'Usuario (Error RLS)',
                 avatar: null,
@@ -1090,6 +1132,7 @@ const ReelsContainer = ({
   };
 
   const handleOpenComments = async (videoId, e) => {
+    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1103,6 +1146,7 @@ const ReelsContainer = ({
   };
 
   const handleCloseComments = () => {
+    // ... (sin cambios) ...
     console.log('❌ Cerrando modal de comentarios');
     setShowCommentsModal(false);
     setReplyingTo(null);
@@ -1110,6 +1154,7 @@ const ReelsContainer = ({
   };
 
   const handleAddComment = async (videoId) => {
+    // ... (sin cambios) ...
     if (!newComment.trim()) {
       console.log('❌ Comentario vacío');
       return;
@@ -1187,6 +1232,7 @@ const ReelsContainer = ({
   };
 
   const handleReply = (commentId, username) => {
+    // ... (sin cambios) ...
     console.log('💬 Respondiendo a comentario:', { commentId, username });
     setReplyingTo(commentId);
     
@@ -1203,11 +1249,13 @@ const ReelsContainer = ({
   };
 
   const handleCancelReply = () => {
+    // ... (sin cambios) ...
     setReplyingTo(null);
     setNewComment('');
   };
 
   const toggleReplies = (commentId) => {
+    // ... (sin cambios) ...
     setShowReplies(prev => ({
       ...prev,
       [commentId]: !prev[commentId]
@@ -1215,12 +1263,14 @@ const ReelsContainer = ({
   };
 
   const formatCount = (count) => {
+    // ... (sin cambios) ...
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count?.toString() || '0';
   };
 
   const formatTimeAgo = (date) => {
+    // ... (sin cambios) ...
     const now = new Date();
     const commentDate = new Date(date);
     const diffInSeconds = Math.floor((now - commentDate) / 1000);
@@ -1233,6 +1283,7 @@ const ReelsContainer = ({
   };
 
   const getVideoCounter = (videoId, type) => {
+    // ... (sin cambios) ...
     return videoCounters[videoId]?.[type] || 0;
   };
 
@@ -1243,6 +1294,7 @@ const ReelsContainer = ({
   const currentVideo = videos[currentIndex];
 
   if (videos.length === 0 && !loading) {
+    // ... (sin cambios) ...
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gray-900 text-white">
         <Icon name="Video" size={48} className="text-pink-500 mb-4" />
@@ -1302,7 +1354,25 @@ const ReelsContainer = ({
                   onError={(e) => console.error('Error de video:', e)}
                 />
 
-                {/* ❌ ELIMINADO: Notificación del centro del video */}
+                {/* ================================================== */}
+                {/* ✅ NUEVA NOTIFICACIÓN (SOBRE EL REPRODUCTOR)      */}
+                {/* ================================================== */}
+                {pointsNotification.show && pointsNotification.videoId === video.id && (
+                  <div 
+                    className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
+                      px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-center
+                      backdrop-blur-md animate-bounce
+                      ${pointsNotification.type === 'success' 
+                        ? 'bg-gradient-to-r from-yellow-400/80 to-orange-500/80' // Color de éxito original
+                        : 'bg-gradient-to-r from-gray-500/80 to-gray-600/80' // Color de restricción original
+                      }
+                    `}
+                    // Añadimos pointer-events-none para no bloquear el play/pause
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {pointsNotification.message}
+                  </div>
+                )}
 
                 {loadingVideo && index === currentIndex && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
@@ -1486,7 +1556,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* BOTÓN DE LIKE (SIN NOTIFICACIÓN CSS AQUÍ) */}
+            {/* ✅ BOTÓN DE LIKE (SIN NOTIFICACIÓN CSS AQUÍ) */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1497,6 +1567,8 @@ const ReelsContainer = ({
                 </div>
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
+              
+              {/* ❌ ELIMINADO: Notificación de puntos de al lado del botón */}
             </div>
 
             <button 
@@ -1508,7 +1580,7 @@ const ReelsContainer = ({
               </div>
             </button>
             
-            {/* NUEVO BOTÓN DE REGALO - MOBILE */}
+            {/* ✅ NUEVO BOTÓN DE REGALO - MOBILE */}
             {currentUser && currentUser.id !== currentVideo.creator?.id && (
                 <button 
                     onClick={(e) => handleGiftClick(currentVideo, e)} 
@@ -1609,7 +1681,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* BOTÓN DE LIKE - DESKTOP (SIN NOTIFICACIÓN CSS AQUÍ) */}
+            {/* ✅ BOTÓN DE LIKE - DESKTOP (SIN NOTIFICACIÓN CSS AQUÍ) */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1622,6 +1694,8 @@ const ReelsContainer = ({
                   {formatCount(getVideoCounter(currentVideo.id, 'likes'))}
                 </span>
               </button>
+
+              {/* ❌ ELIMINADO: Notificación de puntos de al lado del botón */}
             </div>
 
             <button 
@@ -1633,7 +1707,7 @@ const ReelsContainer = ({
               </div>
             </button>
             
-            {/* NUEVO BOTÓN DE REGALO - DESKTOP */}
+            {/* ✅ NUEVO BOTÓN DE REGALO - DESKTOP */}
             {currentUser && currentUser.id !== currentVideo.creator?.id && (
                 <button 
                     onClick={(e) => handleGiftClick(currentVideo, e)} 
@@ -1699,9 +1773,10 @@ const ReelsContainer = ({
           </div>
         )}
 
-        {/* PANEL DE COMENTARIOS - DESKTOP (Sin cambios) */}
+        {/* PANEL DE COMENTARIOS - DESKTOP */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4">
+            {/* ... (sin cambios en el panel de comentarios) ... */}
             {/* Header del panel */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
@@ -1835,7 +1910,7 @@ const ReelsContainer = ({
         )}
       </div>
 
-      {/* MODAL DE COMENTARIOS - MOBILE (Sin cambios) */}
+      {/* MODAL DE COMENTARIOS - MOBILE */}
       {showCommentsModal && currentVideo && isMobile && (
         <div 
           className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
@@ -1845,6 +1920,7 @@ const ReelsContainer = ({
             className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* ... (sin cambios en el modal de comentarios) ... */}
             {/* Header del modal */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
@@ -1978,7 +2054,7 @@ const ReelsContainer = ({
         </div>
       )}
       
-      {/* MODAL DE REGALO DE PUNTOS (Sin cambios) */}
+      {/* ✅ MODAL DE REGALO DE PUNTOS */}
       {showGiftModal && currentVideo && currentUser && (
         <GiftPointsModal
           isOpen={showGiftModal}
@@ -1990,26 +2066,6 @@ const ReelsContainer = ({
           onSuccess={handleGiftSuccess}
         />
       )}
-
-      {/* ================================================================== */}
-      {/* ✅ NUEVA NOTIFICACIÓN (GARANTIZADA) CON 'position: fixed'         */}
-      {/* ================================================================== */}
-      {pointsNotification.show && (
-        <div 
-          className={`fixed top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999]
-            min-w-[300px] max-w-lg w-auto
-            px-8 py-6 rounded-2xl shadow-2xl text-white font-bold text-center text-lg
-            backdrop-blur-xl animate-bounce
-            ${pointsNotification.type === 'success' 
-              ? 'bg-gradient-to-r from-yellow-400/90 to-orange-500/90' // Color de éxito
-              : 'bg-gradient-to-r from-gray-500/90 to-gray-600/90' // Color de restricción
-            }
-          `}
-        >
-          {pointsNotification.message}
-        </div>
-      )}
-
     </div>
   );
 };
