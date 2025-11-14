@@ -1,14 +1,10 @@
 // src/pages/video-feed-dashboard/index.jsx  
 // VideoFeedDashboard OPTIMIZADO - Query con JOIN directo a user_profiles
-// ✅ ACTUALIZADO: Con carrusel de reels para desktop + aleatorización completa
-// ✅ CORREGIDO: Navegación del carrusel desktop (cambia vista en vez de navegar)
-// ✅ CORREGIDO: Pasa ID del video en lugar de índice para reproducción correcta
-// ✅ CORREGIDO: shuffleArray movida fuera del hook para evitar error
-// ✅ CORREGIDO: Carrusel desktop no desaparece - usa videos sin filtrar por orientación
-// ✅ NUEVO: Recibe orientación desde Header para navegación directa a Reels/Videos
-// ✅ NUEVO: Reemplazada TrendingSidebar por PointsBalanceCard
+// ... (otros comentarios)
 // ✅ FUNCIONAL: El hook de puntos ahora carga Puntos Gratis/Premium y Misiones
-// ✅ FINAL: Añadido EarningTipsCard al sidebar
+// ✅ CORREGIDO: Añadida suscripción a 'mission_progress' para que el panel
+//    se actualice en tiempo real al progresar en una misión.
+// ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
@@ -23,9 +19,8 @@ import VideoFeedGrid from './components/VideoFeedGrid';
 import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
 // ❌ TrendingSidebar ya no se usa
 // import TrendingSidebar from './components/TrendingSidebar'; 
-// ✅ Componentes del nuevo sidebar
 import PointsBalanceCard from '../points-rewards-store/components/PointsBalanceCard';
-import EarningTipsCard from './components/EarningTipsCard'; // ✅ AÑADIDO
+import EarningTipsCard from './components/EarningTipsCard';
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
 import PullToRefresh from './components/PullToRefresh';
 import PointsBalanceIndicator from '../../components/ui/PointsBalanceIndicator';
@@ -285,7 +280,7 @@ const useVideos = () => {
 };
 
 // ===============================
-// ✅ HOOK FUNCIONAL: Carga Puntos y Misiones
+// ✅ HOOK MODIFICADO: Ahora carga Puntos y Misiones
 // ===============================
 const useUserPointsAndMissions = () => {
   const { user } = useAuth();
@@ -317,7 +312,8 @@ const useUserPointsAndMissions = () => {
         });
       }
 
-      // 2. Cargar Misiones (usando el service)
+      // 2. Cargar Misiones (usando el service que ya tienes)
+      // Usamos 'includeCompleted: false' para mostrar solo misiones activas
       const missionResult = await missionsService.getDailyMissions({ 
         includeCompleted: false 
       });
@@ -330,6 +326,7 @@ const useUserPointsAndMissions = () => {
         if (todayStats.success && todayStats.stats.daily_points_earned) {
             setPointsEarnedToday(todayStats.stats.daily_points_earned);
         } else {
+            // Fallback por si 'getMissionStats' no funciona como se espera
             setPointsEarnedToday(0); 
         }
       }
@@ -339,23 +336,24 @@ const useUserPointsAndMissions = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // fetchAllData no tiene dependencias externas (usa 'user' de useAuth)
 
   useEffect(() => {
     if (user?.id) {
-      fetchAllData(user.id);
+      fetchAllData(user.id); // Carga inicial
 
-      // Suscribirse a cambios en tiempo real (solo para puntos)
-      const subscription = supabase
-        .channel('user-points')
+      // 1. Suscripción a PUNTOS (user_profiles)
+      const pointsSubscription = supabase
+        .channel('user-points-balance') // Nombre de canal único
         .on('postgres_changes', 
           { 
             event: 'UPDATE', 
             schema: 'public', 
-            table: 'user_profiles',
+            table: 'user_profiles', //
             filter: `id=eq.${user.id}`
           }, 
           (payload) => {
+            console.log('🔄 (Real-time) Cambio de Puntos detectado!', payload.new);
             setPointsData({
               totalPoints: payload.new.points || 0,
               freePoints: payload.new.free_points || 0,
@@ -365,11 +363,33 @@ const useUserPointsAndMissions = () => {
         )
         .subscribe();
 
+      // ================================================================
+      // ✅ 2. NUEVA SUSCRIPCIÓN a PROGRESO DE MISIONES (mission_progress)
+      // ================================================================
+      const missionsSubscription = supabase
+        .channel('user-missions-progress') // Nombre de canal único
+        .on('postgres_changes',
+          {
+            event: '*', // Escuchar INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'mission_progress', //
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔄 (Real-time) Cambio de Misión detectado!', payload);
+            // Un cambio en el progreso (ej. 2/10 -> 3/10) o la finalización
+            // de una misión debe recargar TODOS los datos (misiones Y stats).
+            fetchAllData(user.id);
+          }
+        )
+        .subscribe();
+
       return () => {
-        subscription.unsubscribe();
+        supabase.removeChannel(pointsSubscription);
+        supabase.removeChannel(missionsSubscription); // <-- Asegurarse de limpiar
       };
     }
-  }, [user, fetchAllData]);
+  }, [user, fetchAllData]); // fetchAllData está en useCallback, es seguro
 
   // Función 'addPoints' (para animación)
   const addPoints = useCallback((amount) => {
@@ -424,7 +444,7 @@ const VideoFeedDashboard = () => {
   const [layout, setLayout] = useState('grid');
   const [pointsAnimation, setPointsAnimation] = useState(null);
   const [selectedReelId, setSelectedReelId] = useState(null);
-  
+
   // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
   useEffect(() => {
     if (location.state?.orientation) {
