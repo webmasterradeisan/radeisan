@@ -97,7 +97,17 @@ export const PointsProvider = ({ children }) => {
       // Cargar datos en paralelo
       const [pointsResult, missionsResult, statsResult] = await Promise.all([
         getUserPoints(user.id),
-        getDailyMissions({ includeCompleted: false }), // Solo misiones activas
+        
+        // ============================================================
+        // ✅ INICIO DE LA CORRECCIÓN
+        // Se añade 'frequency: 'all'' para obtener misiones
+        // diarias, semanales, de una vez, etc.
+        // ============================================================
+        getDailyMissions({ includeCompleted: false, frequency: 'all' }),
+        // ============================================================
+        // ✅ FIN DE LA CORRECCIÓN
+        // ============================================================
+        
         getMissionStats()
       ]);
       
