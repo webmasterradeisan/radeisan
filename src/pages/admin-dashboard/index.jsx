@@ -119,25 +119,28 @@ const StatsCard = ({
  */
 const ActivityItem = ({ activity }) => {
   const getActivityIcon = () => {
+    // --- ✅ SECCIÓN CORREGIDA ---
+    // Ajustamos los 'case' para que coincidan con los datos
+    // que envía la base de datos (ej. 'video_upload' en lugar de 'video_uploaded')
     switch (activity.action_type) {
       case 'user_registered':
         return { icon: 'UserPlus', color: 'text-green-600', bg: 'bg-green-100' };
       
-      // CORREGIDO: sin 'ed'
-      case 'video_upload': 
+      // Corregido
+      case 'video_upload':
         return { icon: 'Video', color: 'text-blue-600', bg: 'bg-blue-100' };
       
-      // CORREGIDO: sin 'ed'
-      case 'photo_upload': 
+      // Corregido
+      case 'photo_upload':
         return { icon: 'Image', color: 'text-purple-600', bg: 'bg-purple-100' };
       
       case 'reward_redeemed':
         return { icon: 'Gift', color: 'text-orange-600', bg: 'bg-orange-100' };
       
-      // NUEVO: para 'likes'
+      // Añadido
       case 'like_videos':
         return { icon: 'Heart', color: 'text-red-500', bg: 'bg-red-100' };
-
+        
       case 'points_earned':
         return { icon: 'Coins', color: 'text-yellow-600', bg: 'bg-yellow-100' };
       
@@ -162,7 +165,7 @@ const ActivityItem = ({ activity }) => {
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-900 font-medium truncate">
           {activity.user_name || 'Usuario'}
-        </p>
+        </Grama>
         <p className="text-sm text-gray-600 truncate">
           {activity.description}
         </p>
