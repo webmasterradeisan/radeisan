@@ -1,24 +1,26 @@
 // src/pages/video-feed-dashboard/index.jsx  
 // VideoFeedDashboard OPTIMIZADO - Query con JOIN directo a user_profiles
 // ... (otros comentarios)
-// ✅ FUNCIONAL: El hook de puntos ahora carga Puntos Gratis/Premium y Misiones
-// ✅ CORREGIDO: Añadida suscripción a 'mission_progress' para que el panel
-//    se actualice en tiempo real al progresar en una misión.
-// ============================================================================
+// ✅ SINCRONIZADO: Eliminado el hook local 'useUserPoints'.
+// ✅ SINCRONIZADO: Ahora usa 'usePoints()' (el Contexto global) como única fuente
+//    de verdad para puntos, misiones y animaciones.
+// ✅ SINCRONIZADO: 'TrendingSidebar' reemplazado por 'PointsBalanceCard' y
+//    'EarningTipsCard' con datos del contexto.
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+// ✅ Importamos el Contexto de Puntos mejorado
+import { usePoints } from '../../contexts/PointsContext';
 import { supabase } from '../../lib/supabase';
-// ✅ NUEVA IMPORTACIÓN DEL SERVICIO DE MISIONES
-import * as missionsService from '../../services/missionsService'; 
 import Header from '../../components/ui/Header';
 import FilterChips from './components/FilterChips';
 import VideoFeedGrid from './components/VideoFeedGrid';
 import ReelsCarouselDesktop from './components/ReelsCarouselDesktop';
 // ❌ TrendingSidebar ya no se usa
-// import TrendingSidebar from './components/TrendingSidebar'; 
+// import TrendingSidebar from './components/TrendingSidebar';
+// ✅ Nuevos componentes del Sidebar
 import PointsBalanceCard from '../points-rewards-store/components/PointsBalanceCard';
 import EarningTipsCard from './components/EarningTipsCard';
 import PointsFloatingAnimation from './components/PointsFloatingAnimation';
@@ -184,7 +186,7 @@ const useVideos = () => {
         .eq('is_published', true)
         .order('created_at', { ascending: false });
 
-      // Filtrar por categoría si no es 'todos' y category !== 'all'
+      // Filtrar por categoría si no es 'todos'
       if (category !== 'todos' && category !== 'all') {
         query = query.eq('category', category);
       }
@@ -266,7 +268,7 @@ const useVideos = () => {
 
   useEffect(() => {
     loadVideos(0, 'todos', true);
-  }, []);
+  }, [loadVideos]); // 🛑 'loadVideos' es la única dependencia necesaria
 
   return {
     videos,
@@ -279,130 +281,8 @@ const useVideos = () => {
   };
 };
 
-// ===============================
-// ✅ HOOK MODIFICADO: Ahora carga Puntos y Misiones
-// ===============================
-const useUserPointsAndMissions = () => {
-  const { user } = useAuth();
-  const [pointsData, setPointsData] = useState({
-    totalPoints: 0,
-    freePoints: 0,
-    premiumPoints: 0
-  });
-  const [missions, setMissions] = useState([]);
-  const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  const fetchAllData = useCallback(async (userId) => {
-    try {
-      setLoading(true);
-      
-      // 1. Cargar Puntos (Gratis y Premium)
-      const { data: profileData } = await supabase
-        .from('user_profiles')
-        .select('points, free_points, premium_points') // <-- Query modificada
-        .eq('id', userId)
-        .single();
-      
-      if (profileData) {
-        setPointsData({
-          totalPoints: profileData.points || 0,
-          freePoints: profileData.free_points || 0,
-          premiumPoints: profileData.premium_points || 0
-        });
-      }
-
-      // 2. Cargar Misiones (usando el service que ya tienes)
-      // Usamos 'includeCompleted: false' para mostrar solo misiones activas
-      const missionResult = await missionsService.getDailyMissions({ 
-        includeCompleted: false 
-      });
-
-      if (missionResult.success) {
-        setMissions(missionResult.missions.active || []);
-        
-        // 3. Cargar Estadísticas de Puntos Ganados Hoy
-        const todayStats = await missionsService.getMissionStats();
-        if (todayStats.success && todayStats.stats.daily_points_earned) {
-            setPointsEarnedToday(todayStats.stats.daily_points_earned);
-        } else {
-            // Fallback por si 'getMissionStats' no funciona como se espera
-            setPointsEarnedToday(0); 
-        }
-      }
-      
-    } catch (error) {
-      console.error("Error cargando datos de puntos y misiones:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []); // fetchAllData no tiene dependencias externas (usa 'user' de useAuth)
-
-  useEffect(() => {
-    if (user?.id) {
-      fetchAllData(user.id); // Carga inicial
-
-      // 1. Suscripción a PUNTOS (user_profiles)
-      const pointsSubscription = supabase
-        .channel('user-points-balance') // Nombre de canal único
-        .on('postgres_changes', 
-          { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'user_profiles', //
-            filter: `id=eq.${user.id}`
-          }, 
-          (payload) => {
-            console.log('🔄 (Real-time) Cambio de Puntos detectado!', payload.new);
-            setPointsData({
-              totalPoints: payload.new.points || 0,
-              freePoints: payload.new.free_points || 0,
-              premiumPoints: payload.new.premium_points || 0
-            });
-          }
-        )
-        .subscribe();
-
-      // ================================================================
-      // ✅ 2. NUEVA SUSCRIPCIÓN a PROGRESO DE MISIONES (mission_progress)
-      // ================================================================
-      const missionsSubscription = supabase
-        .channel('user-missions-progress') // Nombre de canal único
-        .on('postgres_changes',
-          {
-            event: '*', // Escuchar INSERT, UPDATE, DELETE
-            schema: 'public',
-            table: 'mission_progress', //
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            console.log('🔄 (Real-time) Cambio de Misión detectado!', payload);
-            // Un cambio en el progreso (ej. 2/10 -> 3/10) o la finalización
-            // de una misión debe recargar TODOS los datos (misiones Y stats).
-            fetchAllData(user.id);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(pointsSubscription);
-        supabase.removeChannel(missionsSubscription); // <-- Asegurarse de limpiar
-      };
-    }
-  }, [user, fetchAllData]); // fetchAllData está en useCallback, es seguro
-
-  // Función 'addPoints' (para animación)
-  const addPoints = useCallback((amount) => {
-    setPointsData(prev => ({
-      ...prev,
-      totalPoints: prev.totalPoints + amount,
-      freePoints: prev.freePoints + amount // Asumimos que los puntos ganados son gratis
-    }));
-  }, []);
-
-  return { pointsData, missions, pointsEarnedToday, loading, addPoints };
-};
-
+// ❌ ELIMINADO: Hook local 'useUserPoints'
+// (La lógica ahora está en PointsContext)
 
 // Configuración de categorías
 const VIDEO_CATEGORIES = [
@@ -424,17 +304,23 @@ const VideoFeedDashboard = () => {
   const { user } = useAuth();
   const { videos, loading: videosLoading, error, hasMore, orientationStats, loadMore, refresh } = useVideos();
   
-  // ✅ LLAMANDO AL NUEVO HOOK FUNCIONAL
+  // ================================================================
+  // ✅ SINCRONIZACIÓN: Usando el Contexto Global
+  // ================================================================
   const { 
-    pointsData, 
-    missions, 
-    pointsEarnedToday, 
+    totalPoints,
+    freePoints,
+    premiumPoints,
+    missions,
+    pointsEarnedToday,
     loading: sidebarLoading, 
-    addPoints 
-  } = useUserPointsAndMissions();
+    addPoints, // Sigue disponible por si VideoFeedGrid lo usa
+    pointsAnimation // Obtenemos la animación del contexto
+  } = usePoints();
+  // ================================================================
   
   const isMobile = useIsMobile();
-  const location = useLocation(); 
+  const location = useLocation(); // ✅ AGREGADO: Para recibir el state de navegación
 
   const [filteredVideos, setFilteredVideos] = useState([]);
   const [shuffledReels, setShuffledReels] = useState([]);
@@ -442,8 +328,10 @@ const VideoFeedDashboard = () => {
   const [activeFilter, setActiveFilter] = useState('todos');
   const [activeOrientation, setActiveOrientation] = useState('all');
   const [layout, setLayout] = useState('grid');
-  const [pointsAnimation, setPointsAnimation] = useState(null);
   const [selectedReelId, setSelectedReelId] = useState(null);
+
+  // ❌ ELIMINADO: Estado de animación local
+  // const [pointsAnimation, setPointsAnimation] = useState(null); 
 
   // ✅ NUEVO: Efecto para aplicar orientación desde navegación del Header
   useEffect(() => {
@@ -565,16 +453,9 @@ const VideoFeedDashboard = () => {
     loadMore();
   }, [loadMore]);
 
-  const handlePointsEarned = useCallback((points) => {
-    console.log(`⭐ Puntos ganados: ${points}`);
-    addPoints(points);
-    setPointsAnimation({ points });
-  }, [addPoints]);
-
-  const handleAnimationComplete = useCallback(() => {
-    console.log('✅ Animación de puntos completada');
-    setPointsAnimation(null);
-  }, []);
+  // ❌ ELIMINADO: handlePointsEarned y handleAnimationComplete
+  // El PointsContext y sus componentes hijos (Reels/VideoPlayer)
+  // ahora manejan esto automáticamente.
 
   // ===============================
   // ✅ HANDLER PARA REELS EN DESKTOP - CAMBIA VISTA EN LUGAR DE NAVEGAR
@@ -641,7 +522,7 @@ const VideoFeedDashboard = () => {
                     </h1>
                     <div className="hidden sm:block">
                       <PointsBalanceIndicator 
-                        points={pointsData.totalPoints} // ✅ USA EL NUEVO HOOK
+                        points={totalPoints} // ✅ SINCRONIZADO
                         showAnimation={true}
                         size="default"
                         variant="prominent"
@@ -664,13 +545,13 @@ const VideoFeedDashboard = () => {
                       variant="outline"
                       size="icon"
                       onClick={handleRefresh}
-                      disabled={videosLoading} // Usamos videosLoading
+                      disabled={videosLoading} // ✅ Sincronizado con 'videosLoading'
                       title="Actualizar feed"
                     >
                       <Icon 
                         name="RefreshCw" 
                         size={20} 
-                        className={videosLoading ? 'animate-spin' : ''} 
+                        className={videosLoading ? 'animate-spin' : ''} // ✅ Sincronizado
                       />
                     </Button>
                   </div>
@@ -775,7 +656,7 @@ const VideoFeedDashboard = () => {
                           orientation={activeOrientation}
                           selectedReelId={selectedReelId}
                           onLoadMore={handleLoadMore}
-                          onPointsEarned={handlePointsEarned}
+                          // ❌ 'onPointsEarned' eliminado, el contexto lo maneja
                           hasMore={hasMore}
                           loading={videosLoading}
                         />
@@ -786,40 +667,40 @@ const VideoFeedDashboard = () => {
               </div>
 
               {/* ================================================== */}
-              {/* ✅ SIDEBAR FINAL CON AMBOS COMPONENTES          */}
+              {/* ✅ SIDEBAR SINCRONIZADO CON CONTEXTO              */}
               {/* ================================================== */}
               <div className="hidden xl:block space-y-6">
+                {/* ❌ TrendingSidebar ELIMINADO */}
                 
-                {/* Panel de Puntos y Misiones */}
+                {/* ✅ Panel de Puntos y Misiones */}
                 <PointsBalanceCard
-                  freePoints={pointsData.freePoints}
-                  premiumPoints={pointsData.premiumPoints}
+                  freePoints={freePoints}
+                  premiumPoints={premiumPoints}
                   pointsEarnedToday={pointsEarnedToday}
                   nextRewardThreshold={0} // TODO: Este valor necesita lógica
                   missions={missions}
                   loading={sidebarLoading} 
                 />
 
-                {/* Panel de "Cómo ganar más puntos" */}
+                {/* ✅ Panel de "Cómo ganar más puntos" */}
                 <EarningTipsCard />
-
               </div>
             </div>
           </div>
         </main>
 
-        {/* Points Animation */}
-        {pointsAnimation && (
+        {/* ✅ Points Animation (leído desde el contexto) */}
+        {pointsAnimation.show && (
           <PointsFloatingAnimation
-            points={pointsAnimation?.points}
-            onAnimationComplete={handleAnimationComplete}
+            points={pointsAnimation.amount}
+            // ❌ 'onAnimationComplete' eliminado, el contexto lo maneja
           />
         )}
 
         {/* Mobile Points Indicator */}
         <div className="fixed top-20 right-4 z-40 sm:hidden">
           <PointsBalanceIndicator 
-            points={pointsData.totalPoints} // ✅ USA EL NUEVO HOOK
+            points={totalPoints} // ✅ SINCRONIZADO
             showAnimation={true}
             size="sm"
             variant="prominent"
@@ -839,8 +720,9 @@ const VideoFeedDashboard = () => {
             <div>🎥 shuffled reels: {shuffledReels.length}</div>
             <div>🎬 shuffled horizontals: {shuffledHorizontals.length}</div>
             <div>🔄 videosLoading: {videosLoading.toString()}</div>
+            {/* ✅ Datos del Contexto Global */}
             <div>📊 sidebarLoading: {sidebarLoading.toString()}</div>
-            <div>💰 Puntos: G:{pointsData.freePoints} P:{pointsData.premiumPoints}</div>
+            <div>💰 Puntos: G:{freePoints} P:{premiumPoints}</div>
             <div>🚀 Misiones: {missions.length}</div>
             <div>📈 Hoy: {pointsEarnedToday}</div>
             <div>🆔 selectedReelId: {selectedReelId || 'null'}</div>
