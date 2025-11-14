@@ -122,16 +122,25 @@ const ActivityItem = ({ activity }) => {
     switch (activity.action_type) {
       case 'user_registered':
         return { icon: 'UserPlus', color: 'text-green-600', bg: 'bg-green-100' };
-      case 'video_uploaded':
+      
+      // CORREGIDO: sin 'ed'
+      case 'video_upload': 
         return { icon: 'Video', color: 'text-blue-600', bg: 'bg-blue-100' };
-      case 'photo_uploaded':
+      
+      // CORREGIDO: sin 'ed'
+      case 'photo_upload': 
         return { icon: 'Image', color: 'text-purple-600', bg: 'bg-purple-100' };
+      
       case 'reward_redeemed':
         return { icon: 'Gift', color: 'text-orange-600', bg: 'bg-orange-100' };
+      
+      // NUEVO: para 'likes'
+      case 'like_videos':
+        return { icon: 'Heart', color: 'text-red-500', bg: 'bg-red-100' };
+
       case 'points_earned':
         return { icon: 'Coins', color: 'text-yellow-600', bg: 'bg-yellow-100' };
       
-      // --- ✅ LÍNEA CORREGIDA ---
       case 'admin_adjustment':
         return { icon: 'Settings2', color: 'text-gray-600', bg: 'bg-gray-100' };
 
