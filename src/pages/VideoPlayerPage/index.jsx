@@ -4,7 +4,7 @@
 // ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
 // ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
 // ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
-// 🟢 4. (SINCRONIZADO) 'fetchVideoData' ahora consulta 'user_mission_progress'
+// 🟢 4. (SINCRONIZADO) 'fetchVideoData' ahora consulta 'mission_progress'
 //    para el anti-farming diario (en lugar de 'user_video_points').
 // 🟢 5. (SINCRONIZADO) 'handleLike' ahora usa la misma lógica de notificación
 //    flotante que el ReelsContainer (progreso, completado, ya ganado).
@@ -12,6 +12,8 @@
 //    que causaban el error 400.
 // 🟢 7. (CORREGIDO) Eliminadas todas las referencias a la tabla 'user_video_points'
 //    (que no existe) para prevenir errores '42P01'.
+// 🟢 8. (BUG FIX) Movidas las definiciones de togglePlayPause, toggleMute, etc., 
+//    antes del useEffect(handleKeyPress) para evitar ReferenceError (el crash).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -928,6 +930,38 @@ const VideoPlayerPage = () => {
       console.error('Error al guardar:', err);
     }
   };
+
+  const handleShare = async () => {
+    if (!user) {
+        navigate('/login');
+        return;
+    }
+    
+    const url = `${window.location.origin}/video/${videoId}`;
+    setShareLink(url);
+    setShowShareModal(true);
+
+    if (!hasEarnedSharePoints) {
+      setHasEarnedSharePoints(true); 
+      
+      try {
+        const result = await trackShareContent('video', videoId, 'link'); 
+
+        if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
+          updatePointsContext(result.points_earned);
+          // Usamos la notificación grande
+          showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
+        } else if (result.result === 'already_paid') {
+          showUserFeedback('PUNTOS YA GANADOS por compartir este contenido.', 'restriction');
+        } else if (result.result === 'error') {
+           setHasEarnedSharePoints(false);
+        }
+      } catch (pointsError) {
+        console.error('❌ Error al otorgar puntos/misión por Compartir:', pointsError);
+        setHasEarnedSharePoints(false);
+      }
+    }
+  };
   
   // ✅ NUEVA FUNCIÓN: Abrir Modal de Regalo
   const handleGift = () => {
@@ -1111,6 +1145,12 @@ const VideoPlayerPage = () => {
       console.error('Error al eliminar comentario:', err);
     }
   };
+
+  // ❌ FUNCIONES MOVIDAS A LA PARTE SUPERIOR DEL COMPONENTE
+  // togglePlayPause
+  // handleVolumeChange
+  // toggleMute
+  // toggleFullscreen
 
   const handleTimeUpdate = () => {
     const currentVideo = videoRef.current;
