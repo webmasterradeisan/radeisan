@@ -129,32 +129,21 @@ export const isAdmin = async (userId) => {
 
 /**
  * Obtiene las estadísticas principales del dashboard
- * ✅ MODIFICADO: Ahora separa videos horizontales y reels verticales
+ * ✅ MODIFICADO: Ahora solo llama a la RPC que calcula todo.
  * @returns {Promise<Object>} Estadísticas del dashboard
  */
 export const getAdminStats = async () => {
   try {
-    // Llamar a la función RPC original
+    // 1. Llamar a la función RPC (que ahora lo hace todo)
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_dashboard_stats');
 
     if (rpcError) throw rpcError;
 
-    // 🆕 CONSULTAS ADICIONALES: Separar videos por orientación
-    const { count: horizontalCount } = await supabase
-      .from('videos')
-      .select('*', { count: 'exact', head: true })
-      .eq('orientation', 'horizontal');
-
-    const { count: verticalCount } = await supabase
-      .from('videos')
-      .select('*', { count: 'exact', head: true })
-      .eq('orientation', 'vertical');
-
-    // Combinar resultados
+    // 2. Simplemente asignar los resultados
     const stats = {
       total_users: rpcData?.total_users || 0,
-      total_videos: horizontalCount || 0, // Videos horizontales
-      total_reels: verticalCount || 0,    // Reels verticales
+      total_videos: rpcData?.total_videos || 0, // Ahora viene de la RPC (horizontales)
+      total_reels: rpcData?.total_reels || 0,    // Ahora viene de la RPC (verticales)
       total_photos: rpcData?.total_photos || 0,
       total_points_distributed: rpcData?.total_points_distributed || 0,
       active_users_today: rpcData?.active_users_today || 0,
@@ -163,7 +152,7 @@ export const getAdminStats = async () => {
       total_premium_sales: rpcData?.total_premium_sales || 0,
     };
 
-    return { stats }; // Devolver en el mismo formato que espera el componente
+    return { stats };
   } catch (error) {
     console.error('Error al obtener estadísticas del admin:', error);
     // Devolver estructura vacía en caso de error
@@ -693,7 +682,7 @@ export const formatRelativeDate = (date) => {
   if (diffMins < 60) return `Hace ${diffMins} min`;
   if (diffHours < 24) return `Hace ${diffHours}h`;
   if (diffDays < 7) return `Hace ${diffDays}d`;
-  return past.toLocaleDateString('es-ES');
+  return past.toLocaleString('es-ES');
 };
 
 export default {
