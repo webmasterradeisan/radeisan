@@ -165,7 +165,7 @@ const ActivityItem = ({ activity }) => {
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-900 font-medium truncate">
           {activity.user_name || 'Usuario'}
-        </Grama>
+        </p> {/* --- ✅ LÍNEA 168 CORREGIDA (antes </Grama>) --- */}
         <p className="text-sm text-gray-600 truncate">
           {activity.description}
         </p>
@@ -347,7 +347,7 @@ const AdminDashboard = () => {
     }
   }, [roleLoading, isAdmin, loadData]);
 
-  // ============================================
+// ============================================
   // HANDLERS
   // ============================================
   const handleRefresh = () => {
@@ -444,7 +444,7 @@ const AdminDashboard = () => {
           loading={loading}
         />
 
-        <StatsCard
+<StatsCard
           title="Fotos"
           value={stats?.total_photos || 0}
           icon="Image"
