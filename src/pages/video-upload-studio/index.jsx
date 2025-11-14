@@ -1296,11 +1296,9 @@ const VideoUploadStudio = () => {
                       {uploadSuccess.orientation === 'vertical' ? '¡Reel publicado exitosamente!' : '¡Video publicado exitosamente!'}
                     </h2>
                     
-                    {/* ✅✅✅ INICIO DE LA CORRECCIÓN DE ERROR 1 ✅✅✅ */}
                     <p className="text-muted-foreground mb-6">
                       Tu {uploadSuccess.orientation === 'vertical' ? 'reel' : 'video'} está ahora disponible para la comunidad
                     </p>
-                    {/* ✅✅✅ FIN DE LA CORRECCIÓN DE ERROR 1 (era </f>) ✅✅✅ */}
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                       <div className="p-4 bg-muted/50 rounded-lg">
@@ -1308,7 +1306,6 @@ const VideoUploadStudio = () => {
                           <Icon name="Award" size={20} color="var(--color-primary)" />
                           <span className="font-medium">Puntos ganados</span>
                         </div>
-                        {/* ✅ CORRECCIÓN: Muestra puntos solo si se ganaron */}
                         <p className="text-2xl font-bold text-primary">
                           {uploadSuccess.pointsEarned > 0 ? `+${uploadSuccess.pointsEarned}` : 'Revisando...'}
                         </p>
@@ -1332,13 +1329,6 @@ const VideoUploadStudio = () => {
                         <p className="text-xs text-muted-foreground">{uploadSuccess.aspectRatio}</p>
                       </div>
                     </div>
-
-                    {/* ✅✅✅ INICIO DE LA CORRECCIÓN DE ERROR 2 ✅✅✅ */}
-                    {/* El bloque "Desglose de puntos" se ha eliminado por completo
-                        porque 'uploadSuccess.pointsBreakdown' ya no es un objeto
-                        válido después de cambiar a 'missionsService'.
-                    */}
-                    {/* ✅✅✅ FIN DE LA CORRECCIÓN DE ERROR 2 ✅✅✅ */}
 
                     <div className="flex flex-col sm:flex-row gap-4">
                       <Button 
@@ -1474,9 +1464,11 @@ const VideoUploadStudio = () => {
                     </div>
                     <div className="flex items-start space-x-2">
                       <Icon name="Clock" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
+                      {/* ✅✅✅ INICIO DE LA CORRECCIÓN FINAL ✅✅✅ */}
                       <p className="text-muted-foreground">
                         Videos más largos generan más puntos por minuto (próximamente)
-                      </U>
+                      </p>
+                      {/* ✅✅✅ FIN DE LA CORRECCIÓN FINAL (era </U>) ✅✅✅ */}
                     </div>
                     <div className="flex items-start space-x-2">
                       <Icon name="Eye" size={16} color="var(--color-primary)" className="mt-0.5 flex-shrink-0" />
