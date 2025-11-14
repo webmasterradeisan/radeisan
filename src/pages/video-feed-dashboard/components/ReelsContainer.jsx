@@ -2,11 +2,10 @@
 // ============================================================================
 // REELS CONTAINER - Integrado con Sistema de Puntos
 // ... (comentarios de cabecera) ...
-// 🟢 REVERTIDO (11/13 v3): Eliminado SweetAlert2.
-// 🟢 RESTAURADO (11/13 v3): Vuelve el estado 'pointsNotification' y la
-//    función 'showPointsNotification'.
-// 🟢 NUEVO (11/13 v3): La notificación ahora se renderiza en el CENTRO
-//    del reproductor de video (sobre el reel) para garantizar visibilidad.
+// 🟢 NUEVO (11/13 v5): Se añaden llamadas RPC 'increment_video_likes' y
+//    'decrement_video_likes' en handleLike y handleDislike.
+//    Esto soluciona el reseteo del contador al recargar.
+// 🟢 MANTIENE (11/13 v4): Notificación 'position: fixed' garantizada.
 // 🟢 MANTIENE (11/13): Diagnóstico de RLS en 'loadComments'.
 // ============================================================================
 
@@ -18,13 +17,6 @@ import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
 import GiftPointsModal from 'components/GiftPointsModal'; 
-
-// ❌ ELIMINADO: Importar SweetAlert2
-// import Swal from 'sweetalert2';
-
-// ❌ ELIMINADO: Instancia de Toast
-// const Toast = Swal.mixin({ ... });
-
 
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
@@ -69,18 +61,18 @@ const ReelsContainer = ({
   // ✅ NUEVO: Estado para el Modal de Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
 
-  // ✅ RESTAURADO: Estado para notificaciones de puntos
+  // ✅ ESTADO DE NOTIFICACIÓN (v4)
   const [pointsNotification, setPointsNotification] = useState({
     show: false,
     message: '',
-    videoId: null,
-    type: 'success' // Añadido para controlar el color
+    videoId: null, 
+    type: 'success' 
   });
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
   const [actionsPerformed, setActionsPerformed] = useState({
-    likes: new Set(), // Esto ahora significa "misión de like completa hoy"
+    likes: new Set(), 
     saves: new Set(),
     follows: new Set(),
     comments: new Set(),
@@ -100,24 +92,19 @@ const ReelsContainer = ({
     videosCount: videos.length,
     currentIndex,
     selectedReelId,
-    enableTransition,
-    hasPlayedInitial: hasPlayedInitial.current,
-    isMobile,
-    isDesktop,
     showCommentsModal,
     showGiftModal 
   });
 
-  // ✅ RESTAURADO: Función para mostrar notificación de puntos
+  // ✅ FUNCIÓN DE NOTIFICACIÓN (v4)
   const showPointsNotification = (message, videoId, type = 'success') => {
     setPointsNotification({
       show: true,
       message,
       videoId,
-      type // Añadimos tipo para controlar color
+      type 
     });
     
-    // Auto ocultar después de 2 segundos
     setTimeout(() => {
       setPointsNotification({
         show: false,
@@ -152,7 +139,6 @@ const ReelsContainer = ({
     return index;
   }, [selectedReelId, videos]);
 
-  // ... (El resto de useEffects de sincronización, carga de usuario y reproducción no cambian) ...
   // ===============================
   // SINCRONIZACIÓN INICIAL
   // ===============================
@@ -229,12 +215,10 @@ const ReelsContainer = ({
 
           // ================================================================
           // ✅ 2. SINCRONIZACIÓN: Cargar 'mission_progress' para anti-farming
-          //    Revisamos si la misión 'like_videos' ya se completó HOY.
           // ================================================================
           try {
             const today = new Date().toISOString().split('T')[0];
             
-            // 2a. Buscar el ID de la misión 'like_videos'
             const { data: mission } = await supabase
               .from('daily_missions')
               .select('id')
@@ -242,7 +226,6 @@ const ReelsContainer = ({
               .single();
 
             if (mission) {
-              // 2b. Buscar si el usuario ya completó esa misión HOY
               const { data: progressData, error: progressError } = await supabase
                 .from('mission_progress') //
                 .select('is_completed')
@@ -252,28 +235,24 @@ const ReelsContainer = ({
                 .single();
 
               if (progressError && progressError.code !== 'PGRST116') {
-                throw progressError; // Lanzar error si no es "fila no encontrada"
+                throw progressError; 
               }
 
               if (progressData && progressData.is_completed) {
-                // Si la misión de "like_videos" está completa HOY,
-                // marcamos TODOS los videos como 'hasEarnedPointsBefore'
                 const allVideoIds = videos.map(v => v.id);
                 setActionsPerformed(prev => ({
                   ...prev,
-                  likes: new Set(allVideoIds) // Activamos anti-farming para todos
+                  likes: new Set(allVideoIds) 
                 }));
               } else {
-                // Aún no completa la misión de like hoy
                 setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
               }
             } else {
-              // No existe la misión 'like_videos', desactivamos anti-farming
               setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
             }
           } catch (err) {
             console.error("Error al verificar progreso de misión 'like_videos':", err);
-            setActionsPerformed(prev => ({ ...prev, likes: new Set() })); // Ser permisivo
+            setActionsPerformed(prev => ({ ...prev, likes: new Set() })); 
           }
 
           // ✅ CARGAR VIDEOS GUARDADOS
@@ -311,6 +290,10 @@ const ReelsContainer = ({
   // INICIALIZAR CONTADORES DE VIDEOS
   // ===============================
   useEffect(() => {
+    // ⚠️ ESTA ES LA CAUSA DEL PROBLEMA ORIGINAL.
+    // Si no actualizamos el 'likes_count' en la DB,
+    // este 'useEffect' reiniciará el contador a 0 en cada recarga.
+    // La solución (v5) está en 'handleLike', no aquí.
     const initialCounters = {};
     videos.forEach(video => {
       initialCounters[video.id] = {
@@ -499,6 +482,7 @@ const ReelsContainer = ({
         }));
 
         try {
+          // Esta función RPC debe existir en tu DB
           const { error } = await supabase.rpc('increment_video_views', { 
             video_id: currentVideoData.id 
           });
@@ -614,7 +598,7 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]); 
 
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE LIKE (Restaurado a 'showPointsNotification')
+  // ✅✅✅ ACCIÓN DE LIKE (CON RPC PARA PERSISTENCIA)
   // ==========================================================
   
   const handleLike = async (videoId, e) => {
@@ -665,6 +649,14 @@ const ReelsContainer = ({
         
         if (error) throw error;
         
+        // 🟢 NUEVO (v5): Actualizar el contador en la DB
+        const { error: rpcError } = await supabase.rpc('decrement_video_likes', { 
+          video_id: videoId 
+        });
+        if (rpcError) {
+          console.warn('Error RPC decrement_video_likes:', rpcError);
+        }
+        
       } catch (error) {
         console.error('❌ Error al quitar like, revirtiendo UI:', error);
         
@@ -706,56 +698,40 @@ const ReelsContainer = ({
           .insert({ video_id: videoId, user_id: user.id });
         
         if (error) throw error;
+        
+        // 🟢 NUEVO (v5): Actualizar el contador en la DB
+        const { error: rpcError } = await supabase.rpc('increment_video_likes', { 
+          video_id: videoId 
+        });
+        if (rpcError) {
+          console.warn('Error RPC increment_video_likes:', rpcError);
+        }
 
-
-        // ✅ VERIFICAR SI YA GANÓ PUNTOS HOY
+        // ✅ Lógica de Misiones (sin cambios)
         if (!hasEarnedPointsBefore) {
           try {
             const missionResult = await missionsService.trackGiveLike('video', videoId);
             
-            // ================================================================
-            // ✅ INICIO: LÓGICA DE NOTIFICACIONES (Restaurada)
-            // ================================================================
             if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
-              // 1. MISIÓN COMPLETA
               const pointsEarned = missionResult.points_earned; 
               await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
-              
-              // ✅ RESTAURADO
               showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId, 'success');
-              
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
 
             } else if (missionResult.result === 'progress_updated') {
-              // 2. PROGRESO REGISTRADO
-              
-              // ✅ RESTAURADO
               showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId, 'success');
                  
             } else if (missionResult.result === 'already_completed') {
-              // 3. ANTI-FARMING (Misión ya completada hoy)
-              
-              // ✅ RESTAURADO
               showPointsNotification(`Ya completaste la misión de Likes hoy.`, videoId, 'restriction');
-
               const allVideoIds = videos.map(v => v.id);
               setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
             }
-            // ================================================================
-            // ✅ FIN: LÓGICA DE NOTIFICACIONES
-            // ================================================================
-
           } catch (pointsError) {
             console.error('❌ Error al procesar puntos o misión:', pointsError);
           }
         } else {
-          // ==============================
-          // YA GANÓ PUNTOS HOY
-          // ==============================
           console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
-          
-          // ✅ RESTAURADO
           showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
         }
 
@@ -782,11 +758,10 @@ const ReelsContainer = ({
   };
 
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE DISLIKE (SINCRONIZADA CON REVERSIÓN)
+  // ✅✅✅ ACCIÓN DE DISLIKE (CON RPC PARA PERSISTENCIA)
   // ==========================================================
   
   const handleDislike = async (videoId, e) => {
-    // ... (sin cambios en la lógica, no tenía notificaciones) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -857,6 +832,14 @@ const ReelsContainer = ({
             .delete()
             .eq('video_id', videoId)
             .eq('user_id', user.id);
+            
+          // 🟢 NUEVO (v5): Actualizar el contador en la DB
+          const { error: rpcError } = await supabase.rpc('decrement_video_likes', { 
+            video_id: videoId 
+          });
+          if (rpcError) {
+            console.warn('Error RPC decrement_video_likes:', rpcError);
+          }
         }
         
       } catch (error) {
@@ -881,7 +864,6 @@ const ReelsContainer = ({
   };
 
   const handleSave = async (videoId, e) => {
-    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -917,7 +899,7 @@ const ReelsContainer = ({
   };
   
   // ==========================================================
-  // ✅✅✅ ACCIÓN DE REGALO (Restaurado a 'showPointsNotification')
+  // ✅✅✅ ACCIÓN DE REGALO (Llama a showPointsNotification)
   // ==========================================================
   const handleGiftClick = (video, e) => {
       if (e) {
@@ -931,7 +913,6 @@ const ReelsContainer = ({
       }
       
       if (currentUser.id === video.creator?.id) {
-          // ✅ RESTAURADO
           showPointsNotification('No puedes regalar puntos a tu propio reel.', video.id, 'restriction');
           return;
       }
@@ -941,11 +922,9 @@ const ReelsContainer = ({
   
   const handleGiftSuccess = (amount) => {
       const currentVideo = videos[currentIndex];
-      // ✅ RESTAURADO
       showPointsNotification(`¡Regalo enviado! ${amount} puntos para el creador.`, currentVideo.id, 'success');
   };
 
-  // ... (handleFollow no cambia) ...
   const handleFollow = async (creatorId, e) => {
     if (e) {
       e.stopPropagation();
@@ -990,7 +969,6 @@ const ReelsContainer = ({
   };
 
   const handleShare = async (video, e) => {
-    // ... (sin cambios, la notificación en clipboard era de SweetAlert) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1005,7 +983,6 @@ const ReelsContainer = ({
         });
       } else {
         navigator.clipboard.writeText(window.location.href);
-        // La notificación toast era de SweetAlert, la original era un 'alert'
         alert('Enlace copiado al portapapeles');
       }
     } catch (error) {
@@ -1014,7 +991,6 @@ const ReelsContainer = ({
   };
 
   const handleMuteToggle = (videoId, e) => {
-    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1040,7 +1016,6 @@ const ReelsContainer = ({
   // ===============================
   
   const loadComments = async (videoId, retryCount = 0) => {
-    // ... (sin cambios, mantiene el diagnóstico RLS) ...
     try {
       let { data, error } = await supabase
         .from('video_comments')
@@ -1086,6 +1061,7 @@ const ReelsContainer = ({
                 avatar: userProfile.avatar,
                 username: userProfile.username || userProfile.name || 'usuario'
               } : {
+                // 🟢 Diagnóstico de RLS
                 id: comment.user_id,
                 name: 'Usuario (Error RLS)',
                 avatar: null,
@@ -1132,7 +1108,6 @@ const ReelsContainer = ({
   };
 
   const handleOpenComments = async (videoId, e) => {
-    // ... (sin cambios) ...
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1146,7 +1121,6 @@ const ReelsContainer = ({
   };
 
   const handleCloseComments = () => {
-    // ... (sin cambios) ...
     console.log('❌ Cerrando modal de comentarios');
     setShowCommentsModal(false);
     setReplyingTo(null);
@@ -1154,7 +1128,6 @@ const ReelsContainer = ({
   };
 
   const handleAddComment = async (videoId) => {
-    // ... (sin cambios) ...
     if (!newComment.trim()) {
       console.log('❌ Comentario vacío');
       return;
@@ -1200,6 +1173,7 @@ const ReelsContainer = ({
 
       if (!replyingTo) {
         console.log('📊 Incrementando contador de comentarios...');
+        // Esta función RPC debe existir en tu DB
         const { error: rpcError } = await supabase.rpc('increment_video_comments', { video_id: videoId });
         if (rpcError) {
           console.error('⚠️ Error al incrementar contador:', rpcError);
@@ -1232,7 +1206,6 @@ const ReelsContainer = ({
   };
 
   const handleReply = (commentId, username) => {
-    // ... (sin cambios) ...
     console.log('💬 Respondiendo a comentario:', { commentId, username });
     setReplyingTo(commentId);
     
@@ -1249,13 +1222,11 @@ const ReelsContainer = ({
   };
 
   const handleCancelReply = () => {
-    // ... (sin cambios) ...
     setReplyingTo(null);
     setNewComment('');
   };
 
   const toggleReplies = (commentId) => {
-    // ... (sin cambios) ...
     setShowReplies(prev => ({
       ...prev,
       [commentId]: !prev[commentId]
@@ -1263,14 +1234,12 @@ const ReelsContainer = ({
   };
 
   const formatCount = (count) => {
-    // ... (sin cambios) ...
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count?.toString() || '0';
   };
 
   const formatTimeAgo = (date) => {
-    // ... (sin cambios) ...
     const now = new Date();
     const commentDate = new Date(date);
     const diffInSeconds = Math.floor((now - commentDate) / 1000);
@@ -1283,7 +1252,6 @@ const ReelsContainer = ({
   };
 
   const getVideoCounter = (videoId, type) => {
-    // ... (sin cambios) ...
     return videoCounters[videoId]?.[type] || 0;
   };
 
@@ -1294,7 +1262,6 @@ const ReelsContainer = ({
   const currentVideo = videos[currentIndex];
 
   if (videos.length === 0 && !loading) {
-    // ... (sin cambios) ...
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gray-900 text-white">
         <Icon name="Video" size={48} className="text-pink-500 mb-4" />
@@ -1353,26 +1320,6 @@ const ReelsContainer = ({
                   onLoadedData={() => setLoadingVideo(false)}
                   onError={(e) => console.error('Error de video:', e)}
                 />
-
-                {/* ================================================== */}
-                {/* ✅ NUEVA NOTIFICACIÓN (SOBRE EL REPRODUCTOR)      */}
-                {/* ================================================== */}
-                {pointsNotification.show && pointsNotification.videoId === video.id && (
-                  <div 
-                    className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
-                      px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-center
-                      backdrop-blur-md animate-bounce
-                      ${pointsNotification.type === 'success' 
-                        ? 'bg-gradient-to-r from-yellow-400/80 to-orange-500/80' // Color de éxito original
-                        : 'bg-gradient-to-r from-gray-500/80 to-gray-600/80' // Color de restricción original
-                      }
-                    `}
-                    // Añadimos pointer-events-none para no bloquear el play/pause
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    {pointsNotification.message}
-                  </div>
-                )}
 
                 {loadingVideo && index === currentIndex && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
@@ -1556,7 +1503,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* ✅ BOTÓN DE LIKE (SIN NOTIFICACIÓN CSS AQUÍ) */}
+            {/* BOTÓN DE LIKE */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1567,8 +1514,6 @@ const ReelsContainer = ({
                 </div>
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
-              
-              {/* ❌ ELIMINADO: Notificación de puntos de al lado del botón */}
             </div>
 
             <button 
@@ -1580,7 +1525,7 @@ const ReelsContainer = ({
               </div>
             </button>
             
-            {/* ✅ NUEVO BOTÓN DE REGALO - MOBILE */}
+            {/* NUEVO BOTÓN DE REGALO - MOBILE */}
             {currentUser && currentUser.id !== currentVideo.creator?.id && (
                 <button 
                     onClick={(e) => handleGiftClick(currentVideo, e)} 
@@ -1681,7 +1626,7 @@ const ReelsContainer = ({
               )}
             </div>
 
-            {/* ✅ BOTÓN DE LIKE - DESKTOP (SIN NOTIFICACIÓN CSS AQUÍ) */}
+            {/* BOTÓN DE LIKE - DESKTOP */}
             <div className="relative flex flex-col items-center space-y-1">
               <button 
                 onClick={(e) => handleLike(currentVideo.id, e)} 
@@ -1694,8 +1639,6 @@ const ReelsContainer = ({
                   {formatCount(getVideoCounter(currentVideo.id, 'likes'))}
                 </span>
               </button>
-
-              {/* ❌ ELIMINADO: Notificación de puntos de al lado del botón */}
             </div>
 
             <button 
@@ -1707,7 +1650,7 @@ const ReelsContainer = ({
               </div>
             </button>
             
-            {/* ✅ NUEVO BOTÓN DE REGALO - DESKTOP */}
+            {/* NUEVO BOTÓN DE REGALO - DESKTOP */}
             {currentUser && currentUser.id !== currentVideo.creator?.id && (
                 <button 
                     onClick={(e) => handleGiftClick(currentVideo, e)} 
@@ -1773,10 +1716,9 @@ const ReelsContainer = ({
           </div>
         )}
 
-        {/* PANEL DE COMENTARIOS - DESKTOP */}
+        {/* PANEL DE COMENTARIOS - DESKTOP (Sin cambios) */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4">
-            {/* ... (sin cambios en el panel de comentarios) ... */}
             {/* Header del panel */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
@@ -1910,7 +1852,7 @@ const ReelsContainer = ({
         )}
       </div>
 
-      {/* MODAL DE COMENTARIOS - MOBILE */}
+      {/* MODAL DE COMENTARIOS - MOBILE (Sin cambios) */}
       {showCommentsModal && currentVideo && isMobile && (
         <div 
           className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
@@ -1920,7 +1862,6 @@ const ReelsContainer = ({
             className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* ... (sin cambios en el modal de comentarios) ... */}
             {/* Header del modal */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Comentarios</h3>
@@ -2054,7 +1995,7 @@ const ReelsContainer = ({
         </div>
       )}
       
-      {/* ✅ MODAL DE REGALO DE PUNTOS */}
+      {/* MODAL DE REGALO DE PUNTOS (Sin cambios) */}
       {showGiftModal && currentVideo && currentUser && (
         <GiftPointsModal
           isOpen={showGiftModal}
@@ -2066,6 +2007,28 @@ const ReelsContainer = ({
           onSuccess={handleGiftSuccess}
         />
       )}
+
+      {/* ================================================================== */}
+      {/* ✅ NUEVA NOTIFICACIÓN (GARANTIZADA) CON 'position: fixed' (v4)    */}
+      {/* ================================================================== */}
+      {pointsNotification.show && (
+        <div 
+          className={`fixed top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999]
+            min-w-[300px] max-w-lg w-auto
+            px-8 py-6 rounded-2xl shadow-2xl text-white font-bold text-center text-lg
+            backdrop-blur-xl animate-bounce
+            ${pointsNotification.type === 'success' 
+              ? 'bg-gradient-to-r from-yellow-400/90 to-orange-500/90' // Color de éxito
+              : 'bg-gradient-to-r from-gray-500/90 to-gray-600/90' // Color de restricción
+            }
+          `}
+          // pointer-events-none permite hacer clic "a través" de la notificación
+          style={{ pointerEvents: 'none' }} 
+        >
+          {pointsNotification.message}
+        </div>
+      )}
+
     </div>
   );
 };
