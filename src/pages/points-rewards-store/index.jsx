@@ -7,6 +7,10 @@
 //    para que solo muestre las que el admin seleccionó.
 // ❌ ELIMINADO: Toda la lógica y JSX del Historial de Transacciones.
 // ============================================================================
+// 🟢 CORRECCIÓN: Se pasan 'missions' y 'pointsEarnedToday' del contexto
+//    directamente a PointsBalanceCard para solucionar el bug de sincronización.
+// ============================================================================
+
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
@@ -106,13 +110,23 @@ const useRewards = () => {
 const PointsRewardsStore = () => {
   const { user } = useAuth();
   
+  // ==================================================================
+  // ✅ INICIO DE LA CORRECCIÓN 1
+  // ==================================================================
+  // Obtenemos 'missions', 'pointsEarnedToday' y el 'loading' general
+  // directamente del contexto.
   const { 
     totalPoints, 
     freePoints, 
     premiumPoints, 
-    loading: pointsLoading, 
-    refreshPoints 
+    loading: pointsLoading, // Este es el 'loading' general de PointsContext
+    refreshPoints,
+    missions,          // <-- AÑADIDO
+    pointsEarnedToday  // <-- AÑADIDO
   } = usePoints();
+  // ==================================================================
+  // ✅ FIN DE LA CORRECCIÓN 1
+  // ==================================================================
   
   const { 
     rewards, 
@@ -135,7 +149,8 @@ const PointsRewardsStore = () => {
   // ❌ ESTADOS PARA EL HISTORIAL (ELIMINADOS)
   
   // ESTADO PARA ESTADÍSTICAS
-  const [stats, setStats] = useState({ earnedToday: 0, earnedAllTime: 0, spentAllTime: 0 });
+  // 🛑 'stats.earnedToday' YA NO ES NECESARIO, usamos 'pointsEarnedToday' del contexto
+  const [stats, setStats] = useState({ earnedAllTime: 0, spentAllTime: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
   
   // ✅ ESTADO PARA REGLAS DE PUNTOS
@@ -146,44 +161,38 @@ const PointsRewardsStore = () => {
 
   const nextRewardThreshold = 300;
   
-  const pageLoading = rewardsLoading || pointsLoading || statsLoading || rulesLoading; 
+  // ✅ CORRECCIÓN: 'statsLoading' ya no es necesario aquí si 'earnedToday' viene del contexto.
+  const pageLoading = rewardsLoading || pointsLoading || rulesLoading; 
 
-  // Carga las estadísticas (Hoy, Total Ganado, Total Gastado)
+  // Carga las estadísticas (Total Ganado, Total Gastado)
+  // 🛑 ELIMINADO: El cálculo de 'earnedToday' se quita, ya que viene del contexto.
   useEffect(() => {
     if (!user?.id) return;
 
     const fetchStats = async () => {
       setStatsLoading(true);
       try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
         const { data, error } = await supabase
           .from('points_transactions')
-          .select('points_change, created_at')
+          .select('points_change') // Ya no necesitamos 'created_at' para 'earnedToday'
           .eq('user_id', user.id);
 
         if (error) throw error;
 
-        let earnedToday = 0;
         let earnedAllTime = 0;
         let spentAllTime = 0;
 
         for (const t of data) {
           const points = t.points_change || 0;
-          const txDate = new Date(t.created_at);
 
           if (points > 0) {
             earnedAllTime += points;
-            if (txDate >= today) {
-              earnedToday += points;
-            }
           } else if (points < 0) {
             spentAllTime += Math.abs(points);
           }
         }
         
-        setStats({ earnedToday, earnedAllTime, spentAllTime });
+        setStats({ earnedAllTime, spentAllTime });
 
       } catch (err) {
         console.error("Error fetching stats:", err);
@@ -431,15 +440,23 @@ const PointsRewardsStore = () => {
               <div className="lg:col-span-4 xl:col-span-3">
                 <div className="sticky top-32 space-y-6">
                   
+                  {/* ================================================================== */}
+                  {/* ✅ INICIO DE LA CORRECCIÓN 2 */}
+                  {/* ================================================================== */}
                   {/* Points Balance Card */}
                   <PointsBalanceCard
-                    currentPoints={totalPoints}
+                    // currentPoints={totalPoints} // 'PointsBalanceCard' calcula el total internamente
                     freePoints={freePoints}
                     premiumPoints={premiumPoints}
-                    pointsEarnedToday={stats.earnedToday}
+                    pointsEarnedToday={pointsEarnedToday} // <-- CORREGIDO: Usando valor del contexto
                     nextRewardThreshold={nextRewardThreshold}
-                    loading={pointsLoading || statsLoading}
+                    loading={pointsLoading} // <-- CORREGIDO: Usando el 'loading' general del contexto
+                    missions={missions}     // <-- AÑADIDO: Pasando las misiones
                   />
+                  {/* ================================================================== */}
+                  {/* ✅ FIN DE LA CORRECCIÓN 2 */}
+                  {/* ================================================================== */}
+
 
                   {/* ✅ CORREGIDO: Sección "Cómo ganar más puntos" */}
                   <div className="bg-card rounded-lg border p-6">
