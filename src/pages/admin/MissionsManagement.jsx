@@ -74,7 +74,8 @@ const MissionForm = ({
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
     icon: String(initialData?.icon || 'Star'), 
     is_active: initialData?.is_active ?? true,
-    show_in_progress_panel: initialData?.show_in_progress_panel ?? true, // ✅ ESTADO SINCRONIZADO
+    // ✅ Estado del checkbox sincronizado
+    show_in_progress_panel: initialData?.show_in_progress_panel ?? true, 
     display_order: initialData?.display_order || 0,
   });
   
@@ -118,7 +119,7 @@ const MissionForm = ({
       ...formData,
       target_count: Number(formData.target_count),
       points_reward: Number(formData.points_reward),
-      // ✅ Aquí se asegura que show_in_progress_panel se envíe y guarde correctamente
+      // ✅ Se asegura que show_in_progress_panel se envíe y persista
       show_in_progress_panel: formData.show_in_progress_panel,
     };
 
@@ -269,7 +270,7 @@ const MissionForm = ({
                 Misión Activa
               </label>
             </div>
-            {/* CHECKBOX: Mostrar en Panel de Progreso (Sincronizado) */}
+            {/* CHECKBOX: Mostrar en Panel de Progreso (Sincronizado con botón Ojo) */}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -493,7 +494,7 @@ export default function MissionsManagement() {
     }
   };
 
-  // ✅ SOLUCIÓN AL PROBLEMA DE SINCRONÍA EN LA LISTA Y PERSISTENCIA
+  // ✅ LÓGICA DE SINCRONÍA Y PERSISTENCIA DEL BOTÓN DE VISIBILIDAD
   const handleToggleShowInPanel = async (mission) => {
     const newStatus = !mission.show_in_progress_panel;
     
@@ -709,7 +710,7 @@ export default function MissionsManagement() {
                         >
                           <AppIcon name={mission.is_active ? 'ToggleRight' : 'ToggleLeft'} size={18} />
                         </Button>
-                        {/* Botón de Sincronización (Ojo) - Renderizado corregido */}
+                        {/* ✅ Botón de Sincronización (Ojo) - Asegura que el ícono refleje el estado */}
                         <Button
                           variant="ghost"
                           size="sm"
