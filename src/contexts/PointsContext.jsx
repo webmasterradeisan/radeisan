@@ -179,16 +179,16 @@ export const PointsProvider = ({ children }) => {
         .subscribe();
 
       // ============================================================
-      // ✅ CORRECCIÓN: Nombre correcto de tabla
+      // ✅ CORRECCIÓN: Usar 'mission_progress' (no 'user_mission_progress')
       // 3. Suscripción a cambios en el PROGRESO DE MISIONES
       // ============================================================
       const missionsSubscription = supabase
-        .channel('public:user_mission_progress')
+        .channel('public:mission_progress')
         .on('postgres_changes',
           {
             event: '*', // Escuchar INSERT, UPDATE, DELETE
             schema: 'public',
-            table: 'user_mission_progress', // ✅ NOMBRE CORRECTO
+            table: 'mission_progress', // ✅ NOMBRE CORRECTO
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
