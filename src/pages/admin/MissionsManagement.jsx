@@ -160,7 +160,7 @@ const MissionForm = ({
             label="Conteo Objetivo (Target)" 
             name="target_count" 
             type="number" 
-            min="0" // ✅ CORREGIDO: Permite 0
+            min="0"
             value={formData.target_count} 
             onChange={handleChange} 
             required 
@@ -169,7 +169,7 @@ const MissionForm = ({
             label="Recompensa (Puntos)" 
             name="points_reward" 
             type="number" 
-            min="0" // ✅ CORREGIDO: Permite 0
+            min="0"
             value={formData.points_reward} 
             onChange={handleChange} 
             required 
