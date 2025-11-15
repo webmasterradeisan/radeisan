@@ -66,7 +66,7 @@ const MissionForm = ({
   onSuccess, 
   onCancel 
 }) => {
-  const isEditing = !!initialData;
+  const isEditing = !!initialData && !!initialData.id; // Uso 'id' para diferenciar edición de prellenado
 
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
@@ -93,18 +93,18 @@ const MissionForm = ({
     setFormData(prev => {
       let newState = { ...prev, [name]: newValue };
       
-      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key al cambiar mission_type
+      // ✅ SOLUCIÓN AL PROBLEMA DE SELECCIÓN Y AUTORELLENO DE CLAVE
       if (name === 'mission_type') {
-        newState.mission_key = newValue; // El valor de la opción es el mission_type (ej. 'upload_reel')
+        // Asegura que el valor seleccionado (newValue) también se establezca como mission_key
+        newState.mission_key = newValue; 
       }
       
       return newState;
     });
   };
   
-  // ✅ CORRECCIÓN: Autollenar mission_key en la carga inicial si no se especifica (para nuevas misiones)
+  // ✅ IMPLEMENTACIÓN: Asegura el prellenado de mission_key en la carga inicial (si es nueva misión o prellenado)
   useEffect(() => {
-    // Si NO estamos en edición y mission_key está vacío, lo llenamos con el mission_type actual
     if (!isEditing && formData.mission_key === '' && formData.mission_type) {
         setFormData(prev => ({
             ...prev,
@@ -130,6 +130,7 @@ const MissionForm = ({
     if (isEditing) {
       result = await missionsService.updateMission(initialData.id, dataToSubmit);
     } else {
+      // Si estamos en modo prellenado para crear, simplemente creamos
       result = await missionsService.createMission(dataToSubmit);
     }
 
@@ -173,7 +174,7 @@ const MissionForm = ({
             name="mission_type"
             value={formData.mission_type}
             onChange={handleChange}
-            // ✅ CORRECCIÓN: Se filtra el 'all', pero el resto de opciones deben funcionar.
+            // Excluir "Todos los Tipos" para la selección
             options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} 
             required
           />
@@ -186,8 +187,6 @@ const MissionForm = ({
             placeholder="Ej: ver_videos_diario_unico"
             required 
             helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
-            // Aunque se puede editar, al cambiar el tipo se sobrescribe (comportamiento solicitado).
-            // Si el problema de selección persistiera, el problema estaría en el componente `Select` custom.
           />
         </div>
 
@@ -294,7 +293,7 @@ const MissionForm = ({
 // COMPONENTE: ConfirmationModal (Modal de Eliminación)
 // ============================================================================
 
-const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
+const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
   <div className="fixed inset-0 bg-background/80 backdrop-blur-sm bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
       <div className="flex items-center gap-3 mb-4">
@@ -319,13 +318,15 @@ const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
       <div className="flex items-center gap-3">
         <button
           onClick={onConfirm}
-          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          disabled={isDeleting}
+          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
         >
-          Sí, eliminar
+          {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
         </button>
         <button
           onClick={onCancel}
-          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+          disabled={isDeleting}
+          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
         >
           Cancelar
         </button>
@@ -366,8 +367,7 @@ export default function MissionsManagement() {
   // CRUD y Modales
   const [missionToEdit, setMissionToEdit] = useState(null);
   const [missionToDelete, setMissionToDelete] = useState(null);
-  // Se añade el estado para la eliminación, aunque no se usó en el código anterior
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // Añadido estado isDeleting
 
 
   // ============================================================================
@@ -508,6 +508,34 @@ export default function MissionsManagement() {
   };
   
   // ============================================================================
+  // LÓGICA DE CREACIÓN PRELLENADA (DEMOSTRACIÓN)
+  // ============================================================================
+  
+  const handleCreateNewMission = () => {
+    const missionTypeUploadReel = missionsService.MISSION_TYPES.UPLOAD_REEL;
+    
+    // ✅ Datos de la misión "Subir reel" prellenada como lo solicitaste
+    const prefilledReelMission = {
+        title: "Subir un Reel",
+        description: "Sube un video corto (reel) a tu perfil para ganar puntos.",
+        mission_type: missionTypeUploadReel,
+        mission_key: missionTypeUploadReel, // Clave autollenada
+        target_count: 1,
+        points_reward: 75,
+        frequency: missionsService.MISSION_FREQUENCY.DAILY,
+        icon: 'Video',
+        is_active: true,
+        show_in_progress_panel: true,
+        display_order: 10,
+        // No tiene 'id' para ser una nueva misión
+    };
+
+    setMissionToEdit(prefilledReelMission);
+    setActiveTab('form');
+  }
+
+
+  // ============================================================================
   // RENDERIZADO
   // ============================================================================
 
@@ -529,11 +557,12 @@ export default function MissionsManagement() {
         </Button>
         <Button 
           variant={activeTab === 'form' ? 'default' : 'ghost'} 
-          onClick={() => { setMissionToEdit(null); setActiveTab('form'); }}
+          // LLAMADA A LA FUNCIÓN DE CREACIÓN PRELLENADA
+          onClick={handleCreateNewMission}
           className="rounded-b-none"
         >
           <AppIcon name="Plus" size={18} className="mr-2" />
-          Crear Misión
+          Crear Misión (Subir Reel Demo)
         </Button>
         {/* Pestaña "Reordenar" eliminada por completo */}
         
