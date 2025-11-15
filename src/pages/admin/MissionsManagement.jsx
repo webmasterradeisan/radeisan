@@ -11,7 +11,7 @@ import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+// 🛑 ELIMINADO: import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 // ============================================================================
 // CONSTANTES Y CONFIGURACIÓN
@@ -57,7 +57,7 @@ const MissionForm = ({
     mission_type: initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO,
     mission_key: initialData?.mission_key || '', // ✅ AÑADIDO: Clave de Misión
     target_count: initialData?.target_count || 1,
-    points_reward: initialData?.points_reward || 0,
+    points_reward: initialData?.points_reward || 0, // ✅ Default 0
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
     icon: initialData?.icon || 'Star',
     is_active: initialData?.is_active ?? true,
@@ -439,41 +439,7 @@ export default function MissionsManagement() {
   // LÓGICA DE REORDENAMIENTO (Drag and Drop)
   // ============================================================================
 
-  const onDragEnd = (result) => {
-    if (!result.destination) return;
-
-    const items = Array.from(missions);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    // Actualizar el orden de visualización en el estado
-    const newOrder = items.map((item, index) => ({
-      ...item,
-      display_order: index // El índice de la matriz es el nuevo orden
-    }));
-    
-    setMissions(newOrder);
-  };
-  
-  const handleSaveReorder = async () => {
-    setIsReordering(true);
-    
-    const reorderData = missions.map((m, index) => ({
-      id: m.id,
-      display_order: index
-    }));
-    
-    const result = await missionsService.reorderMissions(reorderData);
-    setIsReordering(false);
-    
-    if (result.success) {
-      alert('Orden de misiones guardado exitosamente.');
-      setActiveTab('list');
-    } else {
-      alert(`Error al guardar el orden: ${result.error}`);
-      fetchMissions(); // Recargar el orden original
-    }
-  };
+  // 🛑 ELIMINADAS: onDragEnd y handleSaveReorder para evitar el error de compilación.
 
   // ============================================================================
   // RENDERIZADO
@@ -509,7 +475,7 @@ export default function MissionsManagement() {
           className="rounded-b-none"
         >
           <AppIcon name="Move" size={18} className="mr-2" />
-          Reordenar
+          Reordenar (Deshabilitado)
         </Button>
         {/* Estadísticas de Misiones (Opcional, se mantiene por estructura) */}
         {/* <Button variant={activeTab === 'stats' ? 'default' : 'ghost'} onClick={() => setActiveTab('stats')} className="rounded-b-none">
@@ -670,76 +636,19 @@ export default function MissionsManagement() {
       )}
 
       {/* ============================================================================
-      // PESTAÑA DE REORDENAMIENTO
+      // PESTAÑA DE REORDENAMIENTO (Deshabilitada para Fix)
       // ============================================================================ */}
       {activeTab === 'reorder' && (
-        <div className="space-y-4">
-          <div className="bg-yellow-100 border border-yellow-300 text-yellow-800 p-3 rounded-lg text-sm">
-            Arrastra y suelta las misiones para cambiar su orden de aparición en la aplicación.
-            El orden de arriba es `display_order = 0`.
-          </div>
-          
-          <DragDropContext onDragEnd={onDragEnd}>
-            <Droppable droppableId="missions-list">
-              {(provided) => (
-                <ul 
-                  className="space-y-2" 
-                  {...provided.droppableProps} 
-                  ref={provided.innerRef}
-                >
-                  {missions.map((mission, index) => (
-                    <Draggable 
-                      key={mission.id} 
-                      draggableId={mission.id.toString()} 
-                      index={index}
-                    >
-                      {(provided, snapshot) => (
-                        <li
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className={`
-                            p-4 rounded-lg shadow-sm flex items-center justify-between 
-                            transition-all cursor-grab border border-border
-                            ${snapshot.isDragging ? 'bg-primary/20 border-primary shadow-lg' : 'bg-card hover:bg-muted/50'}
-                          `}
-                        >
-                          <div className="flex items-center space-x-4">
-                            <AppIcon name="Move" size={20} className="text-muted-foreground flex-shrink-0" />
-                            <span className="font-mono text-lg font-bold w-10 text-center flex-shrink-0">
-                                #{index}
-                            </span>
-                            <div className="p-2 rounded-full bg-accent text-primary">
-                                <AppIcon name={mission.icon} size={18} />
-                            </div>
-                            <div>
-                                <p className="text-base font-medium text-foreground">{mission.title}</p>
-                                <p className="text-xs text-muted-foreground">Tipo: {mission.mission_type}</p>
-                            </div>
-                          </div>
-                          <span className={`px-3 py-1 text-xs leading-5 font-semibold rounded-full ${mission.is_active ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                            {mission.is_active ? 'Activa' : 'Inactiva'}
-                          </span>
-                        </li>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </ul>
-              )}
-            </Droppable>
-          </DragDropContext>
-          
-          <div className="flex justify-end pt-4">
-            <Button 
-              onClick={handleSaveReorder} 
-              loading={isReordering} 
-              disabled={isReordering}
-            >
-              <AppIcon name="Save" size={18} className="mr-2" />
-              Guardar Nuevo Orden
+        <div className="space-y-4 text-center py-16">
+            <AppIcon name="AlertCircle" size={40} className="text-yellow-600 mx-auto mb-3" />
+            <h3 className="text-xl font-bold text-foreground">Reordenamiento Deshabilitado</h3>
+            <p className="text-muted-foreground max-w-lg mx-auto">
+                La funcionalidad de arrastrar y soltar está temporalmente deshabilitada
+                debido a una dependencia del proyecto (`react-beautiful-dnd`) que no se pudo resolver durante la compilación.
+            </p>
+            <Button onClick={() => setActiveTab('list')}>
+                Volver al Listado
             </Button>
-          </div>
         </div>
       )}
 
