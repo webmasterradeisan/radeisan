@@ -93,7 +93,7 @@ const MissionForm = ({
     setFormData(prev => {
       let newState = { ...prev, [name]: newValue };
       
-      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key
+      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key al cambiar mission_type
       if (name === 'mission_type') {
         newState.mission_key = newValue; // El valor de la opción es el mission_type (ej. 'upload_reel')
       }
@@ -101,6 +101,18 @@ const MissionForm = ({
       return newState;
     });
   };
+  
+  // ✅ CORRECCIÓN: Autollenar mission_key en la carga inicial si no se especifica (para nuevas misiones)
+  useEffect(() => {
+    // Si NO estamos en edición y mission_key está vacío, lo llenamos con el mission_type actual
+    if (!isEditing && formData.mission_key === '' && formData.mission_type) {
+        setFormData(prev => ({
+            ...prev,
+            mission_key: prev.mission_type
+        }));
+    }
+  }, [isEditing, formData.mission_type, formData.mission_key]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -161,7 +173,8 @@ const MissionForm = ({
             name="mission_type"
             value={formData.mission_type}
             onChange={handleChange}
-            options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} // Excluir "Todos los Tipos" para la selección
+            // ✅ CORRECCIÓN: Se filtra el 'all', pero el resto de opciones deben funcionar.
+            options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} 
             required
           />
           {/* ✅ Clave de Misión (Autollenada) */}
@@ -173,7 +186,8 @@ const MissionForm = ({
             placeholder="Ej: ver_videos_diario_unico"
             required 
             helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
-            // readOnly={!isEditing} // Mantener readOnly opcional
+            // Aunque se puede editar, al cambiar el tipo se sobrescribe (comportamiento solicitado).
+            // Si el problema de selección persistiera, el problema estaría en el componente `Select` custom.
           />
         </div>
 
@@ -352,6 +366,8 @@ export default function MissionsManagement() {
   // CRUD y Modales
   const [missionToEdit, setMissionToEdit] = useState(null);
   const [missionToDelete, setMissionToDelete] = useState(null);
+  // Se añade el estado para la eliminación, aunque no se usó en el código anterior
+  const [isDeleting, setIsDeleting] = useState(false);
 
 
   // ============================================================================
