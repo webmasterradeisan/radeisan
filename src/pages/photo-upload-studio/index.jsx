@@ -13,8 +13,17 @@ import PhotoUploadZone from './components/PhotoUploadZone';
 import PhotoPreview from './components/PhotoPreview';
 import PhotoMetadataForm from './components/PhotoMetadataForm';
 
-// Importar servicio de puntos
-import { addFreePoints } from '../../services/pointsService';
+// ==================================================================
+// ✅ INICIO DE LA CORRECCIÓN
+// ==================================================================
+// Importar servicio de misiones en lugar de 'pointsService'
+import * as missionsService from '../../services/missionsService';
+// Importar 'usePoints' para las notificaciones globales
+import { usePoints } from '../../contexts/PointsContext';
+// ==================================================================
+// ✅ FIN DE LA CORRECCIÓN
+// ==================================================================
+
 
 // ===============================
 // CONFIGURACIONES Y CONSTANTES
@@ -42,7 +51,8 @@ const UPLOAD_STEPS = [
   { number: 4, title: 'Publicar', description: 'Revisa y publica tu contenido' }
 ];
 
-const POINTS_PER_PHOTO = 10; // Puntos base por foto subida
+// 🛑 ELIMINADO: Los puntos ahora se manejan por misiones (ej: "Subir foto" o "Paquete Creador")
+// const POINTS_PER_PHOTO = 10; 
 
 // ===============================
 // HOOK PARA GESTIONAR FORMULARIO
@@ -234,14 +244,20 @@ const usePhotoUpload = () => {
                     throw new Error(`Error al insertar metadatos: ${dbError.message}`);
                 }
                 
-                // 3. Otorgar Puntos por la subida
-                await addFreePoints(
-                    user.id, 
-                    POINTS_PER_PHOTO, 
-                    'photo_upload', 
+                // ==================================================================
+                // ✅ INICIO DE LA CORRECCIÓN 3
+                // ==================================================================
+                // 3. Reportar al Sistema de Misiones (en lugar de dar puntos)
+                const missionResult = await missionsService.trackMissionProgress(
+                    'upload_photo', // Clave de la misión (asegúrate que exista en tu 'missionsService' o admin)
+                    'photo', 
                     photoData.id
                 );
-                successfulUploads.push({ success: true, id: photoData.id });
+                
+                successfulUploads.push({ success: true, id: photoData.id, missionResult });
+                // ==================================================================
+                // ✅ FIN DE LA CORRECCIÓN 3
+                // ==================================================================
 
             } catch (innerError) {
                 console.error(`Error procesando foto ${i+1} (${photoFile.name}):`, innerError);
@@ -266,7 +282,7 @@ const usePhotoUpload = () => {
         }
 
         setUploadProgress(100);
-        return successfulUploads;
+        return successfulUploads; // Devuelve el array de resultados
 
     } catch (error) { // Este catch es para errores globales o inesperados
         console.error('Error general en uploadMultiplePhotos:', error);
@@ -294,6 +310,15 @@ const PhotoUploadStudio = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
+  // ==================================================================
+  // ✅ INICIO DE LA CORRECCIÓN 4
+  // ==================================================================
+  // Obtener 'triggerAnimation' de 'usePoints' para notificaciones
+  const { triggerAnimation } = usePoints();
+  // ==================================================================
+  // ✅ FIN DE LA CORRECCIÓN 4
+  // ==================================================================
+
   const {
     uploadMultiplePhotos,
     isUploading,
@@ -341,8 +366,23 @@ const PhotoUploadStudio = () => {
 
     const results = await uploadMultiplePhotos(selectedFiles, metadata);
     
+    // ==================================================================
+    // ✅ INICIO DE LA CORRECCIÓN 5 (Lógica de Notificación)
+    // ==================================================================
     if (results.length > 0) {
         setSuccessfulUploads(results.length); // Guardar el conteo exitoso
+        
+        // Disparar notificación si alguna de las subidas resultó en progreso
+        const anyProgress = results.some(r => r.missionResult && (r.missionResult.result === 'success' || r.missionResult.result === 'progress_updated'));
+        
+        if (anyProgress) {
+            // Dispara la animación global (la misma que los 'likes')
+            // '0' porque los puntos los da el 'missionsService' (si aplica),
+            // pero esto activa la UI de notificación de progreso.
+            triggerAnimation(0, 'earn', 'free'); 
+            console.log('Notificación de Progreso de Misión (Foto) disparada');
+        }
+
         setTimeout(() => {
             setShowUploadModal(false);
             setCurrentStep(4); // Avanzamos al paso 4
@@ -352,6 +392,9 @@ const PhotoUploadStudio = () => {
         setUploadError(uploadError || 'No se pudieron subir las fotos.');
         setShowUploadModal(false);
     }
+    // ==================================================================
+    // ✅ FIN DE LA CORRECCIÓN 5
+    // ==================================================================
   };
 
   // Navegación entre pasos
@@ -530,6 +573,9 @@ const PhotoUploadStudio = () => {
                   </div>
                 )}
 
+                {/* ================================================================== */}
+                {/* ✅ INICIO DE LA CORRECCIÓN 6 (UI de Éxito) */}
+                {/* ================================================================== */}
                 {/* PASO 4: Confirmación */}
                 {currentStep === 4 && (
                   <div className="text-center space-y-6">
@@ -542,9 +588,22 @@ const PhotoUploadStudio = () => {
                         ¡Fotos publicadas exitosamente!
                       </h2>
                       <p className="text-muted-foreground">
-                        Tus {successfulUploads} fotos han sido subidas y están disponibles en tu perfil
+                        Tus {successfulUploads} fotos han sido reportadas al sistema de misiones.
                       </p>
                     </div>
+                    
+                    {/* Mensaje de puntos (revisando) */}
+                    <div className="max-w-sm mx-auto p-4 bg-muted/50 rounded-lg">
+                        <div className="flex items-center space-x-2 mb-2 justify-center">
+                          <Icon name="Award" size={20} color="var(--color-primary)" />
+                          <span className="font-medium">Puntos ganados</span>
+                        </div>
+                        <p className="text-2xl font-bold text-primary">
+                          Revisando...
+                        </p>
+                        <p className="text-xs text-muted-foreground">El sistema de misiones procesará tu subida.</p>
+                    </div>
+
 
                     <div className="flex justify-center space-x-4">
                       <Button onClick={handlePublish}>
@@ -558,6 +617,9 @@ const PhotoUploadStudio = () => {
                     </div>
                   </div>
                 )}
+                {/* ================================================================== */}
+                {/* ✅ FIN DE LA CORRECCIÓN 6 */}
+                {/* ================================================================== */}
               </div>
             </div>
           </div>
