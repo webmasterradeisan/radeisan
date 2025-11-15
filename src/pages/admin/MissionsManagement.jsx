@@ -2,7 +2,7 @@
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
 // Componente completo para gestionar el sistema de misiones desde el admin panel
-// Incluye: CRUD completo, estadísticas, activar/desactivar, reordenamiento
+// Incluye: CRUD completo, estadísticas, activar/desactivar, y más.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -11,15 +11,15 @@ import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-// 🛑 ELIMINADA: Dependencia 'react-beautiful-dnd' (causa del fallo de compilación).
+// 🛑 ELIMINADA: Dependencia 'react-beautiful-dnd' y toda su lógica.
 
 // ============================================================================
 // CONSTANTES Y CONFIGURACIÓN (ESPAÑOL)
 // ============================================================================
 
-// Tipos de misión dinámicos, actualizados con 'upload_reel' y 'upload_photo'
+// Opciones de tipo de misión para Select (filtros y formulario)
 const MISSION_TYPE_OPTIONS = [
-  { value: 'all', label: 'Todos los Tipos' },
+  { value: 'all', label: 'Todos los Tipos' }, // Opción para filtros
   { value: missionsService.MISSION_TYPES.WATCH_VIDEO, label: 'Ver videos' },
   { value: missionsService.MISSION_TYPES.UPLOAD_VIDEO, label: 'Subir video' },
   { value: missionsService.MISSION_TYPES.UPLOAD_REEL, label: 'Subir reel' }, // ✅ AÑADIDO
@@ -38,7 +38,7 @@ const MISSION_TYPE_OPTIONS = [
 ];
 
 const FREQUENCY_OPTIONS = [
-  { value: 'all', label: 'Todas las Frecuencias' },
+  { value: 'all', label: 'Todas las Frecuencias' }, // Opción para filtros
   { value: missionsService.MISSION_FREQUENCY.DAILY, label: 'Diaria' },
   { value: missionsService.MISSION_FREQUENCY.WEEKLY, label: 'Semanal' },
   { value: missionsService.MISSION_FREQUENCY.MONTHLY, label: 'Mensual' },
@@ -46,9 +46,16 @@ const FREQUENCY_OPTIONS = [
 ];
 
 const IS_ACTIVE_OPTIONS = [
-  { value: 'all', label: 'Todos los Estados' },
+  { value: 'all', label: 'Todos los Estados' }, // Opción para filtros
   { value: 'true', label: 'Activas' },
   { value: 'false', label: 'Inactivas' }
+];
+
+// Opciones para el filtro de 'mostrar en progreso'
+const SHOW_IN_PROGRESS_OPTIONS = [
+  { value: 'all', label: 'Todos' },
+  { value: 'true', label: 'Sí' },
+  { value: 'false', label: 'No' },
 ];
 
 // ============================================================================
@@ -72,6 +79,7 @@ const MissionForm = ({
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
     icon: initialData?.icon || 'Star',
     is_active: initialData?.is_active ?? true,
+    show_in_progress_panel: initialData?.show_in_progress_panel ?? true, // ✅ NUEVO CAMPO
     display_order: initialData?.display_order || 0,
   });
   
@@ -97,6 +105,7 @@ const MissionForm = ({
       ...formData,
       target_count: Number(formData.target_count),
       points_reward: Number(formData.points_reward),
+      // show_in_progress_panel ya es booleano
     };
 
     let result;
@@ -141,33 +150,30 @@ const MissionForm = ({
 
         {/* Fila 2: Tipo de Misión y Clave */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ✅ CORRECCIÓN: Pasar solo las opciones de misión para el formulario */}
           <Select
             label="Tipo de Misión"
             name="mission_type"
             value={formData.mission_type}
             onChange={handleChange}
-            options={MISSION_TYPE_OPTIONS.slice(1).map(opt => ({
-              value: opt.value,
-              label: opt.label,
-            }))}
+            options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} // Excluir "Todos los Tipos"
             required
           />
-          {/* ✅ NUEVO CAMPO: Clave de Misión */}
           <Input 
             label="Clave de Misión (mission_key)" 
             name="mission_key" 
             value={formData.mission_key} 
             onChange={handleChange} 
-            placeholder="Ej: watch_video_daily_unique"
+            placeholder="Ej: ver_videos_diario_unico"
             required 
-            helpText="Clave única para la lógica de la DB (anti-farming)."
+            helpText="Clave única para la lógica de la base de datos (evita duplicados)."
           />
         </div>
 
-        {/* Fila 3: Target, Puntos, Frecuencia */}
+        {/* Fila 3: Objetivo, Recompensa, Frecuencia */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Input 
-            label="Conteo Objetivo (Target)" 
+            label="Conteo Objetivo" 
             name="target_count" 
             type="number" 
             min="0"
@@ -189,12 +195,12 @@ const MissionForm = ({
             name="frequency"
             value={formData.frequency}
             onChange={handleChange}
-            options={FREQUENCY_OPTIONS.slice(1)}
+            options={FREQUENCY_OPTIONS.filter(opt => opt.value !== 'all')} // Excluir "Todas las Frecuencias"
             required
           />
         </div>
 
-        {/* Fila 4: Ícono y Estado */}
+        {/* Fila 4: Ícono y Estado Activo */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Select
             label="Ícono de Misión"
@@ -206,7 +212,6 @@ const MissionForm = ({
               label: icon
             }))}
             required
-            // Opcional: Renderizar vista previa de ícono
             renderPrefix={() => (
               <div className="p-2 bg-muted rounded-md mr-2">
                 <AppIcon name={formData.icon} size={16} className="text-primary" />
@@ -214,18 +219,34 @@ const MissionForm = ({
             )}
           />
 
-          <div className="flex items-center space-x-2 pt-6">
-            <input
-              type="checkbox"
-              id="is_active"
-              name="is_active"
-              checked={formData.is_active}
-              onChange={handleChange}
-              className="form-checkbox h-4 w-4 text-primary rounded"
-            />
-            <label htmlFor="is_active" className="text-sm font-medium text-foreground">
-              Misión Activa
-            </label>
+          <div className="flex flex-col justify-center"> {/* Contenedor para alinear checkboxes */}
+            <div className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                id="is_active"
+                name="is_active"
+                checked={formData.is_active}
+                onChange={handleChange}
+                className="form-checkbox h-4 w-4 text-primary rounded"
+              />
+              <label htmlFor="is_active" className="text-sm font-medium text-foreground">
+                Misión Activa
+              </label>
+            </div>
+            {/* ✅ NUEVO CHECKBOX: Mostrar en Panel de Progreso */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="show_in_progress_panel"
+                name="show_in_progress_panel"
+                checked={formData.show_in_progress_panel}
+                onChange={handleChange}
+                className="form-checkbox h-4 w-4 text-primary rounded"
+              />
+              <label htmlFor="show_in_progress_panel" className="text-sm font-medium text-foreground">
+                Mostrar en Panel de Progreso
+              </label>
+            </div>
           </div>
         </div>
 
@@ -270,7 +291,7 @@ const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
         <p className="text-sm text-yellow-800">
           <strong>Advertencia:</strong> Esta acción no se puede deshacer. El progreso de los
-          usuarios en esta misión se perderá.
+          usuarios en esta misión se perderá permanentemente.
         </p> 
       </div>
 
@@ -302,18 +323,19 @@ export default function MissionsManagement() {
   // ============================================================================
 
   // Tabs
-  const [activeTab, setActiveTab] = useState('list'); // 'list', 'form', 'stats'
+  const [activeTab, setActiveTab] = useState('list'); // 'list', 'form'
 
   // Misiones
   const [missions, setMissions] = useState([]);
-  const [filteredMissions, setFilteredMissions] = useState([]);
+  const [filteredMissions, setFilteredMissions] = useState([]); // Misiones después de aplicar filtros
 
   // Filtros y búsqueda
   const [filters, setFilters] = useState({
     search: '',
     is_active: 'all', // 'all', true, false
-    frequency: 'all', // 'all', 'daily', 'weekly', 'monthly'
-    mission_type: 'all'
+    frequency: 'all', // 'all', 'daily', 'weekly', 'monthly', 'one_time'
+    mission_type: 'all',
+    show_in_progress_panel: 'all', // ✅ NUEVO FILTRO
   });
 
   // Carga y Errores
@@ -339,7 +361,7 @@ export default function MissionsManagement() {
 
     if (result.success) {
       // Ordenar por display_order por defecto
-      const sortedMissions = result.missions.sort((a, b) => a.display_order - b.display_order);
+      const sortedMissions = result.missions.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
       setMissions(sortedMissions);
     } else {
       setError(result.error);
@@ -367,31 +389,37 @@ export default function MissionsManagement() {
   useEffect(() => {
     let tempMissions = [...missions];
 
-    // 1. Búsqueda
+    // 1. Búsqueda por texto
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase();
       tempMissions = tempMissions.filter(m => 
         m.title.toLowerCase().includes(searchTerm) ||
         m.description.toLowerCase().includes(searchTerm) ||
         m.mission_type.toLowerCase().includes(searchTerm) ||
-        m.mission_key?.toLowerCase().includes(searchTerm) // Incluir mission_key
+        m.mission_key?.toLowerCase().includes(searchTerm) // Incluir mission_key en búsqueda
       );
     }
 
-    // 2. Estado
+    // 2. Filtrar por estado de actividad
     if (filters.is_active !== 'all') {
       const isActive = filters.is_active === 'true';
       tempMissions = tempMissions.filter(m => m.is_active === isActive);
     }
 
-    // 3. Frecuencia
+    // 3. Filtrar por frecuencia
     if (filters.frequency !== 'all') {
       tempMissions = tempMissions.filter(m => m.frequency === filters.frequency);
     }
 
-    // 4. Tipo de Misión
+    // 4. Filtrar por tipo de misión
     if (filters.mission_type !== 'all') {
       tempMissions = tempMissions.filter(m => m.mission_type === filters.mission_type);
+    }
+
+    // 5. Filtrar por mostrar en panel de progreso
+    if (filters.show_in_progress_panel !== 'all') {
+      const showInPanel = filters.show_in_progress_panel === 'true';
+      tempMissions = tempMissions.filter(m => m.show_in_progress_panel === showInPanel);
     }
 
     setFilteredMissions(tempMissions);
@@ -409,8 +437,8 @@ export default function MissionsManagement() {
       if (existingIndex !== -1) {
         return prev.map((m, i) => i === existingIndex ? newOrUpdatedMission : m);
       }
-      // Agregar si es nueva
-      return [...prev, newOrUpdatedMission].sort((a, b) => a.display_order - b.display_order);
+      // Agregar si es nueva y reordenar
+      return [...prev, newOrUpdatedMission].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     });
     setMissionToEdit(null);
     setActiveTab('list');
@@ -434,7 +462,7 @@ export default function MissionsManagement() {
   
   const handleToggleActive = async (mission) => {
     const newStatus = !mission.is_active;
-    const result = await missionsService.toggleMissionActive(mission.id, newStatus);
+    const result = await missionsService.updateMission(mission.id, { is_active: newStatus });
     if (result.success) {
       setMissions(prev => prev.map(m => 
         m.id === mission.id ? { ...m, is_active: newStatus } : m
@@ -443,13 +471,20 @@ export default function MissionsManagement() {
       alert(`Error al cambiar estado: ${result.error}`);
     }
   };
+
+  // ✅ NUEVA FUNCIÓN: Alternar mostrar en panel de progreso
+  const handleToggleShowInPanel = async (mission) => {
+    const newStatus = !mission.show_in_progress_panel;
+    const result = await missionsService.updateMission(mission.id, { show_in_progress_panel: newStatus });
+    if (result.success) {
+      setMissions(prev => prev.map(m =>
+        m.id === mission.id ? { ...m, show_in_progress_panel: newStatus } : m
+      ));
+    } else {
+      alert(`Error al cambiar visibilidad en panel: ${result.error}`);
+    }
+  };
   
-  // ============================================================================
-  // LÓGICA DE REORDENAMIENTO (Drag and Drop)
-  // ============================================================================
-
-  // 🛑 Lógica de reordenamiento eliminada para evitar fallos de compilación.
-
   // ============================================================================
   // RENDERIZADO
   // ============================================================================
@@ -457,7 +492,7 @@ export default function MissionsManagement() {
   return (
     <div className="p-6 md:p-10">
       <h1 className="text-3xl font-extrabold text-foreground mb-6">
-        Gestión de Misiones Diarias
+        Gestión de Misiones
       </h1>
       
       {/* Selector de Pestañas */}
@@ -478,22 +513,15 @@ export default function MissionsManagement() {
           <AppIcon name="Plus" size={18} className="mr-2" />
           Crear Misión
         </Button>
-        {/* La pestaña "Reordenar" se elimina o se deja como un botón simple */}
-        <Button 
-          variant={'ghost'} // Dejamos el botón simple para no romper el diseño si se espera una línea de botones
-          onClick={() => { alert('Funcionalidad de Reordenamiento Deshabilitada'); }}
-          className="rounded-b-none"
-        >
-          <AppIcon name="Move" size={18} className="mr-2" />
-          Reordenar (Desh.)
-        </Button>
+        {/* 🛑 ELIMINADA: La pestaña "Reordenar" por completo */}
+        
         <Button 
             variant="destructive" 
             onClick={missionsService.resetDailyMissions}
             className="ml-auto"
         >
             <AppIcon name="RotateCw" size={18} className="mr-2" />
-            Resetear Progreso Diario (Admin)
+            Reiniciar Progreso Diario (Admin)
         </Button>
       </div>
 
@@ -517,7 +545,7 @@ export default function MissionsManagement() {
       {activeTab === 'list' && (
         <>
           {/* Filtros */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-6">
             <Input 
               name="search"
               value={filters.search}
@@ -526,22 +554,33 @@ export default function MissionsManagement() {
               icon="Search"
             />
             <Select 
+              label="Estado"
               name="is_active"
               value={filters.is_active}
               onChange={handleFilterChange}
               options={IS_ACTIVE_OPTIONS}
             />
             <Select 
+              label="Frecuencia"
               name="frequency"
               value={filters.frequency}
               onChange={handleFilterChange}
               options={FREQUENCY_OPTIONS}
             />
             <Select 
+              label="Tipo de Misión"
               name="mission_type"
               value={filters.mission_type}
               onChange={handleFilterChange}
               options={MISSION_TYPE_OPTIONS}
+            />
+            {/* ✅ NUEVO FILTRO: Mostrar en Panel de Progreso */}
+            <Select 
+              label="Mostrar en Progreso"
+              name="show_in_progress_panel"
+              value={filters.show_in_progress_panel}
+              onChange={handleFilterChange}
+              options={SHOW_IN_PROGRESS_OPTIONS}
             />
           </div>
 
@@ -553,7 +592,7 @@ export default function MissionsManagement() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Orden</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Misión</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Tipo / Clave</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Meta</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Progreso</th> {/* ✅ Actualizado */}
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Estado</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Acciones</th>
                 </tr>
@@ -571,7 +610,7 @@ export default function MissionsManagement() {
                 )}
                 {!loading && filteredMissions.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-sm text-muted-foreground">No se encontraron misiones.</td>
+                    <td colSpan="6" className="text-center py-4 text-sm text-muted-foreground">No se encontraron misiones con los filtros aplicados.</td>
                   </tr>
                 )}
                 {filteredMissions.map((mission) => (
@@ -591,17 +630,23 @@ export default function MissionsManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                        <span className="block font-medium">{mission.mission_type}</span>
+                        <span className="block font-medium">{MISSION_TYPE_OPTIONS.find(o => o.value === mission.mission_type)?.label || mission.mission_type}</span>
                         <span className="block text-xs text-muted-foreground font-mono">{mission.mission_key}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                         <span className="font-medium text-foreground">{mission.points_reward} Puntos</span>
-                        <span className="block text-xs uppercase">{mission.frequency} - {mission.target_count} Veces</span>
+                        <span className="block text-xs uppercase">{FREQUENCY_OPTIONS.find(o => o.value === mission.frequency)?.label || mission.frequency} - {mission.target_count} Veces</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.is_active ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                        {mission.is_active ? 'Activa' : 'Inactiva'}
-                      </span>
+                      <div className="flex flex-col items-start space-y-1">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.is_active ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                          {mission.is_active ? 'Activa' : 'Inactiva'}
+                        </span>
+                        {/* ✅ NUEVA INSIGNIA: Mostrar en Panel de Progreso */}
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.show_in_progress_panel ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {mission.show_in_progress_panel ? 'Visible en Progreso' : 'Oculta en Progreso'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
@@ -612,6 +657,15 @@ export default function MissionsManagement() {
                           title={mission.is_active ? 'Desactivar' : 'Activar'}
                         >
                           <AppIcon name={mission.is_active ? 'ToggleRight' : 'ToggleLeft'} size={18} />
+                        </Button>
+                        {/* ✅ NUEVO BOTÓN: Alternar mostrar en panel de progreso */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleShowInPanel(mission)}
+                          title={mission.show_in_progress_panel ? 'Ocultar del panel de progreso' : 'Mostrar en el panel de progreso'}
+                        >
+                          <AppIcon name={mission.show_in_progress_panel ? 'EyeOff' : 'Eye'} size={18} />
                         </Button>
                         <Button 
                           variant="ghost" 
@@ -652,3 +706,4 @@ export default function MissionsManagement() {
     </div>
   );
 }
+```http://googleusercontent.com/image_generation_content/0
