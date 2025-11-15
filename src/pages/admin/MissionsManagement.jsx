@@ -66,13 +66,14 @@ const MissionForm = ({
   onSuccess, 
   onCancel 
 }) => {
-  const isEditing = !!initialData && !!initialData.id; // Uso 'id' para diferenciar edición de prellenado
+  const isEditing = !!initialData && !!initialData.id;
 
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     description: initialData?.description || '',
-    mission_type: initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO,
-    mission_key: initialData?.mission_key || '', // Clave de Misión
+    // ✅ CORRECCIÓN: Asegurar que mission_type sea una cadena válida
+    mission_type: String(initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO),
+    mission_key: String(initialData?.mission_key || ''), // Clave de Misión
     target_count: initialData?.target_count || 1,
     points_reward: initialData?.points_reward || 0, // ✅ Default 0
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
@@ -105,6 +106,7 @@ const MissionForm = ({
   
   // ✅ IMPLEMENTACIÓN: Asegura el prellenado de mission_key en la carga inicial (si es nueva misión o prellenado)
   useEffect(() => {
+    // Si NO estamos en edición y mission_key está vacío, lo llenamos con el mission_type actual
     if (!isEditing && formData.mission_key === '' && formData.mission_type) {
         setFormData(prev => ({
             ...prev,
