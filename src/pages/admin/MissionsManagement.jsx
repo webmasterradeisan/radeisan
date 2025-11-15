@@ -38,8 +38,8 @@ export default function MissionsManagement() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    mission_type: 'watch_videos', // Corregido para coincidir con el service
-    mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
+    mission_type: 'watch_videos', // Sincronizado con 'missionsService'
+    mission_key: 'watch_videos', 
     target_count: 1,
     points_reward: 0, // ✅ CORREGIDO: Default es 0
     frequency: 'daily',
@@ -73,12 +73,12 @@ export default function MissionsManagement() {
       setLoading(true);
       setError(null);
 
-      // ✅ CORREGIDO: Llama a la función 'getAllMissions' que ignora RLS
+      // Llama a la función de admin que ignora RLS (del 'missionsService' corregido)
       const result = await missionsService.getAllMissions();
 
       if (result.success) {
         setMissions(result.missions);
-        // setFilteredMissions(result.missions); // 'useEffect' [missions, filters] se encarga de esto
+        // setFilteredMissions(result.missions); // El useEffect [missions, filters] se encarga de esto
       } else {
         throw new Error(result.error);
       }
@@ -201,7 +201,7 @@ export default function MissionsManagement() {
           title: '',
           description: '',
           mission_type: 'watch_videos',
-          mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
+          mission_key: 'watch_videos', 
           target_count: 1,
           points_reward: 0, // ✅ CORREGIDO: Default es 0
           frequency: 'daily',
@@ -242,7 +242,7 @@ export default function MissionsManagement() {
           title: '',
           description: '',
           mission_type: 'watch_videos',
-          mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
+          mission_key: 'watch_videos', 
           target_count: 1,
           points_reward: 0, // ✅ CORREGIDO: Default es 0
           frequency: 'daily',
@@ -294,8 +294,7 @@ export default function MissionsManagement() {
     try {
       setError(null);
 
-      // Usamos el servicio 'updateMission' genérico en lugar de 'toggle'
-      // para asegurar que las políticas RLS que arreglamos funcionen.
+      // Usamos el servicio 'updateMission' genérico para que las RLS funcionen
       const result = await missionsService.updateMission(mission.id, { 
         ...mission, // Pasa todos los datos existentes
         is_active: !mission.is_active // Cambia solo el estado
@@ -305,7 +304,7 @@ export default function MissionsManagement() {
         setSuccess(
           `Misión ${!mission.is_active ? 'activada' : 'desactivada'} exitosamente`
         );
-        await loadMissions();
+        await loadMissions(); // Recarga la lista
         setTimeout(() => setSuccess(null), 3000);
       } else {
         throw new Error(result.error);
@@ -325,7 +324,7 @@ export default function MissionsManagement() {
       title: mission.title,
       description: mission.description,
       mission_type: mission.mission_type,
-      mission_key: mission.mission_key, // <-- CORRECCIÓN AÑADIDA
+      mission_key: mission.mission_key, 
       target_count: mission.target_count,
       points_reward: mission.points_reward,
       frequency: mission.frequency,
@@ -345,7 +344,7 @@ export default function MissionsManagement() {
       title: '',
       description: '',
       mission_type: 'watch_videos',
-      mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
+      mission_key: 'watch_videos', 
       target_count: 1,
       points_reward: 0, // ✅ CORREGIDO: Default es 0
       frequency: 'daily',
@@ -488,6 +487,10 @@ export default function MissionsManagement() {
 // ============================================================================
 
 function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleActive, loading }) {
+  // ✅✅✅ INICIO DE LA CORRECCIÓN DEL CRASH ✅✅✅
+  // El componente recibe 'missions' (que son las 'filteredMissions' del padre).
+  // Debemos mapear 'missions', no 'filteredMissions' (que no existe aquí).
+  
   return (
     <div className="space-y-6">
       {/* Filtros y búsqueda */}
@@ -555,7 +558,7 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
             <p className="text-gray-600">Cargando misiones...</p>
           </div>
         </div>
-      ) : missions.length === 0 ? (
+      ) : missions.length === 0 ? ( // ✅ CORREGIDO: usar 'missions' (la prop)
         <div className="bg-white rounded-lg border border-gray-200 p-12">
           <div className="flex flex-col items-center justify-center">
             <AppIcon name="Target" className="w-16 h-16 text-gray-300 mb-4" />
@@ -571,7 +574,7 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {filteredMissions.map(mission => ( // ✅ CORREGIDO: Usar 'filteredMissions'
+          {missions.map(mission => ( // ✅ CORREGIDO: usar 'missions' (la prop)
             <MissionCard
               key={mission.id}
               mission={mission}
@@ -584,13 +587,14 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
       )}
 
       {/* Contador de resultados */}
-      {filteredMissions.length > 0 && ( // ✅ CORREGIDO: Usar 'filteredMissions'
+      {missions.length > 0 && ( // ✅ CORREGIDO: usar 'missions' (la prop)
         <div className="text-sm text-gray-600 text-center">
-          Mostrando {filteredMissions.length} misión{filteredMissions.length !== 1 ? 'es' : ''}
+          Mostrando {missions.length} misión{missions.length !== 1 ? 'es' : ''}
         </div>
       )}
     </div>
   );
+  // ✅✅✅ FIN DE LA CORRECCIÓN DEL CRASH ✅✅✅
 }
 
 // ============================================================================
@@ -599,20 +603,20 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
 
 function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
   const getMissionTypeLabel = type => {
-    // ✅ CORREGIDO: Lista de 'labels' actualizada
+    // ✅ CORREGIDO: Lista de 'labels' actualizada para coincidir con el 'FormTab'
     const types = {
       watch_videos: 'Ver videos',
       upload_video: 'Subir video',
-      upload_photo: 'Subir foto', // <-- AÑADIDO
-      like_videos: 'Dar likes', // <-- Corregido
-      share_video: 'Compartir', // <-- Corregido
+      upload_photo: 'Subir foto', 
+      like_videos: 'Dar likes',
+      share_video: 'Compartir',
       donate_points: 'Donar puntos',
-      comment_videos: 'Comentar', // <-- Corregido
+      comment_videos: 'Comentar',
       follow_user: 'Seguir usuarios',
       complete_profile: 'Completar perfil',
       login_daily: 'Login diario',
       watch_reels: 'Ver reels',
-      invite_friend: 'Invitar amigo', // <-- AÑADIDO
+      invite_friend: 'Invitar amigo',
       upload_pack: 'Paquete de Publicación',
       all_missions_streak: 'Racha de Misiones'
     };
@@ -1289,7 +1293,7 @@ function DeleteConfirmModal({ mission, onConfirm, onCancel }) {
           <p className="text-sm text-yellow-800">
             <strong>Advertencia:</strong> Esta acción no se puede deshacer. El progreso de los
             usuarios en esta misión se perderá.
-          </p>
+          </T>
         </div>
 
         <div className="flex items-center gap-3">
