@@ -1,17 +1,17 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - GESTIÓN GLOBAL DEL SISTEMA DE PUNTOS (VERSIÓN FINAL Y ESTABLE)
+// POINTS CONTEXT - GESTIÓN GLOBAL DEL SISTEMA DE PUNTOS
 // ============================================================================
 // ✅ CORRECCIÓN CRÍTICA: Se blinda addPoints contra TypeError.
 // ✅ Se utiliza initializeUserPoints para la estabilidad de la DB.
 // ✅ MEJORADO: Centraliza la lógica de misiones y puntos ganados hoy.
-// ✅ TIEMPO REAL: Reemplaza el polling de 10s con suscripciones a Supabase
-//    para 'user_profiles', 'mission_progress' y 'daily_missions'.
+// ✅ TIEMPO REAL: Usa suscripciones a Supabase para actualización automática.
+// ✅ NUEVO: Usa getMissionsForProgressPanel() para mostrar solo misiones visibles
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
-// 🛑 IMPORTACIÓN DE SERVICIOS: Importar funciones de AMBOS servicios
+// 🛠️ IMPORTACIÓN DE SERVICIOS: Importar funciones de AMBOS servicios
 import { 
   getUserPoints,
   addPoints as addPointsService, 
@@ -19,9 +19,9 @@ import {
   initializeUserPoints 
 } from '../services/pointsService'; 
 import {
-  getDailyMissions,
+  getMissionsForProgressPanel, // ✅ NUEVA FUNCIÓN IMPORTADA
   getMissionStats
-} from '../services/missionsService'; // ✅ Importar servicios de misiones
+} from '../services/missionsService';
 import { supabase } from 'lib/supabase';
 
 const PointsContext = createContext();
@@ -50,7 +50,7 @@ export const PointsProvider = ({ children }) => {
     premium: 0,
   });
   
-  // ✅ Nuevos estados para misiones (movidos desde el Dashboard)
+  // ✅ Estados para misiones (movidos desde el Dashboard)
   const [missions, setMissions] = useState([]);
   const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
   
@@ -70,7 +70,7 @@ export const PointsProvider = ({ children }) => {
   const animationTimeoutRef = useRef(null);
   
   // ============================================================================
-  // LÓGICA DE CARGA DE DATOS (UNIFICADA)
+  // LÓGICA DE CARGA DE DATOS (UNIFICADA Y CORREGIDA)
   // ============================================================================
   
   /**
@@ -99,13 +99,11 @@ export const PointsProvider = ({ children }) => {
         getUserPoints(user.id),
         
         // ============================================================
-        // ✅ INICIO DE LA CORRECCIÓN
-        // Se añade 'frequency: 'all'' para obtener misiones
-        // diarias, semanales, de una vez, etc.
+        // ✅ CORRECCIÓN CRÍTICA: Usar getMissionsForProgressPanel()
+        // Esta función SOLO trae misiones con show_in_progress_panel=true
+        // y ya incluye el current_count y is_completed del usuario
         // ============================================================
-        getDailyMissions({ includeCompleted: false, frequency: 'all' }),
-        // ============================================================
-        // ✅ FIN DE LA CORRECCIÓN
+        getMissionsForProgressPanel(),
         // ============================================================
         
         getMissionStats()
@@ -119,9 +117,9 @@ export const PointsProvider = ({ children }) => {
           premium: pointsResult.premium,
         });
 
-        // 2. Actualizar Misiones
+        // 2. ✅ Actualizar Misiones (ahora con progreso en tiempo real)
         if (missionsResult.success) {
-          setMissions(missionsResult.missions.active || []);
+          setMissions(missionsResult.missions || []);
         }
 
         // 3. Actualizar Puntos Ganados Hoy
@@ -131,7 +129,7 @@ export const PointsProvider = ({ children }) => {
         
         console.log('✅ [PointsContext] Datos unificados cargados:', {
           points: pointsResult,
-          missions: missionsResult.missions.active?.length || 0,
+          missions: missionsResult.missions?.length || 0,
           earnedToday: statsResult.stats.daily_points_earned || 0
         });
       }
@@ -180,14 +178,17 @@ export const PointsProvider = ({ children }) => {
         )
         .subscribe();
 
-      // 3. Suscripción a cambios en el PROGRESO DE MISIONES (mission_progress)
+      // ============================================================
+      // ✅ CORRECCIÓN: Nombre correcto de tabla
+      // 3. Suscripción a cambios en el PROGRESO DE MISIONES
+      // ============================================================
       const missionsSubscription = supabase
-        .channel('public:mission_progress')
+        .channel('public:user_mission_progress')
         .on('postgres_changes',
           {
             event: '*', // Escuchar INSERT, UPDATE, DELETE
             schema: 'public',
-            table: 'mission_progress',
+            table: 'user_mission_progress', // ✅ NOMBRE CORRECTO
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
@@ -342,7 +343,7 @@ export const PointsProvider = ({ children }) => {
     freePoints: points.free,
     premiumPoints: points.premium,
     
-    // ✅ Nuevos estados
+    // ✅ Estados de misiones con progreso en tiempo real
     missions,
     pointsEarnedToday,
     
