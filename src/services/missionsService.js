@@ -173,6 +173,80 @@ export async function getAllMissions(filters = {}) {
 // --- FIN DE LA CORRECCIÓN ---
 // ============================================================================
 
+// ============================================================================
+// ✅ NUEVA FUNCIÓN: Obtener misiones para el Panel de Progreso
+// ============================================================================
+
+/**
+ * Obtiene las misiones que deben mostrarse en el Panel de Progreso
+ * con su progreso actual del usuario en tiempo real
+ * @returns {Promise<{success: boolean, missions: Array}>}
+ */
+export async function getMissionsForProgressPanel() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    // Obtener todas las misiones activas que deben mostrarse en el panel
+    const { data: missions, error: missionsError } = await supabase
+      .from('daily_missions')
+      .select('*')
+      .eq('is_active', true)
+      .eq('show_in_progress_panel', true)
+      .order('display_order', { ascending: true });
+
+    if (missionsError) throw missionsError;
+
+    if (!missions || missions.length === 0) {
+      return {
+        success: true,
+        missions: []
+      };
+    }
+
+    // Obtener el progreso del usuario para cada misión
+    const missionIds = missions.map(m => m.id);
+    const { data: progressData, error: progressError } = await supabase
+      .from('user_mission_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('mission_id', missionIds);
+
+    if (progressError) throw progressError;
+
+    // Combinar misiones con su progreso
+    const missionsWithProgress = missions.map(mission => {
+      const progress = progressData?.find(p => p.mission_id === mission.id);
+      
+      return {
+        ...mission,
+        current_count: progress?.current_count || 0,
+        is_completed: progress?.is_completed || false,
+        completed_at: progress?.completed_at || null,
+        progress_percentage: mission.target_count > 0 
+          ? Math.min(Math.round(((progress?.current_count || 0) / mission.target_count) * 100), 100)
+          : 0
+      };
+    });
+
+    return {
+      success: true,
+      missions: missionsWithProgress
+    };
+  } catch (error) {
+    console.error('Error obteniendo misiones para panel de progreso:', error);
+    return {
+      success: false,
+      error: error.message,
+      missions: []
+    };
+  }
+}
+
+// ============================================================================
+// --- FIN DE NUEVA FUNCIÓN ---
+// ============================================================================
+
 export async function getMissionProgress(missionId) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -630,18 +704,18 @@ export async function getTopMissions(limit = 10) {
 
 export async function createMission(missionData) {
   try {
-    // --- CORRECCIÓN ---
-    // De-estructuramos todos los campos del formData, incluyendo mission_key
+    // ✅ CORRECCIÓN: Incluir show_in_progress_panel
     const {
       title,
       description,
       mission_type,
-      mission_key, // <-- CAMPO AÑADIDO
+      mission_key,
       target_count,
       points_reward,
       frequency = 'daily',
       icon,
       is_active = true,
+      show_in_progress_panel = true, // ✅ CAMPO AÑADIDO
       display_order = 0
     } = missionData;
 
@@ -651,12 +725,13 @@ export async function createMission(missionData) {
         title,
         description,
         mission_type,
-        mission_key, // <-- CAMPO AÑADIDO
+        mission_key,
         target_count,
         points_reward,
         frequency,
         icon,
         is_active,
+        show_in_progress_panel, // ✅ CAMPO AÑADIDO
         display_order
       })
       .select()
@@ -680,9 +755,7 @@ export async function createMission(missionData) {
 
 export async function updateMission(missionId, updates) {
   try {
-    // --- CORRECCIÓN (Mejora) ---
-    // De-estructuramos 'updates' para pasar solo los campos permitidos
-    // Esto es más seguro y asegura que 'mission_key' se incluya.
+    // ✅ CORRECCIÓN: Incluir show_in_progress_panel
     const {
       title,
       description,
@@ -693,6 +766,7 @@ export async function updateMission(missionId, updates) {
       frequency,
       icon,
       is_active,
+      show_in_progress_panel, // ✅ CAMPO AÑADIDO
       display_order
     } = updates;
 
@@ -702,12 +776,13 @@ export async function updateMission(missionId, updates) {
         title,
         description,
         mission_type,
-        mission_key, // <-- CAMPO AÑADIDO
+        mission_key,
         target_count,
         points_reward,
         frequency,
         icon,
         is_active,
+        show_in_progress_panel, // ✅ CAMPO AÑADIDO
         display_order,
         updated_at: new Date().toISOString()
       })
@@ -886,6 +961,7 @@ export default {
   getDailyMissions,
   getAllMissions,
   getMissionProgress,
+  getMissionsForProgressPanel, // ✅ FUNCIÓN AÑADIDA
 
   // Tracking
   trackMissionProgress,
