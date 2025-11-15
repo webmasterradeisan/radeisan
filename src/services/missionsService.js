@@ -19,6 +19,16 @@ import * as pointsService from './pointsService';
 export const MISSION_TYPES = {
   WATCH_VIDEO: 'watch_videos',      // Corregido (antes 'watch_video')
   UPLOAD_VIDEO: 'upload_video',       // Coincidía (según tu lista)
+  
+  // ============================================================
+  // ✅ INICIO DE LA CORRECCIÓN
+  // ============================================================
+  UPLOAD_REEL: 'upload_reel',       // <-- AÑADIDO
+  UPLOAD_PHOTO: 'upload_photo',     // <-- AÑADIDO
+  // ============================================================
+  // ✅ FIN DE LA CORRECCIÓN
+  // ============================================================
+  
   GIVE_LIKE: 'like_videos',         // Corregido (antes 'give_like')
   SHARE_CONTENT: 'share_video',       // Corregido (antes 'share_content')
   DONATE_POINTS: 'donate_points',     // (No estaba en tu lista, se mantiene por si acaso)
