@@ -11,7 +11,6 @@ import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select'; 
-// 🛑 ELIMINADA: Dependencia 'react-beautiful-dnd' y toda su lógica.
 
 // ============================================================================
 // CONSTANTES Y CONFIGURACIÓN (ESPAÑOL)
@@ -72,7 +71,7 @@ const MissionForm = ({
     title: initialData?.title || '',
     description: initialData?.description || '',
     mission_type: String(initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO),
-    mission_key: String(initialData?.mission_key || initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO), // ✅ Prellenado
+    mission_key: String(initialData?.mission_key || initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO), 
     target_count: initialData?.target_count || 1,
     points_reward: initialData?.points_reward || 0,
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
@@ -95,7 +94,7 @@ const MissionForm = ({
       
       // ✅ CORRECCIÓN CLAVE: Autollenar mission_key y solucionar el problema de selección
       if (name === 'mission_type') {
-        newState.mission_key = newValue; // El valor de la opción es el mission_type
+        newState.mission_key = newValue; 
       }
       
       return newState;
@@ -110,7 +109,7 @@ const MissionForm = ({
             mission_key: prev.mission_type
         }));
     }
-  }, [isEditing]);
+  }, [isEditing, formData.mission_key, formData.mission_type]);
 
 
   const handleSubmit = async (e) => {
@@ -168,7 +167,7 @@ const MissionForm = ({
         {/* Fila 2: Tipo de Misión y Clave */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           
-          {/* ✅ CORRECCIÓN: Usando select nativo para garantizar funcionalidad */}
+          {/* ✅ CORRECCIÓN: Usando select nativo para Tipo de Misión */}
           <div className="flex flex-col space-y-1">
             <label htmlFor="mission_type" className="text-sm font-medium text-foreground">
               Tipo de Misión <span className="text-destructive">*</span>
@@ -316,7 +315,7 @@ const MissionForm = ({
 // COMPONENTE: ConfirmationModal (Modal de Eliminación)
 // ============================================================================
 
-const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
+const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
   <div className="fixed inset-0 bg-background/80 backdrop-blur-sm bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
       <div className="flex items-center gap-3 mb-4">
@@ -341,13 +340,15 @@ const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
       <div className="flex items-center gap-3">
         <button
           onClick={onConfirm}
-          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          disabled={isDeleting}
+          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
         >
-          Sí, eliminar
+          {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
         </button>
         <button
           onClick={onCancel}
-          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+          disabled={isDeleting}
+          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
         >
           Cancelar
         </button>
@@ -431,7 +432,7 @@ export default function MissionsManagement() {
         m.title.toLowerCase().includes(searchTerm) ||
         (m.description && m.description.toLowerCase().includes(searchTerm)) ||
         m.mission_type.toLowerCase().includes(searchTerm) ||
-        (m.mission_key && m.mission_key.toLowerCase().includes(searchTerm)) // Incluir mission_key en búsqueda
+        (m.mission_key && m.mission_key.toLowerCase().includes(searchTerm))
       );
     }
 
@@ -685,7 +686,7 @@ export default function MissionsManagement() {
                         >
                           <AppIcon name={mission.is_active ? 'ToggleRight' : 'ToggleLeft'} size={18} />
                         </Button>
-                        {/* ✅ NUEVO BOTÓN: Alternar mostrar en panel de progreso */}
+                        {/* ✅ BOTÓN DE VISIBILIDAD (Ojo) */}
                         <Button
                           variant="ghost"
                           size="sm"
