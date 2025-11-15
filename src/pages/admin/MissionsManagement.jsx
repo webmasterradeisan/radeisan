@@ -10,7 +10,7 @@ import * as missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
+import Select from '../../components/ui/Select'; // Mantenemos la importación, pero no lo usamos para Tipo de Misión
 // 🛑 ELIMINADA: Dependencia 'react-beautiful-dnd' y toda su lógica.
 
 // ============================================================================
@@ -171,15 +171,28 @@ const MissionForm = ({
 
         {/* Fila 2: Tipo de Misión y Clave */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select
-            label="Tipo de Misión"
-            name="mission_type"
-            value={formData.mission_type}
-            onChange={handleChange}
-            // Excluir "Todos los Tipos" para la selección
-            options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} 
-            required
-          />
+          {/* // ✅ CORRECCIÓN FINAL: Reemplazo de Select por <select> nativo para solucionar el problema de interacción
+          */}
+          <div className="flex flex-col space-y-1">
+            <label htmlFor="mission_type" className="text-sm font-medium text-foreground">
+              Tipo de Misión <span className="text-destructive">*</span>
+            </label>
+            <select
+              id="mission_type"
+              name="mission_type"
+              value={formData.mission_type}
+              onChange={handleChange}
+              required
+              className="px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:ring-2 focus:ring-primary focus:border-primary transition duration-150 ease-in-out"
+            >
+              {MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all').map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          
           {/* ✅ Clave de Misión (Autollenada) */}
           <Input 
             label="Clave de Misión (mission_key)" 
@@ -212,18 +225,20 @@ const MissionForm = ({
             onChange={handleChange} 
             required 
           />
+          {/* Mantenemos el componente Select original para Frecuencia, asumiendo que solo el de Tipo de Misión falla */}
           <Select
             label="Frecuencia"
             name="frequency"
             value={formData.frequency}
             onChange={handleChange}
-            options={FREQUENCY_OPTIONS.filter(opt => opt.value !== 'all')} // Excluir "Todas las Frecuencias"
+            options={FREQUENCY_OPTIONS.filter(opt => opt.value !== 'all')} 
             required
           />
         </div>
 
         {/* Fila 4: Ícono y Estado Activo */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Mantenemos el componente Select original para Icono, asumiendo que solo el de Tipo de Misión falla */}
           <Select
             label="Ícono de Misión"
             name="icon"
