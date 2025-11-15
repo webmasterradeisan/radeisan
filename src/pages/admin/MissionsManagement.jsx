@@ -11,7 +11,7 @@ import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-// 🛑 ELIMINADO: La dependencia 'react-beautiful-dnd' para evitar el error de compilación.
+// 🛑 Eliminada dependencia 'react-beautiful-dnd'.
 
 // ============================================================================
 // CONSTANTES Y CONFIGURACIÓN
@@ -138,7 +138,6 @@ const MissionForm = ({
             options={MISSION_TYPE_OPTIONS.slice(1).map(opt => ({
               value: opt.value,
               label: opt.label,
-              // Nota: Mapeamos de nuevo para evitar que el primer 'Todos' aparezca en el form
             }))}
             required
           />
