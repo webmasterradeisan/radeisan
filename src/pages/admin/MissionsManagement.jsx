@@ -11,7 +11,7 @@ import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-// 🛑 ELIMINADO: import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+// 🛑 ELIMINADO: La dependencia 'react-beautiful-dnd' para evitar el error de compilación.
 
 // ============================================================================
 // CONSTANTES Y CONFIGURACIÓN
@@ -160,7 +160,7 @@ const MissionForm = ({
             label="Conteo Objetivo (Target)" 
             name="target_count" 
             type="number" 
-            min="0"
+            min="0" // ✅ CORREGIDO: Permite 0
             value={formData.target_count} 
             onChange={handleChange} 
             required 
@@ -169,7 +169,7 @@ const MissionForm = ({
             label="Recompensa (Puntos)" 
             name="points_reward" 
             type="number" 
-            min="0"
+            min="0" // ✅ CORREGIDO: Permite 0
             value={formData.points_reward} 
             onChange={handleChange} 
             required 
@@ -469,13 +469,14 @@ export default function MissionsManagement() {
           <AppIcon name="Plus" size={18} className="mr-2" />
           Crear Misión
         </Button>
+        {/* Pestaña Reordenar Deshabilitada */}
         <Button 
           variant={activeTab === 'reorder' ? 'default' : 'ghost'} 
-          onClick={() => { setActiveTab('reorder'); setMissionToEdit(null); }}
+          onClick={() => { alert('Funcionalidad de Reordenamiento Deshabilitada'); }}
           className="rounded-b-none"
         >
           <AppIcon name="Move" size={18} className="mr-2" />
-          Reordenar (Deshabilitado)
+          Reordenar (Desh.)
         </Button>
         {/* Estadísticas de Misiones (Opcional, se mantiene por estructura) */}
         {/* <Button variant={activeTab === 'stats' ? 'default' : 'ghost'} onClick={() => setActiveTab('stats')} className="rounded-b-none">
@@ -644,7 +645,7 @@ export default function MissionsManagement() {
             <h3 className="text-xl font-bold text-foreground">Reordenamiento Deshabilitado</h3>
             <p className="text-muted-foreground max-w-lg mx-auto">
                 La funcionalidad de arrastrar y soltar está temporalmente deshabilitada
-                debido a una dependencia del proyecto (`react-beautiful-dnd`) que no se pudo resolver durante la compilación.
+                debido a una dependencia del proyecto que no se pudo resolver durante la compilación.
             </p>
             <Button onClick={() => setActiveTab('list')}>
                 Volver al Listado
