@@ -33,6 +33,14 @@ import PointsRewardsStore from './pages/points-rewards-store';
 // ✅ NUEVO - PERFIL PÚBLICO
 import PublicProfilePage from './pages/PublicProfilePage';
 
+// ==================================================================
+// ✅ INICIO DE LA CORRECCIÓN 1: Importar componente de subida de fotos
+// ==================================================================
+import PhotoUploadStudio from './pages/photo-upload-studio'; 
+// ==================================================================
+// ✅ FIN DE LA CORRECCIÓN 1
+// ==================================================================
+
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/PurchasePointsPage';
 import PurchaseSuccess from './pages/purchase-points/PurchaseSuccess';
@@ -235,6 +243,23 @@ const Routes = () => {
                   </ProtectedRoute>
                 } 
               />
+              
+              {/* ================================================================== */}
+              {/* ✅ INICIO DE LA CORRECCIÓN 2: Añadir la ruta para subir fotos */}
+              {/* ================================================================== */}
+              <Route 
+                path="/photo-upload" 
+                element={
+                  <ProtectedRoute>
+                    <MobileLayoutWrapper>
+                      <PhotoUploadStudio />
+                    </MobileLayoutWrapper>
+                  </ProtectedRoute>
+                } 
+              />
+              {/* ================================================================== */}
+              {/* ✅ FIN DE LA CORRECCIÓN 2 */}
+              {/* ================================================================== */}
 
               <Route 
                 path="/video-edit/:videoId" 
