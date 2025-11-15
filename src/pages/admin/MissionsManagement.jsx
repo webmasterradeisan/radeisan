@@ -110,21 +110,24 @@ const MissionForm = ({
     setFormData(prev => {
       let newState = { ...prev, [name]: newValue };
       
-      // Autollenar mission_key al cambiar mission_type
+      // ✅ CORRECCIÓN: Generar mission_key único con timestamp al cambiar mission_type
       if (name === 'mission_type') {
-        newState.mission_key = newValue; 
+        // Generar un mission_key único: tipo_timestamp
+        const timestamp = Date.now();
+        newState.mission_key = `${newValue}_${timestamp}`; 
       }
       
       return newState;
     });
   };
   
-  // Asegura el prellenado de mission_key en la carga inicial
+  // ✅ CORRECCIÓN: Asegurar que mission_key sea único en la carga inicial
   useEffect(() => {
     if (!isEditing && formData.mission_key === '' && formData.mission_type) {
+        const timestamp = Date.now();
         setFormData(prev => ({
             ...prev,
-            mission_key: prev.mission_type
+            mission_key: `${prev.mission_type}_${timestamp}`
         }));
     }
   }, [isEditing, formData.mission_type, formData.mission_key]);
@@ -554,12 +557,14 @@ export default function MissionsManagement() {
   
   const handleCreateNewMission = () => {
     const missionTypeUploadReel = missionsService.MISSION_TYPES.UPLOAD_REEL;
+    // ✅ CORRECCIÓN: Generar mission_key único
+    const timestamp = Date.now();
     
     const prefilledReelMission = {
         title: "Subir un Reel",
         description: "Sube un video corto (reel) a tu perfil para ganar puntos.",
         mission_type: missionTypeUploadReel,
-        mission_key: missionTypeUploadReel,
+        mission_key: `${missionTypeUploadReel}_${timestamp}`, // ✅ Mission key único
         target_count: 1,
         points_reward: 75,
         frequency: missionsService.MISSION_FREQUENCY.DAILY,
