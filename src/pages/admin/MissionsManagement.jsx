@@ -11,16 +11,15 @@ import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-// 🛑 ELIMINADO: La dependencia 'react-beautiful-dnd' para evitar el error de compilación.
+// 🛑 ELIMINADA: Dependencia 'react-beautiful-dnd' (causa del fallo de compilación).
 
 // ============================================================================
-// CONSTANTES Y CONFIGURACIÓN
+// CONSTANTES Y CONFIGURACIÓN (ESPAÑOL)
 // ============================================================================
 
-// Tipos de misión dinámicos (incluye upload_reel y upload_photo)
+// Tipos de misión dinámicos, actualizados con 'upload_reel' y 'upload_photo'
 const MISSION_TYPE_OPTIONS = [
   { value: 'all', label: 'Todos los Tipos' },
-  // Las opciones visibles en el menú de filtros (basadas en el servicio)
   { value: missionsService.MISSION_TYPES.WATCH_VIDEO, label: 'Ver videos' },
   { value: missionsService.MISSION_TYPES.UPLOAD_VIDEO, label: 'Subir video' },
   { value: missionsService.MISSION_TYPES.UPLOAD_REEL, label: 'Subir reel' }, // ✅ AÑADIDO
@@ -30,7 +29,7 @@ const MISSION_TYPE_OPTIONS = [
   { value: missionsService.MISSION_TYPES.COMMENT, label: 'Comentar' },
   { value: missionsService.MISSION_TYPES.FOLLOW_USER, label: 'Seguir usuarios' },
   { value: missionsService.MISSION_TYPES.COMPLETE_PROFILE, label: 'Completar perfil' },
-  { value: missionsService.MISSION_TYPES.LOGIN_DAILY, label: 'Login diario' },
+  { value: missionsService.MISSION_TYPES.LOGIN_DAILY, label: 'Inicio de sesión diario' },
   { value: missionsService.MISSION_TYPES.WATCH_REELS, label: 'Ver reels' },
   { value: missionsService.MISSION_TYPES.INVITE_FRIEND, label: 'Invitar amigo' },
   { value: missionsService.MISSION_TYPES.DONATE_POINTS, label: 'Donar puntos' },
@@ -67,7 +66,7 @@ const MissionForm = ({
     title: initialData?.title || '',
     description: initialData?.description || '',
     mission_type: initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO,
-    mission_key: initialData?.mission_key || '', // ✅ AÑADIDO: Clave de Misión
+    mission_key: initialData?.mission_key || '', // Clave de Misión
     target_count: initialData?.target_count || 1,
     points_reward: initialData?.points_reward || 0, // ✅ Default 0
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
@@ -147,7 +146,6 @@ const MissionForm = ({
             name="mission_type"
             value={formData.mission_type}
             onChange={handleChange}
-            // Mapea todas las opciones excepto la primera ('all')
             options={MISSION_TYPE_OPTIONS.slice(1).map(opt => ({
               value: opt.value,
               label: opt.label,
@@ -304,7 +302,7 @@ export default function MissionsManagement() {
   // ============================================================================
 
   // Tabs
-  const [activeTab, setActiveTab] = useState('list'); // 'list', 'form', 'stats', 'reorder'
+  const [activeTab, setActiveTab] = useState('list'); // 'list', 'form', 'stats'
 
   // Misiones
   const [missions, setMissions] = useState([]);
@@ -326,7 +324,6 @@ export default function MissionsManagement() {
   const [missionToEdit, setMissionToEdit] = useState(null);
   const [missionToDelete, setMissionToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isReordering, setIsReordering] = useState(false);
 
 
   // ============================================================================
@@ -451,7 +448,7 @@ export default function MissionsManagement() {
   // LÓGICA DE REORDENAMIENTO (Drag and Drop)
   // ============================================================================
 
-  // 🛑 ELIMINADAS: onDragEnd y handleSaveReorder para evitar el error de compilación.
+  // 🛑 Lógica de reordenamiento eliminada para evitar fallos de compilación.
 
   // ============================================================================
   // RENDERIZADO
@@ -481,20 +478,15 @@ export default function MissionsManagement() {
           <AppIcon name="Plus" size={18} className="mr-2" />
           Crear Misión
         </Button>
-        {/* Pestaña Reordenar Deshabilitada */}
+        {/* La pestaña "Reordenar" se elimina o se deja como un botón simple */}
         <Button 
-          variant={activeTab === 'reorder' ? 'default' : 'ghost'} 
+          variant={'ghost'} // Dejamos el botón simple para no romper el diseño si se espera una línea de botones
           onClick={() => { alert('Funcionalidad de Reordenamiento Deshabilitada'); }}
           className="rounded-b-none"
         >
           <AppIcon name="Move" size={18} className="mr-2" />
           Reordenar (Desh.)
         </Button>
-        {/* Estadísticas de Misiones (Opcional, se mantiene por estructura) */}
-        {/* <Button variant={activeTab === 'stats' ? 'default' : 'ghost'} onClick={() => setActiveTab('stats')} className="rounded-b-none">
-          <AppIcon name="BarChart2" size={18} className="mr-2" />
-          Estadísticas
-        </Button> */}
         <Button 
             variant="destructive" 
             onClick={missionsService.resetDailyMissions}
@@ -646,23 +638,6 @@ export default function MissionsManagement() {
             </table>
           </div>
         </>
-      )}
-
-      {/* ============================================================================
-      // PESTAÑA DE REORDENAMIENTO (Deshabilitada para Fix)
-      // ============================================================================ */}
-      {activeTab === 'reorder' && (
-        <div className="space-y-4 text-center py-16">
-            <AppIcon name="AlertCircle" size={40} className="text-yellow-600 mx-auto mb-3" />
-            <h3 className="text-xl font-bold text-foreground">Reordenamiento Deshabilitado</h3>
-            <p className="text-muted-foreground max-w-lg mx-auto">
-                La funcionalidad de arrastrar y soltar está temporalmente deshabilitada
-                debido a una dependencia del proyecto que no se pudo resolver durante la compilación.
-            </p>
-            <Button onClick={() => setActiveTab('list')}>
-                Volver al Listado
-            </Button>
-        </div>
       )}
 
       {/* Modal de Confirmación de Eliminación */}
