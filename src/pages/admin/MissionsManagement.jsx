@@ -38,10 +38,10 @@ export default function MissionsManagement() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    mission_type: 'watch_video',
-    mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
+    mission_type: 'watch_videos', // Corregido para coincidir con el service
+    mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
     target_count: 1,
-    points_reward: 10,
+    points_reward: 0, // ✅ CORREGIDO: Default es 0
     frequency: 'daily',
     icon: 'Target',
     is_active: true,
@@ -73,11 +73,12 @@ export default function MissionsManagement() {
       setLoading(true);
       setError(null);
 
+      // ✅ CORREGIDO: Llama a la función 'getAllMissions' que ignora RLS
       const result = await missionsService.getAllMissions();
 
       if (result.success) {
         setMissions(result.missions);
-        setFilteredMissions(result.missions);
+        // setFilteredMissions(result.missions); // 'useEffect' [missions, filters] se encarga de esto
       } else {
         throw new Error(result.error);
       }
@@ -149,7 +150,7 @@ export default function MissionsManagement() {
       filtered = filtered.filter(
         m =>
           m.title.toLowerCase().includes(searchLower) ||
-          m.description.toLowerCase().includes(searchLower)
+          (m.description && m.description.toLowerCase().includes(searchLower))
       );
     }
 
@@ -199,10 +200,10 @@ export default function MissionsManagement() {
         setFormData({
           title: '',
           description: '',
-          mission_type: 'watch_video',
-          mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
+          mission_type: 'watch_videos',
+          mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
           target_count: 1,
-          points_reward: 10,
+          points_reward: 0, // ✅ CORREGIDO: Default es 0
           frequency: 'daily',
           icon: 'Target',
           is_active: true,
@@ -240,10 +241,10 @@ export default function MissionsManagement() {
         setFormData({
           title: '',
           description: '',
-          mission_type: 'watch_video',
-          mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
+          mission_type: 'watch_videos',
+          mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
           target_count: 1,
-          points_reward: 10,
+          points_reward: 0, // ✅ CORREGIDO: Default es 0
           frequency: 'daily',
           icon: 'Target',
           is_active: true,
@@ -293,7 +294,12 @@ export default function MissionsManagement() {
     try {
       setError(null);
 
-      const result = await missionsService.toggleMissionActive(mission.id, !mission.is_active);
+      // Usamos el servicio 'updateMission' genérico en lugar de 'toggle'
+      // para asegurar que las políticas RLS que arreglamos funcionen.
+      const result = await missionsService.updateMission(mission.id, { 
+        ...mission, // Pasa todos los datos existentes
+        is_active: !mission.is_active // Cambia solo el estado
+      });
 
       if (result.success) {
         setSuccess(
@@ -338,10 +344,10 @@ export default function MissionsManagement() {
     setFormData({
       title: '',
       description: '',
-      mission_type: 'watch_video',
-      mission_key: 'watch_video', // <-- CORRECCIÓN AÑADIDA
+      mission_type: 'watch_videos',
+      mission_key: 'watch_videos', // <-- CORRECCIÓN AÑADIDA
       target_count: 1,
-      points_reward: 10,
+      points_reward: 0, // ✅ CORREGIDO: Default es 0
       frequency: 'daily',
       icon: 'Target',
       is_active: true,
@@ -565,7 +571,7 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {missions.map(mission => (
+          {filteredMissions.map(mission => ( // ✅ CORREGIDO: Usar 'filteredMissions'
             <MissionCard
               key={mission.id}
               mission={mission}
@@ -578,9 +584,9 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
       )}
 
       {/* Contador de resultados */}
-      {missions.length > 0 && (
+      {filteredMissions.length > 0 && ( // ✅ CORREGIDO: Usar 'filteredMissions'
         <div className="text-sm text-gray-600 text-center">
-          Mostrando {missions.length} misión{missions.length !== 1 ? 'es' : ''}
+          Mostrando {filteredMissions.length} misión{filteredMissions.length !== 1 ? 'es' : ''}
         </div>
       )}
     </div>
@@ -593,17 +599,20 @@ function ListTab({ missions, filters, updateFilter, onEdit, onDelete, onToggleAc
 
 function MissionCard({ mission, onEdit, onDelete, onToggleActive }) {
   const getMissionTypeLabel = type => {
+    // ✅ CORREGIDO: Lista de 'labels' actualizada
     const types = {
-      watch_video: 'Ver videos',
+      watch_videos: 'Ver videos',
       upload_video: 'Subir video',
-      give_like: 'Dar likes',
-      share_content: 'Compartir',
+      upload_photo: 'Subir foto', // <-- AÑADIDO
+      like_videos: 'Dar likes', // <-- Corregido
+      share_video: 'Compartir', // <-- Corregido
       donate_points: 'Donar puntos',
-      comment: 'Comentar',
+      comment_videos: 'Comentar', // <-- Corregido
       follow_user: 'Seguir usuarios',
       complete_profile: 'Completar perfil',
       login_daily: 'Login diario',
       watch_reels: 'Ver reels',
+      invite_friend: 'Invitar amigo', // <-- AÑADIDO
       upload_pack: 'Paquete de Publicación',
       all_missions_streak: 'Racha de Misiones'
     };
@@ -796,7 +805,10 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
 
           {/* Grid de 2 columnas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Tipo de misión */}
+            
+            {/* ================================================== */}
+            {/* ✅ INICIO: "Tipo de misión" CORREGIDO */}
+            {/* ================================================== */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Tipo de misión *
@@ -807,16 +819,20 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 onChange={e => updateField('mission_type', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
-                <option value="watch_video">Ver videos</option>
+                {/* Lista basada en missionsService.js y tu solicitud */}
+                <option value="watch_videos">Ver videos</option>
                 <option value="upload_video">Subir video</option>
-                <option value="give_like">Dar likes</option>
-                <option value="share_content">Compartir contenido</option>
-                <option value="donate_points">Donar puntos</option>
-                <option value="comment">Comentar</option>
+                <option value="upload_photo">Subir foto</option>
+                <option value="like_videos">Dar likes</option>
+                <option value="share_video">Compartir contenido</option>
+                <option value="comment_videos">Comentar</option>
                 <option value="follow_user">Seguir usuarios</option>
                 <option value="complete_profile">Completar perfil</option>
                 <option value="login_daily">Login diario</option>
                 <option value="watch_reels">Ver reels</option>
+                <option value="invite_friend">Invitar amigo</option>
+                <option value="donate_points">Donar puntos</option>
+                {/* Tipos especiales (si aún los usas) */}
                 <option value="upload_pack">Paquete de Publicación</option>
                 <option value="all_missions_streak">Racha de Misiones Diarias</option>
               </select>
@@ -828,6 +844,10 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                 </p>
               )}
             </div>
+            {/* ================================================== */}
+            {/* ✅ FIN: "Tipo de misión" CORREGIDO */}
+            {/* ================================================== */}
+
 
             {/* Frecuencia */}
             <div>
@@ -847,7 +867,9 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
               </select>
             </div>
 
-            {/* Meta (target count) */}
+            {/* ================================================== */}
+            {/* ✅ INICIO: "Meta (cantidad)" CORREGIDO */}
+            {/* ================================================== */}
             {showTargetCount && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -856,10 +878,14 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                   <input
                     type="number"
                     required
-                    min="1"
+                    min="0" // <-- CORREGIDO: Permite 0
                     placeholder="1"
                     value={formData.target_count}
-                    onChange={e => updateField('target_count', parseInt(e.target.value) || 1)}
+                    onChange={e => {
+                      const value = parseInt(e.target.value);
+                      // Permite 0, pero si está vacío, usa 1 como fallback
+                      updateField('target_count', isNaN(value) ? 1 : value);
+                    }}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                   
@@ -875,8 +901,14 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
                   )}
                 </div>
             )}
+            {/* ================================================== */}
+            {/* ✅ FIN: "Meta (cantidad)" CORREGIDO */}
+            {/* ================================================== */}
 
-            {/* Recompensa en puntos */}
+
+            {/* ================================================== */}
+            {/* ✅ INICIO: "Recompensa (puntos)" CORREGIDO */}
+            {/* ================================================== */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Recompensa (puntos) *
@@ -884,14 +916,22 @@ function FormTab({ formData, setFormData, editingMission, onSubmit, onCancel, sa
               <input
                 type="number"
                 required
-                min="1"
-                placeholder="10"
+                min="0" // <-- CORREGIDO: Permite 0
+                placeholder="0"
                 value={formData.points_reward}
-                onChange={e => updateField('points_reward', parseInt(e.target.value) || 10)}
+                onChange={e => {
+                  const value = parseInt(e.target.value);
+                  // Permite 0, pero si está vacío, usa 0 como fallback
+                  updateField('points_reward', isNaN(value) ? 0 : value);
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-500 mt-1">Puntos que ganará al completar</p>
             </div>
+            {/* ================================================== */}
+            {/* ✅ FIN: "Recompensa (puntos)" CORREGIDO */}
+            {/* ================================================== */}
+
           </div>
 
           {/* Selector de icono */}
