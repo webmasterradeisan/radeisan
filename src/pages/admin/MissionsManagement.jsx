@@ -94,7 +94,7 @@ const MissionForm = ({
       
       // ✅ CORRECCIÓN CLAVE: Autollenar mission_key y solucionar el problema de selección
       if (name === 'mission_type') {
-        newState.mission_key = newValue; 
+        newState.mission_key = newValue; // El valor de la opción es el mission_type
       }
       
       return newState;
@@ -167,7 +167,7 @@ const MissionForm = ({
         {/* Fila 2: Tipo de Misión y Clave */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           
-          {/* ✅ CORRECCIÓN: Usando select nativo para Tipo de Misión */}
+          {/* ✅ CORRECCIÓN: Usando select nativo para garantizar funcionalidad */}
           <div className="flex flex-col space-y-1">
             <label htmlFor="mission_type" className="text-sm font-medium text-foreground">
               Tipo de Misión <span className="text-destructive">*</span>
@@ -197,7 +197,7 @@ const MissionForm = ({
             placeholder="Ej: ver_videos_diario_unico"
             required 
             helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
-            readOnly={!isEditing} // Sugerencia: solo permitir editar si ya existe la misión
+            readOnly={!isEditing} 
           />
         </div>
 
@@ -315,7 +315,7 @@ const MissionForm = ({
 // COMPONENTE: ConfirmationModal (Modal de Eliminación)
 // ============================================================================
 
-const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
+const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
   <div className="fixed inset-0 bg-background/80 backdrop-blur-sm bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
       <div className="flex items-center gap-3 mb-4">
@@ -340,15 +340,13 @@ const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
       <div className="flex items-center gap-3">
         <button
           onClick={onConfirm}
-          disabled={isDeleting}
-          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
+          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
         >
-          {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+          Sí, eliminar
         </button>
         <button
           onClick={onCancel}
-          disabled={isDeleting}
-          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
         >
           Cancelar
         </button>
@@ -503,6 +501,8 @@ export default function MissionsManagement() {
   const handleToggleShowInPanel = async (mission) => {
     const newStatus = !mission.show_in_progress_panel;
     const result = await missionsService.updateMission(mission.id, { show_in_progress_panel: newStatus });
+    
+    // 🛑 CORRECCIÓN CLAVE: La actualización debe reflejarse en el estado local después del éxito.
     if (result.success) {
       setMissions(prev => prev.map(m =>
         m.id === mission.id ? { ...m, show_in_progress_panel: newStatus } : m
@@ -601,7 +601,7 @@ export default function MissionsManagement() {
               onChange={handleFilterChange}
               options={MISSION_TYPE_OPTIONS}
             />
-            {/* ✅ FILTRO: Mostrar en Progreso */}
+            {/* FILTRO: Mostrar en Progreso */}
             <Select 
               label="Mostrar en Progreso"
               name="show_in_progress_panel"
