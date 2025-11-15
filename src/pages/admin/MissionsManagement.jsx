@@ -1293,7 +1293,8 @@ function DeleteConfirmModal({ mission, onConfirm, onCancel }) {
           <p className="text-sm text-yellow-800">
             <strong>Advertencia:</strong> Esta acción no se puede deshacer. El progreso de los
             usuarios en esta misión se perderá.
-          </T>
+          </p> 
+          {/* ✅✅✅ INICIO DE LA CORRECCIÓN FINAL (era </T>) ✅✅✅ */}
         </div>
 
         <div className="flex items-center gap-3">
