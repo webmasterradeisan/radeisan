@@ -204,10 +204,10 @@ export async function getMissionsForProgressPanel() {
       };
     }
 
-    // Obtener el progreso del usuario para cada misión
+    // ✅ CORRECCIÓN: Usar 'mission_progress' en lugar de 'user_mission_progress'
     const missionIds = missions.map(m => m.id);
     const { data: progressData, error: progressError } = await supabase
-      .from('user_mission_progress')
+      .from('mission_progress')
       .select('*')
       .eq('user_id', user.id)
       .in('mission_id', missionIds);
@@ -253,7 +253,7 @@ export async function getMissionProgress(missionId) {
     if (!user) throw new Error('Usuario no autenticado');
 
     const { data, error } = await supabase
-      .from('user_mission_progress')
+      .from('mission_progress')
       .select(`
         *,
         mission:daily_missions (*)
@@ -475,7 +475,7 @@ export async function claimMissionReward(missionId) {
     if (!user) throw new Error('Usuario no autenticado');
 
     const { data: progress, error: progressError } = await supabase
-      .from('user_mission_progress')
+      .from('mission_progress')
       .select(`
         *,
         mission:daily_missions (*)
@@ -499,7 +499,7 @@ export async function claimMissionReward(missionId) {
     if (!pointsResult.success) throw new Error('Error otorgando puntos');
 
     const { error: updateError } = await supabase
-      .from('user_mission_progress')
+      .from('mission_progress')
       .update({
         reward_claimed: true,
         reward_claimed_at: new Date().toISOString()
@@ -626,7 +626,7 @@ export async function getStreakHistory(limit = 30) {
     if (!user) throw new Error('Usuario no autenticado');
 
     const { data, error } = await supabase
-      .from('user_mission_progress')
+      .from('mission_progress')
       .select('completed_at, mission:daily_missions(title)')
       .eq('user_id', user.id)
       .eq('is_completed', true)
@@ -866,7 +866,7 @@ export async function canCompleteMissionToday(missionId) {
     if (!user) throw new Error('Usuario no autenticado');
 
     const { data, error } = await supabase
-      .from('user_mission_progress')
+      .from('mission_progress')
       .select('completed_at, is_completed')
       .eq('user_id', user.id)
       .eq('mission_id', missionId)
