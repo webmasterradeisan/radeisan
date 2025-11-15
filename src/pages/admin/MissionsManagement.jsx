@@ -1,4 +1,3 @@
-// src/pages/admin/MissionsManagement.jsx
 // ============================================================================
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
@@ -7,8 +6,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-// ✅ Importamos el servicio actualizado con los nuevos tipos de misión
-import * as missionsService from '../../services/missionsService'; 
+import * as missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -162,7 +160,7 @@ const MissionForm = ({
             label="Conteo Objetivo (Target)" 
             name="target_count" 
             type="number" 
-            min="1"
+            min="0"
             value={formData.target_count} 
             onChange={handleChange} 
             required 
