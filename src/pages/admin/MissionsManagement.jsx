@@ -2,7 +2,7 @@
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
 // ============================================================================
 // Componente completo para gestionar el sistema de misiones desde el admin panel
-// Incluye: CRUD completo, estadísticas, activar/desactivar, reordenamiento
+// Incluye: CRUD completo, estadísticas, activar/desactivar, y más.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -17,9 +17,9 @@ import Select from '../../components/ui/Select';
 // CONSTANTES Y CONFIGURACIÓN (ESPAÑOL)
 // ============================================================================
 
-// Tipos de misión dinámicos, actualizados con 'upload_reel' y 'upload_photo'
+// Opciones de tipo de misión para Select (filtros y formulario)
 const MISSION_TYPE_OPTIONS = [
-  { value: 'all', label: 'Todos los Tipos' },
+  { value: 'all', label: 'Todos los Tipos' }, // Opción para filtros
   { value: missionsService.MISSION_TYPES.WATCH_VIDEO, label: 'Ver videos' },
   { value: missionsService.MISSION_TYPES.UPLOAD_VIDEO, label: 'Subir video' },
   { value: missionsService.MISSION_TYPES.UPLOAD_REEL, label: 'Subir reel' }, // ✅ AÑADIDO
@@ -38,7 +38,7 @@ const MISSION_TYPE_OPTIONS = [
 ];
 
 const FREQUENCY_OPTIONS = [
-  { value: 'all', label: 'Todas las Frecuencias' },
+  { value: 'all', label: 'Todas las Frecuencias' }, // Opción para filtros
   { value: missionsService.MISSION_FREQUENCY.DAILY, label: 'Diaria' },
   { value: missionsService.MISSION_FREQUENCY.WEEKLY, label: 'Semanal' },
   { value: missionsService.MISSION_FREQUENCY.MONTHLY, label: 'Mensual' },
@@ -46,7 +46,7 @@ const FREQUENCY_OPTIONS = [
 ];
 
 const IS_ACTIVE_OPTIONS = [
-  { value: 'all', label: 'Todos los Estados' },
+  { value: 'all', label: 'Todos los Estados' }, // Opción para filtros
   { value: 'true', label: 'Activas' },
   { value: 'false', label: 'Inactivas' }
 ];
@@ -88,10 +88,18 @@ const MissionForm = ({
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    let newValue = type === 'checkbox' ? checked : value;
+
+    setFormData(prev => {
+      let newState = { ...prev, [name]: newValue };
+      
+      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key y solucionar el problema de selección
+      if (name === 'mission_type') {
+        newState.mission_key = newValue; // El valor de la opción es el mission_type (ej. 'upload_reel')
+      }
+      
+      return newState;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -153,10 +161,10 @@ const MissionForm = ({
             name="mission_type"
             value={formData.mission_type}
             onChange={handleChange}
-            options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} // Excluir "Todos los Tipos"
+            options={MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all')} // Excluir "Todos los Tipos" para la selección
             required
           />
-          {/* ✅ NUEVO CAMPO: Clave de Misión */}
+          {/* ✅ Clave de Misión (Autollenada) */}
           <Input 
             label="Clave de Misión (mission_key)" 
             name="mission_key" 
@@ -164,7 +172,8 @@ const MissionForm = ({
             onChange={handleChange} 
             placeholder="Ej: ver_videos_diario_unico"
             required 
-            helpText="Clave única para la lógica de la base de datos (evita duplicados)."
+            helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
+            readOnly={!isEditing} // Sugerencia: Solo permitir editar si ya existe la misión
           />
         </div>
 
@@ -210,7 +219,6 @@ const MissionForm = ({
               label: icon
             }))}
             required
-            // Opcional: Renderizar vista previa de ícono
             renderPrefix={() => (
               <div className="p-2 bg-muted rounded-md mr-2">
                 <AppIcon name={formData.icon} size={16} className="text-primary" />
@@ -506,7 +514,7 @@ export default function MissionsManagement() {
         </Button>
         <Button 
           variant={activeTab === 'form' ? 'default' : 'ghost'} 
-          onClick={() => { setActiveTab('form'); setMissionToEdit(null); }}
+          onClick={() => { setMissionToEdit(null); setActiveTab('form'); }}
           className="rounded-b-none"
         >
           <AppIcon name="Plus" size={18} className="mr-2" />
@@ -573,7 +581,7 @@ export default function MissionsManagement() {
               onChange={handleFilterChange}
               options={MISSION_TYPE_OPTIONS}
             />
-            {/* ✅ NUEVO FILTRO: Mostrar en Panel de Progreso */}
+            {/* ✅ FILTRO: Mostrar en Panel de Progreso */}
             <Select 
               label="Mostrar en Progreso"
               name="show_in_progress_panel"
@@ -597,6 +605,7 @@ export default function MissionsManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
+                {/* Contenido de la tabla (omito el renderizado complejo por simplicidad) */}
                 {loading && (
                   <tr>
                     <td colSpan="6" className="text-center py-4 text-sm text-muted-foreground">Cargando misiones...</td>
