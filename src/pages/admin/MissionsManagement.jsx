@@ -19,7 +19,7 @@ import Select from '../../components/ui/Select';
 
 // Opciones de tipo de misión para Select (filtros y formulario)
 const MISSION_TYPE_OPTIONS = [
-  { value: 'all', label: 'Todos los Tipos' }, // Opción para filtros
+  { value: 'all', label: 'Todos los Tipos' },
   { value: missionsService.MISSION_TYPES.WATCH_VIDEO, label: 'Ver videos' },
   { value: missionsService.MISSION_TYPES.UPLOAD_VIDEO, label: 'Subir video' },
   { value: missionsService.MISSION_TYPES.UPLOAD_REEL, label: 'Subir reel' }, // ✅ AÑADIDO
@@ -32,13 +32,13 @@ const MISSION_TYPE_OPTIONS = [
   { value: missionsService.MISSION_TYPES.LOGIN_DAILY, label: 'Inicio de sesión diario' },
   { value: missionsService.MISSION_TYPES.WATCH_REELS, label: 'Ver reels' },
   { value: missionsService.MISSION_TYPES.INVITE_FRIEND, label: 'Invitar amigo' },
-  { value: missionsService.MISSION_TYPES.DONATE_POINTS, label: 'Donar puntos' },
+  { value: missionsService.MISSION_TYPES.DONAR_PUNTOS, label: 'Donar puntos' }, // ✅ CORREGIDO
   { value: missionsService.MISSION_TYPES.UPLOAD_PACK, label: 'Paquete de Publicación' },
   { value: missionsService.MISSION_TYPES.ALL_MISSIONS_STREAK, label: 'Racha de Misiones Diarias' }
 ];
 
 const FREQUENCY_OPTIONS = [
-  { value: 'all', label: 'Todas las Frecuencias' }, // Opción para filtros
+  { value: 'all', label: 'Todas las Frecuencias' },
   { value: missionsService.MISSION_FREQUENCY.DAILY, label: 'Diaria' },
   { value: missionsService.MISSION_FREQUENCY.WEEKLY, label: 'Semanal' },
   { value: missionsService.MISSION_FREQUENCY.MONTHLY, label: 'Mensual' },
@@ -46,7 +46,7 @@ const FREQUENCY_OPTIONS = [
 ];
 
 const IS_ACTIVE_OPTIONS = [
-  { value: 'all', label: 'Todos los Estados' }, // Opción para filtros
+  { value: 'all', label: 'Todos los Estados' },
   { value: 'true', label: 'Activas' },
   { value: 'false', label: 'Inactivas' }
 ];
@@ -93,7 +93,7 @@ const MissionForm = ({
     setFormData(prev => {
       let newState = { ...prev, [name]: newValue };
       
-      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key y solucionar el problema de selección
+      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key
       if (name === 'mission_type') {
         newState.mission_key = newValue; // El valor de la opción es el mission_type (ej. 'upload_reel')
       }
@@ -173,7 +173,7 @@ const MissionForm = ({
             placeholder="Ej: ver_videos_diario_unico"
             required 
             helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
-            readOnly={!isEditing} // Sugerencia: Solo permitir editar si ya existe la misión
+            // readOnly={!isEditing} // Mantener readOnly opcional
           />
         </div>
 
@@ -352,7 +352,6 @@ export default function MissionsManagement() {
   // CRUD y Modales
   const [missionToEdit, setMissionToEdit] = useState(null);
   const [missionToDelete, setMissionToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
 
   // ============================================================================
