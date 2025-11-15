@@ -179,7 +179,6 @@ const MissionForm = ({
               value={formData.mission_type}
               onChange={handleChange}
               required
-              // Estilos para parecerse al componente Input/Select
               className="px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:ring-2 focus:ring-primary focus:border-primary transition duration-150 ease-in-out"
             >
               {MISSION_TYPE_OPTIONS.filter(opt => opt.value !== 'all').map(opt => (
@@ -199,7 +198,7 @@ const MissionForm = ({
             placeholder="Ej: ver_videos_diario_unico"
             required 
             helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
-            readOnly={!isEditing} 
+            readOnly={!isEditing} // Sugerencia: solo permitir editar si ya existe la misión
           />
         </div>
 
@@ -317,7 +316,7 @@ const MissionForm = ({
 // COMPONENTE: ConfirmationModal (Modal de Eliminación)
 // ============================================================================
 
-const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
+const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
   <div className="fixed inset-0 bg-background/80 backdrop-blur-sm bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
       <div className="flex items-center gap-3 mb-4">
@@ -342,15 +341,13 @@ const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
       <div className="flex items-center gap-3">
         <button
           onClick={onConfirm}
-          disabled={isDeleting}
-          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
+          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
         >
-          {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+          Sí, eliminar
         </button>
         <button
           onClick={onCancel}
-          disabled={isDeleting}
-          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
+          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
         >
           Cancelar
         </button>
@@ -434,7 +431,7 @@ export default function MissionsManagement() {
         m.title.toLowerCase().includes(searchTerm) ||
         (m.description && m.description.toLowerCase().includes(searchTerm)) ||
         m.mission_type.toLowerCase().includes(searchTerm) ||
-        (m.mission_key && m.mission_key.toLowerCase().includes(searchTerm))
+        (m.mission_key && m.mission_key.toLowerCase().includes(searchTerm)) // Incluir mission_key en búsqueda
       );
     }
 
