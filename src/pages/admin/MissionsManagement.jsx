@@ -1,8 +1,6 @@
 // ============================================================================
 // MISSIONS MANAGEMENT - Panel de Administración de Misiones Diarias
-// ============================================================================
-// Componente completo para gestionar el sistema de misiones desde el admin panel
-// Incluye: CRUD completo, estadísticas, activar/desactivar, y más.
+// ✅ CORREGIDO: Sincronización del toggle "Mostrar en Panel de Progreso"
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -31,7 +29,7 @@ const MISSION_TYPE_OPTIONS = [
   { value: missionsService.MISSION_TYPES.LOGIN_DAILY, label: 'Inicio de sesión diario' },
   { value: missionsService.MISSION_TYPES.WATCH_REELS, label: 'Ver reels' },
   { value: missionsService.MISSION_TYPES.INVITE_FRIEND, label: 'Invitar amigo' },
-  { value: missionsService.MISSION_TYPES.DONATE_POINTS, label: 'Donar puntos' }, 
+  { value: missionsService.MISSION_TYPES.DONAR_PUNTOS, label: 'Donar puntos' }, 
   { value: missionsService.MISSION_TYPES.UPLOAD_PACK, label: 'Paquete de Publicación' },
   { value: missionsService.MISSION_TYPES.ALL_MISSIONS_STREAK, label: 'Racha de Misiones Diarias' }
 ];
@@ -71,12 +69,13 @@ const MissionForm = ({
     title: initialData?.title || '',
     description: initialData?.description || '',
     mission_type: String(initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO),
-    mission_key: String(initialData?.mission_key || initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO), 
+    mission_key: String(initialData?.mission_key || ''),
     target_count: initialData?.target_count || 1,
     points_reward: initialData?.points_reward || 0,
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
     icon: String(initialData?.icon || 'Star'), 
     is_active: initialData?.is_active ?? true,
+    // ✅ Estado del checkbox sincronizado
     show_in_progress_panel: initialData?.show_in_progress_panel ?? true, 
     display_order: initialData?.display_order || 0,
   });
@@ -85,6 +84,25 @@ const MissionForm = ({
   const [error, setError] = useState(null);
   const availableIcons = missionsService.getAvailableMissionIcons();
 
+  // ✅ CORRECCIÓN: Actualizar formData cuando cambia initialData
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        title: initialData.title || '',
+        description: initialData.description || '',
+        mission_type: String(initialData.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO),
+        mission_key: String(initialData.mission_key || ''),
+        target_count: initialData.target_count || 1,
+        points_reward: initialData.points_reward || 0,
+        frequency: initialData.frequency || missionsService.MISSION_FREQUENCY.DAILY,
+        icon: String(initialData.icon || 'Star'),
+        is_active: initialData.is_active ?? true,
+        show_in_progress_panel: initialData.show_in_progress_panel ?? true,
+        display_order: initialData.display_order || 0,
+      });
+    }
+  }, [initialData]);
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     let newValue = type === 'checkbox' ? checked : value;
@@ -92,24 +110,24 @@ const MissionForm = ({
     setFormData(prev => {
       let newState = { ...prev, [name]: newValue };
       
-      // ✅ CORRECCIÓN CLAVE: Autollenar mission_key y solucionar el problema de selección
+      // Autollenar mission_key al cambiar mission_type
       if (name === 'mission_type') {
-        newState.mission_key = newValue; // El valor de la opción es el mission_type
+        newState.mission_key = newValue; 
       }
       
       return newState;
     });
   };
   
-  // Asegura el prellenado de mission_key en la carga inicial (si es una misión nueva)
+  // Asegura el prellenado de mission_key en la carga inicial
   useEffect(() => {
-    if (!isEditing && formData.mission_key === '') {
+    if (!isEditing && formData.mission_key === '' && formData.mission_type) {
         setFormData(prev => ({
             ...prev,
             mission_key: prev.mission_type
         }));
     }
-  }, [isEditing, formData.mission_key, formData.mission_type]);
+  }, [isEditing, formData.mission_type, formData.mission_key]);
 
 
   const handleSubmit = async (e) => {
@@ -121,6 +139,7 @@ const MissionForm = ({
       ...formData,
       target_count: Number(formData.target_count),
       points_reward: Number(formData.points_reward),
+      // ✅ Se asegura que show_in_progress_panel se envíe y persista
       show_in_progress_panel: formData.show_in_progress_panel,
     };
 
@@ -166,8 +185,7 @@ const MissionForm = ({
 
         {/* Fila 2: Tipo de Misión y Clave */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* ✅ CORRECCIÓN: Usando select nativo para garantizar funcionalidad */}
+          {/* Reemplazo de Select por <select> nativo para Tipo de Misión */}
           <div className="flex flex-col space-y-1">
             <label htmlFor="mission_type" className="text-sm font-medium text-foreground">
               Tipo de Misión <span className="text-destructive">*</span>
@@ -188,7 +206,6 @@ const MissionForm = ({
             </select>
           </div>
           
-          {/* ✅ Clave de Misión (Autollenada) */}
           <Input 
             label="Clave de Misión (mission_key)" 
             name="mission_key" 
@@ -197,7 +214,6 @@ const MissionForm = ({
             placeholder="Ej: ver_videos_diario_unico"
             required 
             helpText="Clave única para la lógica de la base de datos (se autollena al elegir el tipo)."
-            readOnly={!isEditing} 
           />
         </div>
 
@@ -233,8 +249,7 @@ const MissionForm = ({
 
         {/* Fila 4: Ícono y Estado Activo */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* ✅ CORRECCIÓN: Usando select nativo para Ícono de Misión */}
+          {/* Reemplazo de Select por <select> nativo para Ícono de Misión */}
           <div className="flex flex-col space-y-1">
             <label htmlFor="icon" className="text-sm font-medium text-foreground">
               Ícono de Misión <span className="text-destructive">*</span>
@@ -275,7 +290,7 @@ const MissionForm = ({
                 Misión Activa
               </label>
             </div>
-            {/* CHECKBOX: Mostrar en Panel de Progreso (Sincronizado con botón Ojo) */}
+            {/* ✅ CHECKBOX: Mostrar en Panel de Progreso (Sincronizado con botón Ojo) */}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -315,7 +330,7 @@ const MissionForm = ({
 // COMPONENTE: ConfirmationModal (Modal de Eliminación)
 // ============================================================================
 
-const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
+const ConfirmationModal = ({ mission, onConfirm, onCancel, isDeleting }) => (
   <div className="fixed inset-0 bg-background/80 backdrop-blur-sm bg-opacity-50 flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
       <div className="flex items-center gap-3 mb-4">
@@ -340,13 +355,15 @@ const ConfirmationModal = ({ mission, onConfirm, onCancel }) => (
       <div className="flex items-center gap-3">
         <button
           onClick={onConfirm}
-          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          disabled={isDeleting}
+          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
         >
-          Sí, eliminar
+          {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
         </button>
         <button
           onClick={onCancel}
-          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+          disabled={isDeleting}
+          className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
         >
           Cancelar
         </button>
@@ -381,7 +398,7 @@ export default function MissionsManagement() {
 
   const [missionToEdit, setMissionToEdit] = useState(null);
   const [missionToDelete, setMissionToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); 
 
 
   // ============================================================================
@@ -497,21 +514,75 @@ export default function MissionsManagement() {
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Alternar mostrar en panel de progreso
+  // ✅ CORRECCIÓN COMPLETA: Sincronización del toggle "Mostrar en Panel de Progreso"
   const handleToggleShowInPanel = async (mission) => {
     const newStatus = !mission.show_in_progress_panel;
-    const result = await missionsService.updateMission(mission.id, { show_in_progress_panel: newStatus });
     
-    // 🛑 CORRECCIÓN CLAVE: La actualización debe reflejarse en el estado local después del éxito.
-    if (result.success) {
-      setMissions(prev => prev.map(m =>
+    console.log('🔄 Toggle Panel de Progreso:', {
+      missionId: mission.id,
+      missionTitle: mission.title,
+      valorAnterior: mission.show_in_progress_panel,
+      valorNuevo: newStatus
+    });
+
+    // 1. Actualización optimista (cambio inmediato en la UI)
+    setMissions(prev => prev.map(m =>
         m.id === mission.id ? { ...m, show_in_progress_panel: newStatus } : m
+    ));
+
+    // 2. Persistencia en la base de datos mediante el servicio
+    const result = await missionsService.updateMission(mission.id, { 
+      show_in_progress_panel: newStatus 
+    });
+    
+    if (result.success) {
+      console.log('✅ Estado actualizado correctamente en la BD:', result.mission);
+      // 3. Confirmación: actualizar con los datos reales del servidor
+      setMissions(prev => prev.map(m =>
+        m.id === mission.id ? result.mission : m
       ));
     } else {
+      console.error('❌ Error al actualizar:', result.error);
       alert(`Error al cambiar visibilidad en panel: ${result.error}`);
+      // 4. Revertir si el servicio falla
+      setMissions(prev => prev.map(m =>
+          m.id === mission.id ? { ...m, show_in_progress_panel: !newStatus } : m
+      ));
     }
   };
   
+  
+  const handleCreateNewMission = () => {
+    const missionTypeUploadReel = missionsService.MISSION_TYPES.UPLOAD_REEL;
+    
+    const prefilledReelMission = {
+        title: "Subir un Reel",
+        description: "Sube un video corto (reel) a tu perfil para ganar puntos.",
+        mission_type: missionTypeUploadReel,
+        mission_key: missionTypeUploadReel,
+        target_count: 1,
+        points_reward: 75,
+        frequency: missionsService.MISSION_FREQUENCY.DAILY,
+        icon: 'Video',
+        is_active: true,
+        show_in_progress_panel: true,
+        display_order: 10,
+    };
+
+    setMissionToEdit(prefilledReelMission);
+    setActiveTab('form');
+  }
+
+  // ✅ CORRECCIÓN: Función mejorada para editar misión con datos actualizados
+  const handleEditMission = (mission) => {
+    // Buscar la misión actualizada en el array de missions
+    const updatedMission = missions.find(m => m.id === mission.id) || mission;
+    console.log('📝 Editando misión:', updatedMission);
+    setMissionToEdit(updatedMission);
+    setActiveTab('form');
+  };
+
+
   // ============================================================================
   // RENDERIZADO
   // ============================================================================
@@ -534,13 +605,12 @@ export default function MissionsManagement() {
         </Button>
         <Button 
           variant={activeTab === 'form' ? 'default' : 'ghost'} 
-          onClick={() => { setMissionToEdit(null); setActiveTab('form'); }}
+          onClick={handleCreateNewMission}
           className="rounded-b-none"
         >
           <AppIcon name="Plus" size={18} className="mr-2" />
-          Crear Misión
+          Crear Misión (Subir Reel Demo)
         </Button>
-        {/* Pestaña "Reordenar" eliminada por completo */}
         
         <Button 
             variant="destructive" 
@@ -625,7 +695,6 @@ export default function MissionsManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {/* Contenido de la tabla (omito el renderizado complejo por simplicidad) */}
                 {loading && (
                   <tr>
                     <td colSpan="6" className="text-center py-4 text-sm text-muted-foreground">Cargando misiones...</td>
@@ -670,7 +739,7 @@ export default function MissionsManagement() {
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.is_active ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                           {mission.is_active ? 'Activa' : 'Inactiva'}
                         </span>
-                        {/* ✅ NUEVA INSIGNIA: Mostrar en Panel de Progreso */}
+                        {/* ✅ Insignia de Sincronización (refleja el estado actual) */}
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.show_in_progress_panel ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}>
                           {mission.show_in_progress_panel ? 'Visible en Progreso' : 'Oculta en Progreso'}
                         </span>
@@ -678,6 +747,7 @@ export default function MissionsManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
+                        {/* Botón Toggle Activo/Inactivo */}
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -686,23 +756,32 @@ export default function MissionsManagement() {
                         >
                           <AppIcon name={mission.is_active ? 'ToggleRight' : 'ToggleLeft'} size={18} />
                         </Button>
-                        {/* ✅ BOTÓN DE VISIBILIDAD (Ojo) */}
+                        
+                        {/* ✅ CORRECCIÓN: Botón Toggle Mostrar/Ocultar en Panel de Progreso */}
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleToggleShowInPanel(mission)}
                           title={mission.show_in_progress_panel ? 'Ocultar del panel de progreso' : 'Mostrar en el panel de progreso'}
                         >
-                          <AppIcon name={mission.show_in_progress_panel ? 'EyeOff' : 'Eye'} size={18} />
+                          {/* ✅ Ícono correcto según el estado actual */}
+                          <AppIcon 
+                            name={mission.show_in_progress_panel ? 'Eye' : 'EyeOff'} 
+                            size={18} 
+                          />
                         </Button>
+                        
+                        {/* ✅ CORRECCIÓN: Botón Editar usa la función mejorada */}
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          onClick={() => { setMissionToEdit(mission); setActiveTab('form'); }}
+                          onClick={() => handleEditMission(mission)}
                           title="Editar"
                         >
                           <AppIcon name="Edit" size={18} />
                         </Button>
+                        
+                        {/* Botón Eliminar */}
                         <Button 
                           variant="ghost" 
                           size="sm" 
