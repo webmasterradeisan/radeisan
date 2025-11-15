@@ -10,7 +10,7 @@ import * as missionsService from '../../services/missionsService';
 import AppIcon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select'; // Mantenemos la importación, pero no lo usamos para Tipo de Misión
+import Select from '../../components/ui/Select'; 
 // 🛑 ELIMINADA: Dependencia 'react-beautiful-dnd' y toda su lógica.
 
 // ============================================================================
@@ -22,8 +22,8 @@ const MISSION_TYPE_OPTIONS = [
   { value: 'all', label: 'Todos los Tipos' },
   { value: missionsService.MISSION_TYPES.WATCH_VIDEO, label: 'Ver videos' },
   { value: missionsService.MISSION_TYPES.UPLOAD_VIDEO, label: 'Subir video' },
-  { value: missionsService.MISSION_TYPES.UPLOAD_REEL, label: 'Subir reel' }, // ✅ AÑADIDO
-  { value: missionsService.MISSION_TYPES.UPLOAD_PHOTO, label: 'Subir foto' }, // ✅ AÑADIDO
+  { value: missionsService.MISSION_TYPES.UPLOAD_REEL, label: 'Subir reel' }, 
+  { value: missionsService.MISSION_TYPES.UPLOAD_PHOTO, label: 'Subir foto' }, 
   { value: missionsService.MISSION_TYPES.GIVE_LIKE, label: 'Dar likes' },
   { value: missionsService.MISSION_TYPES.SHARE_CONTENT, label: 'Compartir contenido' },
   { value: missionsService.MISSION_TYPES.COMMENT, label: 'Comentar' },
@@ -32,7 +32,7 @@ const MISSION_TYPE_OPTIONS = [
   { value: missionsService.MISSION_TYPES.LOGIN_DAILY, label: 'Inicio de sesión diario' },
   { value: missionsService.MISSION_TYPES.WATCH_REELS, label: 'Ver reels' },
   { value: missionsService.MISSION_TYPES.INVITE_FRIEND, label: 'Invitar amigo' },
-  { value: missionsService.MISSION_TYPES.DONAR_PUNTOS, label: 'Donar puntos' }, // ✅ CORREGIDO
+  { value: missionsService.MISSION_TYPES.DONAR_PUNTOS, label: 'Donar puntos' }, 
   { value: missionsService.MISSION_TYPES.UPLOAD_PACK, label: 'Paquete de Publicación' },
   { value: missionsService.MISSION_TYPES.ALL_MISSIONS_STREAK, label: 'Racha de Misiones Diarias' }
 ];
@@ -71,15 +71,14 @@ const MissionForm = ({
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     description: initialData?.description || '',
-    // ✅ CORRECCIÓN: Asegurar que mission_type sea una cadena válida
     mission_type: String(initialData?.mission_type || missionsService.MISSION_TYPES.WATCH_VIDEO),
     mission_key: String(initialData?.mission_key || ''), // Clave de Misión
     target_count: initialData?.target_count || 1,
-    points_reward: initialData?.points_reward || 0, // ✅ Default 0
+    points_reward: initialData?.points_reward || 0, // Default 0
     frequency: initialData?.frequency || missionsService.MISSION_FREQUENCY.DAILY,
-    icon: initialData?.icon || 'Star',
+    icon: String(initialData?.icon || 'Star'), // ✅ Asegurar que el ícono sea String
     is_active: initialData?.is_active ?? true,
-    show_in_progress_panel: initialData?.show_in_progress_panel ?? true, // ✅ NUEVO CAMPO
+    show_in_progress_panel: initialData?.show_in_progress_panel ?? true, // NUEVO CAMPO
     display_order: initialData?.display_order || 0,
   });
   
@@ -94,9 +93,8 @@ const MissionForm = ({
     setFormData(prev => {
       let newState = { ...prev, [name]: newValue };
       
-      // ✅ SOLUCIÓN AL PROBLEMA DE SELECCIÓN Y AUTORELLENO DE CLAVE
+      // ✅ Autollenar mission_key al cambiar mission_type
       if (name === 'mission_type') {
-        // Asegura que el valor seleccionado (newValue) también se establezca como mission_key
         newState.mission_key = newValue; 
       }
       
@@ -104,9 +102,8 @@ const MissionForm = ({
     });
   };
   
-  // ✅ IMPLEMENTACIÓN: Asegura el prellenado de mission_key en la carga inicial (si es nueva misión o prellenado)
+  // Asegura el prellenado de mission_key en la carga inicial (si es nueva misión o prellenado)
   useEffect(() => {
-    // Si NO estamos en edición y mission_key está vacío, lo llenamos con el mission_type actual
     if (!isEditing && formData.mission_key === '' && formData.mission_type) {
         setFormData(prev => ({
             ...prev,
@@ -132,7 +129,6 @@ const MissionForm = ({
     if (isEditing) {
       result = await missionsService.updateMission(initialData.id, dataToSubmit);
     } else {
-      // Si estamos en modo prellenado para crear, simplemente creamos
       result = await missionsService.createMission(dataToSubmit);
     }
 
@@ -171,8 +167,7 @@ const MissionForm = ({
 
         {/* Fila 2: Tipo de Misión y Clave */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* // ✅ CORRECCIÓN FINAL: Reemplazo de Select por <select> nativo para solucionar el problema de interacción
-          */}
+          {/* Reemplazo de Select por <select> nativo para Tipo de Misión */}
           <div className="flex flex-col space-y-1">
             <label htmlFor="mission_type" className="text-sm font-medium text-foreground">
               Tipo de Misión <span className="text-destructive">*</span>
@@ -193,7 +188,6 @@ const MissionForm = ({
             </select>
           </div>
           
-          {/* ✅ Clave de Misión (Autollenada) */}
           <Input 
             label="Clave de Misión (mission_key)" 
             name="mission_key" 
@@ -225,7 +219,6 @@ const MissionForm = ({
             onChange={handleChange} 
             required 
           />
-          {/* Mantenemos el componente Select original para Frecuencia, asumiendo que solo el de Tipo de Misión falla */}
           <Select
             label="Frecuencia"
             name="frequency"
@@ -238,23 +231,32 @@ const MissionForm = ({
 
         {/* Fila 4: Ícono y Estado Activo */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Mantenemos el componente Select original para Icono, asumiendo que solo el de Tipo de Misión falla */}
-          <Select
-            label="Ícono de Misión"
-            name="icon"
-            value={formData.icon}
-            onChange={handleChange}
-            options={availableIcons.map(icon => ({
-              value: icon,
-              label: icon
-            }))}
-            required
-            renderPrefix={() => (
-              <div className="p-2 bg-muted rounded-md mr-2">
+          {/* // ✅ CORRECCIÓN FINAL: Reemplazo de Select por <select> nativo para Ícono de Misión */}
+          <div className="flex flex-col space-y-1">
+            <label htmlFor="icon" className="text-sm font-medium text-foreground">
+              Ícono de Misión <span className="text-destructive">*</span>
+            </label>
+            <div className="flex items-center border border-border rounded-lg bg-input focus-within:ring-2 focus-within:ring-primary">
+              <div className="p-2 bg-muted rounded-l-lg mr-2">
                 <AppIcon name={formData.icon} size={16} className="text-primary" />
               </div>
-            )}
-          />
+              <select
+                id="icon"
+                name="icon"
+                value={formData.icon}
+                onChange={handleChange}
+                required
+                className="flex-grow py-2 bg-input text-foreground outline-none appearance-none" // appearance-none para evitar el estilo doble de flecha
+              >
+                {availableIcons.map(icon => (
+                  <option key={icon} value={icon}>
+                    {icon}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
 
           <div className="flex flex-col justify-center"> {/* Contenedor para alinear checkboxes */}
             <div className="flex items-center space-x-2 mb-2">
@@ -283,6 +285,7 @@ const MissionForm = ({
               <label htmlFor="show_in_progress_panel" className="text-sm font-medium text-foreground">
                 Mostrar en Panel de Progreso
               </label>
+              {/* Este campo es clave para la SINCRONIZACIÓN de visibilidad con el "Progreso de Misiones" */}
             </div>
           </div>
         </div>
@@ -384,7 +387,7 @@ export default function MissionsManagement() {
   // CRUD y Modales
   const [missionToEdit, setMissionToEdit] = useState(null);
   const [missionToDelete, setMissionToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false); // Añadido estado isDeleting
+  const [isDeleting, setIsDeleting] = useState(false); 
 
 
   // ============================================================================
@@ -511,7 +514,7 @@ export default function MissionsManagement() {
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Alternar mostrar en panel de progreso
+  // ✅ Alternar mostrar en panel de progreso (Clave de Sincronización)
   const handleToggleShowInPanel = async (mission) => {
     const newStatus = !mission.show_in_progress_panel;
     const result = await missionsService.updateMission(mission.id, { show_in_progress_panel: newStatus });
@@ -531,7 +534,7 @@ export default function MissionsManagement() {
   const handleCreateNewMission = () => {
     const missionTypeUploadReel = missionsService.MISSION_TYPES.UPLOAD_REEL;
     
-    // ✅ Datos de la misión "Subir reel" prellenada como lo solicitaste
+    // Datos de la misión "Subir reel" prellenada como lo solicitaste
     const prefilledReelMission = {
         title: "Subir un Reel",
         description: "Sube un video corto (reel) a tu perfil para ganar puntos.",
@@ -544,7 +547,6 @@ export default function MissionsManagement() {
         is_active: true,
         show_in_progress_panel: true,
         display_order: 10,
-        // No tiene 'id' para ser una nueva misión
     };
 
     setMissionToEdit(prefilledReelMission);
@@ -574,14 +576,12 @@ export default function MissionsManagement() {
         </Button>
         <Button 
           variant={activeTab === 'form' ? 'default' : 'ghost'} 
-          // LLAMADA A LA FUNCIÓN DE CREACIÓN PRELLENADA
           onClick={handleCreateNewMission}
           className="rounded-b-none"
         >
           <AppIcon name="Plus" size={18} className="mr-2" />
           Crear Misión (Subir Reel Demo)
         </Button>
-        {/* Pestaña "Reordenar" eliminada por completo */}
         
         <Button 
             variant="destructive" 
@@ -642,7 +642,7 @@ export default function MissionsManagement() {
               onChange={handleFilterChange}
               options={MISSION_TYPE_OPTIONS}
             />
-            {/* ✅ FILTRO: Mostrar en Panel de Progreso */}
+            {/* FILTRO: Mostrar en Panel de Progreso */}
             <Select 
               label="Mostrar en Progreso"
               name="show_in_progress_panel"
@@ -711,7 +711,7 @@ export default function MissionsManagement() {
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.is_active ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                           {mission.is_active ? 'Activa' : 'Inactiva'}
                         </span>
-                        {/* ✅ NUEVA INSIGNIA: Mostrar en Panel de Progreso */}
+                        {/* Insignia: Mostrar en Panel de Progreso */}
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${mission.show_in_progress_panel ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}>
                           {mission.show_in_progress_panel ? 'Visible en Progreso' : 'Oculta en Progreso'}
                         </span>
@@ -727,7 +727,7 @@ export default function MissionsManagement() {
                         >
                           <AppIcon name={mission.is_active ? 'ToggleRight' : 'ToggleLeft'} size={18} />
                         </Button>
-                        {/* ✅ NUEVO BOTÓN: Alternar mostrar en panel de progreso */}
+                        {/* Botón: Alternar mostrar en panel de progreso */}
                         <Button
                           variant="ghost"
                           size="sm"
