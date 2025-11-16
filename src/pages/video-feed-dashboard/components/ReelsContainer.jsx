@@ -117,6 +117,8 @@ const ReelsContainer = ({
 
   // ✅ NUEVO: Función para mostrar notificación de puntos
   const showPointsNotification = (message, videoId, type = 'success') => {
+    console.log('🔔 MOSTRANDO NOTIFICACIÓN:', { message, videoId, type });
+    
     setPointsNotification({
       show: true,
       message,
@@ -196,7 +198,7 @@ const ReelsContainer = ({
         if (user) {
           const { data: profile } = await supabase
             .from('user_profiles')
-            .select('id, name, avatar, username')
+            .select('id, full_name, avatar_url, username')
             .eq('id', user.id)
             .single();
           
@@ -320,6 +322,46 @@ const ReelsContainer = ({
     });
     setVideoCounters(initialCounters);
   }, [videos]);
+
+  // ===============================
+  // ✅ CARGAR CONTADORES EN TIEMPO REAL DESDE BD
+  // ===============================
+  useEffect(() => {
+    const loadRealTimeCounters = async () => {
+      if (videos.length === 0) return;
+      
+      const currentVideo = videos[currentIndex];
+      if (!currentVideo) return;
+
+      try {
+        // Cargar likes count
+        const { count: likesCount } = await supabase
+          .from('video_likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('video_id', currentVideo.id);
+
+        // Cargar comments count
+        const { count: commentsCount } = await supabase
+          .from('video_comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('video_id', currentVideo.id);
+
+        // Actualizar contadores
+        setVideoCounters(prev => ({
+          ...prev,
+          [currentVideo.id]: {
+            ...prev[currentVideo.id],
+            likes: likesCount || 0,
+            comments: commentsCount || 0
+          }
+        }));
+      } catch (error) {
+        console.error('Error cargando contadores en tiempo real:', error);
+      }
+    };
+
+    loadRealTimeCounters();
+  }, [currentIndex, videos]);
 
   // ===============================
   // FORZAR REPRODUCCIÓN DEL VIDEO INICIAL
@@ -701,8 +743,10 @@ const ReelsContainer = ({
           // MISIÓN NO COMPLETA HOY
           // ==============================
           try {
-            // ✅ Llamamos a la función SQL (que ya no falla)
-            const missionResult = await missionsService.trackGiveLike('video', videoId);
+            // ✅ Llamamos a la función SQL con 'reel' como tipo
+            const missionResult = await missionsService.trackGiveLike('reel', videoId);
+            
+            console.log('🎯 Resultado de trackGiveLike:', missionResult);
             
             // ================================================================
             // ✅ INICIO: LÓGICA DE NOTIFICACIONES SINCRONIZADA
@@ -1050,7 +1094,7 @@ const ReelsContainer = ({
         
         const { data: usersData, error: usersError } = await supabase
           .from('user_profiles')
-          .select('id, name, avatar, username')
+          .select('id, full_name, avatar_url, username')
           .in('id', userIds);
 
         if (!usersError && usersData) {
@@ -1065,9 +1109,9 @@ const ReelsContainer = ({
               ...comment,
               user: userProfile ? {
                 id: userProfile.id,
-                name: userProfile.name || userProfile.username || 'Usuario',
-                avatar: userProfile.avatar,
-                username: userProfile.username || userProfile.name || 'usuario'
+                name: userProfile.full_name || userProfile.username || 'Usuario',
+                avatar: userProfile.avatar_url,
+                username: userProfile.username || userProfile.full_name || 'usuario'
               } : {
                 id: comment.user_id,
                 name: 'Usuario',
