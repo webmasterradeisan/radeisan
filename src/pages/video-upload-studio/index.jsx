@@ -211,16 +211,26 @@ const useVideoUpload = () => {
       setUploadProgress(85);
 
       // 🆕 PASO 11: REPORTAR ACCIÓN AL SISTEMA DE MISIONES
-      // (Reemplaza el antiguo 'addFreePoints' directo)
+      // ✅ CORRECCIÓN: Distinguir entre VIDEO y REEL basándose en orientación
       console.log('🔔 Reportando subida al sistema de misiones...');
       let pointsEarnedToday = 0;
-      let missionResult = null; // ✅ CORRECCIÓN: Capturar el resultado completo
+      let missionResult = null;
 
       try {
-        missionResult = await missionsService.trackMissionProgress( // ✅ CORRECCIÓN: Asignar a la variable
-            missionsService.MISSION_TYPES.UPLOAD_VIDEO, // 'upload_video'
-            'video', // El tipo de referencia
-            videoData.id // El ID del video que se creó
+        // ✅ Determinar el tipo de misión según la orientación
+        const isReel = orientationData.orientation === 'vertical';
+        const missionType = isReel 
+          ? missionsService.MISSION_TYPES.UPLOAD_REEL   // Vertical = Reel
+          : missionsService.MISSION_TYPES.UPLOAD_VIDEO; // Horizontal = Video
+        
+        const referenceType = isReel ? 'reel' : 'video';
+
+        console.log(`📹 Detectado como: ${isReel ? 'REEL' : 'VIDEO'} (orientación: ${orientationData.orientation})`);
+
+        missionResult = await missionsService.trackMissionProgress(
+            missionType,      // ✅ UPLOAD_REEL o UPLOAD_VIDEO según orientación
+            referenceType,    // ✅ 'reel' o 'video'
+            videoData.id
         );
 
         console.log('✅ Misión reportada:', missionResult);
