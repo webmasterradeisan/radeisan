@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - Integrado con Sistema de Puntos
+// REELS CONTAINER - VERSION FINAL CORREGIDA
 // ✅ CORREGIDO: Verificaciones de seguridad para comment.user
 // ✅ CORREGIDO: Estructura JSX del modal
 // ✅ NUEVO: Avisos de puntos cerca del botón like
@@ -16,6 +16,11 @@
 //    el error 400.
 // 🟢 CORREGIDO: Eliminadas todas las referencias a la tabla 'user_video_points'
 //    (que no existe) para prevenir errores '42P01'.
+// ✅ CORREGIDO: trackWatchVideo ahora usa parámetros correctos (contentType, contentId, duration)
+// ✅ IMPLEMENTADO: trackShareContent completamente funcional con notificaciones
+// ✅ IMPLEMENTADO: trackComment completamente funcional con notificaciones
+// ✅ IMPLEMENTADO: trackFollowUser completamente funcional con notificaciones
+// ✅ MANTENIDO: Layout original respetado al 100%
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -505,10 +510,16 @@ const ReelsContainer = ({
       if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
         setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
         
-        missionsService.trackWatchVideo(currentVideoData.id, currentVideo.currentTime)
+        // ✅ CORREGIDO: Parámetros correctos para trackWatchVideo
+        missionsService.trackWatchVideo('reel', currentVideoData.id, currentVideo.currentTime)
           .then(result => {
-            if (result.completed) {
-              addPoints(result.reward.points, result.message, 'free');
+            if (result.result === 'success' && result.points_earned > 0) {
+              addPoints(result.points_earned, result.message || 'Misión de Ver Videos completada', 'free');
+              showPointsNotification(`+${result.points_earned} PUNTOS por ver reel 🎉`, currentVideoData.id, 'success');
+            } else if (result.result === 'progress_updated') {
+              showPointsNotification('Progreso registrado. ¡Sigue viendo!', currentVideoData.id, 'success');
+            } else if (result.result === 'already_completed') {
+              showPointsNotification('Ya completaste la misión de ver reels hoy.', currentVideoData.id, 'restriction');
             }
           })
           .catch(error => console.error('Error tracking video:', error));
@@ -900,29 +911,33 @@ const ReelsContainer = ({
             following_id: creatorId 
           });
 
-        // ✅ OTORGAR PUNTOS (Lógica antigua mantenida)
-        // if (!hasEarnedPointsBefore) {
-        //   try {
-        //     await addPoints(10, 'Seguiste a un creador', 'free');
+        // ✅ TRACKING DE MISIÓN - IMPLEMENTADO
+        if (!actionsPerformed.follows.has(creatorId)) {
+          try {
+            const result = await missionsService.trackFollowUser(creatorId);
             
-        //     // 🛑 ERROR: Esta tabla no existe.
-        //     // await supabase
-        //     //   .from('user_video_points')
-        //     // ...
+            const videoId = videos[currentIndex]?.id;
             
-        //     const missionResult = await missionsService.trackFollowUser(creatorId);
-        //     if (missionResult.completed) {
-        //       await addPoints(missionResult.reward.points, missionResult.message, 'free');
-        //     }
-            
-        //     setActionsPerformed(prev => ({
-        //       ...prev,
-        //       follows: new Set([...prev.follows, creatorId])
-        //     }));
-        //   } catch (pointsError) {
-        //     console.error('Error al otorgar puntos:', pointsError);
-        //   }
-        // }
+            if (result.result === 'success' && result.points_earned > 0) {
+              await addPoints(result.points_earned, result.message || 'Misión de Seguir completada', 'free');
+              showPointsNotification(`+${result.points_earned} PUNTOS por Seguir 👥`, videoId, 'success');
+              setActionsPerformed(prev => ({
+                ...prev,
+                follows: new Set([...prev.follows, creatorId])
+              }));
+            } else if (result.result === 'progress_updated') {
+              showPointsNotification('Progreso registrado. ¡Sigue siguiendo!', videoId, 'success');
+            } else if (result.result === 'already_completed') {
+              showPointsNotification('Ya completaste la misión de seguir hoy.', videoId, 'restriction');
+              setActionsPerformed(prev => ({
+                ...prev,
+                follows: new Set([...prev.follows, creatorId])
+              }));
+            }
+          } catch (pointsError) {
+            console.error('Error al otorgar puntos:', pointsError);
+          }
+        }
       }
       
       setFollowedCreators(newFollowedCreators);
@@ -938,51 +953,53 @@ const ReelsContainer = ({
     }
     
     try {
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'share' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.shares.has(video.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
+      const videoId = video.id;
+      const shareMethod = navigator.share ? 'native' : 'clipboard';
 
       if (navigator.share) {
         await navigator.share({
-          title: video.title || 'Video',
+          title: video.title || 'Reel',
           text: video.description || '',
           url: window.location.href
         });
       } else {
         navigator.clipboard.writeText(window.location.href);
-        alert('Enlace copiado al portapapeles');
+        showPointsNotification('Enlace copiado al portapapeles', videoId, 'success');
       }
 
-      // ✅ OTORGAR PUNTOS (Lógica antigua mantenida)
-      // if (!hasEarnedPointsBefore) {
-      //   try {
-      //     const { data: { user } } = await supabase.auth.getUser();
-      //     if (user) {
-      //       await addPoints(3, 'Video compartido', 'free');
-            
-      //       // 🛑 ERROR: Esta tabla no existe.
-      //       // await supabase
-      //       //   .from('user_video_points')
-      //       // ...
-            
-      //       const missionResult = await missionsService.trackShareContent(
-      //         'video', 
-      //         video.id, 
-      //         navigator.share ? 'native' : 'clipboard'
-      //       );
-            
-      //       if (missionResult.completed) {
-      //         await addPoints(missionResult.reward.points, missionResult.message, 'free');
-      //       }
-            
-      //       setActionsPerformed(prev => ({
-      //         ...prev,
-      //         shares: new Set([...prev.shares, video.id])
-      //       }));
-      //     }
-      //   } catch (pointsError) {
-      //     console.error('Error al otorgar puntos:', pointsError);
-      //   }
-      // }
+      // ✅ TRACKING DE MISIÓN - IMPLEMENTADO
+      if (!actionsPerformed.shares.has(videoId)) {
+        setActionsPerformed(prev => ({
+          ...prev,
+          shares: new Set([...prev.shares, videoId])
+        }));
+        
+        try {
+          const result = await missionsService.trackShareContent(
+            'reel',
+            videoId,
+            1,
+            { platform: shareMethod }
+          );
+          
+          if (result.result === 'success' && result.points_earned > 0) {
+            await addPoints(result.points_earned, result.message || 'Misión de Compartir completada', 'free');
+            showPointsNotification(`+${result.points_earned} PUNTOS por Compartir 📢`, videoId, 'success');
+          } else if (result.result === 'progress_updated') {
+            showPointsNotification('Progreso registrado. ¡Sigue compartiendo!', videoId, 'success');
+          } else if (result.result === 'already_completed') {
+            showPointsNotification('Ya completaste la misión de compartir hoy.', videoId, 'restriction');
+          }
+        } catch (pointsError) {
+          console.error('Error al otorgar puntos:', pointsError);
+        }
+      }
     } catch (error) {
       console.error('Error compartiendo:', error);
     }
@@ -1161,46 +1178,31 @@ const ReelsContainer = ({
 
       console.log('✅ Comentario insertado exitosamente:', insertedComment);
 
-      if (!replyingTo) {
-        console.log('📊 Incrementando contador de comentarios...');
-        // ❌ ELIMINADO: RPC 'increment_video_comments' que fallaba
-        // const { error: rpcError } = await supabase.rpc('increment_video_comments', { video_id: videoId });
-        // if (rpcError) {
-        //   console.error('⚠️ Error al incrementar contador:', rpcError);
-        // } else {
-        //   console.log('✅ Contador incrementado');
-        // }
+      // ✅ TRACKING DE MISIÓN - IMPLEMENTADO
+      if (!replyingTo && !actionsPerformed.comments.has(videoId)) {
+        setActionsPerformed(prev => ({
+          ...prev,
+          comments: new Set([...prev.comments, videoId])
+        }));
+        
+        try {
+          const result = await missionsService.trackComment('reel', videoId);
+          
+          if (result.result === 'success' && result.points_earned > 0) {
+            await addPoints(result.points_earned, result.message || 'Misión de Comentar completada', 'free');
+            showPointsNotification(`+${result.points_earned} PUNTOS por Comentar 💬`, videoId, 'success');
+          } else if (result.result === 'progress_updated') {
+            showPointsNotification('Comentario registrado. ¡Sigue así!', videoId, 'success');
+          } else if (result.result === 'already_completed') {
+            showPointsNotification('Ya completaste la misión de comentar hoy.', videoId, 'restriction');
+          }
+        } catch (pointsError) {
+          console.error('⚠️ Error al otorgar puntos:', pointsError);
+        }
       }
 
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'comment' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.comments.has(videoId);
-
-      // if (!hasEarnedPointsBefore) {
-      //   try {
-      //     console.log('🎁 Otorgando puntos...');
-      //     await addPoints(3, replyingTo ? 'Respuesta agregada' : 'Comentario agregado', 'free');
-          
-      //     // 🛑 ERROR: Esta tabla no existe.
-      //     // await supabase
-      //     //   .from('user_video_points')
-      //     // ...
-          
-      //     const missionResult = await missionsService.trackComment('video', videoId);
-      //     if (missionResult.completed) {
-      //       await addPoints(missionResult.reward.points, missionResult.message, 'free');
-      //     }
-          
-      //     setActionsPerformed(prev => ({
-      //       ...prev,
-      //       comments: new Set([...prev.comments, videoId])
-      //     }));
-      //     console.log('✅ Puntos otorgados');
-      //   } catch (pointsError) {
-      //     console.error('⚠️ Error al otorgar puntos:', pointsError);
-      //   }
-      // }
-
       if (!replyingTo) {
+        console.log('📊 Incrementando contador de comentarios...');
         setVideoCounters(prev => ({
           ...prev,
           [videoId]: {
