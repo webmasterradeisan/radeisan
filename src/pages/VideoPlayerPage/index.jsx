@@ -1,6 +1,6 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VERSION FINAL ESTABLE
+// VERSION FINAL ESTABLE - CORREGIDA
 // ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
 // ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
 // ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
@@ -14,6 +14,11 @@
 //    (que no existe) para prevenir errores '42P01'.
 // 🟢 8. (BUG FIX) Movidas las definiciones de togglePlayPause, toggleMute, etc., 
 //    antes del useEffect(handleKeyPress) para evitar ReferenceError (el crash).
+// ✅ 9. (CORREGIDO) trackWatchVideo ahora incluye parámetro de duración y detección reel/video
+// ✅ 10. (CORREGIDO) trackShareContent ahora usa parámetros correctos y detección reel/video
+// ✅ 11. (IMPLEMENTADO) trackFollowUser ahora captura resultados y muestra notificaciones
+// ✅ 12. (MEJORADO) trackComment ahora incluye detección de tipo reel/video
+// ✅ 13. (MEJORADO) trackGiveLike ahora incluye detección de tipo reel/video
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -747,12 +752,24 @@ const VideoPlayerPage = () => {
 
     try {
       setHasEarnedViewPoints(true);
-      const result = await trackWatchVideo('video', videoId);
+      
+      // ✅ Obtener la duración actual del video
+      const currentTime = videoRef.current?.currentTime || 30;
+      
+      // ✅ Detectar si es reel o video según orientación
+      const isReel = video?.orientation === 'vertical';
+      const contentType = isReel ? 'reel' : 'video';
+      
+      // ✅ PARÁMETROS CORRECTOS: (contentType, contentId, watchDuration)
+      const result = await trackWatchVideo(contentType, videoId, currentTime);
 
       if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
         updatePointsContext(result.points_earned);
-        // Usamos la notificación grande para esto, ya que es menos frecuente
-        showUserFeedback(`+${result.points_earned} PUNTOS por ver 30 segundos 🎉`, 'success');
+        showUserFeedback(`+${result.points_earned} PUNTOS por ver ${contentType} 🎉`, 'success');
+      } else if (result.result === 'progress_updated') {
+        showUserFeedback(`Progreso registrado. ¡Sigue viendo ${contentType}s!`, 'success');
+      } else if (result.result === 'already_completed') {
+        showUserFeedback(`Ya completaste la misión de ver ${contentType}s hoy.`, 'restriction');
       }
 
     } catch (err) {
@@ -811,8 +828,12 @@ const VideoPlayerPage = () => {
         
         if (!hasEarnedLikePoints) {
           try {
-            // ✅ Llamamos a la función SQL (que ya no falla)
-            const result = await trackGiveLike('video', videoId); 
+            // ✅ Detectar si es reel o video según orientación
+            const isReel = video?.orientation === 'vertical';
+            const contentType = isReel ? 'reel' : 'video';
+            
+            // ✅ Llamamos a la función SQL con detección de tipo
+            const result = await trackGiveLike(contentType, videoId); 
             console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
 
             if (result.result === 'success' && result.points_earned > 0) { 
@@ -945,12 +966,25 @@ const VideoPlayerPage = () => {
       setHasEarnedSharePoints(true); 
       
       try {
-        const result = await trackShareContent('video', videoId, 'link'); 
+        // ✅ Detectar si es reel o video según orientación
+        const isReel = video?.orientation === 'vertical';
+        const contentType = isReel ? 'reel' : 'video';
+        
+        // ✅ PARÁMETROS CORRECTOS: (contentType, contentId, shareCount, metadata)
+        const result = await trackShareContent(
+          contentType,
+          videoId,
+          1,                              // ✅ Cantidad de veces compartido
+          { platform: 'link' }            // ✅ Metadata con plataforma
+        );
 
         if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
           updatePointsContext(result.points_earned);
-          // Usamos la notificación grande
-          showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
+          showUserFeedback(`+${result.points_earned} PUNTOS por Compartir ${contentType} 📢`, 'success');
+        } else if (result.result === 'progress_updated') {
+          showUserFeedback(`Progreso registrado. ¡Sigue compartiendo!`, 'success');
+        } else if (result.result === 'already_completed') {
+          showUserFeedback(`Ya completaste la misión de compartir hoy.`, 'restriction');
         } else if (result.result === 'already_paid') {
           showUserFeedback('PUNTOS YA GANADOS por compartir este contenido.', 'restriction');
         } else if (result.result === 'error') {
@@ -1000,28 +1034,45 @@ const VideoPlayerPage = () => {
 
     try {
       if (following) {
+        // Dejar de seguir
         setFollowing(false);
         await supabase
-          .from('user_follows') // 🛑 Asumido: 'user_follows'
+          .from('user_follows')
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', video.user_id);
+        
+        showUserFeedback('Dejaste de seguir a este creador', 'success', 1500);
       } else {
+        // Seguir
         setFollowing(true);
         await supabase
-          .from('user_follows') // 🛑 Asumido: 'user_follows'
+          .from('user_follows')
           .insert({
             follower_id: user.id,
             following_id: video.user_id
           });
         
+        // ✅ TRACKING DE MISIÓN - IMPLEMENTADO CORRECTAMENTE
         try {
-          trackFollowUser(video.user_id);
+          const result = await trackFollowUser(video.user_id);
+          
+          if (result.result === 'success' && result.points_earned > 0) {
+            updatePointsContext(result.points_earned);
+            showUserFeedback(`+${result.points_earned} PUNTOS por Seguir creador 👥`, 'success');
+          } else if (result.result === 'progress_updated') {
+            showUserFeedback('Progreso registrado. ¡Sigue siguiendo creadores!', 'success');
+          } else if (result.result === 'already_completed') {
+            showUserFeedback('Ya completaste la misión de seguir hoy.', 'restriction');
+          } else {
+            // Si no hay misión activa, solo mostrar mensaje básico
+            showUserFeedback('Ahora sigues a este creador', 'success', 1500);
+          }
         } catch (missionError) {
           console.error('❌ Error al registrar misión de Seguir:', missionError);
+          // Mostrar mensaje básico aunque falle el tracking
+          showUserFeedback('Ahora sigues a este creador', 'success', 1500);
         }
-        // Usamos la notificación grande
-        showUserFeedback('Ahora sigues a este creador', 'success', 1500);
       }
     } catch (err) {
       console.error('Error al seguir:', err);
@@ -1074,18 +1125,22 @@ const VideoPlayerPage = () => {
         comments: prev.comments + 1
       }));
 
-      // ✅ CORREGIDO: Lógica de notificación de comentarios
+      // ✅ CORREGIDO: Lógica de notificación de comentarios con detección de tipo
       if (!hasEarnedCommentPoints) {
         setHasEarnedCommentPoints(true); 
         
         try {
-          const result = await trackComment('video', videoId);
+          // ✅ Detectar si es reel o video según orientación
+          const isReel = video?.orientation === 'vertical';
+          const contentType = isReel ? 'reel' : 'video';
+          
+          // ✅ Usar contentType en lugar de 'video' hardcodeado
+          const result = await trackComment(contentType, videoId);
           console.log('--- RESPUESTA DE TRACK COMMENT (DEBUG) ---', result); 
 
           if (result.result === 'success' && result.points_earned > 0) {
             updatePointsContext(result.points_earned);
-            // Usamos la notificación grande
-            showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
+            showUserFeedback(`+${result.points_earned} PUNTOS por Comentar ${contentType} 💬`, 'success');
           } else if (result.result === 'progress_updated') {
             showUserFeedback('Comentario registrado. ¡Sigue así!', 'success');
           } else if (result.result === 'already_paid') {
