@@ -212,14 +212,22 @@ export async function getMissionsForProgressPanel() {
     }
 
     // ✅ CORRECCIÓN: Usar 'mission_progress' en lugar de 'user_mission_progress'
+    // 🔥 NUEVO: Filtrar solo el progreso del día actual
+    const todayDate = new Date().toISOString().split('T')[0]; // '2025-11-17'
     const missionIds = missions.map(m => m.id);
     const { data: progressData, error: progressError } = await supabase
       .from('mission_progress')
       .select('*')
       .eq('user_id', user.id)
-      .in('mission_id', missionIds);
+      .in('mission_id', missionIds)
+      .eq('date', todayDate); // ✅ CRÍTICO: Filtrar solo progreso de HOY
 
     if (progressError) throw progressError;
+
+    console.log('📅 [getMissionsForProgressPanel] Filtrando por fecha:', {
+      today: todayDate,
+      progressRecordsFound: progressData?.length || 0
+    });
 
     // Combinar misiones con su progreso
     const missionsWithProgress = missions.map(mission => {
