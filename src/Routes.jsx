@@ -1,10 +1,12 @@
-// src/Routes.jsx - ACTUALIZADO CON PERFIL PÚBLICO
+// src/Routes.jsx - ACTUALIZADO CON SISTEMA DE NOTIFICACIONES GLOBAL
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import { AuthProvider } from "contexts/AuthContext";
 import { PointsProvider } from "contexts/PointsContext";
+import { NotificationProvider } from "contexts/NotificationContext"; // ✅ NUEVO IMPORT
+import NotificationContainer from "components/notifications/NotificationContainer"; // ✅ NUEVO IMPORT
 
 // SISTEMA ORIGINAL MANTENIDO
 import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
@@ -178,402 +180,394 @@ const Routes = () => {
     <BrowserRouter>
       <AuthProvider>
         <PointsProvider>
-          <ErrorBoundary>
-            <ScrollToTop />
-            <RouterRoutes>
-              
-              {/* =================== RUTAS PÚBLICAS =================== */}
-              
-              <Route 
-                path="/" 
-                element={
-                  <UniversalRoute>
-                    <LandingPage />
-                  </UniversalRoute>
-                } 
-              />
-              
-              <Route 
-                path="/login" 
-                element={
-                  <PublicRoute>
-                    <Login />
-                  </PublicRoute>
-                } 
-              />
-              
-              <Route 
-                path="/register" 
-                element={
-                  <PublicRoute>
-                    <Register />
-                  </PublicRoute>
-                } 
-              />
-              
-              <Route 
-                path="/auth/callback" 
-                element={
-                  <UniversalRoute>
-                    <AuthCallback />
-                  </UniversalRoute>
-                } 
-              />
+          <NotificationProvider> {/* ✅ NUEVO: Provider de notificaciones */}
+            <ErrorBoundary>
+              <ScrollToTop />
+              <RouterRoutes>
+                
+                {/* =================== RUTAS PÚBLICAS =================== */}
+                
+                <Route 
+                  path="/" 
+                  element={
+                    <UniversalRoute>
+                      <LandingPage />
+                    </UniversalRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/login" 
+                  element={
+                    <PublicRoute>
+                      <Login />
+                    </PublicRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/register" 
+                  element={
+                    <PublicRoute>
+                      <Register />
+                    </PublicRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/auth/callback" 
+                  element={
+                    <UniversalRoute>
+                      <AuthCallback />
+                    </UniversalRoute>
+                  } 
+                />
 
-              {/* =================== RUTAS PROTEGIDAS =================== */}
-              
-              <Route 
-                path="/dashboard" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <VideoFeedDashboard />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
+                {/* ✅ NUEVO - PERFIL PÚBLICO (Visible sin login) */}
+                <Route 
+                  path="/profile/:userId" 
+                  element={
+                    <UniversalRoute>
+                      <PublicProfilePage />
+                    </UniversalRoute>
+                  } 
+                />
 
-              <Route 
-                path="/upload" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <VideoUploadStudio />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* ================================================================== */}
-              {/* ✅ INICIO DE LA CORRECCIÓN 2: Añadir la ruta para subir fotos */}
-              {/* ================================================================== */}
-              <Route 
-                path="/photo-upload" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PhotoUploadStudio />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-              {/* ================================================================== */}
-              {/* ✅ FIN DE LA CORRECCIÓN 2 */}
-              {/* ================================================================== */}
+                {/* =================== RUTAS PROTEGIDAS (Usuario) =================== */}
+                
+                <Route 
+                  path="/dashboard" 
+                  element={
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <VideoFeedDashboard />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
 
-              <Route 
-                path="/video-edit/:videoId" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <VideoEditStudio />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              <Route 
-                path="/reels" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
+                <Route 
+                  path="/reels" 
+                  element={
+                    <ProtectedRoute>
                       <ReelsPage />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              <Route 
-                path="/video/:videoId" 
-                element={
-                  <UniversalRoute>
-                    <VideoPlayerPage />
-                  </UniversalRoute>
-                } 
-              />
-
-              <Route 
-                path="/reel/:videoId" 
-                element={
-                  <UniversalRoute>
-                    <VideoPlayerPage />
-                  </UniversalRoute>
-                } 
-              />
-
-              {/* =================== PERFIL =================== */}
-              
-              {/* Perfil propio del usuario autenticado */}
-              <Route 
-                path="/profile" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <UserProfileSettings />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* ✅ NUEVO - Perfil público (acepta username o UUID) */}
-              <Route 
-                path="/profile/:identifier" 
-                element={
-                  <UniversalRoute>
-                    <PublicProfilePage />
-                  </UniversalRoute>
-                } 
-              />
-
-              {/* =================== MARKETPLACE Y REWARDS =================== */}
-
-              <Route 
-                path="/marketplace" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <BusinessMarketplace />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              <Route 
-                path="/rewards" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PointsRewardsStore />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* =================== COMPRA DE PUNTOS PREMIUM =================== */}
-
-              <Route 
-                path="/purchase-points" 
-                element={
-                  <ProtectedRoute>
-                    <PurchasePointsPage />
-                  </ProtectedRoute>
-                } 
-              />
-
-              <Route 
-                path="/purchase/success" 
-                element={
-                  <ProtectedRoute>
-                    <PurchaseSuccess />
-                  </ProtectedRoute>
-                } 
-              />
-
-              <Route 
-                path="/purchase/failure" 
-                element={
-                  <ProtectedRoute>
-                    <PurchaseFailure />
-                  </ProtectedRoute>
-                } 
-              />
-
-              <Route 
-                path="/purchase/pending" 
-                element={
-                  <ProtectedRoute>
-                    <PurchasePending />
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* =================== OTRAS RUTAS PROTEGIDAS =================== */}
-
-              <Route 
-                path="/saved" 
-                element={
-                  <ProtectedRoute>
-                    <MobileLayoutWrapper>
-                      <PlaceholderPage 
-                        title="Contenido Guardado" 
-                        description="Accede a todo el contenido que has guardado" 
-                      />
-                    </MobileLayoutWrapper>
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* CONFIGURACIÓN - REDIRECCIÓN A /PROFILE (Implementación lista) */}
-              <Route 
-                path="/settings" 
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/profile" replace />
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
-              
-              <Route 
-                path="/admin" 
-                element={
-                  <ProtectedAdminRoute>
-                    <AdminLayout />
-                  </ProtectedAdminRoute>
-                }
-              >
-                {/* Dashboard - ✅ REAL (Sprint 4) */}
-                <Route index element={<AdminDashboard />} />
-
-                {/* Usuarios - ✅ REAL (Sprint 4) */}
-                <Route 
-                  path="users" 
-                  element={
-                    <ProtectedAdminRoute requiredPermission="manage_users">
-                      <UserManagement />
-                    </ProtectedAdminRoute>
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Categorías - ✅ REAL (Sprint 4) */}
                 <Route 
-                  path="categories" 
+                  path="/reel/:reelId" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_categories">
-                      <CategoryManagement />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <ReelsPage />
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Puntos - ✅ REAL (Sprint 5) */}
                 <Route 
-                  path="points" 
+                  path="/video/:videoId" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_points">
-                      <PointsRulesEditor />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <VideoPlayerPage />
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* 💎 NUEVO - Puntos Premium - ✅ REAL */}
                 <Route 
-                  path="premium-points" 
+                  path="/upload" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_points">
-                      <PremiumPointsConfig />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <VideoUploadStudio />
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* 💰 NUEVO - Gestión de Transacciones - ✅ REAL */}
+                {/* ==================================================================
+                    ✅ CORRECCIÓN 2: Ruta para subir fotos
+                    ================================================================== */}
                 <Route 
-                  path="transactions" 
+                  path="/upload-photo" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_transactions">
-                      <TransactionsManagement />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <PhotoUploadStudio />
+                    </ProtectedRoute>
+                  } 
+                />
+                {/* ==================================================================
+                    ✅ FIN DE LA CORRECCIÓN 2
+                    ================================================================== */}
+
+                <Route 
+                  path="/edit/:videoId" 
+                  element={
+                    <ProtectedRoute>
+                      <VideoEditStudio />
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Misiones - ✅ REAL (NUEVO) */}
+                {/* PROFILE: Ahora redirige a /profile que es la página real de configuración */}
                 <Route 
-                  path="missions" 
+                  path="/profile" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_missions">
-                      <MissionsManagement />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <UserProfileSettings />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Recompensas - ✅ REAL (Sprint 5) */}
+                {/* MARKETPLACE - ✅ REAL (Sprint 3) */}
                 <Route 
-                  path="rewards" 
+                  path="/marketplace" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_rewards">
-                      <RewardsManagement />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <BusinessMarketplace />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Moderación - ✅ REAL (Sprint 6) */}
+                {/* TIENDA DE PUNTOS - ✅ REAL (Sprint 3) */}
                 <Route 
-                  path="moderation" 
+                  path="/store" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="moderate_content">
-                      <ContentModeration />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <PointsRewardsStore />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Analytics - ✅ REAL (Sprint 6) */}
+                {/* ✅ NUEVO - COMPRA DE PUNTOS PREMIUM */}
                 <Route 
-                  path="analytics" 
+                  path="/purchase-points" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="view_analytics">
-                      <AdvancedAnalytics />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <PurchasePointsPage />
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Branding - ✅ REAL (Sprint 5) */}
                 <Route 
-                  path="settings" 
+                  path="/purchase/success" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="manage_settings">
-                      <BrandingSettings />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <PurchaseSuccess />
+                    </ProtectedRoute>
                   } 
                 />
 
-                {/* Logs - ⏳ PLACEHOLDER */}
                 <Route 
-                  path="logs" 
+                  path="/purchase/failure" 
                   element={
-                    <ProtectedAdminRoute requiredPermission="view_logs">
-                      <AdminPlaceholder 
-                        title="Logs de Administración"
-                        description="Auditoría de acciones administrativas"
-                        requiredPermission="view_logs"
-                      />
-                    </ProtectedAdminRoute>
+                    <ProtectedRoute>
+                      <PurchaseFailure />
+                    </ProtectedRoute>
                   } 
                 />
-              </Route>
 
-              {/* Acceso no autorizado */}
-              <Route 
-                path="/unauthorized" 
-                element={
-                  <UniversalRoute>
-                    <Unauthorized />
-                  </UniversalRoute>
-                } 
-              />
+                <Route 
+                  path="/purchase/pending" 
+                  element={
+                    <ProtectedRoute>
+                      <PurchasePending />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* =================== REDIRECTS =================== */}
-              
-              <Route path="/create" element={<Navigate to="/upload" replace />} />
-              <Route path="/home" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
-              
-              {/* Redirect de compra (por si alguien usa /buy-points) */}
-              <Route path="/buy-points" element={<Navigate to="/purchase-points" replace />} />
+                {/* =================== OTRAS RUTAS PROTEGIDAS =================== */}
 
-              {/* =================== 404 =================== */}
-              
-              <Route 
-                path="*" 
-                element={
-                  <UniversalRoute>
-                    <NotFound />
-                  </UniversalRoute>
-                } 
-              />
-              
-            </RouterRoutes>
-          </ErrorBoundary>
+                <Route 
+                  path="/saved" 
+                  element={
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <PlaceholderPage 
+                          title="Contenido Guardado" 
+                          description="Accede a todo el contenido que has guardado" 
+                        />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* CONFIGURACIÓN - REDIRECCIÓN A /PROFILE (Implementación lista) */}
+                <Route 
+                  path="/settings" 
+                  element={
+                    <ProtectedRoute>
+                      <Navigate to="/profile" replace />
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
+                
+                <Route 
+                  path="/admin" 
+                  element={
+                    <ProtectedAdminRoute>
+                      <AdminLayout />
+                    </ProtectedAdminRoute>
+                  }
+                >
+                  {/* Dashboard - ✅ REAL (Sprint 4) */}
+                  <Route index element={<AdminDashboard />} />
+
+                  {/* Usuarios - ✅ REAL (Sprint 4) */}
+                  <Route 
+                    path="users" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_users">
+                        <UserManagement />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Categorías - ✅ REAL (Sprint 4) */}
+                  <Route 
+                    path="categories" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_categories">
+                        <CategoryManagement />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Puntos - ✅ REAL (Sprint 5) */}
+                  <Route 
+                    path="points" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_points">
+                        <PointsRulesEditor />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* 💎 NUEVO - Puntos Premium - ✅ REAL */}
+                  <Route 
+                    path="premium-points" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_points">
+                        <PremiumPointsConfig />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* 💰 NUEVO - Gestión de Transacciones - ✅ REAL */}
+                  <Route 
+                    path="transactions" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_transactions">
+                        <TransactionsManagement />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Misiones - ✅ REAL (NUEVO) */}
+                  <Route 
+                    path="missions" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_missions">
+                        <MissionsManagement />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Recompensas - ✅ REAL (Sprint 5) */}
+                  <Route 
+                    path="rewards" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_rewards">
+                        <RewardsManagement />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Moderación - ✅ REAL (Sprint 6) */}
+                  <Route 
+                    path="moderation" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="moderate_content">
+                        <ContentModeration />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Analytics - ✅ REAL (Sprint 6) */}
+                  <Route 
+                    path="analytics" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="view_analytics">
+                        <AdvancedAnalytics />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Branding - ✅ REAL (Sprint 5) */}
+                  <Route 
+                    path="settings" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="manage_settings">
+                        <BrandingSettings />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+
+                  {/* Logs - ⏳ PLACEHOLDER */}
+                  <Route 
+                    path="logs" 
+                    element={
+                      <ProtectedAdminRoute requiredPermission="view_logs">
+                        <AdminPlaceholder 
+                          title="Logs de Administración"
+                          description="Auditoría de acciones administrativas"
+                          requiredPermission="view_logs"
+                        />
+                      </ProtectedAdminRoute>
+                    } 
+                  />
+                </Route>
+
+                {/* Acceso no autorizado */}
+                <Route 
+                  path="/unauthorized" 
+                  element={
+                    <UniversalRoute>
+                      <Unauthorized />
+                    </UniversalRoute>
+                  } 
+                />
+
+                {/* =================== REDIRECTS =================== */}
+                
+                <Route path="/create" element={<Navigate to="/upload" replace />} />
+                <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
+                
+                {/* Redirect de compra (por si alguien usa /buy-points) */}
+                <Route path="/buy-points" element={<Navigate to="/purchase-points" replace />} />
+
+                {/* =================== 404 =================== */}
+                
+                <Route 
+                  path="*" 
+                  element={
+                    <UniversalRoute>
+                      <NotFound />
+                    </UniversalRoute>
+                  } 
+                />
+                
+              </RouterRoutes>
+            </ErrorBoundary>
+            <NotificationContainer /> {/* ✅ NUEVO: Renderizador de notificaciones */}
+          </NotificationProvider>
         </PointsProvider>
       </AuthProvider>
     </BrowserRouter>
