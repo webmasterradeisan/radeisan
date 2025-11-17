@@ -670,7 +670,7 @@ const ReelsContainer = ({
       // ✅ VERIFICAR SI YA COMPLETÓ LA MISIÓN DE LIKES HOY
       const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
       
-      // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE
+      // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE EN ESTE VIDEO
       const isCurrentlyLiked = newLikedVideos.has(videoId);
       
       console.log('👍 Estado del like:', {
@@ -699,8 +699,8 @@ const ReelsContainer = ({
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        // ❌ ELIMINADO: RPC 'decrement_video_likes' que fallaba
-        // await supabase.rpc('decrement_video_likes', { video_id: videoId });
+        // Mostrar notificación de que quitó el like
+        showPointsNotification('Like removido de este video', videoId, 'info');
         
       } else {
         // ==============================
@@ -723,57 +723,58 @@ const ReelsContainer = ({
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // ❌ ELIMINADO: RPC 'increment_video_likes' que fallaba
-        // await supabase.rpc('increment_video_likes', { video_id: videoId });
-
-        // ✅ VERIFICAR SI YA GANÓ PUNTOS HOY
-        if (!hasEarnedPointsBefore) {
-          // ==============================
-          // MISIÓN NO COMPLETA HOY
-          // ==============================
-          try {
-            // ✅ Llamamos a la función SQL con 'reel' como tipo
-            const missionResult = await missionsService.trackGiveLike('reel', videoId);
+        // ✅ SIEMPRE TRACKEAR LA ACCIÓN (incluso si ya ganó puntos antes)
+        try {
+          // ✅ Llamamos a la función SQL con 'reel' como tipo
+          const missionResult = await missionsService.trackGiveLike('reel', videoId);
+          
+          console.log('🎯 Resultado de trackGiveLike:', missionResult);
+          
+          // ================================================================
+          // ✅ NOTIFICACIONES PARA TODOS LOS CASOS
+          // ================================================================
+          if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
+            // 1. MISIÓN COMPLETA
+            const pointsEarned = missionResult.points_earned; 
+            await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
+            showPointsNotification(`🎉 Misión Completa: +${pointsEarned} puntos`, videoId, 'success');
             
-            console.log('🎯 Resultado de trackGiveLike:', missionResult);
+            // Marcar TODOS los videos como 'hechos' para hoy
+            const allVideoIds = videos.map(v => v.id);
+            setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
+
+          } else if (missionResult.result === 'progress_updated' || missionResult.result === 'registered') {
+            // 2. PROGRESO REGISTRADO (SIEMPRE MOSTRAR)
+            showPointsNotification(
+              missionResult.message || '✓ Like registrado en este video', 
+              videoId, 
+              'info'
+            );
+               
+          } else if (missionResult.result === 'already_completed') {
+            // 3. MISIÓN YA COMPLETADA HOY
+            showPointsNotification('✓ Ya completaste la misión de Likes hoy', videoId, 'warning');
             
-            // ================================================================
-            // ✅ INICIO: LÓGICA DE NOTIFICACIONES SINCRONIZADA
-            // ================================================================
-            if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
-              // 1. MISIÓN COMPLETA
-              const pointsEarned = missionResult.points_earned; 
-              await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
-              showPointsNotification(`Misión Completa: +${pointsEarned} puntos 🎉`, videoId, 'success');
-              
-              // Marcar TODOS los videos como 'hechos' para hoy
-              const allVideoIds = videos.map(v => v.id);
-              setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
-
-            } else if (missionResult.result === 'progress_updated') {
-              // 2. PROGRESO REGISTRADO
-              showPointsNotification(`Acción registrada. Sigue dando Likes!`, videoId, 'success');
-                 
-            } else if (missionResult.result === 'already_completed') {
-              // 3. ANTI-FARMING (Misión ya completada hoy)
-              showPointsNotification(`Ya completaste la misión de Likes hoy.`, videoId, 'restriction');
-               // Marcar TODOS los videos como 'hechos' para hoy
-              const allVideoIds = videos.map(v => v.id);
-              setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
-            }
-            // ================================================================
-            // ✅ FIN: LÓGICA DE NOTIFICACIONES
-            // ================================================================
-
-          } catch (pointsError) {
-            console.error('❌ Error al procesar puntos o misión:', pointsError);
+            // Marcar TODOS los videos como 'hechos' para hoy
+            const allVideoIds = videos.map(v => v.id);
+            setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
+            
+          } else {
+            // 4. CUALQUIER OTRO CASO - Mostrar mensaje genérico
+            showPointsNotification(
+              missionResult.message || '✓ Like registrado en este video',
+              videoId,
+              'info'
+            );
           }
-        } else {
-          // ==============================
-          // YA GANÓ PUNTOS HOY
-          // ==============================
-          console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
-          showPointsNotification('Ya completaste esta misión hoy', videoId, 'restriction');
+          // ================================================================
+          // ✅ FIN: LÓGICA DE NOTIFICACIONES
+          // ================================================================
+
+        } catch (pointsError) {
+          console.error('❌ Error al procesar puntos o misión:', pointsError);
+          // Mostrar notificación de error
+          showPointsNotification('Error al procesar la acción', videoId, 'error');
         }
       }
       
@@ -781,6 +782,7 @@ const ReelsContainer = ({
       setDislikedVideos(newDislikedVideos);
     } catch (error) {
       console.error('❌ Error en like:', error);
+      showPointsNotification('Error al dar like', videoId, 'error');
     }
   };
 
@@ -919,11 +921,12 @@ const ReelsContainer = ({
 
       const newFollowedCreators = new Set(followedCreators);
       const isCurrentlyFollowing = newFollowedCreators.has(creatorId);
-      // 🛑 Lógica 'hasEarnedPointsBefore' de 'follow' deshabilitada
-      // const hasEarnedPointsBefore = actionsPerformed.follows.has(creatorId);
+      const videoId = videos[currentIndex]?.id;
 
       if (isCurrentlyFollowing) {
-        // Dejar de seguir
+        // ==============================
+        // DEJAR DE SEGUIR
+        // ==============================
         newFollowedCreators.delete(creatorId);
         
         await supabase
@@ -933,8 +936,12 @@ const ReelsContainer = ({
           .eq('following_id', creatorId);
         
         console.log('✅ Dejaste de seguir al creador:', creatorId);
+        showPointsNotification('Dejaste de seguir a este creador', videoId, 'info');
+        
       } else {
-        // Seguir
+        // ==============================
+        // SEGUIR
+        // ==============================
         newFollowedCreators.add(creatorId);
         
         await supabase
@@ -944,38 +951,50 @@ const ReelsContainer = ({
             following_id: creatorId 
           });
 
-        // ✅ TRACKING DE MISIÓN - IMPLEMENTADO
-        if (!actionsPerformed.follows.has(creatorId)) {
-          try {
-            const result = await missionsService.trackFollowUser(creatorId);
-            
-            const videoId = videos[currentIndex]?.id;
-            
-            if (result.result === 'success' && result.points_earned > 0) {
-              await addPoints(result.points_earned, result.message || 'Misión de Seguir completada', 'free');
-              showPointsNotification(`+${result.points_earned} PUNTOS por Seguir 👥`, videoId, 'success');
-              setActionsPerformed(prev => ({
-                ...prev,
-                follows: new Set([...prev.follows, creatorId])
-              }));
-            } else if (result.result === 'progress_updated') {
-              showPointsNotification('Progreso registrado. ¡Sigue siguiendo!', videoId, 'success');
-            } else if (result.result === 'already_completed') {
-              showPointsNotification('Ya completaste la misión de seguir hoy.', videoId, 'restriction');
-              setActionsPerformed(prev => ({
-                ...prev,
-                follows: new Set([...prev.follows, creatorId])
-              }));
-            }
-          } catch (pointsError) {
-            console.error('Error al otorgar puntos:', pointsError);
+        // ✅ SIEMPRE TRACKEAR LA ACCIÓN
+        try {
+          const result = await missionsService.trackFollowUser(creatorId);
+          
+          console.log('🎯 Resultado de trackFollowUser:', result);
+          
+          // ✅ NOTIFICACIONES PARA TODOS LOS CASOS
+          if (result.result === 'success' && result.points_earned > 0) {
+            await addPoints(result.points_earned, result.message || 'Misión de Seguir completada', 'free');
+            showPointsNotification(`🎉 +${result.points_earned} puntos por seguir`, videoId, 'success');
+            setActionsPerformed(prev => ({
+              ...prev,
+              follows: new Set([...prev.follows, creatorId])
+            }));
+          } else if (result.result === 'progress_updated' || result.result === 'registered') {
+            showPointsNotification(
+              result.message || '✓ Ahora sigues a este creador',
+              videoId,
+              'info'
+            );
+          } else if (result.result === 'already_completed') {
+            showPointsNotification('✓ Ya completaste la misión de seguir hoy', videoId, 'warning');
+            setActionsPerformed(prev => ({
+              ...prev,
+              follows: new Set([...prev.follows, creatorId])
+            }));
+          } else {
+            showPointsNotification(
+              result.message || '✓ Ahora sigues a este creador',
+              videoId,
+              'info'
+            );
           }
+        } catch (pointsError) {
+          console.error('❌ Error al procesar puntos:', pointsError);
+          showPointsNotification('Error al procesar la acción', videoId, 'error');
         }
       }
       
       setFollowedCreators(newFollowedCreators);
     } catch (error) {
-      console.error('Error siguiendo/dejando de seguir creador:', error);
+      console.error('❌ Error siguiendo/dejando de seguir creador:', error);
+      const videoId = videos[currentIndex]?.id;
+      showPointsNotification('Error al seguir/dejar de seguir', videoId, 'error');
     }
   };
 
@@ -994,7 +1013,11 @@ const ReelsContainer = ({
 
       const videoId = video.id;
       const shareMethod = navigator.share ? 'native' : 'clipboard';
+      
+      // ✅ VERIFICAR SI YA COMPARTIÓ ESTE VIDEO ANTES
+      const hasSharedBefore = actionsPerformed.shares.has(videoId);
 
+      // Compartir según el método disponible
       if (navigator.share) {
         await navigator.share({
           title: video.title || 'Reel',
@@ -1002,39 +1025,59 @@ const ReelsContainer = ({
           url: window.location.href
         });
       } else {
-        navigator.clipboard.writeText(window.location.href);
-        showPointsNotification('Enlace copiado al portapapeles', videoId, 'success');
+        await navigator.clipboard.writeText(window.location.href);
+        showPointsNotification('📋 Enlace copiado al portapapeles', videoId, 'info');
       }
 
-      // ✅ TRACKING DE MISIÓN - IMPLEMENTADO
-      if (!actionsPerformed.shares.has(videoId)) {
-        setActionsPerformed(prev => ({
-          ...prev,
-          shares: new Set([...prev.shares, videoId])
-        }));
+      // ✅ SIEMPRE TRACKEAR LA ACCIÓN
+      try {
+        const result = await missionsService.trackShareContent(
+          'reel',
+          videoId,
+          1,
+          { platform: shareMethod }
+        );
         
-        try {
-          const result = await missionsService.trackShareContent(
-            'reel',
+        console.log('🎯 Resultado de trackShareContent:', result);
+        
+        // ✅ NOTIFICACIONES PARA TODOS LOS CASOS
+        if (result.result === 'success' && result.points_earned > 0) {
+          await addPoints(result.points_earned, result.message || 'Misión de Compartir completada', 'free');
+          showPointsNotification(`🎉 +${result.points_earned} puntos por compartir`, videoId, 'success');
+          setActionsPerformed(prev => ({
+            ...prev,
+            shares: new Set([...prev.shares, videoId])
+          }));
+        } else if (result.result === 'progress_updated' || result.result === 'registered') {
+          showPointsNotification(
+            result.message || (hasSharedBefore ? '✓ Video compartido nuevamente' : '✓ Video compartido'),
             videoId,
-            1,
-            { platform: shareMethod }
+            'info'
           );
-          
-          if (result.result === 'success' && result.points_earned > 0) {
-            await addPoints(result.points_earned, result.message || 'Misión de Compartir completada', 'free');
-            showPointsNotification(`+${result.points_earned} PUNTOS por Compartir 📢`, videoId, 'success');
-          } else if (result.result === 'progress_updated') {
-            showPointsNotification('Progreso registrado. ¡Sigue compartiendo!', videoId, 'success');
-          } else if (result.result === 'already_completed') {
-            showPointsNotification('Ya completaste la misión de compartir hoy.', videoId, 'restriction');
-          }
-        } catch (pointsError) {
-          console.error('Error al otorgar puntos:', pointsError);
+          setActionsPerformed(prev => ({
+            ...prev,
+            shares: new Set([...prev.shares, videoId])
+          }));
+        } else if (result.result === 'already_completed') {
+          showPointsNotification('✓ Ya completaste la misión de compartir hoy', videoId, 'warning');
+          setActionsPerformed(prev => ({
+            ...prev,
+            shares: new Set([...prev.shares, videoId])
+          }));
+        } else {
+          showPointsNotification(
+            result.message || (hasSharedBefore ? '✓ Video compartido nuevamente' : '✓ Video compartido'),
+            videoId,
+            'info'
+          );
         }
+      } catch (pointsError) {
+        console.error('❌ Error al procesar puntos:', pointsError);
+        showPointsNotification('Error al procesar la acción', videoId, 'error');
       }
     } catch (error) {
-      console.error('Error compartiendo:', error);
+      console.error('❌ Error compartiendo:', error);
+      showPointsNotification('Error al compartir', video.id, 'error');
     }
   };
 
@@ -1170,6 +1213,7 @@ const ReelsContainer = ({
   const handleAddComment = async (videoId) => {
     if (!newComment.trim()) {
       console.log('❌ Comentario vacío');
+      showPointsNotification('⚠️ Escribe algo antes de comentar', videoId, 'warning');
       return;
     }
 
@@ -1187,6 +1231,9 @@ const ReelsContainer = ({
       }
 
       console.log('👤 Usuario autenticado:', user.id);
+      
+      // ✅ VERIFICAR SI YA COMENTÓ EN ESTE VIDEO ANTES
+      const hasCommentedBefore = actionsPerformed.comments.has(videoId);
 
       const commentData = {
         video_id: videoId,
@@ -1205,35 +1252,60 @@ const ReelsContainer = ({
 
       if (error) {
         console.error('❌ Error de Supabase:', error);
-        alert(`Error al comentar: ${error.message}`);
+        showPointsNotification('❌ Error al comentar', videoId, 'error');
         throw error;
       }
 
       console.log('✅ Comentario insertado exitosamente:', insertedComment);
 
-      // ✅ TRACKING DE MISIÓN - IMPLEMENTADO
-      if (!replyingTo && !actionsPerformed.comments.has(videoId)) {
-        setActionsPerformed(prev => ({
-          ...prev,
-          comments: new Set([...prev.comments, videoId])
-        }));
-        
+      // ✅ SIEMPRE TRACKEAR SI ES COMENTARIO PRINCIPAL (no respuesta)
+      if (!replyingTo) {
         try {
           const result = await missionsService.trackComment('reel', videoId);
           
+          console.log('🎯 Resultado de trackComment:', result);
+          
+          // ✅ NOTIFICACIONES PARA TODOS LOS CASOS
           if (result.result === 'success' && result.points_earned > 0) {
             await addPoints(result.points_earned, result.message || 'Misión de Comentar completada', 'free');
-            showPointsNotification(`+${result.points_earned} PUNTOS por Comentar 💬`, videoId, 'success');
-          } else if (result.result === 'progress_updated') {
-            showPointsNotification('Comentario registrado. ¡Sigue así!', videoId, 'success');
+            showPointsNotification(`🎉 +${result.points_earned} puntos por comentar`, videoId, 'success');
+            setActionsPerformed(prev => ({
+              ...prev,
+              comments: new Set([...prev.comments, videoId])
+            }));
+          } else if (result.result === 'progress_updated' || result.result === 'registered') {
+            showPointsNotification(
+              result.message || (hasCommentedBefore ? '✓ Comentario agregado' : '✓ Primer comentario en este video'),
+              videoId,
+              'info'
+            );
+            setActionsPerformed(prev => ({
+              ...prev,
+              comments: new Set([...prev.comments, videoId])
+            }));
           } else if (result.result === 'already_completed') {
-            showPointsNotification('Ya completaste la misión de comentar hoy.', videoId, 'restriction');
+            showPointsNotification('✓ Ya completaste la misión de comentar hoy', videoId, 'warning');
+            setActionsPerformed(prev => ({
+              ...prev,
+              comments: new Set([...prev.comments, videoId])
+            }));
+          } else {
+            showPointsNotification(
+              result.message || (hasCommentedBefore ? '✓ Comentario agregado' : '✓ Primer comentario en este video'),
+              videoId,
+              'info'
+            );
           }
         } catch (pointsError) {
-          console.error('⚠️ Error al otorgar puntos:', pointsError);
+          console.error('⚠️ Error al procesar puntos:', pointsError);
+          showPointsNotification('Error al procesar la acción', videoId, 'error');
         }
+      } else {
+        // Si es una respuesta, solo mostrar confirmación
+        showPointsNotification('✓ Respuesta agregada', videoId, 'info');
       }
 
+      // Incrementar contador
       if (!replyingTo) {
         console.log('📊 Incrementando contador de comentarios...');
         setVideoCounters(prev => ({
@@ -1254,7 +1326,7 @@ const ReelsContainer = ({
     } catch (error) {
       console.error('❌ ===== ERROR GENERAL AL COMENTAR =====');
       console.error('❌ Error:', error);
-      alert('Error al agregar comentario. Revisa la consola para más detalles.');
+      showPointsNotification('❌ Error al comentar', videoId, 'error');
     }
   };
 
