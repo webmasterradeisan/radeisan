@@ -50,7 +50,8 @@ const ReelsContainer = ({
   const isDesktop = !isMobile;
 
   // ✅ INTEGRACIÓN CON SISTEMA DE PUNTOS
-  const { addPoints } = usePoints();
+  // 🔥 NUEVAS FUNCIONES: updateMissionOptimistic, rollbackMission, refreshPoints
+  const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints } = usePoints();
   
   // ✅ SISTEMA DE NOTIFICACIONES GLOBALES (ÚNICO)
   const { success, error, warning, info } = useNotification();
@@ -651,6 +652,9 @@ const ReelsContainer = ({
   // ✅✅✅ ACCIÓN DE LIKE (SINCRONIZADA)
   // ===============================
   
+  // ============================================================================
+  // 🔥 FUNCIÓN handleLike CORREGIDA CON ACTUALIZACIÓN OPTIMISTA Y ROLLBACK
+  // ============================================================================
   const handleLike = async (videoId, e) => {
     if (e) {
       e.stopPropagation();
@@ -673,7 +677,7 @@ const ReelsContainer = ({
       // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE EN ESTE VIDEO
       const isCurrentlyLiked = newLikedVideos.has(videoId);
       
-      console.log('👍 Estado del like:', {
+      console.log('👍 [handleLike] Estado inicial:', {
         videoId,
         hasEarnedPointsBefore,
         isCurrentlyLiked
@@ -723,56 +727,140 @@ const ReelsContainer = ({
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
 
-        // ✅ SIEMPRE TRACKEAR LA ACCIÓN (incluso si ya ganó puntos antes)
+        // ================================================================
+        // 🔥 NUEVA LÓGICA: ACTUALIZACIÓN OPTIMISTA + ROLLBACK
+        // ================================================================
+        
+        // 1. Guardar snapshot del estado actual (para rollback si falla)
+        const missionSnapshot = [...missions];
+        
+        console.log('💾 [handleLike] Snapshot guardado:', {
+          missions: missionSnapshot.map(m => ({
+            title: m.title,
+            type: m.mission_type,
+            progress: `${m.current_count}/${m.target_count}`
+          }))
+        });
+        
+        // 2. ACTUALIZACIÓN OPTIMISTA (el usuario ve el cambio INMEDIATAMENTE)
+        //    Incrementar el contador LOCALMENTE sin esperar al backend
+        updateMissionOptimistic('give_like', 1);
+        
+        console.log('⚡ [handleLike] Actualización optimista aplicada (usuario ve cambio inmediato)');
+
+        // 3. Llamar al backend para trackear la acción
         try {
+          console.log('🚀 [handleLike] Llamando a trackGiveLike...');
+          
           // ✅ Llamamos a la función SQL con 'reel' como tipo
           const missionResult = await missionsService.trackGiveLike('reel', videoId);
           
-          console.log('🎯 Resultado de trackGiveLike:', missionResult);
+          console.log('🎯 [handleLike] Resultado de trackGiveLike:', missionResult);
           
           // ================================================================
-          // ✅ NOTIFICACIONES PARA TODOS LOS CASOS
+          // ✅ MANEJO COMPLETO DE TODOS LOS CASOS
           // ================================================================
+          
           if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
-            // 1. MISIÓN COMPLETA
+            // ========================================
+            // CASO 1: MISIÓN COMPLETADA (ej: 10/10)
+            // ========================================
             const pointsEarned = missionResult.points_earned; 
+            
+            console.log('🎉 [handleLike] ¡MISIÓN COMPLETADA!', {
+              points: pointsEarned,
+              message: missionResult.message
+            });
+            
+            // Agregar puntos al usuario
             await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
+            
+            // Notificación de éxito
             showPointsNotification(`🎉 Misión Completa: +${pointsEarned} puntos`, videoId, 'success');
             
             // Marcar TODOS los videos como 'hechos' para hoy
             const allVideoIds = videos.map(v => v.id);
             setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
+            
+            // 🔄 FORCE REFRESH: Actualizar misiones desde el backend
+            console.log('🔄 [handleLike] Force refresh de misiones...');
+            await refreshPoints();
 
           } else if (missionResult.result === 'progress_updated' || missionResult.result === 'registered') {
-            // 2. PROGRESO REGISTRADO (SIEMPRE MOSTRAR)
+            // ========================================
+            // CASO 2: PROGRESO REGISTRADO (ej: 8/10 -> 9/10)
+            // ========================================
+            console.log('📊 [handleLike] Progreso actualizado:', missionResult.message);
+            
             showPointsNotification(
               missionResult.message || '✓ Like registrado en este video', 
               videoId, 
               'info'
             );
+            
+            // 🔄 FORCE REFRESH: Confirmar progreso desde el backend
+            console.log('🔄 [handleLike] Confirmando progreso desde backend...');
+            await refreshPoints();
                
           } else if (missionResult.result === 'already_completed') {
-            // 3. MISIÓN YA COMPLETADA HOY
+            // ========================================
+            // CASO 3: MISIÓN YA COMPLETADA HOY
+            // ========================================
+            console.log('⚠️ [handleLike] Misión ya completada hoy');
+            
             showPointsNotification('✓ Ya completaste la misión de Likes hoy', videoId, 'warning');
             
             // Marcar TODOS los videos como 'hechos' para hoy
             const allVideoIds = videos.map(v => v.id);
             setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
             
+            // ROLLBACK: Revertir la actualización optimista
+            console.log('⏪ [handleLike] Rollback: misión ya completada');
+            rollbackMission(missionSnapshot);
+            
+          } else if (missionResult.result === 'mission_not_found') {
+            // ========================================
+            // CASO 4: MISIÓN NO ENCONTRADA (ERROR DE CONFIG)
+            // ========================================
+            console.error('❌ [handleLike] Misión no encontrada en BD:', {
+              mission_type: 'give_like',
+              hint: 'Verifica que existe una misión activa con mission_type="give_like"'
+            });
+            
+            showPointsNotification('⚠️ Configuración de misión incorrecta', videoId, 'warning');
+            
+            // ROLLBACK: Revertir la actualización optimista
+            rollbackMission(missionSnapshot);
+            
           } else {
-            // 4. CUALQUIER OTRO CASO - Mostrar mensaje genérico
+            // ========================================
+            // CASO 5: CUALQUIER OTRO CASO
+            // ========================================
+            console.log('ℹ️ [handleLike] Caso no específico:', missionResult);
+            
             showPointsNotification(
               missionResult.message || '✓ Like registrado en este video',
               videoId,
               'info'
             );
+            
+            // Confirmar desde backend
+            await refreshPoints();
           }
           // ================================================================
-          // ✅ FIN: LÓGICA DE NOTIFICACIONES
+          // ✅ FIN: LÓGICA DE NOTIFICACIONES Y MANEJO DE CASOS
           // ================================================================
 
         } catch (pointsError) {
-          console.error('❌ Error al procesar puntos o misión:', pointsError);
+          // ================================================================
+          // ❌ ERROR EN EL BACKEND - ROLLBACK AUTOMÁTICO
+          // ================================================================
+          console.error('❌ [handleLike] Error al procesar puntos o misión:', pointsError);
+          
+          // ROLLBACK: Revertir el cambio optimista
+          console.log('⏪ [handleLike] Rollback por error de backend');
+          rollbackMission(missionSnapshot);
+          
           // Mostrar notificación de error
           showPointsNotification('Error al procesar la acción', videoId, 'error');
         }
@@ -780,11 +868,15 @@ const ReelsContainer = ({
       
       setLikedVideos(newLikedVideos);
       setDislikedVideos(newDislikedVideos);
+      
     } catch (error) {
-      console.error('❌ Error en like:', error);
+      console.error('❌ [handleLike] Error general en like:', error);
       showPointsNotification('Error al dar like', videoId, 'error');
     }
   };
+  // ============================================================================
+  // FIN DE LA FUNCIÓN handleLike CORREGIDA
+  // ============================================================================
 
   const handleDislike = async (videoId, e) => {
     if (e) {
