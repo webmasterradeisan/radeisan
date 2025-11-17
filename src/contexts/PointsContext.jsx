@@ -7,6 +7,8 @@
 // ✅ MEJORADO: Centraliza la lógica de misiones y puntos ganados hoy.
 // ✅ TIEMPO REAL: Usa suscripciones a Supabase para actualización automática.
 // ✅ NUEVO: Usa getMissionsForProgressPanel() para mostrar solo misiones visibles
+// 🔥 NUEVO: updateMissionOptimistic() - Actualización instantánea sin esperar backend
+// 🔥 NUEVO: rollbackMission() - Revierte cambios si el backend falla
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -70,6 +72,58 @@ export const PointsProvider = ({ children }) => {
   const animationTimeoutRef = useRef(null);
   
   // ============================================================================
+  // 🔥 NUEVAS FUNCIONES: ACTUALIZACIÓN OPTIMISTA Y ROLLBACK
+  // ============================================================================
+  
+  /**
+   * Actualiza el progreso de una misión LOCALMENTE (optimista)
+   * sin esperar confirmación del backend.
+   * El usuario verá el cambio INSTANTÁNEAMENTE.
+   * 
+   * @param {string} missionType - Tipo de misión (ej: 'give_like')
+   * @param {number} delta - Cantidad a incrementar (default: 1)
+   */
+  const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
+    console.log('⚡ [Optimistic] Actualizando misión localmente:', {
+      missionType,
+      delta,
+      before: missions.find(m => m.mission_type === missionType)?.current_count
+    });
+    
+    setMissions(prev => prev.map(mission => {
+      if (mission.mission_type === missionType) {
+        const newCount = Math.min(
+          mission.current_count + delta,
+          mission.target_count
+        );
+        
+        console.log('⚡ [Optimistic] Nuevo progreso:', {
+          mission: mission.title,
+          from: `${mission.current_count}/${mission.target_count}`,
+          to: `${newCount}/${mission.target_count}`
+        });
+        
+        return {
+          ...mission,
+          current_count: newCount
+        };
+      }
+      return mission;
+    }));
+  }, [missions]);
+  
+  /**
+   * Revierte el estado de las misiones a un snapshot anterior
+   * Se usa cuando el backend falla o rechaza la operación.
+   * 
+   * @param {Array} snapshot - Estado anterior de las misiones
+   */
+  const rollbackMission = useCallback((snapshot) => {
+    console.log('⏪ [Rollback] Revirtiendo al estado anterior');
+    setMissions(snapshot);
+  }, []);
+  
+  // ============================================================================
   // LÓGICA DE CARGA DE DATOS (UNIFICADA Y CORREGIDA)
   // ============================================================================
   
@@ -120,6 +174,15 @@ export const PointsProvider = ({ children }) => {
         // 2. ✅ Actualizar Misiones (ahora con progreso en tiempo real)
         if (missionsResult.success) {
           setMissions(missionsResult.missions || []);
+          
+          console.log('📊 [loadAllData] Misiones cargadas:', {
+            total: missionsResult.missions?.length || 0,
+            details: missionsResult.missions?.map(m => ({
+              title: m.title,
+              progress: `${m.current_count}/${m.target_count}`,
+              completed: m.is_completed
+            }))
+          });
         }
 
         // 3. Actualizar Puntos Ganados Hoy
@@ -318,6 +381,7 @@ export const PointsProvider = ({ children }) => {
   // FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE
   // ============================================================================
   const refreshPoints = useCallback(() => {
+    console.log('🔄 [refreshPoints] Refresh manual solicitado');
     return loadAllData();
   }, [loadAllData]);
 
@@ -353,10 +417,14 @@ export const PointsProvider = ({ children }) => {
     // Animación
     pointsAnimation,
     
-    // Funciones
+    // Funciones principales
     addPoints,
     deductPoints,
-    refreshPoints
+    refreshPoints,
+    
+    // 🔥 NUEVAS FUNCIONES EXPORTADAS
+    updateMissionOptimistic,  // ✅ Actualización instantánea
+    rollbackMission           // ✅ Rollback en caso de error
   };
 
   return (
