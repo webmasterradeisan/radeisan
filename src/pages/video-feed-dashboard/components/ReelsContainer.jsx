@@ -27,7 +27,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import { usePoints } from 'contexts/PointsContext';
-import { useNotification } from 'contexts/NotificationContext'; // ✅ Sistema de notificaciones global
+import { useNotification } from 'contexts/NotificationContext'; // ✅ SISTEMA GLOBAL
 import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
@@ -52,7 +52,7 @@ const ReelsContainer = ({
   // ✅ INTEGRACIÓN CON SISTEMA DE PUNTOS
   const { addPoints } = usePoints();
   
-  // ✅ INTEGRACIÓN CON SISTEMA DE NOTIFICACIONES GLOBAL
+  // ✅ SISTEMA DE NOTIFICACIONES GLOBALES (ÚNICO)
   const { success, error, warning, info } = useNotification();
 
   // Estados principales
@@ -79,14 +79,6 @@ const ReelsContainer = ({
   
   // ✅ NUEVO: Estado para el Modal de Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
-
-  // ✅ NUEVO: Estado para notificaciones de puntos
-  const [pointsNotification, setPointsNotification] = useState({
-    show: false,
-    message: '',
-    videoId: null,
-    type: 'success' // Añadido para controlar el color
-  });
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
@@ -119,36 +111,18 @@ const ReelsContainer = ({
     showGiftModal // ✅ Nuevo estado de debug
   });
 
-  // ✅ SISTEMA HÍBRIDO: Notificación LOCAL (junto al botón) + GLOBAL (esquina)
+  // ✅ NUEVO: Función para mostrar notificación de puntos
+  // ✅ SISTEMA GLOBAL: Función para mostrar notificaciones
   const showPointsNotification = (message, videoId, type = 'success') => {
-    console.log('🔔 MOSTRANDO NOTIFICACIÓN HÍBRIDA:', { message, videoId, type });
+    console.log('🔔 [NOTIFICACIÓN GLOBAL]:', { message, videoId, type });
     
-    // 1. NOTIFICACIÓN LOCAL (junto al botón de like - feedback inmediato)
-    setPointsNotification({
-      show: true,
-      message,
-      videoId,
-      type
-    });
-    
-    // Auto ocultar después de 2 segundos
-    setTimeout(() => {
-      setPointsNotification({
-        show: false,
-        message: '',
-        videoId: null,
-        type: 'success'
-      });
-    }, 2000);
-    
-    // 2. NOTIFICACIÓN GLOBAL (esquina superior - mensajes importantes)
-    // Solo para misiones completadas y mensajes importantes
-    if (message.includes('Misión Completa') || message.includes('puntos') || message.includes('completaste')) {
-      if (type === 'success') {
-        success(message, { duration: 2500 });
-      } else if (type === 'error' || type === 'restriction') {
-        warning(message, { duration: 2500 });
-      }
+    // Usar SOLO el sistema global de notificaciones
+    if (type === 'success') {
+      success(message, { duration: 2500 });
+    } else if (type === 'error' || type === 'restriction') {
+      warning(message, { duration: 2500 });
+    } else if (type === 'info') {
+      info(message, { duration: 2500 });
     }
   };
 
@@ -1593,20 +1567,6 @@ const ReelsContainer = ({
                 </div>
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
-
-              {/* ================================================== */}
-              {/* ✅ NOTIFICACIÓN DE PUNTOS (CON ESTILO DINÁMICO)   */}
-              {/* ================================================== */}
-              {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className={`absolute -left-32 top-0 px-3 py-2 rounded-lg shadow-xl animate-bounce font-bold text-xs whitespace-nowrap
-                  ${pointsNotification.type === 'success' 
-                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
-                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
-                  }
-                `}>
-                  {pointsNotification.message}
-                </div>
-              )}
             </div>
 
             <button 
@@ -1733,17 +1693,6 @@ const ReelsContainer = ({
                 </span>
               </button>
 
-              {/* ✅ NOTIFICACIÓN DE PUNTOS AL LADO DEL LIKE - DESKTOP */}
-              {pointsNotification.show && pointsNotification.videoId === currentVideo.id && (
-                <div className={`absolute -left-40 top-2 px-4 py-2 rounded-xl shadow-2xl animate-bounce font-bold text-sm whitespace-nowrap z-50
-                  ${pointsNotification.type === 'success' 
-                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white'
-                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
-                  }
-                `}>
-                  {pointsNotification.message}
-                </div>
-              )}
             </div>
 
             <button 
