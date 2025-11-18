@@ -1,26 +1,16 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSION FINAL CORREGIDA
-// ✅ CORREGIDO: Verificaciones de seguridad para comment.user
-// ✅ CORREGIDO: Estructura JSX del modal
-// ✅ NUEVO: Avisos de puntos cerca del botón like
-// ✅ CORREGIDO: Sistema de tracking persistente para likes
-// ✅ NUEVO: INTEGRACIÓN BOTÓN Y MODAL DE REGALO
-// ✅ CORREGIDO: Ruta de importación de GiftPointsModal para evitar el error.
-// 🟢 SINCRONIZADO: 'loadCurrentUserAndActions' ahora consulta 'mission_progress'
-//    para el anti-farming diario (en lugar de 'user_video_points').
-// 🟢 SINCRONIZADO: 'handleLike' ya no da 5 puntos directos y usa
-//    la lógica de misión, mostrando notificaciones.
-// 🟢 CORREGIDO: Solucionado crash 'handlePlayPause is not defined'.
-// 🟢 CORREGIDO: Eliminadas llamadas a RPC 'increment_video_likes' que causaban
-//    el error 400.
-// 🟢 CORREGIDO: Eliminadas todas las referencias a la tabla 'user_video_points'
-//    (que no existe) para prevenir errores '42P01'.
-// ✅ CORREGIDO: trackWatchVideo ahora usa parámetros correctos (contentType, contentId, duration)
-// ✅ IMPLEMENTADO: trackShareContent completamente funcional con notificaciones
-// ✅ IMPLEMENTADO: trackComment completamente funcional con notificaciones
-// ✅ IMPLEMENTADO: trackFollowUser completamente funcional con notificaciones
-// ✅ MANTENIDO: Layout original respetado al 100%
+// REELS CONTAINER - VERSION FINAL ANTI-FARMING PROFESIONAL
+// ✅ CORREGIDO: Sistema de tracking persistente en BD
+// ✅ CORREGIDO: Previene farming por video individual
+// ✅ CORREGIDO: Contador 9/10 → 10/10 funciona correctamente
+// ✅ PROFESIONAL: Tracking permanente que persiste en todos los dispositivos
+// ============================================================================
+// CHANGELOG V3:
+// 🔥 ELIMINADO: Anti-farming local (ya no es necesario)
+// 🔥 SIMPLIFICADO: Backend maneja todo el anti-farming
+// 🔥 CORREGIDO: Rollback problemático eliminado
+// 🔥 MEJORADO: Actualización optimista sin race conditions
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -84,11 +74,11 @@ const ReelsContainer = ({
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
   const [actionsPerformed, setActionsPerformed] = useState({
-    likes: new Set(), // Esto ahora significa "misión de like completa hoy"
     saves: new Set(),
     follows: new Set(),
     comments: new Set(),
     shares: new Set()
+    // 🔥 ELIMINADO: likes (backend maneja anti-farming ahora)
   });
 
   // Refs
@@ -213,54 +203,8 @@ const ReelsContainer = ({
             setLikedVideos(likedIds);
           }
 
-          // ================================================================
-          // ✅ 2. SINCRONIZACIÓN: Cargar 'mission_progress' para anti-farming
-          //    Revisamos si la misión 'like_videos' ya se completó HOY.
-          // ================================================================
-          try {
-            const today = new Date().toISOString().split('T')[0];
-            
-            // 2a. Buscar el ID de la misión 'like_videos'
-            const { data: mission } = await supabase
-              .from('daily_missions')
-              .select('id')
-              .eq('mission_type', 'give_like') // ✅ CORREGIDO: Cambio de 'like_videos' a 'give_like'
-              .single();
-
-            if (mission) {
-              // 2b. Buscar si el usuario ya completó esa misión HOY
-              const { data: progressData, error: progressError } = await supabase
-                .from('mission_progress') //
-                .select('is_completed')
-                .eq('user_id', user.id)
-                .eq('mission_id', mission.id)
-                .eq('date', today)
-                .single();
-
-              if (progressError && progressError.code !== 'PGRST116') {
-                throw progressError; // Lanzar error si no es "fila no encontrada"
-              }
-
-              if (progressData && progressData.is_completed) {
-                // Si la misión de "like_videos" está completa HOY,
-                // marcamos TODOS los videos como 'hasEarnedPointsBefore'
-                const allVideoIds = videos.map(v => v.id);
-                setActionsPerformed(prev => ({
-                  ...prev,
-                  likes: new Set(allVideoIds) // Activamos anti-farming para todos
-                }));
-              } else {
-                // Aún no completa la misión de like hoy
-                setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
-              }
-            } else {
-              // No existe la misión 'like_videos', desactivamos anti-farming
-              setActionsPerformed(prev => ({ ...prev, likes: new Set() }));
-            }
-          } catch (err) {
-            console.error("Error al verificar progreso de misión 'like_videos':", err);
-            setActionsPerformed(prev => ({ ...prev, likes: new Set() })); // Ser permisivo
-          }
+          // 🔥 ANTI-FARMING ELIMINADO: Ahora el backend (trigger SQL) maneja todo
+          // La tabla mission_content_tracking rastrea qué videos ya contaron hoy
 
           // ✅ CARGAR VIDEOS GUARDADOS
           const { data: savedData } = await supabase
@@ -671,15 +615,11 @@ const ReelsContainer = ({
       const newLikedVideos = new Set(likedVideos);
       const newDislikedVideos = new Set(dislikedVideos);
       
-      // ✅ VERIFICAR SI YA COMPLETÓ LA MISIÓN DE LIKES HOY
-      const hasEarnedPointsBefore = actionsPerformed.likes.has(videoId);
-      
       // ✅ VERIFICAR SI TIENE LIKE ACTUALMENTE EN ESTE VIDEO
       const isCurrentlyLiked = newLikedVideos.has(videoId);
       
       console.log('👍 [handleLike] Estado inicial:', {
         videoId,
-        hasEarnedPointsBefore,
         isCurrentlyLiked
       });
       
@@ -801,25 +741,21 @@ const ReelsContainer = ({
             });
             
             // ================================================================
-            // ✅ CORRECCIÓN PROBLEMA 1: Contador 9/10 → 10/10
+            // ✅ SOLUCIÓN CONTADOR 9/10 → 10/10
             // ================================================================
-            // ❌ ELIMINADO: rollbackMission(missionSnapshot)
-            // Mantener la actualización optimista (10/10) y dejar que refreshPoints confirme
+            // NO hacer rollback - mantener actualización optimista
+            // El backend ya confirmó 10/10, solo esperamos el refresh
             
             // PASO 1: Agregar puntos al usuario
             console.log('💰 [handleLike] Agregando puntos al usuario...');
             await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
             
-            // PASO 2: Force refresh (esto confirmará el 10/10 desde el backend)
+            // PASO 2: Confirmar estado desde backend
             console.log('🔄 [handleLike] Confirmando estado desde backend...');
             await refreshPoints();
             
             // PASO 3: Notificación de éxito
             showPointsNotification(`🎉 Misión Completa: +${pointsEarned} puntos`, videoId, 'success');
-            
-            // PASO 4: Marcar TODOS los videos como 'hechos' para hoy
-            const allVideoIds = videos.map(v => v.id);
-            setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
             // ================================================================
 
           } else if (missionResult.result === 'progress_updated' || missionResult.result === 'registered') {
@@ -846,9 +782,7 @@ const ReelsContainer = ({
             
             showPointsNotification('✓ Ya completaste la misión de Likes hoy', videoId, 'warning');
             
-            // Marcar TODOS los videos como 'hechos' para hoy
-            const allVideoIds = videos.map(v => v.id);
-            setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
+            // 🔥 BACKEND MANEJA TODO: No necesitamos marcar videos localmente
             
             // ROLLBACK: Revertir la actualización optimista
             console.log('⏪ [handleLike] Rollback: misión ya completada');
