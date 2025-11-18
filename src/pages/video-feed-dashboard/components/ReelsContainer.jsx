@@ -224,7 +224,7 @@ const ReelsContainer = ({
             const { data: mission } = await supabase
               .from('daily_missions')
               .select('id')
-              .eq('mission_type', 'like_videos') //
+              .eq('mission_type', 'give_like') // ✅ CORREGIDO: Cambio de 'like_videos' a 'give_like'
               .single();
 
             if (mission) {
