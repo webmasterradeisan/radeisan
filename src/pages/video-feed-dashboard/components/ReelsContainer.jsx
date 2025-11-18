@@ -803,21 +803,21 @@ const ReelsContainer = ({
             // ================================================================
             // ✅ CORRECCIÓN PROBLEMA 1: Contador 9/10 → 10/10
             // ================================================================
-            // PASO 1: Revertir la actualización optimista para forzar cambio de estado
-            console.log('⏪ [handleLike] Revirtiendo actualización optimista antes del refresh');
-            rollbackMission(missionSnapshot);
+            // ❌ ELIMINADO: rollbackMission(missionSnapshot)
+            // Mantener la actualización optimista (10/10) y dejar que refreshPoints confirme
             
-            // PASO 2: Agregar puntos al usuario
+            // PASO 1: Agregar puntos al usuario
+            console.log('💰 [handleLike] Agregando puntos al usuario...');
             await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
             
-            // PASO 3: Force refresh (esto traerá 10/10 desde el backend)
-            console.log('🔄 [handleLike] Force refresh de misiones...');
+            // PASO 2: Force refresh (esto confirmará el 10/10 desde el backend)
+            console.log('🔄 [handleLike] Confirmando estado desde backend...');
             await refreshPoints();
             
-            // PASO 4: Notificación de éxito
+            // PASO 3: Notificación de éxito
             showPointsNotification(`🎉 Misión Completa: +${pointsEarned} puntos`, videoId, 'success');
             
-            // PASO 5: Marcar TODOS los videos como 'hechos' para hoy
+            // PASO 4: Marcar TODOS los videos como 'hechos' para hoy
             const allVideoIds = videos.map(v => v.id);
             setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
             // ================================================================
