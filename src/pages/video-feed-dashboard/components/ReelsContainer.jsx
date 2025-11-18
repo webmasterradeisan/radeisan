@@ -723,9 +723,37 @@ const ReelsContainer = ({
           }
         }));
 
-        await supabase
+        // ================================================================
+        // 🔥 INSERTAR LIKE CON MANEJO DE DUPLICADOS
+        // ================================================================
+        const { error: likeError } = await supabase
           .from('video_likes')
           .insert({ video_id: videoId, user_id: user.id });
+        
+        // Verificar si el like ya existía (error UNIQUE constraint)
+        if (likeError) {
+          if (likeError.code === '23505') {
+            // Error UNIQUE: El usuario ya dio like a este video antes
+            console.log('⚠️ [handleLike] Ya diste like a este video anteriormente');
+            showPointsNotification('Ya diste like a este video', videoId, 'info');
+            // El video ya tiene like, mantener el estado
+            return;
+          } else {
+            // Otro tipo de error
+            console.error('❌ [handleLike] Error al insertar like:', likeError);
+            showPointsNotification('Error al dar like', videoId, 'error');
+            // Revertir el contador
+            setVideoCounters(prev => ({
+              ...prev,
+              [videoId]: {
+                ...prev[videoId],
+                likes: Math.max(0, (prev[videoId]?.likes || 0) - 1)
+              }
+            }));
+            return;
+          }
+        }
+        // ================================================================
 
         // ================================================================
         // 🔥 NUEVA LÓGICA: ACTUALIZACIÓN OPTIMISTA + ROLLBACK
