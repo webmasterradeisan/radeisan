@@ -772,19 +772,27 @@ const ReelsContainer = ({
               message: missionResult.message
             });
             
-            // Agregar puntos al usuario
+            // ================================================================
+            // ✅ CORRECCIÓN PROBLEMA 1: Contador 9/10 → 10/10
+            // ================================================================
+            // PASO 1: Revertir la actualización optimista para forzar cambio de estado
+            console.log('⏪ [handleLike] Revirtiendo actualización optimista antes del refresh');
+            rollbackMission(missionSnapshot);
+            
+            // PASO 2: Agregar puntos al usuario
             await addPoints(pointsEarned, missionResult.message || 'Misión de Likes completada', 'free'); 
             
-            // Notificación de éxito
-            showPointsNotification(`🎉 Misión Completa: +${pointsEarned} puntos`, videoId, 'success');
-            
-            // Marcar TODOS los videos como 'hechos' para hoy
-            const allVideoIds = videos.map(v => v.id);
-            setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
-            
-            // 🔄 FORCE REFRESH: Actualizar misiones desde el backend
+            // PASO 3: Force refresh (esto traerá 10/10 desde el backend)
             console.log('🔄 [handleLike] Force refresh de misiones...');
             await refreshPoints();
+            
+            // PASO 4: Notificación de éxito
+            showPointsNotification(`🎉 Misión Completa: +${pointsEarned} puntos`, videoId, 'success');
+            
+            // PASO 5: Marcar TODOS los videos como 'hechos' para hoy
+            const allVideoIds = videos.map(v => v.id);
+            setActionsPerformed(prev => ({ ...prev, likes: new Set(allVideoIds) }));
+            // ================================================================
 
           } else if (missionResult.result === 'progress_updated' || missionResult.result === 'registered') {
             // ========================================
