@@ -9,6 +9,8 @@
 // ✅ NUEVO: Usa getMissionsForProgressPanel() para mostrar solo misiones visibles
 // 🔥 NUEVO: updateMissionOptimistic() - Actualización instantánea sin esperar backend
 // 🔥 NUEVO: rollbackMission() - Revierte cambios si el backend falla
+// 🔥 CORREGIDO: Eliminada dependencia circular en updateMissionOptimistic
+// 🔥 CORREGIDO: refreshPoints ahora fuerza re-render con timestamp único
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -76,6 +78,7 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   
   /**
+   * ✅ CORRECCIÓN: Eliminada dependencia de 'missions' para evitar re-creación
    * Actualiza el progreso de una misión LOCALMENTE (optimista)
    * sin esperar confirmación del backend.
    * El usuario verá el cambio INSTANTÁNEAMENTE.
@@ -86,31 +89,42 @@ export const PointsProvider = ({ children }) => {
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
     console.log('⚡ [Optimistic] Actualizando misión localmente:', {
       missionType,
-      delta,
-      before: missions.find(m => m.mission_type === missionType)?.current_count
+      delta
     });
     
-    setMissions(prev => prev.map(mission => {
-      if (mission.mission_type === missionType) {
-        const newCount = Math.min(
-          mission.current_count + delta,
-          mission.target_count
-        );
-        
-        console.log('⚡ [Optimistic] Nuevo progreso:', {
-          mission: mission.title,
-          from: `${mission.current_count}/${mission.target_count}`,
-          to: `${newCount}/${mission.target_count}`
+    setMissions(prev => {
+      const targetMission = prev.find(m => m.mission_type === missionType);
+      
+      if (targetMission) {
+        console.log('⚡ [Optimistic] Misión encontrada:', {
+          mission: targetMission.title,
+          before: `${targetMission.current_count}/${targetMission.target_count}`
         });
-        
-        return {
-          ...mission,
-          current_count: newCount
-        };
       }
-      return mission;
-    }));
-  }, [missions]);
+      
+      return prev.map(mission => {
+        if (mission.mission_type === missionType) {
+          const newCount = Math.min(
+            mission.current_count + delta,
+            mission.target_count
+          );
+          
+          console.log('⚡ [Optimistic] Nuevo progreso:', {
+            mission: mission.title,
+            from: `${mission.current_count}/${mission.target_count}`,
+            to: `${newCount}/${mission.target_count}`
+          });
+          
+          return {
+            ...mission,
+            current_count: newCount,
+            _updated: Date.now() // 🔥 Forzar nueva referencia
+          };
+        }
+        return mission;
+      });
+    });
+  }, []); // ✅ SIN DEPENDENCIAS - usa setMissions con función callback
   
   /**
    * Revierte el estado de las misiones a un snapshot anterior
@@ -120,7 +134,7 @@ export const PointsProvider = ({ children }) => {
    */
   const rollbackMission = useCallback((snapshot) => {
     console.log('⏪ [Rollback] Revirtiendo al estado anterior');
-    setMissions(snapshot);
+    setMissions(snapshot.map(m => ({ ...m, _updated: Date.now() }))); // 🔥 Forzar nueva referencia
   }, []);
   
   // ============================================================================
@@ -173,11 +187,18 @@ export const PointsProvider = ({ children }) => {
 
         // 2. ✅ Actualizar Misiones (ahora con progreso en tiempo real)
         if (missionsResult.success) {
-          setMissions(missionsResult.missions || []);
+          // 🔥 CORRECCIÓN: Agregar timestamp único para forzar re-render
+          const missionsWithTimestamp = (missionsResult.missions || []).map(m => ({
+            ...m,
+            _updated: Date.now()
+          }));
+          
+          setMissions(missionsWithTimestamp);
           
           console.log('📊 [loadAllData] Misiones cargadas:', {
-            total: missionsResult.missions?.length || 0,
-            details: missionsResult.missions?.map(m => ({
+            total: missionsWithTimestamp.length,
+            timestamp: Date.now(),
+            details: missionsWithTimestamp.map(m => ({
               title: m.title,
               progress: `${m.current_count}/${m.target_count}`,
               completed: m.is_completed
@@ -378,11 +399,15 @@ export const PointsProvider = ({ children }) => {
 
 
   // ============================================================================
-  // FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE
+  // 🔥 FUNCIÓN PARA REFRESCAR PUNTOS MANUALMENTE (CORREGIDA)
   // ============================================================================
-  const refreshPoints = useCallback(() => {
+  const refreshPoints = useCallback(async () => {
     console.log('🔄 [refreshPoints] Refresh manual solicitado');
-    return loadAllData();
+    
+    // 🔥 CORRECCIÓN: Esperar a que termine el refresh
+    await loadAllData();
+    
+    console.log('✅ [refreshPoints] Refresh completado');
   }, [loadAllData]);
 
   // ============================================================================
@@ -423,8 +448,8 @@ export const PointsProvider = ({ children }) => {
     refreshPoints,
     
     // 🔥 NUEVAS FUNCIONES EXPORTADAS
-    updateMissionOptimistic,  // ✅ Actualización instantánea
-    rollbackMission           // ✅ Rollback en caso de error
+    updateMissionOptimistic,  // ✅ Actualización instantánea (sin dependencia circular)
+    rollbackMission           // ✅ Rollback en caso de error (con timestamp forzado)
   };
 
   return (
