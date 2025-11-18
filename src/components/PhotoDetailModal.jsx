@@ -5,6 +5,8 @@ import Button from './ui/Button';
 import { supabase } from '../lib/supabase'; 
 import { trackGiveLike, trackComment, trackShareContent, MISSION_TYPES } from '../services/missionsService'; 
 import { useAuth } from '../contexts/AuthContext'; 
+// ✅ IMPORTACIÓN NECESARIA PARA PUNTOS Y MISIONES
+import { usePoints } from '../contexts/PointsContext';
 // ✅ NUEVA IMPORTACIÓN
 import GiftPointsModal from './GiftPointsModal'; 
 
@@ -18,6 +20,15 @@ const PhotoDetailModal = ({
     totalPhotos
 }) => {
     const { user } = useAuth();
+    
+    // ✅ HOOK DE PUNTOS Y MISIONES
+    const { 
+        missions, 
+        updateMissionOptimistic, 
+        rollbackMission, 
+        addPoints, 
+        refreshPoints 
+    } = usePoints();
     
     const [likeCount, setLikeCount] = useState(0); 
     const [isLiking, setIsLiking] = useState(false);
@@ -179,330 +190,363 @@ const PhotoDetailModal = ({
             return;
         }
 
-        // Optimistic UI Update: Quitar comentario inmediatamente
-        setComments(prev => prev.filter(c => c.id !== commentId));
-        
         try {
-            // 1. Eliminar de la base de datos
             const { error } = await supabase
-                .from('photo_comments') 
+                .from('photo_comments')
                 .delete()
                 .eq('id', commentId)
-                .eq('user_id', currentUserId); // Doble chequeo de seguridad en la DB
+                .eq('user_id', currentUserId);
 
             if (error) throw error;
 
-            showTemporaryToast("Comentario eliminado exitosamente.", 'success');
-            // La UI ya está actualizada, solo refrescamos la lista de la página principal.
-            refreshParentData(); 
-
+            setComments(prev => prev.filter(c => c.id !== commentId));
+            showTemporaryToast("Comentario eliminado correctamente", 'success');
         } catch (error) {
-            console.error('💥 Error al eliminar comentario:', error);
-            showTemporaryToast("Error al eliminar el comentario.", 'error');
-            // Revertir UI: Forzar un fetch para restaurar el estado real de la DB
-            await fetchInteractions();
+            console.error("Error deleting comment:", error);
+            showTemporaryToast("Error al eliminar el comentario", 'error');
         }
-    }, [currentUserId, fetchInteractions, refreshParentData, showTemporaryToast]);
+    }, [currentUserId, showTemporaryToast]);
 
-
+    // ===================================
+    // ✅ FUNCIÓN ACTUALIZADA: handleLikeToggle
+    // ===================================
     const handleLikeToggle = useCallback(async () => {
-        if (!user?.id || isLiking) return;
+        if (!user) {
+            showTemporaryToast('Debes iniciar sesión para dar like', 'error', 3000);
+            return;
+        }
 
-        setIsLiking(true);
-        const photoId = photoData.id;
-        
+        if (isLiking) return;
+
         // 💾 Guardar snapshot para rollback
         const snapshot = {
             userHasLiked,
             likeCount
         };
 
-        console.log('👍 [handleLikeToggle] Estado inicial:', {
-            photoId: photoId.substring(0, 8),
-            userHasLiked,
-            likeCount,
-            isOwner
-        });
-
         try {
-            if (userHasLiked) { 
+            setIsLiking(true);
+
+            if (userHasLiked) {
                 // ==============================
                 // QUITAR LIKE
                 // ==============================
-                console.log('⏪ [handleLikeToggle] Quitando like...');
-                
-                // Actualización optimista (usuario ve cambio inmediato)
+                // Actualización optimista
                 setUserHasLiked(false);
                 setLikeCount(Math.max(0, likeCount - 1));
 
                 const { error: deleteError } = await supabase
-                    .from('photo_likes') 
+                    .from('photo_likes')
                     .delete()
                     .eq('user_id', user.id)
-                    .eq('photo_id', photoId);
+                    .eq('photo_id', photoData.id);
 
                 if (deleteError) throw deleteError;
-                
-                console.log('✅ [handleLikeToggle] Like eliminado correctamente');
-                showTemporaryToast('Me Gusta removido', 'success', 3000);
 
-            } else { 
+                // Mostrar notificación
+                showTemporaryToast('Like removido', 'info', 2000);
+
+            } else {
                 // ==============================
                 // DAR LIKE
                 // ==============================
-                console.log('👍 [handleLikeToggle] Dando like...');
-                
-                // Verificar si es el dueño
-                if (isOwner) {
-                    showTemporaryToast('No puedes darle like a tu propio contenido', 'info', 3000);
-                    setIsLiking(false);
-                    return;
-                }
-
-                // Actualización optimista (usuario ve cambio inmediato)
+                // Actualización optimista
                 setUserHasLiked(true);
                 setLikeCount(likeCount + 1);
 
-                // Intentar insertar el like
                 const { error: insertError } = await supabase
-                    .from('photo_likes') 
-                    .insert({ user_id: user.id, photo_id: photoId });
-                
-                // ================================================================
-                // 🔥 MANEJO EXPLÍCITO DE ERROR 23505 (LIKE DUPLICADO)
-                // ================================================================
+                    .from('photo_likes')
+                    .insert({ user_id: user.id, photo_id: photoData.id });
+
+                // 🔥 MANEJO EXPLÍCITO DE ERROR 23505 (duplicado)
                 if (insertError) {
                     if (insertError.code === '23505') {
-                        // Error UNIQUE: El usuario ya dio like a esta foto antes
-                        console.log('⚠️ [handleLikeToggle] Ya diste like a esta foto anteriormente');
-                        
-                        // Rollback de la actualización optimista
+                        // Rollback de actualización optimista
                         setUserHasLiked(snapshot.userHasLiked);
                         setLikeCount(snapshot.likeCount);
-                        
+
                         showTemporaryToast('Ya diste like a esta foto', 'info', 3000);
-                        setIsLiking(false);
                         return;
-                    } else {
-                        // Otro tipo de error
-                        throw insertError;
                     }
+                    throw insertError;
                 }
 
                 // ================================================================
-                // ✅ LIKE INSERTADO CORRECTAMENTE - TRACKEAR MISIÓN
+                // ✅ TRACKEAR MISIÓN (Backend maneja anti-farming ahora)
                 // ================================================================
-                console.log('✅ [handleLikeToggle] Like insertado, trackeando misión...');
                 
+                // 1. Guardar snapshot del estado actual (para rollback si falla)
+                const missionsSnapshot = [...missions];
+                
+                console.log('💾 [PhotoLike] Snapshot guardado');
+                
+                // 2. ACTUALIZACIÓN OPTIMISTA
+                updateMissionOptimistic('give_like', 1);
+                
+                console.log('⚡ [PhotoLike] Actualización optimista aplicada');
+
+                // 3. Llamar al backend
                 try {
-                    const trackingResult = await trackGiveLike('photo', photoId);
-                    console.log('🎯 [handleLikeToggle] Resultado tracking:', trackingResult);
+                    console.log('🚀 [PhotoLike] Llamando a trackGiveLike...');
                     
-                    if (trackingResult.result === 'success' && trackingResult.points_earned > 0) {
-                        // ¡MISIÓN COMPLETADA!
-                        console.log('🎉 [handleLikeToggle] ¡Misión completada!', {
-                            points: trackingResult.points_earned
-                        });
+                    const missionResult = await trackGiveLike('photo', photoData.id);
+                    
+                    console.log('🎯 [PhotoLike] Resultado:', missionResult);
+                    
+                    // ================================================================
+                    // MANEJO DE CASOS
+                    // ================================================================
+                    
+                    if (missionResult.result === 'success' && missionResult.points_earned > 0) {
+                        // ========================================
+                        // CASO 1: MISIÓN COMPLETADA (10/10)
+                        // ========================================
+                        const pointsEarned = missionResult.points_earned;
+                        
+                        console.log('🎉 [PhotoLike] ¡MISIÓN COMPLETADA!');
+                        
+                        // ✅ NO HACER ROLLBACK (mantener 10/10)
+                        
+                        // Agregar puntos
+                        await addPoints(pointsEarned, missionResult.message || 'Misión completada', 'free');
+                        
+                        // Confirmar desde backend
+                        await refreshPoints();
+                        
+                        showTemporaryToast(`🎉 Misión Completa: +${pointsEarned} puntos`, 'success', 3000);
+
+                    } else if (missionResult.result === 'progress_updated' || missionResult.result === 'registered') {
+                        // ========================================
+                        // CASO 2: PROGRESO REGISTRADO
+                        // ========================================
+                        console.log('📊 [PhotoLike] Progreso actualizado');
                         
                         showTemporaryToast(
-                            `🎉 Misión Completa: +${trackingResult.points_earned} puntos`, 
-                            'success', 
-                            5000,
-                            () => {
-                                fetchInteractions();
-                                refreshParentData();
-                            }
+                            missionResult.message || '✓ Progreso registrado',
+                            'success',
+                            2500
                         );
                         
-                    } else if (trackingResult.result === 'progress_updated') {
-                        // Progreso actualizado pero no completado
-                        console.log('📊 [handleLikeToggle] Progreso actualizado');
-                        showTemporaryToast('✓ Progreso registrado. ¡Sigue dando likes!', 'success', 3000);
+                        // Confirmar desde backend
+                        await refreshPoints();
+
+                    } else if (missionResult.result === 'already_completed') {
+                        // ========================================
+                        // CASO 3: MISIÓN YA COMPLETADA
+                        // ========================================
+                        console.log('⚠️ [PhotoLike] Misión ya completada hoy');
                         
-                    } else if (trackingResult.result === 'already_completed') {
-                        // Misión ya completada hoy
-                        console.log('ℹ️ [handleLikeToggle] Misión ya completada hoy');
-                        showTemporaryToast('Ya completaste la misión de Likes hoy', 'info', 3000);
+                        showTemporaryToast('Ya completaste la misión de Likes hoy', 'info', 2500);
                         
+                        // Rollback
+                        rollbackMission(missionsSnapshot);
+
+                    } else if (missionResult.result === 'already_tracked') {
+                        // ========================================
+                        // CASO 4: ESTE CONTENIDO YA CONTÓ HOY (ANTI-FARMING)
+                        // ========================================
+                        console.log('⚠️ [PhotoLike] Esta foto ya contó para la misión hoy');
+                        
+                        showTemporaryToast('Ya recibiste progreso por esta foto hoy', 'info', 2500);
+                        
+                        // Rollback
+                        rollbackMission(missionsSnapshot);
+
                     } else {
-                        // Otro resultado
-                        console.log('ℹ️ [handleLikeToggle] Acción registrada:', trackingResult.result);
-                        showTemporaryToast('Like registrado', 'success', 2000);
+                        // ========================================
+                        // CASO 5: CUALQUIER OTRO
+                        // ========================================
+                        console.log('ℹ️ [PhotoLike] Caso no específico:', missionResult);
+                        
+                        showTemporaryToast(
+                            missionResult.message || '✓ Like registrado',
+                            'info',
+                            2000
+                        );
+                        
+                        await refreshPoints();
                     }
+
+                } catch (missionError) {
+                    // ================================================================
+                    // ERROR EN BACKEND - ROLLBACK
+                    // ================================================================
+                    console.error('❌ [PhotoLike] Error al procesar misión:', missionError);
                     
-                } catch (trackError) {
-                    // Error al trackear misión (no crítico)
-                    console.error('⚠️ [handleLikeToggle] Error al trackear misión:', trackError);
-                    showTemporaryToast('Like registrado', 'success', 2000);
+                    // Rollback
+                    rollbackMission(missionsSnapshot);
+                    
+                    showTemporaryToast('Error al procesar la acción', 'error', 2500);
                 }
             }
 
         } catch (error) {
             // ================================================================
-            // 💥 ERROR CRÍTICO - ROLLBACK COMPLETO
+            // ERROR GENERAL - ROLLBACK COMPLETO
             // ================================================================
-            console.error('❌ [handleLikeToggle] Error crítico:', error);
+            console.error('❌ [PhotoLike] Error general:', error);
             
-            // Rollback a estado anterior
+            // Rollback UI
             setUserHasLiked(snapshot.userHasLiked);
             setLikeCount(snapshot.likeCount);
             
-            // Mostrar error al usuario
-            showTemporaryToast(
-                `Error al procesar like: ${error.message}`, 
-                'error', 
-                4000
-            );
+            showTemporaryToast(`Error: ${error.message}`, 'error', 2500);
             
-            // Refresh para sincronizar con BD
+            // Refrescar desde backend
             fetchInteractions();
-            
         } finally {
             setIsLiking(false);
         }
-    }, [photoData, isLiking, userHasLiked, likeCount, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
+    }, [
+        user, 
+        userHasLiked, 
+        likeCount, 
+        photoData,
+        isLiking,
+        missions,
+        updateMissionOptimistic,
+        rollbackMission,
+        addPoints,
+        refreshPoints,
+        showTemporaryToast,
+        fetchInteractions
+    ]);
 
-
+    // FUNCIÓN PARA COMENTAR
     const handleCommentSubmit = useCallback(async (e) => {
-        e?.preventDefault(); 
-        
-        const comment = commentText.trim();
-        if (comment === '' || !user?.id) return;
-        
-        const tempComment = commentText;
-
-        try {
-            // 1. Lógica de inserción
-            const { error: insertError } = await supabase
-                .from('photo_comments') 
-                .insert({ user_id: user.id, photo_id: photoData.id, content: comment });
-
-            if (insertError) throw insertError;
-            
-            // 2. Actualizar UI localmente y disparar toast
-            setCommentText(''); 
-            
-            // 3. Lógica de tracking de puntos (Solo si NO es el dueño)
-            if (!isOwner) {
-                if (MISSION_TYPES?.COMMENT) {
-                    const trackingResult = await trackComment('photo', photoData.id); 
-                    if (trackingResult.result === 'success') {
-                         showTemporaryToast(`+${trackingResult.points_earned} Puntos por Comentario!`, 'success', 5000, () => {
-                            fetchInteractions();
-                            refreshParentData();
-                        });
-                        return; // Salir sin recargar aquí
-                    } else if (trackingResult.result === 'already_paid') {
-                        showTemporaryToast("Ya ganaste puntos por este comentario.", 'info', 5000, () => {
-                            fetchInteractions();
-                        });
-                        return;
-                    }
-                }
-            } else {
-                 showTemporaryToast("Comentario publicado (No ganas puntos por tu contenido).", 'info', 5000, () => {
-                    fetchInteractions();
-                });
-                return;
-            }
-            
-            // Si no hubo toast, recargar aquí
-            fetchInteractions(); 
-            refreshParentData(); 
-
-
-        } catch (error) {
-            console.error('💥 Error al insertar o trackear comentario:', error);
-            setCommentText(tempComment); // Revertir texto si falla
-            showTemporaryToast('Error al enviar el comentario.', 'error');
-            // Si falla, recargar para ver el estado real
-            fetchInteractions();
+        e.preventDefault();
+        if (!user) {
+            showTemporaryToast('Debes iniciar sesión para comentar', 'error', 3000);
+            return;
         }
-    }, [commentText, photoData, refreshParentData, user, fetchInteractions, isOwner, showTemporaryToast]);
+        if (commentText.trim() === '') return;
 
-    const handleShare = useCallback(async () => {
-        const shareUrl = `${window.location.origin}/photo/${photoData.id}`; 
-        const shareTitle = photoData.caption || "Mira esta foto!";
-        
-        const callTracking = async (platform) => {
-             if (!isOwner) {
-                if (MISSION_TYPES?.SHARE_CONTENT) {
-                    const trackingResult = await trackShareContent('photo', photoData.id, platform); 
-                    if (trackingResult.result === 'success') {
-                         showTemporaryToast(`¡Compartido! +${trackingResult.points_earned} puntos.`, 'success', 5000, () => {
-                            refreshParentData();
-                        });
-                    } else if (trackingResult.result === 'already_paid') {
-                        showTemporaryToast("Ya ganaste puntos por compartir este contenido hoy.", 'info', 5000, () => {
-                            refreshParentData();
-                        });
-                    }
-                }
-            } else {
-                showTemporaryToast("Compartiendo foto (No ganas puntos por tu contenido).", 'info', 5000);
-            }
+        const optimisticComment = {
+            id: `temp-${Date.now()}`,
+            content: commentText,
+            created_at: new Date().toISOString(),
+            user_id: user.id,
+            user: user.full_name || `@${user.username || 'Usuario'}`,
+            isOptimistic: true
         };
 
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: shareTitle,
-                    url: shareUrl,
-                });
-                await callTracking('web_share_api'); 
+        setComments(prev => [optimisticComment, ...prev]);
+        setCommentText('');
 
-            } catch (error) {
-                if (error.name !== 'AbortError') { 
-                     console.error('Web Share API falló:', error);
-                     showTemporaryToast('Error al abrir el diálogo de compartir.', 'error');
-                }
-            }
-        } else {
-            // Fallback: Copiar al portapapeles
+        try {
+            const { data, error } = await supabase
+                .from('photo_comments')
+                .insert({ 
+                    photo_id: photoData.id, 
+                    user_id: user.id, 
+                    content: commentText 
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            setComments(prev => prev.map(c => 
+                c.id === optimisticComment.id 
+                    ? { ...data, user: optimisticComment.user }
+                    : c
+            ));
+
+            // Trackear misión de comentario
             try {
-                await navigator.clipboard.writeText(shareUrl);
-                await callTracking('clipboard_share');
+                const result = await trackComment('photo', photoData.id, commentText);
+                console.log('Resultado misión comentario:', result);
                 
-            } catch (error) {
-                console.error('Error al copiar al portapapeles:', error);
-                showTemporaryToast('Error al copiar el enlace.', 'error');
+                if (result.points_earned > 0) {
+                    await addPoints(result.points_earned, result.message, 'free');
+                    showTemporaryToast(`✓ Comentario enviado. +${result.points_earned} puntos`, 'success', 3000);
+                } else {
+                    showTemporaryToast(result.message || '✓ Comentario enviado', 'success', 2500);
+                }
+            } catch (trackError) {
+                console.error('Error tracking comment mission:', trackError);
+                showTemporaryToast('✓ Comentario enviado', 'success', 2500);
+            }
+
+        } catch (error) {
+            console.error("Error posting comment:", error);
+            setComments(prev => prev.filter(c => c.id !== optimisticComment.id));
+            showTemporaryToast(`Error al enviar comentario: ${error.message}`, 'error', 3000);
+        }
+    }, [user, commentText, photoData, addPoints, showTemporaryToast]);
+
+    // FUNCIÓN PARA COMPARTIR
+    const handleShare = useCallback(async () => {
+        if (!user) {
+            showTemporaryToast('Debes iniciar sesión para compartir', 'error', 3000);
+            return;
+        }
+
+        try {
+            const shareUrl = `${window.location.origin}/photo/${photoData.id}`;
+            
+            if (navigator.share) {
+                await navigator.share({
+                    title: photoData.caption || 'Foto en Radeisan',
+                    text: photoData.description || 'Mira esta foto',
+                    url: shareUrl
+                });
+                
+                // Trackear misión de compartir
+                try {
+                    const result = await trackShareContent('photo', photoData.id);
+                    console.log('Resultado misión compartir:', result);
+                    
+                    if (result.points_earned > 0) {
+                        await addPoints(result.points_earned, result.message, 'free');
+                        showTemporaryToast(`✓ Contenido compartido. +${result.points_earned} puntos`, 'success', 3000);
+                    }
+                } catch (trackError) {
+                    console.error('Error tracking share mission:', trackError);
+                }
+            } else {
+                await navigator.clipboard.writeText(shareUrl);
+                showTemporaryToast('Enlace copiado al portapapeles', 'success', 2000);
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.error('Error sharing:', error);
+                showTemporaryToast('Error al compartir', 'error', 2000);
             }
         }
-    }, [photoData, refreshParentData, isOwner, showTemporaryToast]);
-    
-    // ✅ NUEVA FUNCIÓN: Abrir Modal de Regalo
+    }, [user, photoData, addPoints, showTemporaryToast]);
+
+    // ✅ FUNCIÓN PARA ABRIR MODAL DE REGALO
     const handleGift = useCallback(() => {
-        if (!user) {
-            showTemporaryToast("Debes iniciar sesión para regalar puntos.", 'error'); 
-            return;
-        }
-        if (isOwner) {
-            showTemporaryToast("No puedes regalar puntos a tu propia foto.", 'error');
-            return;
-        }
         setShowGiftModal(true);
-    }, [user, isOwner, showTemporaryToast]);
-    
-    // ✅ NUEVA FUNCIÓN: Manejar el éxito del regalo
-    const handleGiftSuccess = useCallback((amount) => {
-        showTemporaryToast(`¡Regalo enviado! ${amount} puntos para el creador.`, 'success', 3000);
+    }, []);
+
+    // ✅ FUNCIÓN PARA MANEJAR ÉXITO DEL REGALO
+    const handleGiftSuccess = useCallback((message) => {
+        showTemporaryToast(message, 'success', 3000);
+        setShowGiftModal(false);
     }, [showTemporaryToast]);
 
+    if (!photoData) {
+        return null;
+    }
 
-    // Asignamos datos para la UI usando photoData real
-    const photoUrl = photoData?.image_url || photoData?.thumbnail_url; 
-    const photoCaption = photoData?.caption || 'Foto sin descripción';
-    const photoDescription = photoData?.description; 
+    const photoUrl = photoData.url;
+    const userDisplayName = photoData.user?.full_name || `@${photoData.user?.username || 'Usuario'}`;
+    const photoDate = new Date(photoData.created_at).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    const photoCaption = photoData.caption;
+    const photoDescription = photoData.description;
     
-    const userDisplayName = photoData?.user_profiles?.username || photoData?.user_profiles?.full_name || `@${user?.email?.split('@')[0] || 'UsuarioDetalle'}`;
-    const photoDate = new Date(photoData?.created_at).toLocaleDateString();
-
+    const photoId = photoData.id;
     const isFirstPhoto = currentPhotoIndex === 0;
     const isLastPhoto = currentPhotoIndex === totalPhotos - 1;
 
     return (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-0 sm:p-4">
-            
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
             {!isFirstPhoto && (
                 <Button
                     variant="ghost"
@@ -513,8 +557,8 @@ const PhotoDetailModal = ({
                     <Icon name="ChevronLeft" size={32} />
                 </Button>
             )}
-
-            <div className="flex w-full max-w-7xl h-full sm:h-[95vh] bg-card sm:rounded-lg overflow-hidden shadow-2xl">
+            
+            <div className="relative flex w-full max-w-7xl h-[90vh] bg-background rounded-lg shadow-2xl overflow-hidden">
                 
                 <Button
                     variant="ghost"
@@ -664,12 +708,12 @@ const PhotoDetailModal = ({
                 </Button>
             )}
             
-            {/* 🚨 TOAST NOTIFICATION COMPONENT (sin cambios) */}
+            {/* 🚨 TOAST NOTIFICATION COMPONENT */}
             {showToast && (
                 <div 
                     className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] p-3 rounded-lg shadow-xl transition-all duration-500 opacity-100 
-                        ${toastMessage.includes("Puntos") ? 'bg-green-600 text-white' : 
-                          (toastMessage.includes("Error") ? 'bg-red-600 text-white' : 'bg-yellow-500 text-gray-800')}`
+                        ${toastMessage.includes("Puntos") || toastMessage.includes("Completa") || toastMessage.includes("Misión") ? 'bg-green-600 text-white' : 
+                          (toastMessage.includes("Error") ? 'bg-red-600 text-white' : 'bg-blue-500 text-white')}`
                     }
                     style={{ animation: 'slideUp 0.3s forwards' }}
                 >
