@@ -11,6 +11,7 @@
 // 🔥 NUEVO: rollbackMission() - Revierte cambios si el backend falla
 // 🔥 CORREGIDO: Eliminada dependencia circular en updateMissionOptimistic
 // 🔥 CORREGIDO: refreshPoints ahora fuerza re-render con timestamp único
+// 🎯 CORRECCIÓN CRÍTICA: Solucionado bug 9/10 con debounce y protección contra race conditions
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -73,6 +74,11 @@ export const PointsProvider = ({ children }) => {
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
   
+  // 🔥 NUEVO: Referencias para control de race conditions
+  const lastOptimisticUpdateRef = useRef(0);
+  const debounceTimerRef = useRef(null);
+  const isLoadingRef = useRef(false);
+  
   // ============================================================================
   // 🔥 NUEVAS FUNCIONES: ACTUALIZACIÓN OPTIMISTA Y ROLLBACK
   // ============================================================================
@@ -91,6 +97,9 @@ export const PointsProvider = ({ children }) => {
       missionType,
       delta
     });
+    
+    // 🔥 NUEVO: Marcar timestamp de actualización optimista
+    lastOptimisticUpdateRef.current = Date.now();
     
     setMissions(prev => {
       const targetMission = prev.find(m => m.mission_type === missionType);
@@ -118,7 +127,8 @@ export const PointsProvider = ({ children }) => {
           return {
             ...mission,
             current_count: newCount,
-            _updated: Date.now() // 🔥 Forzar nueva referencia
+            _updated: Date.now(), // 🔥 Forzar nueva referencia
+            _optimistic: true // 🔥 NUEVO: Marcar como actualización optimista
           };
         }
         return mission;
@@ -134,7 +144,11 @@ export const PointsProvider = ({ children }) => {
    */
   const rollbackMission = useCallback((snapshot) => {
     console.log('⏪ [Rollback] Revirtiendo al estado anterior');
-    setMissions(snapshot.map(m => ({ ...m, _updated: Date.now() }))); // 🔥 Forzar nueva referencia
+    setMissions(snapshot.map(m => ({ 
+      ...m, 
+      _updated: Date.now(),
+      _optimistic: false // 🔥 NUEVO: Quitar flag optimista
+    }))); 
   }, []);
   
   // ============================================================================
@@ -142,10 +156,11 @@ export const PointsProvider = ({ children }) => {
   // ============================================================================
   
   /**
-   * Carga TODOS los datos relacionados con puntos y misiones.
+   * 🔥 CORREGIDA: Carga TODOS los datos relacionados con puntos y misiones.
+   * Ahora respeta las actualizaciones optimistas recientes para evitar race conditions.
    * Esta es ahora la única fuente de verdad.
    */
-  const loadAllData = useCallback(async () => {
+  const loadAllData = useCallback(async (forceRefresh = false) => {
     if (!mountedRef.current) return;
     
     if (!user || !isAuthenticated) {
@@ -156,9 +171,35 @@ export const PointsProvider = ({ children }) => {
         return;
     }
     
+    // 🔥 NUEVO: Prevenir llamadas concurrentes
+    if (isLoadingRef.current && !forceRefresh) {
+      console.log('⏸️ [loadAllData] Ya hay una carga en progreso, saltando...');
+      return;
+    }
+    
+    // 🔥 NUEVO: Respetar actualizaciones optimistas recientes (< 1 segundo)
+    const timeSinceOptimistic = Date.now() - lastOptimisticUpdateRef.current;
+    if (timeSinceOptimistic < 1000 && !forceRefresh) {
+      console.log(`⏸️ [loadAllData] Actualización optimista reciente (${timeSinceOptimistic}ms), esperando...`);
+      
+      // 🔥 Programar recarga después de 1.5 segundos
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        console.log('⏰ [loadAllData] Ejecutando recarga programada');
+        loadAllData(true);
+      }, 1500);
+      
+      return;
+    }
+    
+    isLoadingRef.current = true;
     setLoading(true);
 
     try {
+      console.log('🔄 [loadAllData] Iniciando carga completa de datos...');
+      
       // Inicializar el registro de puntos (seguridad)
       await initializeUserPoints(user.id);
       
@@ -185,20 +226,48 @@ export const PointsProvider = ({ children }) => {
           premium: pointsResult.premium,
         });
 
-        // 2. ✅ Actualizar Misiones (ahora con progreso en tiempo real)
+        // 2. ✅ Actualizar Misiones (ahora con protección contra race conditions)
         if (missionsResult.success) {
-          // 🔥 CORRECCIÓN: Agregar timestamp único para forzar re-render
-          const missionsWithTimestamp = (missionsResult.missions || []).map(m => ({
-            ...m,
-            _updated: Date.now()
-          }));
-          
-          setMissions(missionsWithTimestamp);
+          setMissions(prev => {
+            const newMissions = (missionsResult.missions || []).map(m => ({
+              ...m,
+              _updated: Date.now(),
+              _optimistic: false // 🔥 NUEVO: Marcar como datos del servidor
+            }));
+            
+            // 🔥 NUEVO: Si hay misiones optimistas, solo actualizar las que NO sean optimistas
+            const hasOptimisticMissions = prev.some(m => m._optimistic);
+            
+            if (hasOptimisticMissions) {
+              console.log('⚠️ [loadAllData] Hay misiones optimistas, mezclando datos...');
+              
+              // Mantener las misiones optimistas, actualizar solo las del servidor
+              return prev.map(mission => {
+                if (mission._optimistic) {
+                  console.log(`⚡ [loadAllData] Manteniendo misión optimista: ${mission.title} ${mission.current_count}/${mission.target_count}`);
+                  return mission; // Mantener versión optimista
+                }
+                
+                // Buscar versión actualizada del servidor
+                const serverVersion = newMissions.find(m => m.mission_type === mission.mission_type);
+                if (serverVersion) {
+                  console.log(`📥 [loadAllData] Actualizando desde servidor: ${serverVersion.title} ${serverVersion.current_count}/${serverVersion.target_count}`);
+                  return serverVersion;
+                }
+                
+                return mission;
+              });
+            }
+            
+            // Si no hay misiones optimistas, usar directamente las del servidor
+            console.log('📥 [loadAllData] Sin misiones optimistas, usando datos del servidor');
+            return newMissions;
+          });
           
           console.log('📊 [loadAllData] Misiones cargadas:', {
-            total: missionsWithTimestamp.length,
+            total: missionsResult.missions?.length || 0,
             timestamp: Date.now(),
-            details: missionsWithTimestamp.map(m => ({
+            details: missionsResult.missions?.map(m => ({
               title: m.title,
               progress: `${m.current_count}/${m.target_count}`,
               completed: m.is_completed
@@ -218,29 +287,38 @@ export const PointsProvider = ({ children }) => {
         });
       }
     } catch (error) {
-      console.error('❌ Error cargando datos unificados en PointsContext:', error);
+      console.error('❌ Error cargando datos de PointsContext:', error);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     } finally {
+      isLoadingRef.current = false;
       if (mountedRef.current) {
         setLoading(false);
       }
     }
-  }, [user, isAuthenticated]); // Dependencias de useCallback
-
+  }, [user, isAuthenticated]);
 
   // ============================================================================
-  // EFECTO: CARGA INICIAL Y SUSCRIPCIONES EN TIEMPO REAL
+  // SUSCRIPCIONES EN TIEMPO REAL (MEJORADAS CON DEBOUNCE)
   // ============================================================================
   useEffect(() => {
-    if (user?.id && isAuthenticated) {
-      // 1. Carga inicial
-      loadAllData();
+    if (!user) return;
+    
+    // 1. Cargar datos iniciales
+    loadAllData(true);
+    
+    console.log('🔌 [Real-Time] Conectando suscripciones...');
 
+    if (user && isAuthenticated) {
+      // ============================================================
       // 2. Suscripción a cambios en el SALDO (user_profiles)
+      // ============================================================
       const pointsSubscription = supabase
         .channel('public:user_profiles')
-        .on('postgres_changes', 
-          { 
-            event: 'UPDATE', 
+        .on('postgres_changes',
+          {
+            event: 'UPDATE',
             schema: 'public', 
             table: 'user_profiles',
             filter: `id=eq.${user.id}`
@@ -263,8 +341,8 @@ export const PointsProvider = ({ children }) => {
         .subscribe();
 
       // ============================================================
-      // ✅ CORRECCIÓN: Usar 'mission_progress' (no 'user_mission_progress')
-      // 3. Suscripción a cambios en el PROGRESO DE MISIONES
+      // 🔥 CORRECCIÓN CRÍTICA: Suscripción a cambios en PROGRESO DE MISIONES
+      // Ahora con debounce y respeto por actualizaciones optimistas
       // ============================================================
       const missionsSubscription = supabase
         .channel('public:mission_progress')
@@ -272,14 +350,40 @@ export const PointsProvider = ({ children }) => {
           {
             event: '*', // Escuchar INSERT, UPDATE, DELETE
             schema: 'public',
-            table: 'mission_progress', // ✅ NOMBRE CORRECTO
+            table: 'mission_progress',
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
             console.log('🔄 [Real-Time] Cambio de Progreso de Misión detectado!', payload);
-            // Un cambio en el progreso (ej. 2/10 -> 3/10)
-            // debe recargar la lista de misiones y las stats.
-            loadAllData();
+            
+            // 🔥 NUEVO: Verificar si hay actualizaciones optimistas recientes
+            const timeSinceOptimistic = Date.now() - lastOptimisticUpdateRef.current;
+            
+            if (timeSinceOptimistic < 1000) {
+              console.log(`⏸️ [Real-Time] Ignorando evento (actualización optimista hace ${timeSinceOptimistic}ms)`);
+              
+              // 🔥 Programar recarga con debounce
+              if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+              }
+              debounceTimerRef.current = setTimeout(() => {
+                console.log('⏰ [Real-Time] Ejecutando recarga programada desde suscripción');
+                loadAllData(true);
+              }, 1500);
+              
+              return;
+            }
+            
+            // 🔥 NUEVO: Si no hay actualizaciones optimistas recientes, recargar con debounce
+            console.log('🔄 [Real-Time] Programando recarga (sin actualizaciones optimistas recientes)');
+            
+            if (debounceTimerRef.current) {
+              clearTimeout(debounceTimerRef.current);
+            }
+            debounceTimerRef.current = setTimeout(() => {
+              console.log('⏰ [Real-Time] Ejecutando recarga programada');
+              loadAllData(true);
+            }, 500); // Debounce de 500ms para permitir que la DB propague cambios
           }
         )
         .subscribe();
@@ -295,17 +399,25 @@ export const PointsProvider = ({ children }) => {
           },
           (payload) => {
             console.log('🔄 [Real-Time] Cambio de Admin en Misiones detectado!', payload);
-            // Si un admin cambia una misión, recargamos todo.
-            loadAllData();
+            // Si un admin cambia una misión, recargamos todo con delay
+            setTimeout(() => {
+              loadAllData(true);
+            }, 1000);
           }
         )
         .subscribe();
 
       // Función de limpieza
       return () => {
+        console.log('🔌 [Real-Time] Desconectando suscripciones...');
         supabase.removeChannel(pointsSubscription);
         supabase.removeChannel(missionsSubscription);
         supabase.removeChannel(adminMissionsSubscription);
+        
+        // 🔥 NUEVO: Limpiar timer de debounce
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
       };
       
     } else {
@@ -353,8 +465,10 @@ export const PointsProvider = ({ children }) => {
           throw new Error(result?.error || 'El servidor falló al registrar la transacción de puntos.');
       }
       
-      // 2. Refrescar estado local (la suscripción lo hará, pero forzamos por si acaso)
-      await loadAllData(); 
+      // 2. Refrescar estado local con delay para permitir propagación
+      setTimeout(() => {
+        loadAllData(true);
+      }, 500);
 
       // 3. Iniciar animación
       triggerAnimation(amount, 'earn', type);
@@ -363,7 +477,7 @@ export const PointsProvider = ({ children }) => {
 
     } catch (error) {
       console.error('❌ Error en addPoints (Contexto):', error);
-      loadAllData(); // Forzar un refresh en caso de fallo
+      loadAllData(true); // Forzar un refresh en caso de fallo
       return { success: false, error: error.message || 'Error al sumar puntos.' };
     }
   }, [user, loadAllData, triggerAnimation]);
@@ -382,8 +496,10 @@ export const PointsProvider = ({ children }) => {
           throw new Error(result?.error || 'El servidor falló al procesar la deducción.');
       }
       
-      // 2. Refrescar estado local
-      await loadAllData();
+      // 2. Refrescar estado local con delay
+      setTimeout(() => {
+        loadAllData(true);
+      }, 500);
 
       // 3. Iniciar animación
       triggerAnimation(amount, 'deduct', type);
@@ -392,7 +508,7 @@ export const PointsProvider = ({ children }) => {
       
     } catch (error) {
       console.error('❌ Fallo en deductPoints (Contexto):', error);
-      loadAllData();
+      loadAllData(true);
       return { success: false, error: error.message || 'Error al deducir puntos.' };
     }
   }, [user, loadAllData, triggerAnimation]);
@@ -404,8 +520,8 @@ export const PointsProvider = ({ children }) => {
   const refreshPoints = useCallback(async () => {
     console.log('🔄 [refreshPoints] Refresh manual solicitado');
     
-    // 🔥 CORRECCIÓN: Esperar a que termine el refresh
-    await loadAllData();
+    // 🔥 CORRECCIÓN: Esperar a que termine el refresh, forzar carga
+    await loadAllData(true);
     
     console.log('✅ [refreshPoints] Refresh completado');
   }, [loadAllData]);
@@ -419,6 +535,10 @@ export const PointsProvider = ({ children }) => {
       mountedRef.current = false; // Marcar como desmontado
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
+      }
+      // 🔥 NUEVO: Limpiar timer de debounce
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
     };
   }, []);
