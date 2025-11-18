@@ -210,17 +210,31 @@ const PhotoDetailModal = ({
 
         setIsLiking(true);
         const photoId = photoData.id;
-        const previousLikedState = userHasLiked;
-        const previousLikeCount = likeCount;
+        
+        // 💾 Guardar snapshot para rollback
+        const snapshot = {
+            userHasLiked,
+            likeCount
+        };
 
-        let warningMessage = '';
-        if (isOwner) {
-            warningMessage = 'No ganas puntos por darle "Me Gusta" a tu propio contenido.';
-        }
+        console.log('👍 [handleLikeToggle] Estado inicial:', {
+            photoId: photoId.substring(0, 8),
+            userHasLiked,
+            likeCount,
+            isOwner
+        });
 
         try {
             if (userHasLiked) { 
-                // UNLIKE
+                // ==============================
+                // QUITAR LIKE
+                // ==============================
+                console.log('⏪ [handleLikeToggle] Quitando like...');
+                
+                // Actualización optimista (usuario ve cambio inmediato)
+                setUserHasLiked(false);
+                setLikeCount(Math.max(0, likeCount - 1));
+
                 const { error: deleteError } = await supabase
                     .from('photo_likes') 
                     .delete()
@@ -229,63 +243,120 @@ const PhotoDetailModal = ({
 
                 if (deleteError) throw deleteError;
                 
-                // Actualizar UI localmente (NO REFRESCAR)
-                setUserHasLiked(false);
-                setLikeCount(Math.max(0, previousLikeCount - 1));
+                console.log('✅ [handleLikeToggle] Like eliminado correctamente');
+                showTemporaryToast('Me Gusta removido', 'success', 3000);
 
             } else { 
-                // LIKE
+                // ==============================
+                // DAR LIKE
+                // ==============================
+                console.log('👍 [handleLikeToggle] Dando like...');
+                
+                // Verificar si es el dueño
+                if (isOwner) {
+                    showTemporaryToast('No puedes darle like a tu propio contenido', 'info', 3000);
+                    setIsLiking(false);
+                    return;
+                }
+
+                // Actualización optimista (usuario ve cambio inmediato)
+                setUserHasLiked(true);
+                setLikeCount(likeCount + 1);
+
+                // Intentar insertar el like
                 const { error: insertError } = await supabase
                     .from('photo_likes') 
                     .insert({ user_id: user.id, photo_id: photoId });
                 
-                if (insertError && insertError.code !== '23505') throw insertError;
-                
-                if (!insertError || insertError.code === '23505') {
-                    // Si el like fue exitoso o ya existía, actualizamos el conteo y estado
-                    setUserHasLiked(true);
-                    setLikeCount(previousLikeCount + 1);
-
-                    // Lógica de tracking de puntos (Solo si NO es el dueño)
-                    if (!isOwner) {
-                        if (MISSION_TYPES?.GIVE_LIKE) {
-                            const trackingResult = await trackGiveLike('photo', photoId); 
-                            
-                            if (trackingResult.result === 'success') {
-                                showTemporaryToast(`+${trackingResult.points_earned} Puntos por Like!`, 'success', 5000, () => {
-                                    fetchInteractions(); 
-                                    refreshParentData(); 
-                                });
-                                // Salir sin recargar aquí
-                                return; 
-                            } else if (trackingResult.result === 'already_paid') {
-                                warningMessage = 'Ya ganaste puntos por darle "Me Gusta" a esta foto anteriormente.';
-                            }
-                        }
+                // ================================================================
+                // 🔥 MANEJO EXPLÍCITO DE ERROR 23505 (LIKE DUPLICADO)
+                // ================================================================
+                if (insertError) {
+                    if (insertError.code === '23505') {
+                        // Error UNIQUE: El usuario ya dio like a esta foto antes
+                        console.log('⚠️ [handleLikeToggle] Ya diste like a esta foto anteriormente');
+                        
+                        // Rollback de la actualización optimista
+                        setUserHasLiked(snapshot.userHasLiked);
+                        setLikeCount(snapshot.likeCount);
+                        
+                        showTemporaryToast('Ya diste like a esta foto', 'info', 3000);
+                        setIsLiking(false);
+                        return;
+                    } else {
+                        // Otro tipo de error
+                        throw insertError;
                     }
                 }
-            }
-            
-            // Si hubo mensaje de advertencia (o unlike), mostrar toast y luego recargar
-            if (warningMessage || userHasLiked) {
-                 showTemporaryToast(warningMessage || 'Me Gusta removido.', warningMessage ? 'info' : 'success', 5000, () => {
-                    fetchInteractions(); 
-                    refreshParentData();
-                });
-            } else {
-                // Si no hay toast, recargar inmediatamente para sincronizar el contador
-                 fetchInteractions(); 
-                 refreshParentData();
+
+                // ================================================================
+                // ✅ LIKE INSERTADO CORRECTAMENTE - TRACKEAR MISIÓN
+                // ================================================================
+                console.log('✅ [handleLikeToggle] Like insertado, trackeando misión...');
+                
+                try {
+                    const trackingResult = await trackGiveLike('photo', photoId);
+                    console.log('🎯 [handleLikeToggle] Resultado tracking:', trackingResult);
+                    
+                    if (trackingResult.result === 'success' && trackingResult.points_earned > 0) {
+                        // ¡MISIÓN COMPLETADA!
+                        console.log('🎉 [handleLikeToggle] ¡Misión completada!', {
+                            points: trackingResult.points_earned
+                        });
+                        
+                        showTemporaryToast(
+                            `🎉 Misión Completa: +${trackingResult.points_earned} puntos`, 
+                            'success', 
+                            5000,
+                            () => {
+                                fetchInteractions();
+                                refreshParentData();
+                            }
+                        );
+                        
+                    } else if (trackingResult.result === 'progress_updated') {
+                        // Progreso actualizado pero no completado
+                        console.log('📊 [handleLikeToggle] Progreso actualizado');
+                        showTemporaryToast('✓ Progreso registrado. ¡Sigue dando likes!', 'success', 3000);
+                        
+                    } else if (trackingResult.result === 'already_completed') {
+                        // Misión ya completada hoy
+                        console.log('ℹ️ [handleLikeToggle] Misión ya completada hoy');
+                        showTemporaryToast('Ya completaste la misión de Likes hoy', 'info', 3000);
+                        
+                    } else {
+                        // Otro resultado
+                        console.log('ℹ️ [handleLikeToggle] Acción registrada:', trackingResult.result);
+                        showTemporaryToast('Like registrado', 'success', 2000);
+                    }
+                    
+                } catch (trackError) {
+                    // Error al trackear misión (no crítico)
+                    console.error('⚠️ [handleLikeToggle] Error al trackear misión:', trackError);
+                    showTemporaryToast('Like registrado', 'success', 2000);
+                }
             }
 
         } catch (error) {
-            console.error('💥 Error al dar like:', error);
-            alert(`Error de interacción: ${error.message}`);
-            // Revertir estado si falla la operación
-            setUserHasLiked(previousLikedState);
-            setLikeCount(previousLikeCount);
-            // Si falla, recargamos inmediatamente para ver el estado real de la BD
+            // ================================================================
+            // 💥 ERROR CRÍTICO - ROLLBACK COMPLETO
+            // ================================================================
+            console.error('❌ [handleLikeToggle] Error crítico:', error);
+            
+            // Rollback a estado anterior
+            setUserHasLiked(snapshot.userHasLiked);
+            setLikeCount(snapshot.likeCount);
+            
+            // Mostrar error al usuario
+            showTemporaryToast(
+                `Error al procesar like: ${error.message}`, 
+                'error', 
+                4000
+            );
+            
+            // Refresh para sincronizar con BD
             fetchInteractions();
+            
         } finally {
             setIsLiking(false);
         }
