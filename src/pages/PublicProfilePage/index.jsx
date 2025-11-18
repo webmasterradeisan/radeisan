@@ -1,7 +1,6 @@
 // src/pages/PublicProfilePage/index.jsx
 // ✅ DISEÑO EXACTO SEGÚN LA IMAGEN
 // ✅ CORREGIDO: Lógica de carga de fotos defensiva para evitar errores de JOIN en Supabase.
-// ✅ CORREGIDO: Agregado useEffect y handlers faltantes
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -56,7 +55,7 @@ const PublicProfilePage = () => {
     return 'horizontal';
   };
 
-  const loadUserProfile = useCallback(async () => {
+  const loadUserProfile = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -169,29 +168,7 @@ const PublicProfilePage = () => {
       setError(err.message === 'Usuario no encontrado' ? 'Usuario no encontrado' : 'Error al cargar el perfil');
       setLoading(false);
     }
-  }, [identifier, currentUser, navigate]);
-
-  // ✅ useEffect PRINCIPAL - esto es lo que faltaba!
-  useEffect(() => {
-    if (identifier) {
-      loadUserProfile();
-    }
-  }, [identifier, loadUserProfile]);
-
-  // ✅ Handlers para el modal de fotos
-  const handlePhotoClick = useCallback((index) => {
-    setSelectedPhotoIndex(index);
-    setShowPhotoModal(true);
-  }, []);
-
-  const handlePhotoModalClose = useCallback(() => {
-    setShowPhotoModal(false);
-    setSelectedPhotoIndex(null);
-  }, []);
-
-  const handlePhotoNavigation = useCallback((newIndex) => {
-    setSelectedPhotoIndex(newIndex);
-  }, []);
+  };
 
   const handleFollowToggle = async () => {
     if (!currentUser) {
@@ -202,196 +179,229 @@ const PublicProfilePage = () => {
 
     try {
       if (following) {
-        await supabase.from('user_follows').delete()
+        setFollowing(false);
+        await supabase
+          .from('user_follows')
+          .delete()
           .eq('follower_id', currentUser.id)
           .eq('following_id', profileData.id);
-        setFollowing(false);
-        setProfileData(prev => ({ ...prev, followersCount: Math.max(0, prev.followersCount - 1) }));
+        setProfileData(prev => ({
+          ...prev,
+          followersCount: Math.max(0, prev.followersCount - 1)
+        }));
       } else {
-        await supabase.from('user_follows').insert({
-          follower_id: currentUser.id,
-          following_id: profileData.id,
-        });
         setFollowing(true);
-        setProfileData(prev => ({ ...prev, followersCount: prev.followersCount + 1 }));
+        await supabase
+          .from('user_follows')
+          .insert({
+            follower_id: currentUser.id,
+            following_id: profileData.id
+          });
+        setProfileData(prev => ({
+          ...prev,
+          followersCount: prev.followersCount + 1
+        }));
       }
     } catch (err) {
-      console.error('Error en follow/unfollow:', err);
+      console.error('❌ Error al seguir/dejar de seguir:', err);
+      setFollowing(!following);
     }
   };
+  
+  const handlePhotoClick = useCallback((index) => {
+    setSelectedPhotoIndex(index);
+    setShowPhotoModal(true);
+  }, []);
+
+  const handlePhotoModalClose = useCallback(() => {
+    setShowPhotoModal(false);
+    setSelectedPhotoIndex(null);
+  }, []);
+  
+  const handlePhotoNavigation = useCallback((direction) => {
+    if (selectedPhotoIndex === null) return;
+    let newIndex = selectedPhotoIndex;
+    if (direction === 'next') {
+        newIndex = Math.min(userPhotos.length - 1, selectedPhotoIndex + 1);
+    } else if (direction === 'prev') {
+        newIndex = Math.max(0, selectedPhotoIndex - 1);
+    }
+    setSelectedPhotoIndex(newIndex);
+  }, [selectedPhotoIndex, userPhotos.length]);
+
+
+  useEffect(() => {
+    if (identifier) {
+      loadUserProfile();
+    }
+  }, [identifier, currentUser]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <>
+        <Helmet>
+          <title>Cargando perfil... | RADEISAN</title>
+        </Helmet>
         <Header />
-        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <div className="min-h-screen bg-background flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-muted-foreground">Cargando perfil...</p>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  if (error) {
+  if (error || !profileData) {
     return (
-      <div className="min-h-screen bg-background">
+      <>
+        <Helmet>
+          <title>Usuario no encontrado | RADEISAN</title>
+        </Helmet>
         <Header />
-        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-          <div className="text-center">
+        <div className="min-h-screen bg-background flex items-center justify-center px-4">
+          <div className="text-center max-w-md">
             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-              <Icon name="AlertCircle" size={32} className="text-destructive" />
+              <Icon name="UserX" size={32} className="text-muted-foreground" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">{error}</h2>
-            <Button onClick={() => navigate(-1)} variant="outline" className="mt-4">
-              <Icon name="ArrowLeft" size={16} className="mr-2" />
-              Volver
+            <h1 className="text-2xl font-bold text-foreground mb-2">Usuario no encontrado</h1>
+            <p className="text-muted-foreground mb-6">
+              El perfil que buscas no existe o no está disponible.
+            </p>
+            <Button onClick={() => navigate('/dashboard')}>
+              <Icon name="Home" size={16} className="mr-2" />
+              Volver al inicio
             </Button>
           </div>
         </div>
-      </div>
+      </>
     );
   }
-
-  if (!profileData) return null;
 
   return (
     <>
       <Helmet>
-        <title>{profileData.name} (@{profileData.username}) - Perfil</title>
-        <meta name="description" content={profileData.bio || `Perfil de ${profileData.name}`} />
+        <title>{profileData.name} (@{profileData.username}) | RADEISAN</title>
+        <meta name="description" content={profileData.bio} />
       </Helmet>
 
       <div className="min-h-screen bg-background">
         <Header />
-        
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Cover Image */}
-          <div className="bg-card rounded-lg overflow-hidden shadow-sm mb-6">
-            <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-accent/20">
-              {profileData.coverImage && (
-                <Image 
-                  src={profileData.coverImage} 
-                  alt="Portada" 
-                  className="w-full h-full object-cover"
-                />
-              )}
-            </div>
 
-            {/* Profile Header */}
-            <div className="relative px-6 pb-6">
-              <div className="flex flex-col sm:flex-row sm:items-end sm:space-x-5 -mt-12 sm:-mt-16">
-                <div className="relative">
-                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-muted overflow-hidden">
-                    <Image 
-                      src={profileData.avatar} 
-                      alt={profileData.name}
-                      className="w-full h-full object-cover"
-                    />
+        <main className="pt-16">
+          <div className="max-w-6xl mx-auto">
+            {/* HEADER - Portada arriba, TODO debajo */}
+            <div className="bg-card border-b border-border">
+              {/* Cover Image - AL FONDO */}
+              <div className="relative h-48 sm:h-64 bg-gradient-to-r from-primary/20 to-secondary/20 overflow-hidden">
+                {profileData.coverImage ? (
+                  <Image 
+                    src={profileData.coverImage} 
+                    alt="Portada del perfil"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
+                )}
+              </div>
+
+              {/* Profile Section - TODO DEBAJO de la portada */}
+              <div className="px-4 sm:px-6 py-6">
+                <div className="flex items-start justify-between gap-4">
+                  {/* Lado IZQUIERDO: Avatar + Info */}
+                  <div className="flex items-start gap-4 flex-1">
+                    {/* Avatar DEBAJO de la portada */}
+                    <div className="flex-shrink-0">
+                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-card bg-card overflow-hidden shadow-lg">
+                        <Image 
+                          src={profileData.avatar} 
+                          alt={profileData.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Info al lado del avatar */}
+                    <div className="flex-1 min-w-0">
+                      {/* Nombre y badges */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+                          {profileData.name}
+                        </h1>
+                        {profileData.isVerified && (
+                          <Icon name="BadgeCheck" size={20} color="var(--color-primary)" />
+                        )}
+                        {profileData.isBusinessAccount && (
+                          <div className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 rounded-full">
+                            <Icon name="Building2" size={12} color="var(--color-accent)" />
+                            <span className="text-xs font-medium text-accent">Business</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Username */}
+                      <p className="text-sm text-muted-foreground mb-3">
+                        @{profileData.username}
+                      </p>
+                      
+                      {/* Stats en UNA LÍNEA HORIZONTAL */}
+                      <div className="flex items-center flex-wrap gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Icon name="Monitor" size={16} className="text-blue-500" />
+                          <span className="font-medium text-foreground">{profileData.videosCount}</span>
+                          <span className="text-muted-foreground">videos</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Icon name="Smartphone" size={16} className="text-red-500" />
+                          <span className="font-medium text-foreground">{profileData.reelsCount}</span>
+                          <span className="text-muted-foreground">reels</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Icon name="Image" size={16} className="text-green-500" />
+                          <span className="font-medium text-foreground">{profileData.photosCount}</span>
+                          <span className="text-muted-foreground">fotos</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Icon name="Eye" size={16} className="text-muted-foreground" />
+                          <span className="font-medium text-foreground">{profileData.totalViews}</span>
+                          <span className="text-muted-foreground">views</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Icon name="Heart" size={16} className="text-red-500" />
+                          <span className="font-medium text-foreground">{profileData.totalLikes}</span>
+                          <span className="text-muted-foreground">likes</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  {profileData.isVerified && (
-                    <div className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center border-2 border-card">
-                      <Icon name="CheckCircle" size={20} className="text-white" />
-                    </div>
-                  )}
-                </div>
 
-                <div className="mt-4 sm:mt-0 flex-1 min-w-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                    <div className="mb-4 sm:mb-0">
-                      <h1 className="text-2xl font-bold flex items-center space-x-2">
-                        <span>{profileData.name}</span>
-                      </h1>
-                      <p className="text-muted-foreground">@{profileData.username}</p>
-                      {profileData.bio && (
-                        <p className="mt-2 text-sm text-foreground max-w-2xl">{profileData.bio}</p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      {currentUser ? (
-                        <>
-                          <Button
-                            onClick={handleFollowToggle}
-                            variant={following ? 'outline' : 'default'}
-                            size="sm"
-                            className="min-w-[100px]"
-                          >
-                            {following ? (
-                              <>
-                                <Icon name="UserMinus" size={16} className="mr-2" />
-                                Siguiendo
-                              </>
-                            ) : (
-                              <>
-                                <Icon name="UserPlus" size={16} className="mr-2" />
-                                Seguir
-                              </>
-                            )}
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Icon name="MessageCircle" size={16} className="mr-2" />
-                            Mensaje
-                          </Button>
-                        </>
-                      ) : (
-                        <Button onClick={() => navigate('/login')} size="sm">
-                          <Icon name="UserPlus" size={16} className="mr-2" />
-                          Seguir
-                        </Button>
-                      )}
-                    </div>
+                  {/* Lado DERECHO: Botones */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={following ? "outline" : "default"}
+                      size="sm"
+                      onClick={handleFollowToggle}
+                    >
+                      <Icon name={following ? "UserCheck" : "UserPlus"} size={16} className="mr-2" />
+                      {following ? 'Siguiendo' : 'Seguir'}
+                    </Button>
+                    
+                    <Button variant="outline" size="icon">
+                      <Icon name="Share2" size={16} />
+                    </Button>
                   </div>
                 </div>
               </div>
-
-              {/* Stats */}
-              <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-foreground">
-                    {profileData.followersCount?.toLocaleString() || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Seguidores</div>
-                </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-foreground">
-                    {profileData.followingCount?.toLocaleString() || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Siguiendo</div>
-                </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-foreground">
-                    {profileData.videosCount?.toLocaleString() || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Videos</div>
-                </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-foreground">
-                    {profileData.reelsCount?.toLocaleString() || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Reels</div>
-                </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-foreground">
-                    {profileData.photosCount?.toLocaleString() || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Fotos</div>
-                </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-foreground">
-                    {profileData.totalViews?.toLocaleString() || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Vistas</div>
-                </div>
-              </div>
             </div>
-          </div>
 
-          {/* Content Tabs */}
-          <div className="bg-card rounded-lg shadow-sm overflow-hidden">
-            <div className="border-b border-border">
-              <div className="flex overflow-x-auto">
+            {/* Tabs */}
+            <div className="px-4 sm:px-6 py-6">
+              <div className="flex border-b border-border mb-6 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('videos')}
                   className={`px-4 py-3 font-medium transition-colors whitespace-nowrap ${
@@ -429,7 +439,7 @@ const PublicProfilePage = () => {
 
               {/* Content - Videos */}
               {activeTab === 'videos' && (
-                <div className="p-6">
+                <div>
                   {horizontalVideos.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
@@ -477,7 +487,7 @@ const PublicProfilePage = () => {
 
               {/* Content - Reels */}
               {activeTab === 'reels' && (
-                <div className="p-6">
+                <div>
                   {reels.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
@@ -522,7 +532,7 @@ const PublicProfilePage = () => {
 
               {/* Content - Fotos */}
               {activeTab === 'photos' && (
-                <div className="p-6">
+                <div>
                   {userPhotos.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
@@ -535,6 +545,7 @@ const PublicProfilePage = () => {
                       {userPhotos.map((photo, index) => (
                         <div 
                           key={photo.id}
+                          // Click handler para abrir el modal
                           onClick={() => handlePhotoClick(index)} 
                           className="bg-card rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group relative"
                         >
@@ -567,6 +578,7 @@ const PublicProfilePage = () => {
               photoData={userPhotos[selectedPhotoIndex]}
               onClose={handlePhotoModalClose}
               onNavigate={handlePhotoNavigation}
+              // Se pasa loadUserProfile para que el modal pueda refrescar la lista si es necesario (ej: al borrar una foto)
               refreshParentData={loadUserProfile} 
               totalPhotos={userPhotos.length}
           />
