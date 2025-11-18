@@ -195,7 +195,7 @@ const Routes = () => {
                     </UniversalRoute>
                   } 
                 />
-                
+
                 <Route 
                   path="/login" 
                   element={
@@ -204,7 +204,7 @@ const Routes = () => {
                     </PublicRoute>
                   } 
                 />
-                
+
                 <Route 
                   path="/register" 
                   element={
@@ -213,7 +213,7 @@ const Routes = () => {
                     </PublicRoute>
                   } 
                 />
-                
+
                 <Route 
                   path="/auth/callback" 
                   element={
@@ -223,18 +223,9 @@ const Routes = () => {
                   } 
                 />
 
-                {/* ✅ NUEVO - PERFIL PÚBLICO (Visible sin login) */}
-                <Route 
-                  path="/profile/:userId" 
-                  element={
-                    <UniversalRoute>
-                      <PublicProfilePage />
-                    </UniversalRoute>
-                  } 
-                />
+                {/* =================== RUTAS PROTEGIDAS PRINCIPALES =================== */}
 
-                {/* =================== RUTAS PROTEGIDAS (Usuario) =================== */}
-                
+                {/* DASHBOARD (Feed Principal) - ✅ REAL */}
                 <Route 
                   path="/dashboard" 
                   element={
@@ -246,67 +237,67 @@ const Routes = () => {
                   } 
                 />
 
+                {/* REELS - ✅ REAL */}
                 <Route 
                   path="/reels" 
                   element={
                     <ProtectedRoute>
-                      <ReelsPage />
+                      <MobileLayoutWrapper>
+                        <ReelsPage />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
-                <Route 
-                  path="/reel/:reelId" 
-                  element={
-                    <ProtectedRoute>
-                      <ReelsPage />
-                    </ProtectedRoute>
-                  } 
-                />
-
+                {/* VIDEO PLAYER - ✅ REAL */}
                 <Route 
                   path="/video/:videoId" 
                   element={
                     <ProtectedRoute>
-                      <VideoPlayerPage />
+                      <MobileLayoutWrapper>
+                        <VideoPlayerPage />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
+                {/* UPLOAD VIDEO - ✅ REAL */}
                 <Route 
                   path="/upload" 
                   element={
                     <ProtectedRoute>
-                      <VideoUploadStudio />
+                      <MobileLayoutWrapper>
+                        <VideoUploadStudio />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
-                {/* ==================================================================
-                    ✅ CORRECCIÓN 2: Ruta para subir fotos
-                    ================================================================== */}
+                {/* UPLOAD PHOTO - ✅ REAL */}
                 <Route 
                   path="/upload-photo" 
                   element={
                     <ProtectedRoute>
-                      <PhotoUploadStudio />
+                      <MobileLayoutWrapper>
+                        <PhotoUploadStudio />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
-                {/* ==================================================================
-                    ✅ FIN DE LA CORRECCIÓN 2
-                    ================================================================== */}
 
+                {/* EDIT VIDEO - ✅ REAL */}
                 <Route 
                   path="/edit/:videoId" 
                   element={
                     <ProtectedRoute>
-                      <VideoEditStudio />
+                      <MobileLayoutWrapper>
+                        <VideoEditStudio />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
-                {/* PROFILE: Ahora redirige a /profile que es la página real de configuración */}
+                {/* PERFIL - ✅ REAL (PROPIO) */}
                 <Route 
                   path="/profile" 
                   element={
@@ -318,7 +309,19 @@ const Routes = () => {
                   } 
                 />
 
-                {/* MARKETPLACE - ✅ REAL (Sprint 3) */}
+                {/* PERFIL - ✅ REAL (PÚBLICO) */}
+                <Route 
+                  path="/profile/:userId" 
+                  element={
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <PublicProfilePage />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* MARKETPLACE - ✅ REAL */}
                 <Route 
                   path="/marketplace" 
                   element={
@@ -330,9 +333,9 @@ const Routes = () => {
                   } 
                 />
 
-                {/* TIENDA DE PUNTOS - ✅ REAL (Sprint 3) */}
+                {/* 🎁 TIENDA DE RECOMPENSAS - ✅ REAL (AGREGADO) */}
                 <Route 
-                  path="/store" 
+                  path="/rewards" 
                   element={
                     <ProtectedRoute>
                       <MobileLayoutWrapper>
@@ -342,45 +345,87 @@ const Routes = () => {
                   } 
                 />
 
-                {/* ✅ NUEVO - COMPRA DE PUNTOS PREMIUM */}
+                {/* 💎 COMPRA DE PUNTOS PREMIUM - ✅ REAL */}
                 <Route 
                   path="/purchase-points" 
                   element={
                     <ProtectedRoute>
-                      <PurchasePointsPage />
+                      <MobileLayoutWrapper>
+                        <PurchasePointsPage />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
+                {/* Resultado de compra - Éxito */}
                 <Route 
                   path="/purchase/success" 
                   element={
                     <ProtectedRoute>
-                      <PurchaseSuccess />
+                      <MobileLayoutWrapper>
+                        <PurchaseSuccess />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
+                {/* Resultado de compra - Fallo */}
                 <Route 
                   path="/purchase/failure" 
                   element={
                     <ProtectedRoute>
-                      <PurchaseFailure />
+                      <MobileLayoutWrapper>
+                        <PurchaseFailure />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
+                {/* Resultado de compra - Pendiente */}
                 <Route 
                   path="/purchase/pending" 
                   element={
                     <ProtectedRoute>
-                      <PurchasePending />
+                      <MobileLayoutWrapper>
+                        <PurchasePending />
+                      </MobileLayoutWrapper>
                     </ProtectedRoute>
                   } 
                 />
 
-                {/* =================== OTRAS RUTAS PROTEGIDAS =================== */}
+                {/* =================== PLACEHOLDERS TEMPORALES =================== */}
 
+                {/* EXPLORAR - ⏳ PLACEHOLDER */}
+                <Route 
+                  path="/explore" 
+                  element={
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <PlaceholderPage 
+                          title="Explorar Contenido" 
+                          description="Descubre nuevo contenido popular" 
+                        />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* NOTIFICACIONES - ⏳ PLACEHOLDER */}
+                <Route 
+                  path="/notifications" 
+                  element={
+                    <ProtectedRoute>
+                      <MobileLayoutWrapper>
+                        <PlaceholderPage 
+                          title="Notificaciones" 
+                          description="Mantente al día con tu actividad" 
+                        />
+                      </MobileLayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* GUARDADOS - ⏳ PLACEHOLDER */}
                 <Route 
                   path="/saved" 
                   element={
