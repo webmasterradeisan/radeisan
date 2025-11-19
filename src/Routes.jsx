@@ -1,12 +1,12 @@
-// src/Routes.jsx - ACTUALIZADO CON SISTEMA DE NOTIFICACIONES GLOBAL
+// src/Routes.jsx - ACTUALIZADO CON CORRECCIONES DE RUTAS
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import { AuthProvider } from "contexts/AuthContext";
 import { PointsProvider } from "contexts/PointsContext";
-import { NotificationProvider } from "contexts/NotificationContext"; // ✅ NUEVO IMPORT
-import NotificationContainer from "components/notifications/NotificationContainer"; // ✅ NUEVO IMPORT
+import { NotificationProvider } from "contexts/NotificationContext";
+import NotificationContainer from "components/notifications/NotificationContainer";
 
 // SISTEMA ORIGINAL MANTENIDO
 import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
@@ -32,18 +32,13 @@ import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
 
-// ✅ NUEVO - PERFIL PÚBLICO
+// ✅ PERFIL PÚBLICO
 import PublicProfilePage from './pages/PublicProfilePage';
 
-// ==================================================================
-// ✅ INICIO DE LA CORRECCIÓN 1: Importar componente de subida de fotos
-// ==================================================================
+// ✅ COMPONENTE DE SUBIDA DE FOTOS
 import PhotoUploadStudio from './pages/photo-upload-studio'; 
-// ==================================================================
-// ✅ FIN DE LA CORRECCIÓN 1
-// ==================================================================
 
-// ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
+// ✅ SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/PurchasePointsPage';
 import PurchaseSuccess from './pages/purchase-points/PurchaseSuccess';
 import PurchaseFailure from './pages/purchase-points/PurchaseFailure';
@@ -180,7 +175,7 @@ const Routes = () => {
     <BrowserRouter>
       <AuthProvider>
         <PointsProvider>
-          <NotificationProvider> {/* ✅ NUEVO: Provider de notificaciones */}
+          <NotificationProvider>
             <ErrorBoundary>
               <ScrollToTop />
               <RouterRoutes>
@@ -274,8 +269,9 @@ const Routes = () => {
                 />
 
                 {/* UPLOAD PHOTO - ✅ REAL */}
+                {/* CORRECCIÓN 1: Se cambió /upload-photo por /photo-upload para coincidir con la URL */}
                 <Route 
-                  path="/upload-photo" 
+                  path="/photo-upload" 
                   element={
                     <ProtectedRoute>
                       <MobileLayoutWrapper>
@@ -310,8 +306,9 @@ const Routes = () => {
                 />
 
                 {/* PERFIL - ✅ REAL (PÚBLICO) */}
+                {/* CORRECCIÓN 2: Se cambió :userId por :identifier para coincidir con useParams en PublicProfilePage */}
                 <Route 
-                  path="/profile/:userId" 
+                  path="/profile/:identifier" 
                   element={
                     <ProtectedRoute>
                       <MobileLayoutWrapper>
@@ -611,7 +608,7 @@ const Routes = () => {
                 
               </RouterRoutes>
             </ErrorBoundary>
-            <NotificationContainer /> {/* ✅ NUEVO: Renderizador de notificaciones */}
+            <NotificationContainer />
           </NotificationProvider>
         </PointsProvider>
       </AuthProvider>
