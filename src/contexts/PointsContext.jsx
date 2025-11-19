@@ -98,7 +98,6 @@ export const PointsProvider = ({ children }) => {
           return {
             ...mission,
             current_count: newCount,
-            _updated: Date.now(),
             _optimistic: true,
             _optimisticTimestamp: Date.now(),
             _optimisticValue: newCount
@@ -118,7 +117,6 @@ export const PointsProvider = ({ children }) => {
     
     setMissions(snapshot.map(m => ({ 
       ...m, 
-      _updated: Date.now(),
       _optimistic: false,
       _optimisticTimestamp: undefined,
       _optimisticValue: undefined
@@ -246,7 +244,6 @@ export const PointsProvider = ({ children }) => {
               
               return {
                 ...serverMission,
-                _updated: Date.now(),
                 _optimistic: false,
                 _optimisticTimestamp: undefined,
                 _optimisticValue: undefined
