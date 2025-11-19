@@ -1,3 +1,4 @@
+// src/pages/PurchasePointsPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -14,7 +15,7 @@ import {
 const PurchasePointsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { points, refreshPoints } = usePoints();
+  const { points } = usePoints();
 
   // Estados
   const [packages, setPackages] = useState([]);
@@ -43,63 +44,38 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
-      console.log('🔧 Iniciando carga de datos...');
-
       // Inicializar servicio de pagos
-      console.log('1️⃣ Inicializando paymentService...');
       const initResult = await paymentService.initialize();
-      console.log('✅ Resultado de inicialización:', initResult);
-
       if (!initResult || !initResult.success) {
-        throw new Error(initResult?.error || 'Error al inicializar servicio de pagos');
+        console.warn('Advertencia en inicialización de pagos:', initResult);
       }
 
       // Cargar paquetes usando RPC
-      console.log('2️⃣ Cargando paquetes usando RPC...');
       const { data: packagesData, error: packagesError } = await supabase
         .rpc('get_active_packages');
 
-      if (packagesError) {
-        console.error('❌ Error cargando paquetes:', packagesError);
-        throw packagesError;
-      }
+      if (packagesError) throw packagesError;
 
-      console.log('✅ Paquetes cargados:', packagesData?.length || 0);
       setPackages(packagesData || []);
 
       // Obtener pasarelas activas del servicio
-      console.log('3️⃣ Obteniendo pasarelas activas...');
       const activeGateways = paymentService.getActiveGateways();
-      console.log('✅ Pasarelas activas:', activeGateways);
-      console.log('📊 Cantidad de pasarelas:', activeGateways?.length || 0);
-      
       setGateways(activeGateways || []);
 
       // Establecer pasarela predeterminada
       if (activeGateways && activeGateways.length > 0) {
         const defaultGateway = paymentService.getDefaultGateway();
-        console.log('✅ Pasarela predeterminada:', defaultGateway);
         setSelectedGateway(defaultGateway);
-      } else {
-        console.warn('⚠️ No hay pasarelas activas disponibles');
       }
 
       // Cargar historial de compras
-      console.log('4️⃣ Cargando historial de compras...');
       const history = await paymentService.getUserPurchaseHistory(user.id, 10);
       if (history && history.success) {
-        console.log('✅ Historial cargado:', history.purchases?.length || 0, 'compras');
         setPurchaseHistory(history.purchases || []);
       }
 
-      console.log('🎉 Carga de datos completada exitosamente');
     } catch (err) {
       console.error('❌ Error loading data:', err);
-      console.error('📋 Detalles del error:', {
-        message: err.message,
-        stack: err.stack,
-        error: err
-      });
       setError(err.message || 'Error al cargar los paquetes. Por favor recarga la página.');
     } finally {
       setLoading(false);
@@ -108,88 +84,55 @@ const PurchasePointsPage = () => {
 
   // Manejar compra
   const handlePurchase = async () => {
-    console.log('🎯 handlePurchase() iniciado');
-    console.log('📦 Datos recibidos:', {
-      selectedPackage: selectedPackage,
-      selectedGateway: selectedGateway,
-      packageId: selectedPackage?.id,
-      gatewayName: selectedGateway?.gateway_name
-    });
-
     if (!selectedPackage || !selectedGateway) {
-      const errorMsg = 'Por favor selecciona un paquete y método de pago';
-      console.error('❌ Validación fallida:', errorMsg);
-      setError(errorMsg);
+      setError('Por favor selecciona un paquete y método de pago');
       return;
     }
 
-    // Validar el paquete antes de proceder
-    console.log('🔍 Validando paquete...');
     const validation = paymentService.validatePackage(selectedPackage);
-    console.log('📋 Resultado validación:', validation);
-    
     if (!validation.valid) {
-      console.error('❌ Paquete inválido:', validation.error);
       setError(validation.error);
       return;
     }
 
-    console.log('✅ Validación exitosa, iniciando compra...');
     setPurchasing(true);
     setError(null);
 
     try {
-      console.log('🔄 Llamando a paymentService.purchasePackage...');
-      console.log('📤 Parámetros:', {
-        packageName: selectedPackage.name,
-        packageId: selectedPackage.id,
-        gatewayName: selectedGateway.gateway_name,
-        price: selectedPackage.price_cop
-      });
-
       const result = await paymentService.purchasePackage(
         selectedPackage, 
         selectedGateway.gateway_name
       );
 
-      console.log('📦 Resultado de purchasePackage:', result);
-      console.log('📊 Resultado completo (stringified):', JSON.stringify(result, null, 2));
-
       if (!result.success) {
-        console.error('❌ Compra falló:', result.error);
         throw new Error(result.error || 'Error desconocido en la compra');
       }
 
-      console.log('✅ Compra exitosa, procesando redirección...');
+      // ✅ CORRECCIÓN CLAVE: Manejo robusto de la redirección
+      console.log('✅ Compra creada exitosamente:', result);
       
-      // El resultado puede venir con diferentes propiedades según la pasarela
+      // Obtener el ID de la transacción de cualquiera de las propiedades posibles
+      const transactionId = result.id || result.transaction_id || result.purchaseId || result.purchase?.id;
+
       if (result.paymentUrl) {
-        console.log('🔗 Redirigiendo a paymentUrl:', result.paymentUrl);
+        // Caso 1: La pasarela nos da una URL externa (ej: Stripe checkout)
         window.location.href = result.paymentUrl;
       } else if (result.checkoutUrl) {
-        console.log('🔗 Redirigiendo a checkoutUrl:', result.checkoutUrl);
+        // Caso 2: URL de checkout alternativa
         window.location.href = result.checkoutUrl;
       } else {
-        console.warn('⚠️ No se encontró URL de pago en el resultado');
-        console.log('📋 Revisando estructura del resultado:', Object.keys(result));
-        
-        // Para MercadoPago, el checkout se abre automáticamente
-        if (result.gateway === 'mercadopago') {
-          console.log('✅ MercadoPago: checkout debería abrirse automáticamente');
-          // El checkout ya fue abierto por el servicio
+        // Caso 3: Flujo interno, simulado o Mercado Pago integrado sin redirect externo
+        // Redirigimos MANUALMENTE a la página de pendiente con el ID
+        if (transactionId) {
+          navigate(`/purchase/pending?purchase_id=${transactionId}`);
         } else {
-          throw new Error('No se recibió URL de pago y la pasarela no es MercadoPago');
+          // Fallback extremo si no hay ID (no debería pasar si success es true)
+          navigate('/purchase/pending');
         }
       }
 
     } catch (err) {
       console.error('❌ Error en handlePurchase:', err);
-      console.error('📋 Detalles del error:', {
-        message: err.message,
-        stack: err.stack,
-        error: err
-      });
-      
       setError(err.message || 'Error al procesar la compra. Por favor intenta de nuevo.');
       setPurchasing(false);
     }
@@ -556,13 +499,6 @@ const PurchasePointsPage = () => {
                 <button
                   onClick={(e) => {
                     e.preventDefault();
-                    console.log('🖱️ Click en botón Continuar al Pago detectado');
-                    console.log('📊 Estado actual:', {
-                      selectedPackage: selectedPackage?.name,
-                      selectedGateway: selectedGateway?.display_name,
-                      purchasing,
-                      disabled: !selectedGateway || purchasing
-                    });
                     handlePurchase();
                   }}
                   disabled={!selectedGateway || purchasing}
