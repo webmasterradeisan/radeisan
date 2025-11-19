@@ -1,3 +1,4 @@
+// src/pages/purchase-points/PurchasePending.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Clock, RefreshCw, Home, AlertCircle } from 'lucide-react';
@@ -17,19 +18,26 @@ const PurchasePending = () => {
   }, [purchaseId]);
 
   const checkStatus = async () => {
+    if (!purchaseId) return;
+    
     setChecking(true);
-    const result = await paymentService.checkPurchaseStatus(purchaseId);
-    if (result.success) {
-      setPurchase(result.purchase);
-      
-      // Si el pago ya se completó, redirigir a success
-      if (result.purchase.status === 'completed') {
-        navigate(`/purchase/success?purchase_id=${purchaseId}`, { replace: true });
-      } else if (result.purchase.status === 'failed') {
-        navigate('/purchase/failure', { replace: true });
+    try {
+      const result = await paymentService.checkPurchaseStatus(purchaseId);
+      if (result.success) {
+        setPurchase(result.purchase);
+        
+        // Si el pago ya se completó, redirigir a success
+        if (result.purchase.status === 'completed') {
+          navigate(`/purchase/success?purchase_id=${purchaseId}`, { replace: true });
+        } else if (result.purchase.status === 'failed') {
+          navigate('/purchase/failure', { replace: true });
+        }
       }
+    } catch (error) {
+      console.error('Error checking status:', error);
+    } finally {
+      setChecking(false);
     }
-    setChecking(false);
   };
 
   return (
@@ -76,15 +84,24 @@ const PurchasePending = () => {
             </div>
           </div>
 
-          {/* Información de la compra */}
-          {purchase && (
+          {/* ✅ CORRECCIÓN: Mostrar el ID siempre que exista en la URL, incluso si 'purchase' es null */}
+          {purchaseId && (
             <div className="bg-gray-50 rounded-lg p-4 mb-8">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-600">ID de Transacción:</span>
-                <span className="font-mono text-gray-900 text-xs">
-                  {purchase.transaction_id}
+                <span className="font-mono text-gray-900 text-xs md:text-sm break-all">
+                  {/* Preferir el ID del objeto purchase, fallback al ID de la URL */}
+                  {purchase?.transaction_id || purchaseId}
                 </span>
               </div>
+              {purchase && (
+                 <div className="flex justify-between items-center text-sm mt-2">
+                    <span className="text-gray-600">Estado actual:</span>
+                    <span className="font-bold text-yellow-600 capitalize">
+                      {purchase.status === 'pending' ? 'Pendiente' : purchase.status}
+                    </span>
+                 </div>
+              )}
             </div>
           )}
 
@@ -92,7 +109,7 @@ const PurchasePending = () => {
           <div className="space-y-3">
             <button
               onClick={checkStatus}
-              disabled={checking}
+              disabled={checking || !purchaseId}
               className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-4 rounded-lg hover:from-blue-700 hover:to-purple-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {checking ? (
