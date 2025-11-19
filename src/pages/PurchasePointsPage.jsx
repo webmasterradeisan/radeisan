@@ -15,7 +15,7 @@ import {
 const PurchasePointsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { points, refreshPoints } = usePoints();
+  const { points, refreshPoints } = usePoints(); // Obtenemos la función para recargar
 
   // === ESTADOS GLOBALES ===
   const [activeTab, setActiveTab] = useState('buy_points'); // 'buy_points' | 'gift_store'
@@ -56,6 +56,11 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
+      // ✅ ARREGLO: Forzar la actualización de puntos al entrar a la página
+      if (refreshPoints) {
+        await refreshPoints(); 
+      }
+
       // 1. Inicializar servicio de pagos
       const initResult = await paymentService.initialize();
       if (!initResult || !initResult.success) console.warn('Advertencia pagos:', initResult);
@@ -139,20 +144,19 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
-        // Construimos un objeto "tipo paquete" temporal para que el paymentService lo procese
-        // Incluimos metadata extra para que el backend sepa que es un REGALO y a quién va
+        // Construimos un objeto "tipo paquete" temporal
         const giftTransactionObject = {
             id: selectedGift.id, // ID del regalo
             name: `Regalo: ${selectedGift.name}`,
             price_cop: selectedGift.price_cop,
             description: `Regalo para @${selectedRecipient.username}`,
-            // Metadata importante para tu backend/webhook:
+            // Metadata importante para webhook
             type: 'gift_purchase',
             recipient_id: selectedRecipient.id,
             sender_id: user.id
         };
 
-        // Usamos la misma pasarela (MercadoPago) configurada
+        // Usamos la misma pasarela configurada
         const result = await paymentService.purchasePackage(
             giftTransactionObject,
             selectedGateway.gateway_name
@@ -167,7 +171,7 @@ const PurchasePointsPage = () => {
     }
   };
 
-  // Helper para manejar la redirección de pagos (Común para Paquetes y Regalos)
+  // Helper para manejar la redirección de pagos
   const handlePaymentResult = (result) => {
       if (!result.success) throw new Error(result.error || 'Error desconocido');
 
@@ -207,7 +211,7 @@ const PurchasePointsPage = () => {
         if (data && !data.success) throw new Error(data.error);
 
         setGiftSuccess(true);
-        if (refreshPoints) refreshPoints();
+        if (refreshPoints) await refreshPoints(); // Actualizar saldo inmediatamente
 
         setTimeout(() => {
             setGiftSuccess(false);
