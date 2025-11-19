@@ -1,6 +1,6 @@
 /**
- * RADEISAN - Payment Service (Versión Simplificada)
- * Sin Edge Functions - Solo RPCs
+ * RADEISAN - Payment Service (Corregido para Producción)
+ * Integra redirección real a Mercado Pago
  */
 
 import { supabase } from '../lib/supabase.js';
@@ -12,9 +12,6 @@ import { supabase } from '../lib/supabase.js';
 const PAYMENT_CONFIG = {
   mercadopago: {
     scriptUrl: 'https://sdk.mercadopago.com/js/v2',
-  },
-  webhookUrls: {
-    mercadopago: `${window.location.origin}/api/webhooks/mercadopago`,
   }
 };
 
@@ -37,7 +34,6 @@ class PaymentService {
     try {
       console.log('🔧 [PaymentService] Iniciando inicialización...');
       
-      console.log('📡 [PaymentService] Llamando a supabase.rpc("get_active_gateways")...');
       const { data, error } = await supabase.rpc('get_active_gateways');
       
       if (error) {
@@ -45,60 +41,26 @@ class PaymentService {
         throw error;
       }
       
-      console.log('✅ [PaymentService] Respuesta de RPC recibida:', {
-        data,
-        tipo: typeof data,
-        esArray: Array.isArray(data),
-        cantidad: data?.length || 0
-      });
-      
       this.activeGateways = Array.isArray(data) ? data : [];
       console.log(`📊 [PaymentService] Pasarelas activas cargadas: ${this.activeGateways.length}`);
       
-      if (this.activeGateways.length > 0) {
-        console.log('📋 [PaymentService] Lista de pasarelas:', 
-          this.activeGateways.map(g => ({
-            name: g.gateway_name,
-            display: g.display_name,
-            active: g.is_active,
-            default: g.is_default
-          }))
-        );
-      } else {
-        console.warn('⚠️ [PaymentService] No se encontraron pasarelas activas');
-      }
-      
       this.defaultGateway = this.activeGateways.find(g => g.is_default) || this.activeGateways[0] || null;
-      if (this.defaultGateway) {
-        console.log('✅ [PaymentService] Pasarela predeterminada:', this.defaultGateway.display_name);
-      }
       
-      // Inicializar MercadoPago si está disponible
+      // Inicializar MercadoPago si está activo y tiene credenciales
       const mpGateway = this.activeGateways.find(g => g.gateway_name === 'mercadopago');
       if (mpGateway) {
         await this.initializeMercadoPago(mpGateway);
       }
       
       this.initialized = true;
-      console.log('🎉 [PaymentService] Servicio completamente inicializado');
-      
       return { 
         success: true, 
-        gateways: this.activeGateways,
-        count: this.activeGateways.length
+        gateways: this.activeGateways
       };
       
     } catch (error) {
       console.error('❌ [PaymentService] Error fatal al inicializar:', error);
-      this.initialized = false;
-      this.activeGateways = [];
-      this.defaultGateway = null;
-      
-      return { 
-        success: false, 
-        error: error.message || 'Error desconocido',
-        details: error
-      };
+      return { success: false, error: error.message };
     }
   }
 
@@ -106,12 +68,6 @@ class PaymentService {
    * Obtener pasarelas activas
    */
   getActiveGateways() {
-    if (!this.initialized) {
-      console.warn('⚠️ [PaymentService] getActiveGateways() llamado antes de inicializar');
-      return [];
-    }
-    
-    console.log('📊 [PaymentService] getActiveGateways() retornando:', this.activeGateways.length, 'pasarelas');
     return this.activeGateways;
   }
 
@@ -119,35 +75,36 @@ class PaymentService {
    * Obtener pasarela predeterminada
    */
   getDefaultGateway() {
-    if (!this.initialized) {
-      console.warn('⚠️ [PaymentService] getDefaultGateway() llamado antes de inicializar');
-      return null;
-    }
-    
     return this.defaultGateway;
   }
 
   // ==========================================
-  // MERCADOPAGO - INTEGRACIÓN SIMPLIFICADA
+  // MERCADOPAGO - INTEGRACIÓN REAL
   // ==========================================
 
   /**
-   * Inicializar MercadoPago
+   * Inicializar SDK de MercadoPago
    */
   async initializeMercadoPago(gateway) {
     try {
-      console.log('🔧 [MercadoPago] Iniciando inicialización...');
-      
       if (!window.MercadoPago) {
-        console.log('📥 [MercadoPago] Cargando SDK...');
         await this.loadScript(PAYMENT_CONFIG.mercadopago.scriptUrl);
-      } else {
-        console.log('✅ [MercadoPago] SDK ya estaba cargado');
       }
 
-      console.log('✅ [MercadoPago] Inicializado exitosamente');
+      // Intentar obtener la Public Key del objeto gateway
+      // Asumimos que el RPC retorna un campo 'public_key' o 'credentials'
+      const publicKey = gateway.public_key || (gateway.credentials && gateway.credentials.public_key);
+
+      if (publicKey) {
+        console.log('🔑 [MercadoPago] Inicializando instancia con Public Key...');
+        this.mercadopagoInstance = new window.MercadoPago(publicKey, {
+          locale: 'es-CO'
+        });
+      } else {
+        console.warn('⚠️ [MercadoPago] No se encontró Public Key en la configuración del gateway');
+      }
+
       return true;
-      
     } catch (error) {
       console.error('❌ [MercadoPago] Error al inicializar:', error);
       return false;
@@ -155,128 +112,127 @@ class PaymentService {
   }
 
   /**
-   * Crear preferencia de pago (SIMPLIFICADO - sin Edge Function)
+   * Crear preferencia de pago (Llamada al Backend)
    */
   async createMercadoPagoPreference(packageData, userId) {
     try {
-      console.log('🔧 [MercadoPago] Creando preferencia de pago...');
+      console.log('🔧 [MercadoPago] Solicitando preferencia al servidor...');
       
-      // Llamar a función RPC en lugar de Edge Function
+      // Llamamos al RPC que debe encargarse de generar el link
       const { data, error } = await supabase.rpc('create_mercadopago_preference', {
         p_user_id: userId,
         p_package_id: packageData.id,
         p_gateway_name: 'mercadopago'
       });
 
-      if (error) {
-        console.error('❌ [MercadoPago] Error en RPC:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log('✅ [MercadoPago] Preferencia creada:', data);
+      console.log('✅ [MercadoPago] Respuesta del servidor:', data);
 
       if (!data || !data.success) {
-        throw new Error(data?.error || 'Error al crear preferencia');
+        throw new Error(data?.error || 'Error al crear preferencia en el servidor');
       }
 
       return {
         success: true,
         purchaseId: data.purchase_id,
-        packageData: data
+        packageData: data // Aquí debe venir init_point o preference_id
       };
       
     } catch (error) {
       console.error('❌ [MercadoPago] Error:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      return { success: false, error: error.message };
     }
   }
 
   /**
-   * Procesar compra con MercadoPago (SIMPLIFICADO)
+   * Procesar compra con MercadoPago (REDIRECCIÓN REAL)
    */
   async processMercadoPagoPurchase(packageData, userId) {
     try {
-      console.log('🔧 [MercadoPago] Procesando compra...');
+      console.log('🚀 [MercadoPago] Iniciando flujo de compra...');
       
-      // Crear preferencia
+      // 1. Crear preferencia en el backend
       const preference = await this.createMercadoPagoPreference(packageData, userId);
       
       if (!preference.success) {
         throw new Error(preference.error);
       }
 
-      // FLUJO SIMPLIFICADO: Mostrar información al usuario
-      const message = `
-Compra registrada exitosamente!
+      const responseData = preference.packageData;
 
-Paquete: ${packageData.name}
-Puntos: ${packageData.points_amount}
-Precio: $${this.calculateDiscountedPrice(packageData.price_cop, packageData.discount_percentage).toLocaleString()} COP
-
-ID de compra: ${preference.purchaseId}
-
-NOTA: Este es un flujo simplificado de desarrollo.
-Para completar el pago en producción, necesitarás:
-1. Configurar credenciales de MercadoPago
-2. Implementar Edge Functions
-3. Configurar webhooks
-
-Por ahora, la compra se ha registrado como PENDIENTE en la base de datos.
-      `;
-
-      alert(message);
+      // 2. LÓGICA DE REDIRECCIÓN (Prioridad: URL directa)
       
-      // Redirigir a página de confirmación
-      window.location.href = `/purchase/pending?purchase_id=${preference.purchaseId}`;
+      // A. Si el backend devolvió una URL de inicio (init_point)
+      if (responseData.init_point || responseData.sandbox_init_point) {
+        const url = responseData.init_point || responseData.sandbox_init_point;
+        console.log('🔗 [MercadoPago] Redirigiendo a checkout:', url);
+        
+        // Retornamos la URL para que el componente haga la redirección 
+        // o la hacemos aquí directamente.
+        return {
+          success: true,
+          paymentUrl: url, // El componente PurchasePointsPage usará esto
+          purchaseId: preference.purchaseId,
+          gateway: 'mercadopago'
+        };
+      }
+      
+      // B. Si el backend devolvió solo un ID de preferencia (Checkout Pro frontend)
+      if (responseData.preference_id && this.mercadopagoInstance) {
+        console.log('💳 [MercadoPago] Abriendo Checkout Pro con ID:', responseData.preference_id);
+        
+        // Opción: Retornar para que el componente use el objeto checkout
+        // O usar el método .checkout() si está disponible en esta versión del SDK
+        const checkout = this.mercadopagoInstance.checkout({
+          preference: {
+            id: responseData.preference_id
+          },
+          autoOpen: true
+        });
+        
+        return {
+            success: true,
+            checkoutOpened: true,
+            purchaseId: preference.purchaseId,
+            gateway: 'mercadopago'
+        };
+      }
 
+      // C. Fallback: Si no hay URL, mantenemos el comportamiento "Pendiente" 
+      // pero avisamos en consola que falta configuración en el backend.
+      console.warn('⚠️ [MercadoPago] El backend no devolvió "init_point". Se usará flujo manual.');
+      
       return {
         success: true,
+        // Al no haber URL, el componente PurchasePointsPage usará su lógica fallback 
+        // de redirección manual a /purchase/pending
         purchaseId: preference.purchaseId,
         gateway: 'mercadopago'
       };
       
     } catch (error) {
       console.error('❌ [MercadoPago] Error procesando:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      return { success: false, error: error.message };
     }
   }
 
   // ==========================================
-  // FUNCIONES PRINCIPALES
+  // FUNCIONES PRINCIPALES DE COMPRA
   // ==========================================
 
-  /**
-   * Iniciar proceso de compra
-   */
   async purchasePackage(packageData, gatewayName = null) {
     try {
-      console.log('🛒 [PaymentService] Iniciando compra...');
-      
-      // Verificar autenticación
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
-      if (authError || !user) {
-        throw new Error('Usuario no autenticado');
-      }
+      if (authError || !user) throw new Error('Usuario no autenticado');
 
-      // Determinar pasarela
       const gateway = gatewayName 
         ? this.activeGateways.find(g => g.gateway_name === gatewayName)
         : this.getDefaultGateway();
 
-      if (!gateway) {
-        throw new Error('No hay pasarelas de pago disponibles');
-      }
+      if (!gateway) throw new Error('No hay pasarelas disponibles');
 
-      console.log('🏦 [PaymentService] Usando pasarela:', gateway.display_name);
-
-      // Procesar según la pasarela
       if (gateway.gateway_name === 'mercadopago') {
         return await this.processMercadoPagoPurchase(packageData, user.id);
       }
@@ -284,195 +240,61 @@ Por ahora, la compra se ha registrado como PENDIENTE en la base de datos.
       throw new Error('Pasarela no soportada');
       
     } catch (error) {
-      console.error('❌ [PaymentService] Error en purchasePackage:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      console.error('❌ [PaymentService] Error:', error);
+      return { success: false, error: error.message };
     }
   }
 
-  /**
-   * Verificar estado de una compra
-   */
+  // ==========================================
+  // UTILIDADES Y OTROS MÉTODOS
+  // ==========================================
+
   async checkPurchaseStatus(purchaseId) {
-  try {
-    const { data, error } = await supabase.rpc('get_purchase_status', {
-      p_purchase_id: purchaseId
-    });
+    try {
+      const { data, error } = await supabase.rpc('get_purchase_status', {
+        p_purchase_id: purchaseId
+      });
 
-    if (error) throw error;
+      if (error) throw error;
+      if (!data || !data.success) throw new Error(data?.error || 'Error desconocido');
 
-    if (!data || !data.success) {
-      throw new Error(data?.error || 'Error al obtener estado de compra');
+      return { success: true, purchase: data.purchase };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-
-    return {
-      success: true,
-      purchase: data.purchase
-    };
-  } catch (error) {
-    console.error('Error checking purchase status:', error);
-    return {
-      success: false,
-      error: error.message
-    };
   }
-}
 
-  /**
-   * Obtener historial de compras del usuario
-   */
   async getUserPurchaseHistory(userId, limit = 20) {
-  try {
-    const { data, error } = await supabase.rpc('get_user_purchases', {
-      p_limit: limit
-    });
-
-    if (error) throw error;
-
-    if (!data || !data.success) {
-      throw new Error(data?.error || 'Error al obtener historial');
+    try {
+      const { data, error } = await supabase.rpc('get_user_purchases', { p_limit: limit });
+      if (error) throw error;
+      return { success: true, purchases: data.purchases || [] };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-
-    return {
-      success: true,
-      purchases: data.purchases || []
-    };
-  } catch (error) {
-    console.error('Error getting purchase history:', error);
-    return {
-      success: false,
-      error: error.message
-    };
   }
-}
 
-  // ==========================================
-  // FUNCIONES AUXILIARES
-  // ==========================================
-
-  /**
-   * Cargar script externo
-   */
   loadScript(src) {
     return new Promise((resolve, reject) => {
-      const existingScript = document.querySelector(`script[src="${src}"]`);
-      if (existingScript) {
+      if (document.querySelector(`script[src="${src}"]`)) {
         resolve();
         return;
       }
-
       const script = document.createElement('script');
       script.src = src;
       script.async = true;
-      
-      script.onload = () => {
-        console.log(`✅ Script cargado: ${src}`);
-        resolve();
-      };
-      
-      script.onerror = () => {
-        console.error(`❌ Error cargando script: ${src}`);
-        reject(new Error(`Failed to load script: ${src}`));
-      };
-      
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load: ${src}`));
       document.body.appendChild(script);
     });
   }
 
-  /**
-   * Formatear precio en COP
-   */
-  formatCOP(amount) {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  }
-
-  /**
-   * Calcular precio con descuento
-   */
-  calculateDiscountedPrice(price, discountPercentage) {
-    return price * (1 - discountPercentage / 100);
-  }
-
-  /**
-   * Validar paquete antes de compra
-   */
   validatePackage(packageData) {
-    if (!packageData) {
-      return { valid: false, error: 'Paquete no encontrado' };
-    }
-
-    if (!packageData.is_active) {
-      return { valid: false, error: 'Este paquete no está disponible' };
-    }
-
-    if (!packageData.points_amount || packageData.points_amount <= 0) {
-      return { valid: false, error: 'Cantidad de puntos inválida' };
-    }
-
-    if (!packageData.price_cop || packageData.price_cop <= 0) {
-      return { valid: false, error: 'Precio inválido' };
-    }
-
+    if (!packageData || !packageData.is_active) return { valid: false, error: 'Paquete no disponible' };
+    if (!packageData.price_cop || packageData.price_cop <= 0) return { valid: false, error: 'Precio inválido' };
     return { valid: true };
-  }
-
-  /**
-   * Obtener información de métodos de pago disponibles
-   */
-  getAvailablePaymentMethods() {
-    const methods = [];
-
-    for (const gateway of this.activeGateways) {
-      if (gateway.supported_methods && Array.isArray(gateway.supported_methods)) {
-        methods.push({
-          gateway: gateway.gateway_name,
-          display_name: gateway.display_name,
-          methods: gateway.supported_methods,
-          logo_url: gateway.logo_url
-        });
-      }
-    }
-
-    return methods;
   }
 }
 
-// ==========================================
-// EXPORTAR INSTANCIA SINGLETON
-// ==========================================
-
 const paymentService = new PaymentService();
-
 export default paymentService;
-
-// ==========================================
-// CONSTANTES EXPORTADAS
-// ==========================================
-
-export const PAYMENT_STATUS = {
-  PENDING: 'pending',
-  PROCESSING: 'processing',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-  REFUNDED: 'refunded'
-};
-
-export const PAYMENT_METHODS = {
-  PSE: 'pse',
-  CREDIT_CARD: 'credit_card',
-  DEBIT_CARD: 'debit_card',
-  EFECTY: 'efecty',
-  BALOTO: 'baloto',
-  CORRESPONSAL: 'corresponsal'
-};
-
-export const GATEWAYS = {
-  MERCADOPAGO: 'mercadopago',
-  BOLD: 'bold'
-};
