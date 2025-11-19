@@ -36,7 +36,7 @@ const PremiumPointsConfig = () => {
     gateway_name: '',
     is_active: false,
     is_default: false,
-    credentials: {
+    config: {
       public_key: '',
       access_token: '',
       api_key: ''
@@ -181,8 +181,8 @@ const PremiumPointsConfig = () => {
       
       // Validar que haya credenciales antes de guardar
       const hasCredentials = gatewayForm.gateway_name === 'mercadopago' 
-        ? (gatewayForm.credentials.public_key && gatewayForm.credentials.access_token)
-        : (gatewayForm.credentials.api_key);
+        ? (gatewayForm.config.public_key && gatewayForm.config.access_token)
+        : (gatewayForm.config.api_key);
 
       if (gatewayForm.is_active && !hasCredentials) {
         showToast('Debes ingresar las credenciales antes de activar la pasarela', 'error');
@@ -191,15 +191,15 @@ const PremiumPointsConfig = () => {
       }
 
       // Preparar credenciales según la pasarela
-      let credentialsToSave = {};
+      let configToSave = {};
       if (gatewayForm.gateway_name === 'mercadopago') {
-        credentialsToSave = {
-          public_key: gatewayForm.credentials.public_key || '',
-          access_token: gatewayForm.credentials.access_token || ''
+        configToSave = {
+          public_key: gatewayForm.config.public_key || '',
+          access_token: gatewayForm.config.access_token || ''
         };
       } else if (gatewayForm.gateway_name === 'bold') {
-        credentialsToSave = {
-          api_key: gatewayForm.credentials.api_key || ''
+        configToSave = {
+          api_key: gatewayForm.config.api_key || ''
         };
       }
 
@@ -207,14 +207,14 @@ const PremiumPointsConfig = () => {
         gateway: gatewayForm.gateway_name,
         is_active: gatewayForm.is_active,
         is_default: gatewayForm.is_default,
-        credentials: credentialsToSave
+        config: configToSave
       });
 
       const { error } = await supabase.rpc('update_gateway_config', {
         p_gateway_name: gatewayForm.gateway_name,
         p_is_active: gatewayForm.is_active,
         p_is_default: gatewayForm.is_default,
-        p_credentials: credentialsToSave,
+        p_credentials: configToSave,  // La RPC espera p_credentials aunque se guarde en config
         p_settings: null
       });
       
@@ -282,7 +282,7 @@ const PremiumPointsConfig = () => {
       gateway_name: gateway.gateway_name,
       is_active: gateway.is_active,
       is_default: gateway.is_default,
-      credentials: gateway.credentials || {
+      config: gateway.config || {
         public_key: '',
         access_token: '',
         api_key: ''
@@ -299,7 +299,7 @@ const PremiumPointsConfig = () => {
       gateway_name: '',
       is_active: false,
       is_default: false,
-      credentials: {
+      config: {
         public_key: '',
         access_token: '',
         api_key: ''
@@ -558,22 +558,22 @@ const PremiumPointsConfig = () => {
                 <div className="mb-4">
                   <p className="text-sm text-gray-600 mb-2">Credenciales configuradas:</p>
                   <div className="flex gap-2 flex-wrap">
-                    {gateway.credentials?.public_key && (
+                    {gateway.config?.public_key && (
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
                         Public Key
                       </span>
                     )}
-                    {gateway.credentials?.access_token && (
+                    {gateway.config?.access_token && (
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
                         Access Token
                       </span>
                     )}
-                    {gateway.credentials?.api_key && (
+                    {gateway.config?.api_key && (
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
                         API Key
                       </span>
                     )}
-                    {!gateway.credentials?.public_key && !gateway.credentials?.access_token && !gateway.credentials?.api_key && (
+                    {!gateway.config?.public_key && !gateway.config?.access_token && !gateway.config?.api_key && (
                       <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs">
                         Sin credenciales
                       </span>
@@ -805,10 +805,10 @@ const PremiumPointsConfig = () => {
                       <div className="relative">
                         <input
                           type={showCredentials['public_key'] ? 'text' : 'password'}
-                          value={gatewayForm.credentials.public_key || ''}
+                          value={gatewayForm.config.public_key || ''}
                           onChange={(e) => setGatewayForm({
                             ...gatewayForm,
-                            credentials: { ...gatewayForm.credentials, public_key: e.target.value }
+                            config: { ...gatewayForm.config, public_key: e.target.value }
                           })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
                           placeholder="APP_USR-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -830,10 +830,10 @@ const PremiumPointsConfig = () => {
                       <div className="relative">
                         <input
                           type={showCredentials['access_token'] ? 'text' : 'password'}
-                          value={gatewayForm.credentials.access_token || ''}
+                          value={gatewayForm.config.access_token || ''}
                           onChange={(e) => setGatewayForm({
                             ...gatewayForm,
-                            credentials: { ...gatewayForm.credentials, access_token: e.target.value }
+                            config: { ...gatewayForm.config, access_token: e.target.value }
                           })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
                           placeholder="APP_USR-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -858,10 +858,10 @@ const PremiumPointsConfig = () => {
                     <div className="relative">
                       <input
                         type={showCredentials['api_key'] ? 'text' : 'password'}
-                        value={gatewayForm.credentials.api_key || ''}
+                        value={gatewayForm.config.api_key || ''}
                         onChange={(e) => setGatewayForm({
                           ...gatewayForm,
-                          credentials: { ...gatewayForm.credentials, api_key: e.target.value }
+                          config: { ...gatewayForm.config, api_key: e.target.value }
                         })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
                         placeholder="pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
