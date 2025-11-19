@@ -141,7 +141,7 @@ const PremiumPointsConfig = () => {
   };
 
   // ==========================================
-  // LÓGICA DE PASARELAS (CORREGIDA)
+  // LÓGICA DE PASARELAS
   // ==========================================
 
   const handleConfigureGateway = (gateway) => {
@@ -149,7 +149,7 @@ const PremiumPointsConfig = () => {
     setShowSecrets(false);
   };
 
-  // ✅ FUNCIÓN CORREGIDA: Usa FormData para capturar los inputs de forma robusta
+  // ✅ CORRECCIÓN: Usar FormData para capturar inputs correctamente
   const handleSaveGatewayConfig = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -157,30 +157,22 @@ const PremiumPointsConfig = () => {
     const formData = new FormData(e.currentTarget);
 
     try {
-      // Capturar valores de los checkboxes (si están checkeados envían 'on', si no, null)
       const isActive = formData.get('is_active') === 'on';
       const isDefault = formData.get('is_default') === 'on';
       
-      let credentials = {};
-      
-      // Lógica específica para Mercado Pago
+      let credentials = selectedGateway.credentials || {};
+
+      // Si es MercadoPago, capturamos explícitamente
       if (selectedGateway.gateway_name === 'mercadopago') {
-        // Capturamos explícitamente usando los nombres de los inputs
         const publicKey = formData.get('public_key');
         const accessToken = formData.get('access_token');
 
-        if (!publicKey || !accessToken) {
-          throw new Error('La Public Key y el Access Token son obligatorios');
+        if (publicKey && accessToken) {
+          credentials = {
+            public_key: publicKey.trim(),
+            access_token: accessToken.trim()
+          };
         }
-
-        credentials = {
-          public_key: publicKey.trim(),
-          access_token: accessToken.trim()
-        };
-      } 
-      else {
-          // Para otras pasarelas, mantenemos lo que ya existía
-          credentials = selectedGateway.credentials || {};
       }
 
       const gatewayData = {
@@ -189,7 +181,7 @@ const PremiumPointsConfig = () => {
         display_name: selectedGateway.display_name,
         is_active: isActive,
         is_default: isDefault,
-        credentials: credentials, // Aquí se guarda el JSON correcto
+        credentials: credentials,
         updated_at: new Date()
       };
 
@@ -201,14 +193,13 @@ const PremiumPointsConfig = () => {
           .neq('id', selectedGateway.id);
       }
 
-      // Upsert (Actualizar o Insertar)
       const { error } = await supabase
         .from('payment_gateways')
         .upsert(gatewayData);
 
       if (error) throw error;
 
-      toast.success('Configuración guardada exitosamente');
+      toast.success('Configuración guardada');
       setSelectedGateway(null);
       loadData();
 
@@ -245,7 +236,7 @@ const PremiumPointsConfig = () => {
         </button>
       </div>
 
-      {/* SECCIÓN 1: PAQUETES DE PUNTOS */}
+      {/* SECCIÓN DE PAQUETES */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -326,7 +317,7 @@ const PremiumPointsConfig = () => {
         </div>
       </section>
 
-      {/* SECCIÓN 2: PASARELAS DE PAGO */}
+      {/* SECCIÓN DE PASARELAS */}
       <section className="pt-8 border-t border-gray-200">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -395,7 +386,7 @@ const PremiumPointsConfig = () => {
         </div>
       </section>
 
-      {/* MODAL: EDICIÓN DE PAQUETES */}
+      {/* MODAL DE PAQUETES */}
       {isEditingPackage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -519,7 +510,7 @@ const PremiumPointsConfig = () => {
         </div>
       )}
 
-      {/* MODAL: CONFIGURACIÓN DE PASARELA */}
+      {/* MODAL DE PASARELAS */}
       {selectedGateway && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -555,7 +546,7 @@ const PremiumPointsConfig = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-blue-800 mb-1">Public Key</label>
-                      {/* ✅ AGREGADO name="public_key" */}
+                      {/* ✅ CORRECCIÓN: name="public_key" agregado */}
                       <input
                         type={showSecrets ? "text" : "password"}
                         name="public_key"
@@ -568,7 +559,7 @@ const PremiumPointsConfig = () => {
 
                     <div>
                       <label className="block text-xs font-semibold text-blue-800 mb-1">Access Token</label>
-                      {/* ✅ AGREGADO name="access_token" */}
+                      {/* ✅ CORRECCIÓN: name="access_token" agregado */}
                       <input
                         type={showSecrets ? "text" : "password"}
                         name="access_token"
@@ -597,7 +588,7 @@ const PremiumPointsConfig = () => {
                     <span className="text-xs text-gray-500">Activa esta pasarela para que los usuarios puedan usarla</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    {/* ✅ AGREGADO name="is_active" */}
+                    {/* ✅ CORRECCIÓN: name="is_active" agregado */}
                     <input 
                       type="checkbox" 
                       name="is_active" 
@@ -614,7 +605,7 @@ const PremiumPointsConfig = () => {
                     <span className="text-xs text-gray-500">Se seleccionará automáticamente para los usuarios</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                     {/* ✅ AGREGADO name="is_default" */}
+                    {/* ✅ CORRECCIÓN: name="is_default" agregado */}
                     <input 
                       type="checkbox" 
                       name="is_default" 
