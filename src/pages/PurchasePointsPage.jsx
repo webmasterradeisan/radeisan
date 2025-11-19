@@ -15,14 +15,15 @@ import {
 const PurchasePointsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { points, refreshPoints } = usePoints(); // Obtenemos la función para recargar
+  // ✅ CORRECCIÓN: Usamos las variables exactas que exporta PointsContext
+  const { freePoints, premiumPoints, refreshPoints } = usePoints(); 
 
   // === ESTADOS GLOBALES ===
   const [activeTab, setActiveTab] = useState('buy_points'); // 'buy_points' | 'gift_store'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // === ESTADOS: COMPRA DE PUNTOS (ORIGINAL) ===
+  // === ESTADOS: COMPRA DE PUNTOS ===
   const [packages, setPackages] = useState([]);
   const [gateways, setGateways] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -31,7 +32,7 @@ const PurchasePointsPage = () => {
   const [purchasing, setPurchasing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  // === ESTADOS: TIENDA DE REGALOS (HÍBRIDA) ===
+  // === ESTADOS: TIENDA DE REGALOS ===
   const [gifts, setGifts] = useState([]);
   const [selectedGift, setSelectedGift] = useState(null);
   const [paymentMethodGift, setPaymentMethodGift] = useState('points'); // 'points' | 'direct'
@@ -56,10 +57,8 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
-      // ✅ ARREGLO: Forzar la actualización de puntos al entrar a la página
-      if (refreshPoints) {
-        await refreshPoints(); 
-      }
+      // Refrescar puntos al entrar para asegurar sincronización con Header
+      if (refreshPoints) await refreshPoints();
 
       // 1. Inicializar servicio de pagos
       const initResult = await paymentService.initialize();
@@ -70,11 +69,10 @@ const PurchasePointsPage = () => {
       if (packagesError) throw packagesError;
       setPackages(packagesData || []);
 
-      // 3. Cargar Pasarelas (MercadoPago, etc.)
+      // 3. Cargar Pasarelas
       const activeGateways = paymentService.getActiveGateways();
       setGateways(activeGateways || []);
       
-      // Seleccionar pasarela por defecto (MercadoPago usualmente)
       if (activeGateways && activeGateways.length > 0) {
         const defaultGw = paymentService.getDefaultGateway();
         setSelectedGateway(defaultGw);
@@ -103,7 +101,7 @@ const PurchasePointsPage = () => {
     }
   };
 
-  // === 1. COMPRA DE PAQUETES DE PUNTOS (ORIGINAL) ===
+  // === 1. COMPRA DE PAQUETES ===
   const handlePurchasePackage = async () => {
     if (!selectedPackage || !selectedGateway) {
       setError('Por favor selecciona un paquete y método de pago');
@@ -144,19 +142,16 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
-        // Construimos un objeto "tipo paquete" temporal
         const giftTransactionObject = {
-            id: selectedGift.id, // ID del regalo
+            id: selectedGift.id,
             name: `Regalo: ${selectedGift.name}`,
             price_cop: selectedGift.price_cop,
             description: `Regalo para @${selectedRecipient.username}`,
-            // Metadata importante para webhook
             type: 'gift_purchase',
             recipient_id: selectedRecipient.id,
             sender_id: user.id
         };
 
-        // Usamos la misma pasarela configurada
         const result = await paymentService.purchasePackage(
             giftTransactionObject,
             selectedGateway.gateway_name
@@ -171,14 +166,11 @@ const PurchasePointsPage = () => {
     }
   };
 
-  // Helper para manejar la redirección de pagos
   const handlePaymentResult = (result) => {
       if (!result.success) throw new Error(result.error || 'Error desconocido');
-
       const transactionId = result.id || result.transaction_id || result.purchaseId;
 
       if (result.paymentUrl) {
-        // Redirección a MercadoPago
         window.location.href = result.paymentUrl;
       } else if (result.checkoutUrl) {
         window.location.href = result.checkoutUrl;
@@ -188,11 +180,13 @@ const PurchasePointsPage = () => {
       }
   };
 
-  // === 3. ENVÍO DE REGALO CON PUNTOS (INTERNO) ===
+  // === 3. ENVÍO DE REGALO CON PUNTOS ===
   const handleSendGiftWithPoints = async () => {
     if (!selectedGift || !selectedRecipient) return;
 
-    const currentBalance = points?.premium || 0;
+    // ✅ CORRECCIÓN: Usamos premiumPoints directamente del contexto
+    const currentBalance = premiumPoints || 0;
+    
     if (currentBalance < selectedGift.cost_points) {
         setError('No tienes suficientes Puntos Premium. ¡Compra un paquete o paga directo!');
         return;
@@ -211,7 +205,7 @@ const PurchasePointsPage = () => {
         if (data && !data.success) throw new Error(data.error);
 
         setGiftSuccess(true);
-        if (refreshPoints) await refreshPoints(); // Actualizar saldo inmediatamente
+        if (refreshPoints) await refreshPoints(); 
 
         setTimeout(() => {
             setGiftSuccess(false);
@@ -227,7 +221,7 @@ const PurchasePointsPage = () => {
     }
   };
 
-  // Helpers UI
+  // Helpers
   const handleSearchUsers = async (query) => {
     setSearchQuery(query);
     if (query.length < 3) { setSearchResults([]); return; }
@@ -264,7 +258,7 @@ const PurchasePointsPage = () => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-16">
         <div className="max-w-7xl mx-auto px-4 py-6">
           
-          {/* TÍTULO DE PÁGINA */}
+          {/* TÍTULO */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full p-2">
@@ -281,7 +275,7 @@ const PurchasePointsPage = () => {
             </div>
           </div>
 
-          {/* BALANCE ACTUAL */}
+          {/* BALANCE ACTUAL (CORREGIDO) */}
           <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl p-6 mb-6 shadow-xl">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -296,18 +290,20 @@ const PurchasePointsPage = () => {
               <div className="flex items-center gap-4">
                 <div className="text-center">
                   <p className="text-white/80 text-xs">Puntos Gratis</p>
-                  <p className="text-white text-2xl font-bold">{points?.free || 0}</p>
+                  {/* ✅ USAMOS freePoints */}
+                  <p className="text-white text-2xl font-bold">{freePoints || 0}</p>
                 </div>
                 <div className="w-px h-12 bg-white/30"></div>
                 <div className="text-center">
                   <p className="text-white/80 text-xs">Puntos Premium</p>
-                  <p className="text-green-300 text-2xl font-bold">{points?.premium || 0}</p>
+                  {/* ✅ USAMOS premiumPoints */}
+                  <p className="text-green-300 text-2xl font-bold">{premiumPoints || 0}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ERRORES */}
+          {/* ERROR */}
           {error && (
             <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 flex justify-between items-center">
               <div className="flex items-center gap-2 text-red-700">
@@ -318,7 +314,7 @@ const PurchasePointsPage = () => {
             </div>
           )}
 
-          {/* PESTAÑAS DE NAVEGACIÓN */}
+          {/* TABS */}
           <div className="flex p-1 bg-white rounded-xl shadow-sm mb-8 max-w-md mx-auto border border-gray-100">
             <button onClick={() => setActiveTab('buy_points')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'buy_points' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}>
               <Package className="w-4 h-4" /> Recargar Puntos
@@ -328,9 +324,7 @@ const PurchasePointsPage = () => {
             </button>
           </div>
 
-          {/* ========================================================================= */}
-          {/* TAB 1: COMPRAR PUNTOS (TU LÓGICA ORIGINAL) */}
-          {/* ========================================================================= */}
+          {/* TAB 1: COMPRAR PUNTOS */}
           {activeTab === 'buy_points' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -433,9 +427,7 @@ const PurchasePointsPage = () => {
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB 2: TIENDA DE REGALOS (HÍBRIDA CON MERCADOPAGO) */}
-          {/* ========================================================================= */}
+          {/* TAB 2: TIENDA DE REGALOS */}
           {activeTab === 'gift_store' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
               {!selectedGift ? (
@@ -529,10 +521,11 @@ const PurchasePointsPage = () => {
                                     <span className="font-bold text-gray-900 text-sm">Usar Puntos</span>
                                  </div>
                                  <p className="text-xl font-bold text-pink-600">{selectedGift.cost_points} pts</p>
-                                 <p className="text-[10px] text-gray-500">Saldo: {points?.premium || 0}</p>
+                                 {/* ✅ USAMOS premiumPoints CORRECTO */}
+                                 <p className="text-[10px] text-gray-500">Saldo: {premiumPoints || 0}</p>
                               </div>
                               
-                              {/* Opción Directa (MercadoPago) */}
+                              {/* Opción Directa */}
                               <div onClick={() => setPaymentMethodGift('direct')} className={`cursor-pointer border-2 rounded-xl p-4 relative ${paymentMethodGift === 'direct' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-200'}`}>
                                  {paymentMethodGift === 'direct' && <div className="absolute top-2 right-2 text-blue-600"><CheckCircle className="w-5 h-5"/></div>}
                                  <div className="flex items-center gap-2 mb-1">
@@ -545,7 +538,7 @@ const PurchasePointsPage = () => {
                            </div>
                         </div>
 
-                        {/* BOTÓN DE ACCIÓN (DIFERENCIADO POR MÉTODO) */}
+                        {/* BOTÓN DE ACCIÓN */}
                         <button
                           onClick={paymentMethodGift === 'points' ? handleSendGiftWithPoints : handleDirectGiftPurchase}
                           disabled={!selectedRecipient || sendingGift}
