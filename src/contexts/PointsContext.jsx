@@ -228,23 +228,24 @@ export const PointsProvider = ({ children }) => {
       ]);
       
       if (mountedRef.current) {
-        // Actualizar puntos
-        if (pointsResult && typeof pointsResult.total !== 'undefined') {
-          setPoints({
-            total: pointsResult.total || 0,
-            free: pointsResult.free || 0,
-            premium: pointsResult.premium || 0
-          });
-        }
+        // 1. Actualizar Saldo de Puntos
+        setPoints({
+          total: pointsResult.total || 0,
+          free: pointsResult.free || 0,
+          premium: pointsResult.premium || 0,
+        });
         
-        // 🔥 V3: CORRECCIÓN #2 - Protección extendida + Lógica inteligente
-        setMissions(prev => {
-          if (!missionsResult || !Array.isArray(missionsResult)) {
-            console.warn('⚠️ [loadAllData V3] missionsResult inválido:', missionsResult);
-            return prev;
-          }
-          
-          return missionsResult.map(serverMission => {
+        // 2. 🔥 V3: CORRECCIÓN - Protección extendida + Lógica inteligente
+        if (missionsResult && missionsResult.success) {
+          setMissions(prev => {
+            const serverMissions = missionsResult.missions || [];
+            
+            if (!Array.isArray(serverMissions)) {
+              console.warn('⚠️ [loadAllData V3] missions array inválido:', serverMissions);
+              return prev;
+            }
+            
+            return serverMissions.map(serverMission => {
             const existingMission = prev.find(m => m.id === serverMission.id);
             const isOptimisticMission = serverMission.mission_type === optimisticMissionTypeRef.current;
             
@@ -317,10 +318,13 @@ export const PointsProvider = ({ children }) => {
               _optimisticValue: undefined
             };
           });
-        });
+        } else {
+          // Si no hay éxito en la carga, mantener estado anterior
+          console.warn('⚠️ [loadAllData V3] No se pudieron cargar misiones:', missionsResult);
+        }
         
-        // Actualizar estadísticas
-        if (statsResult && typeof statsResult.pointsEarnedToday !== 'undefined') {
+        // 3. Actualizar estadísticas
+        if (statsResult && statsResult.success && typeof statsResult.pointsEarnedToday !== 'undefined') {
           setPointsEarnedToday(statsResult.pointsEarnedToday || 0);
         }
         
