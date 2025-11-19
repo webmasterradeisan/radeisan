@@ -75,11 +75,11 @@ const GiftNotificationContainer = () => {
           </div>
           
           <button 
-            onClick={closeGiftModal}
-            className="mt-6 text-xs text-gray-400 hover:text-gray-600 underline"
-          >
-            Guardar en mi balance
-          </button>
+  onClick={closeGiftModal}
+  className="mt-6 text-sm text-gray-500 hover:text-gray-800 underline font-medium"
+>
+  ¡Genial! Cerrar ventana
+</button>
         </div>
       </div>
     </div>
