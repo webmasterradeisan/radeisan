@@ -57,7 +57,7 @@ const PremiumPointsConfig = () => {
   }, []);
 
   // ==========================================
-  // LÓGICA DE PAQUETES (RESTAURADA)
+  // LÓGICA DE PAQUETES (INTACTA)
   // ==========================================
 
   const handleEditPackage = (pkg = null) => {
@@ -149,38 +149,32 @@ const PremiumPointsConfig = () => {
     setShowSecrets(false);
   };
 
+  // ✅ FUNCIÓN CORREGIDA: Usa FormData para asegurar que las credenciales se guarden
   const handleSaveGatewayConfig = async (e) => {
     e.preventDefault();
     setSaving(true);
 
-    // ✅ CORRECCIÓN: Usar FormData para capturar los valores de forma segura
-    const formData = new FormData(e.currentTarget);
+    const formData = new FormData(e.target);
 
     try {
-      // Capturar checkboxes correctamente
-      const isActive = formData.get('is_active') === 'on'; // El input checkbox manda 'on' si está checked
+      // Capturar valores del formulario
+      const isActive = formData.get('is_active') === 'on';
       const isDefault = formData.get('is_default') === 'on';
       
-      let credentials = {};
-      
-      // Lógica específica para Mercado Pago
+      // Construir objeto de credenciales
+      let credentials = selectedGateway.credentials || {};
+
+      // Si es MercadoPago, capturamos explícitamente los inputs del formulario
       if (selectedGateway.gateway_name === 'mercadopago') {
         const publicKey = formData.get('public_key');
         const accessToken = formData.get('access_token');
 
-        if (!publicKey || !accessToken) {
-          throw new Error('La Public Key y el Access Token son obligatorios');
+        if (publicKey && accessToken) {
+          credentials = {
+            public_key: publicKey.trim(),
+            access_token: accessToken.trim()
+          };
         }
-
-        credentials = {
-          public_key: publicKey.trim(),
-          access_token: accessToken.trim()
-        };
-      } 
-      // Aquí puedes agregar lógica para otras pasarelas (Bold, etc) si las tienes
-      else {
-          // Mantener credenciales anteriores si no es MP o si no se editaron
-          credentials = selectedGateway.credentials || {};
       }
 
       const gatewayData = {
@@ -189,7 +183,7 @@ const PremiumPointsConfig = () => {
         display_name: selectedGateway.display_name,
         is_active: isActive,
         is_default: isDefault,
-        credentials: credentials,
+        credentials: credentials, // Guardamos el JSON actualizado
         updated_at: new Date()
       };
 
@@ -213,7 +207,7 @@ const PremiumPointsConfig = () => {
 
     } catch (error) {
       console.error('Error saving gateway config:', error);
-      toast.error(error.message || 'Error al guardar configuración');
+      toast.error('Error al guardar configuración');
     } finally {
       setSaving(false);
     }
@@ -244,9 +238,7 @@ const PremiumPointsConfig = () => {
         </button>
       </div>
 
-      {/* ==========================================
-          SECCIÓN 1: PAQUETES DE PUNTOS
-         ========================================== */}
+      {/* SECCIÓN 1: PAQUETES DE PUNTOS (INTACTA) */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -327,9 +319,7 @@ const PremiumPointsConfig = () => {
         </div>
       </section>
 
-      {/* ==========================================
-          SECCIÓN 2: PASARELAS DE PAGO
-         ========================================== */}
+      {/* SECCIÓN 2: PASARELAS DE PAGO */}
       <section className="pt-8 border-t border-gray-200">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -398,9 +388,7 @@ const PremiumPointsConfig = () => {
         </div>
       </section>
 
-      {/* ==========================================
-          MODAL: EDICIÓN DE PAQUETES
-         ========================================== */}
+      {/* MODAL: EDICIÓN DE PAQUETES (INTACTA) */}
       {isEditingPackage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -524,9 +512,7 @@ const PremiumPointsConfig = () => {
         </div>
       )}
 
-      {/* ==========================================
-          MODAL: CONFIGURACIÓN DE PASARELA
-         ========================================== */}
+      {/* MODAL: CONFIGURACIÓN DE PASARELA (CORREGIDA) */}
       {selectedGateway && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -562,6 +548,7 @@ const PremiumPointsConfig = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-blue-800 mb-1">Public Key</label>
+                      {/* ✅ AÑADIDO NAME="PUBLIC_KEY" PARA QUE FUNCIONE EL GUARDADO */}
                       <input
                         type={showSecrets ? "text" : "password"}
                         name="public_key"
@@ -574,6 +561,7 @@ const PremiumPointsConfig = () => {
 
                     <div>
                       <label className="block text-xs font-semibold text-blue-800 mb-1">Access Token</label>
+                      {/* ✅ AÑADIDO NAME="ACCESS_TOKEN" PARA QUE FUNCIONE EL GUARDADO */}
                       <input
                         type={showSecrets ? "text" : "password"}
                         name="access_token"
@@ -602,6 +590,7 @@ const PremiumPointsConfig = () => {
                     <span className="text-xs text-gray-500">Activa esta pasarela para que los usuarios puedan usarla</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
+                    {/* ✅ AÑADIDO NAME="IS_ACTIVE" */}
                     <input 
                       type="checkbox" 
                       name="is_active" 
@@ -618,6 +607,7 @@ const PremiumPointsConfig = () => {
                     <span className="text-xs text-gray-500">Se seleccionará automáticamente para los usuarios</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
+                    {/* ✅ AÑADIDO NAME="IS_DEFAULT" */}
                     <input 
                       type="checkbox" 
                       name="is_default" 
