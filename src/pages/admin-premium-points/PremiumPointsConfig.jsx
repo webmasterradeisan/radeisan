@@ -174,55 +174,20 @@ const PremiumPointsConfig = () => {
     }
   };
 
-  // Manejar actualización de pasarela - REPARADO
+  // Manejar actualización de pasarela
   const handleSaveGateway = async () => {
     try {
       setLoading(true);
       
-      // Validar que haya credenciales antes de guardar
-      const hasCredentials = gatewayForm.gateway_name === 'mercadopago' 
-        ? (gatewayForm.config.public_key && gatewayForm.config.access_token)
-        : (gatewayForm.config.api_key);
-
-      if (gatewayForm.is_active && !hasCredentials) {
-        showToast('Debes ingresar las credenciales antes de activar la pasarela', 'error');
-        setLoading(false);
-        return;
-      }
-
-      // Preparar credenciales según la pasarela
-      let configToSave = {};
-      if (gatewayForm.gateway_name === 'mercadopago') {
-        configToSave = {
-          public_key: gatewayForm.config.public_key || '',
-          access_token: gatewayForm.config.access_token || ''
-        };
-      } else if (gatewayForm.gateway_name === 'bold') {
-        configToSave = {
-          api_key: gatewayForm.config.api_key || ''
-        };
-      }
-
-      console.log('Guardando pasarela:', {
-        gateway: gatewayForm.gateway_name,
-        is_active: gatewayForm.is_active,
-        is_default: gatewayForm.is_default,
-        config: configToSave
-      });
-
       const { error } = await supabase.rpc('update_gateway_config', {
         p_gateway_name: gatewayForm.gateway_name,
         p_is_active: gatewayForm.is_active,
         p_is_default: gatewayForm.is_default,
-        p_credentials: configToSave,  // La RPC espera p_credentials aunque se guarde en config
+        p_credentials: gatewayForm.config,  // El parámetro se llama p_credentials pero guarda en config
         p_settings: null
       });
       
-      if (error) {
-        console.error('Error al guardar:', error);
-        throw error;
-      }
-      
+      if (error) throw error;
       showToast('Pasarela actualizada exitosamente', 'success');
       await loadGateways();
       closeGatewayModal();
@@ -234,34 +199,37 @@ const PremiumPointsConfig = () => {
     }
   };
 
-  // Funciones de gestión de modales
-  const openPackageModal = (pkg = null) => {
-    if (pkg) {
-      setEditingPackage(pkg);
-      setPackageForm({
-        name: pkg.name,
-        description: pkg.description,
-        points_amount: pkg.points_amount.toString(),
-        price_cop: pkg.price_cop.toString(),
-        discount_percentage: pkg.discount_percentage || 0,
-        is_featured: pkg.is_featured || false,
-        badge_text: pkg.badge_text || ''
-      });
-    } else {
-      setEditingPackage(null);
-      setPackageForm({
-        name: '',
-        description: '',
-        points_amount: '',
-        price_cop: '',
-        discount_percentage: 0,
-        is_featured: false,
-        badge_text: ''
-      });
-    }
+  // Abrir modal para crear paquete
+  const openCreatePackageModal = () => {
+    setEditingPackage(null);
+    setPackageForm({
+      name: '',
+      description: '',
+      points_amount: '',
+      price_cop: '',
+      discount_percentage: 0,
+      is_featured: false,
+      badge_text: ''
+    });
     setShowPackageModal(true);
   };
 
+  // Abrir modal para editar paquete
+  const openEditPackageModal = (pkg) => {
+    setEditingPackage(pkg);
+    setPackageForm({
+      name: pkg.name,
+      description: pkg.description,
+      points_amount: pkg.points_amount.toString(),
+      price_cop: pkg.price_cop.toString(),
+      discount_percentage: pkg.discount_percentage,
+      is_featured: pkg.is_featured,
+      badge_text: pkg.badge_text || ''
+    });
+    setShowPackageModal(true);
+  };
+
+  // Cerrar modal de paquete
   const closePackageModal = () => {
     setShowPackageModal(false);
     setEditingPackage(null);
@@ -276,6 +244,7 @@ const PremiumPointsConfig = () => {
     });
   };
 
+  // Abrir modal para editar pasarela
   const openGatewayModal = (gateway) => {
     setEditingGateway(gateway);
     setGatewayForm({
@@ -288,10 +257,10 @@ const PremiumPointsConfig = () => {
         api_key: ''
       }
     });
-    setShowCredentials({});
     setShowGatewayModal(true);
   };
 
+  // Cerrar modal de pasarela
   const closeGatewayModal = () => {
     setShowGatewayModal(false);
     setEditingGateway(null);
@@ -305,209 +274,197 @@ const PremiumPointsConfig = () => {
         api_key: ''
       }
     });
-    setShowCredentials({});
   };
 
-  // Sistema de notificaciones
+  // Mostrar notificación
   const showToast = (message, type = 'info') => {
-    // Implementación simple de toast
-    const toastColors = {
-      success: 'bg-green-500',
-      error: 'bg-red-500',
-      info: 'bg-blue-500'
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `fixed top-4 right-4 ${toastColors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in-down`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-      toast.classList.add('animate-fade-out-up');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    // Implementar con tu sistema de notificaciones preferido
+    alert(message);
   };
 
-  // Formatear números
-  const formatCurrency = (value) => {
+  // Formatear moneda COP
+  const formatCOP = (amount) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
       minimumFractionDigits: 0
-    }).format(value);
+    }).format(amount);
+  };
+
+  // Calcular precio con descuento
+  const calculateDiscountedPrice = (price, discount) => {
+    return price * (1 - discount / 100);
   };
 
   if (loading && packages.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando configuración...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <p className="text-red-600">{error}</p>
-          <button
-            onClick={loadAllData}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Reintentar
-          </button>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Star className="h-8 w-8 text-yellow-500" />
-            Gestión de Puntos Premium
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <Package className="h-8 w-8 text-blue-600" />
+            Puntos Premium
           </h1>
-          <p className="text-gray-600 mt-2">
-            Administra paquetes de puntos y pasarelas de pago
-          </p>
+          <p className="text-gray-600 mt-1">Gestiona paquetes y pasarelas de pago</p>
         </div>
+        <button
+          onClick={openCreatePackageModal}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+        >
+          <Plus className="h-5 w-5" />
+          Crear Paquete
+        </button>
+      </div>
 
-        {/* Estadísticas */}
-        {statistics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Ventas Totales</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {statistics.total_sales || 0}
-                  </p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-blue-500" />
-              </div>
-            </div>
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-red-600" />
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Ingresos</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {formatCurrency(statistics.total_revenue || 0)}
-                  </p>
-                </div>
-                <DollarSign className="h-8 w-8 text-green-500" />
+      {/* Estadísticas */}
+      {statistics && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm">Total Ventas</p>
+                <p className="text-3xl font-bold mt-1">{statistics.completed_sales}</p>
               </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Puntos Vendidos</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {(statistics.total_points_sold || 0).toLocaleString()}
-                  </p>
-                </div>
-                <Award className="h-8 w-8 text-purple-500" />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Precio Promedio</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {formatCurrency(statistics.average_sale_price || 0)}
-                  </p>
-                </div>
-                <Package className="h-8 w-8 text-orange-500" />
-              </div>
+              <TrendingUp className="h-12 w-12 text-blue-200" />
             </div>
           </div>
-        )}
 
-        {/* Paquetes */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Package className="h-6 w-6" />
-              Paquetes de Puntos
-            </h2>
-            <button
-              onClick={() => openPackageModal()}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            >
-              <Plus className="h-5 w-5" />
-              Nuevo Paquete
-            </button>
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm">Ingresos Totales</p>
+                <p className="text-2xl font-bold mt-1">{formatCOP(statistics.total_revenue)}</p>
+              </div>
+              <DollarSign className="h-12 w-12 text-green-200" />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100 text-sm">Puntos Vendidos</p>
+                <p className="text-3xl font-bold mt-1">{statistics.total_points_sold?.toLocaleString()}</p>
+              </div>
+              <Award className="h-12 w-12 text-purple-200" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-100 text-sm">Ventas Hoy</p>
+                <p className="text-3xl font-bold mt-1">{statistics.sales_today}</p>
+                <p className="text-sm text-orange-100 mt-1">{formatCOP(statistics.revenue_today)}</p>
+              </div>
+              <TrendingUp className="h-12 w-12 text-orange-200" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Paquetes de Puntos */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">Paquetes de Puntos</h2>
+        </div>
+        
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {packages.map((pkg) => (
               <div
                 key={pkg.id}
-                className={`bg-white rounded-lg shadow overflow-hidden ${
-                  !pkg.is_active ? 'opacity-60' : ''
-                } ${pkg.is_featured ? 'ring-2 ring-yellow-400' : ''}`}
+                className={`relative border-2 rounded-lg p-6 transition ${
+                  pkg.is_active 
+                    ? 'border-blue-200 hover:border-blue-400' 
+                    : 'border-gray-200 opacity-50'
+                }`}
               >
-                {pkg.is_featured && (
-                  <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-2 text-sm font-medium flex items-center gap-2">
-                    <Star className="h-4 w-4" />
+                {/* Badge */}
+                {pkg.is_featured && pkg.is_active && (
+                  <div className="absolute -top-3 left-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                    <Star className="h-3 w-3" />
                     {pkg.badge_text || 'Destacado'}
                   </div>
                 )}
-                
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    {pkg.name}
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    {pkg.description}
-                  </p>
+
+                {/* Estado */}
+                <div className="absolute top-4 right-4">
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    pkg.is_active 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {pkg.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+
+                {/* Contenido */}
+                <div className="mt-2">
+                  <h3 className="text-lg font-bold text-gray-900">{pkg.name}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{pkg.description}</p>
                   
-                  <div className="space-y-2 mb-4">
+                  <div className="mt-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Puntos:</span>
-                      <span className="font-bold text-blue-600">
-                        {pkg.points_amount.toLocaleString()}
-                      </span>
+                      <span className="text-sm text-gray-600">Puntos:</span>
+                      <span className="font-bold text-blue-600">{pkg.points_amount.toLocaleString()}</span>
                     </div>
+                    
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Precio:</span>
-                      <span className="font-bold text-green-600">
-                        {formatCurrency(pkg.price_cop)}
-                      </span>
+                      <span className="text-sm text-gray-600">Precio:</span>
+                      <div className="text-right">
+                        {pkg.discount_percentage > 0 ? (
+                          <>
+                            <span className="text-xs text-gray-400 line-through block">
+                              {formatCOP(pkg.price_cop)}
+                            </span>
+                            <span className="font-bold text-green-600">
+                              {formatCOP(calculateDiscountedPrice(pkg.price_cop, pkg.discount_percentage))}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="font-bold text-gray-900">{formatCOP(pkg.price_cop)}</span>
+                        )}
+                      </div>
                     </div>
+
                     {pkg.discount_percentage > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Descuento:</span>
-                        <span className="font-bold text-red-600">
-                          {pkg.discount_percentage}%
-                        </span>
+                      <div className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full text-center">
+                        {pkg.discount_percentage}% descuento
                       </div>
                     )}
                   </div>
 
-                  <div className="flex gap-2">
+                  {/* Acciones */}
+                  <div className="mt-4 flex gap-2">
                     <button
-                      onClick={() => openPackageModal(pkg)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 px-3 py-2 rounded-lg hover:bg-blue-100 transition"
+                      onClick={() => openEditPackageModal(pkg)}
+                      className="flex-1 flex items-center justify-center gap-1 bg-blue-50 text-blue-600 px-3 py-2 rounded hover:bg-blue-100 transition"
                     >
                       <Edit2 className="h-4 w-4" />
                       Editar
                     </button>
                     <button
                       onClick={() => handleDeletePackage(pkg.id)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100 transition"
+                      disabled={!pkg.is_active}
+                      className="flex items-center justify-center gap-1 bg-red-50 text-red-600 px-3 py-2 rounded hover:bg-red-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="h-4 w-4" />
-                      Desactivar
                     </button>
                   </div>
                 </div>
@@ -515,77 +472,80 @@ const PremiumPointsConfig = () => {
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Pasarelas de Pago */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <CreditCard className="h-6 w-6" />
-              Pasarelas de Pago
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Pasarelas de Pago */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <CreditCard className="h-6 w-6" />
+            Pasarelas de Pago
+          </h2>
+        </div>
+        
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {gateways.map((gateway) => (
               <div
                 key={gateway.id}
-                className="bg-white rounded-lg shadow p-6"
+                className={`border-2 rounded-lg p-6 ${
+                  gateway.is_active 
+                    ? 'border-green-200 bg-green-50' 
+                    : 'border-gray-200'
+                }`}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      {gateway.display_name}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {gateway.gateway_name}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {gateway.is_active && (
-                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Activa
-                      </span>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    {gateway.logo_url && (
+                      <img 
+                        src={gateway.logo_url} 
+                        alt={gateway.display_name}
+                        className="h-10 w-auto"
+                      />
                     )}
+                    <div>
+                      <h3 className="font-bold text-gray-900">{gateway.display_name}</h3>
+                      <p className="text-sm text-gray-600">{gateway.gateway_name}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      gateway.is_active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {gateway.is_active ? 'Activa' : 'Inactiva'}
+                    </span>
                     {gateway.is_default && (
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                      <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
                         Predeterminada
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-2">Credenciales configuradas:</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {gateway.config?.public_key && (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                        Public Key
-                      </span>
-                    )}
-                    {gateway.config?.access_token && (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                        Access Token
-                      </span>
-                    )}
-                    {gateway.config?.api_key && (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                        API Key
-                      </span>
-                    )}
-                    {!gateway.config?.public_key && !gateway.config?.access_token && !gateway.config?.api_key && (
-                      <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs">
-                        Sin credenciales
-                      </span>
-                    )}
+                <div className="mt-4">
+                  <p className="text-sm text-gray-600 font-medium mb-2">Métodos soportados:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {gateway.supported_methods && Array.isArray(gateway.supported_methods) && 
+                      gateway.supported_methods.map((method, idx) => (
+                        <span 
+                          key={idx}
+                          className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded"
+                        >
+                          {method.toUpperCase()}
+                        </span>
+                      ))
+                    }
                   </div>
                 </div>
 
                 <button
                   onClick={() => openGatewayModal(gateway)}
-                  className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                  className="mt-4 w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
                 >
-                  <Settings className="h-5 w-5" />
+                  <Settings className="h-4 w-4" />
                   Configurar
                 </button>
               </div>
@@ -600,7 +560,7 @@ const PremiumPointsConfig = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h3 className="text-xl font-bold text-gray-900">
-                {editingPackage ? 'Editar Paquete' : 'Nuevo Paquete'}
+                {editingPackage ? 'Editar Paquete' : 'Crear Paquete'}
               </h3>
               <button
                 onClick={closePackageModal}
@@ -613,14 +573,14 @@ const PremiumPointsConfig = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre del Paquete
+                  Nombre del Paquete *
                 </label>
                 <input
                   type="text"
                   value={packageForm.name}
                   onChange={(e) => setPackageForm({ ...packageForm, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: Paquete Básico"
+                  placeholder="ej: Paquete Premium"
                 />
               </div>
 
@@ -632,15 +592,15 @@ const PremiumPointsConfig = () => {
                   value={packageForm.description}
                   onChange={(e) => setPackageForm({ ...packageForm, description: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Descripción del paquete"
                   rows="3"
+                  placeholder="Descripción del paquete"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cantidad de Puntos
+                    Cantidad de Puntos *
                   </label>
                   <input
                     type="number"
@@ -653,7 +613,7 @@ const PremiumPointsConfig = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio (COP)
+                    Precio COP *
                   </label>
                   <input
                     type="number"
@@ -667,51 +627,64 @@ const PremiumPointsConfig = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descuento (%)
+                  Descuento (%) - Opcional
                 </label>
                 <input
                   type="number"
+                  min="0"
+                  max="100"
                   value={packageForm.discount_percentage}
                   onChange={(e) => setPackageForm({ ...packageForm, discount_percentage: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="0"
-                  min="0"
-                  max="100"
                 />
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Marcar como Destacado
-                  </label>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Los paquetes destacados se muestran con un badge especial
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={packageForm.is_featured}
-                    onChange={(e) => setPackageForm({ ...packageForm, is_featured: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Texto de Badge - Opcional
+                </label>
+                <input
+                  type="text"
+                  value={packageForm.badge_text}
+                  onChange={(e) => setPackageForm({ ...packageForm, badge_text: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="¡Más Popular!"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_featured"
+                  checked={packageForm.is_featured}
+                  onChange={(e) => setPackageForm({ ...packageForm, is_featured: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="is_featured" className="text-sm text-gray-700">
+                  Marcar como destacado
                 </label>
               </div>
 
-              {packageForm.is_featured && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Texto del Badge (opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={packageForm.badge_text}
-                    onChange={(e) => setPackageForm({ ...packageForm, badge_text: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Ej: Más Popular"
-                  />
+              {/* Preview */}
+              {packageForm.points_amount && packageForm.price_cop && (
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Vista Previa:</p>
+                  <div className="bg-white border-2 border-blue-200 rounded-lg p-4">
+                    <h4 className="font-bold text-gray-900">{packageForm.name || 'Nombre del paquete'}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{packageForm.description || 'Descripción'}</p>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="font-bold text-blue-600">{parseInt(packageForm.points_amount).toLocaleString()} puntos</span>
+                      <span className="font-bold text-green-600">
+                        {formatCOP(calculateDiscountedPrice(parseFloat(packageForm.price_cop), packageForm.discount_percentage))}
+                      </span>
+                    </div>
+                    {packageForm.discount_percentage > 0 && (
+                      <div className="mt-2 bg-green-50 text-green-700 text-xs px-2 py-1 rounded text-center">
+                        {packageForm.discount_percentage}% descuento
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -725,7 +698,7 @@ const PremiumPointsConfig = () => {
               </button>
               <button
                 onClick={handleSavePackage}
-                disabled={loading}
+                disabled={!packageForm.name || !packageForm.points_amount || !packageForm.price_cop}
                 className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="h-5 w-5" />
@@ -902,8 +875,7 @@ const PremiumPointsConfig = () => {
               </button>
               <button
                 onClick={handleSaveGateway}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
               >
                 <Save className="h-5 w-5" />
                 Guardar Configuración
