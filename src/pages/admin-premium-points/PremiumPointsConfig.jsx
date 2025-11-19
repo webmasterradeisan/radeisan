@@ -57,7 +57,7 @@ const PremiumPointsConfig = () => {
   }, []);
 
   // ==========================================
-  // LÓGICA DE PAQUETES (INTACTA)
+  // LÓGICA DE PAQUETES
   // ==========================================
 
   const handleEditPackage = (pkg = null) => {
@@ -149,32 +149,38 @@ const PremiumPointsConfig = () => {
     setShowSecrets(false);
   };
 
-  // ✅ FUNCIÓN CORREGIDA: Usa FormData para asegurar que las credenciales se guarden
+  // ✅ FUNCIÓN CORREGIDA: Usa FormData para capturar los inputs de forma robusta
   const handleSaveGatewayConfig = async (e) => {
     e.preventDefault();
     setSaving(true);
 
-    const formData = new FormData(e.target);
+    const formData = new FormData(e.currentTarget);
 
     try {
-      // Capturar valores del formulario
+      // Capturar valores de los checkboxes (si están checkeados envían 'on', si no, null)
       const isActive = formData.get('is_active') === 'on';
       const isDefault = formData.get('is_default') === 'on';
       
-      // Construir objeto de credenciales
-      let credentials = selectedGateway.credentials || {};
-
-      // Si es MercadoPago, capturamos explícitamente los inputs del formulario
+      let credentials = {};
+      
+      // Lógica específica para Mercado Pago
       if (selectedGateway.gateway_name === 'mercadopago') {
+        // Capturamos explícitamente usando los nombres de los inputs
         const publicKey = formData.get('public_key');
         const accessToken = formData.get('access_token');
 
-        if (publicKey && accessToken) {
-          credentials = {
-            public_key: publicKey.trim(),
-            access_token: accessToken.trim()
-          };
+        if (!publicKey || !accessToken) {
+          throw new Error('La Public Key y el Access Token son obligatorios');
         }
+
+        credentials = {
+          public_key: publicKey.trim(),
+          access_token: accessToken.trim()
+        };
+      } 
+      else {
+          // Para otras pasarelas, mantenemos lo que ya existía
+          credentials = selectedGateway.credentials || {};
       }
 
       const gatewayData = {
@@ -183,7 +189,7 @@ const PremiumPointsConfig = () => {
         display_name: selectedGateway.display_name,
         is_active: isActive,
         is_default: isDefault,
-        credentials: credentials, // Guardamos el JSON actualizado
+        credentials: credentials, // Aquí se guarda el JSON correcto
         updated_at: new Date()
       };
 
@@ -195,19 +201,20 @@ const PremiumPointsConfig = () => {
           .neq('id', selectedGateway.id);
       }
 
+      // Upsert (Actualizar o Insertar)
       const { error } = await supabase
         .from('payment_gateways')
         .upsert(gatewayData);
 
       if (error) throw error;
 
-      toast.success('Configuración de pasarela guardada');
+      toast.success('Configuración guardada exitosamente');
       setSelectedGateway(null);
       loadData();
 
     } catch (error) {
       console.error('Error saving gateway config:', error);
-      toast.error('Error al guardar configuración');
+      toast.error(error.message || 'Error al guardar configuración');
     } finally {
       setSaving(false);
     }
@@ -238,7 +245,7 @@ const PremiumPointsConfig = () => {
         </button>
       </div>
 
-      {/* SECCIÓN 1: PAQUETES DE PUNTOS (INTACTA) */}
+      {/* SECCIÓN 1: PAQUETES DE PUNTOS */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -388,7 +395,7 @@ const PremiumPointsConfig = () => {
         </div>
       </section>
 
-      {/* MODAL: EDICIÓN DE PAQUETES (INTACTA) */}
+      {/* MODAL: EDICIÓN DE PAQUETES */}
       {isEditingPackage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -512,7 +519,7 @@ const PremiumPointsConfig = () => {
         </div>
       )}
 
-      {/* MODAL: CONFIGURACIÓN DE PASARELA (CORREGIDA) */}
+      {/* MODAL: CONFIGURACIÓN DE PASARELA */}
       {selectedGateway && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -548,7 +555,7 @@ const PremiumPointsConfig = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-blue-800 mb-1">Public Key</label>
-                      {/* ✅ AÑADIDO NAME="PUBLIC_KEY" PARA QUE FUNCIONE EL GUARDADO */}
+                      {/* ✅ AGREGADO name="public_key" */}
                       <input
                         type={showSecrets ? "text" : "password"}
                         name="public_key"
@@ -561,7 +568,7 @@ const PremiumPointsConfig = () => {
 
                     <div>
                       <label className="block text-xs font-semibold text-blue-800 mb-1">Access Token</label>
-                      {/* ✅ AÑADIDO NAME="ACCESS_TOKEN" PARA QUE FUNCIONE EL GUARDADO */}
+                      {/* ✅ AGREGADO name="access_token" */}
                       <input
                         type={showSecrets ? "text" : "password"}
                         name="access_token"
@@ -590,7 +597,7 @@ const PremiumPointsConfig = () => {
                     <span className="text-xs text-gray-500">Activa esta pasarela para que los usuarios puedan usarla</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    {/* ✅ AÑADIDO NAME="IS_ACTIVE" */}
+                    {/* ✅ AGREGADO name="is_active" */}
                     <input 
                       type="checkbox" 
                       name="is_active" 
@@ -607,7 +614,7 @@ const PremiumPointsConfig = () => {
                     <span className="text-xs text-gray-500">Se seleccionará automáticamente para los usuarios</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    {/* ✅ AÑADIDO NAME="IS_DEFAULT" */}
+                     {/* ✅ AGREGADO name="is_default" */}
                     <input 
                       type="checkbox" 
                       name="is_default" 
