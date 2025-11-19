@@ -1,651 +1,914 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase.js';
 import { 
-  Plus, Edit2, Trash2, Save, X, AlertCircle, CheckCircle, 
-  Package, CreditCard, Settings, RefreshCw, Eye, EyeOff 
+  Plus, Edit2, Trash2, Save, X, DollarSign, Package, 
+  CreditCard, Settings, TrendingUp, Eye, EyeOff, AlertCircle,
+  CheckCircle, Star, Award
 } from 'lucide-react';
-import { Toaster, toast } from 'react-hot-toast';
 
 const PremiumPointsConfig = () => {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  // Estado de paquetes
   const [packages, setPackages] = useState([]);
   const [gateways, setGateways] = useState([]);
+  const [statistics, setStatistics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  // Estados para Paquetes
-  const [isEditingPackage, setIsEditingPackage] = useState(false);
-  const [currentPackage, setCurrentPackage] = useState(null);
+  // Estado de modales
+  const [showPackageModal, setShowPackageModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [editingPackage, setEditingPackage] = useState(null);
+  const [editingGateway, setEditingGateway] = useState(null);
+  
+  // Estado de formulario de paquete
+  const [packageForm, setPackageForm] = useState({
+    name: '',
+    description: '',
+    points_amount: '',
+    price_cop: '',
+    discount_percentage: 0,
+    is_featured: false,
+    badge_text: ''
+  });
 
-  // Estados para Pasarelas
-  const [selectedGateway, setSelectedGateway] = useState(null);
-  const [showSecrets, setShowSecrets] = useState(false);
+  // Estado de formulario de pasarela
+  const [gatewayForm, setGatewayForm] = useState({
+    gateway_name: '',
+    is_active: false,
+    is_default: false,
+    credentials: {
+      public_key: '',
+      access_token: '',
+      api_key: ''
+    }
+  });
 
-  // Cargar datos iniciales
-  const loadData = async () => {
+  // Estado de vista de credenciales
+  const [showCredentials, setShowCredentials] = useState({});
+
+  // Cargar datos al montar el componente
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  // Función para cargar todos los datos
+  const loadAllData = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      
-      // 1. Cargar Paquetes
-      const { data: packagesData, error: packagesError } = await supabase
-        .from('point_packages')
-        .select('*')
-        .order('price_cop', { ascending: true });
-
-      if (packagesError) throw packagesError;
-
-      // 2. Cargar Pasarelas
-      const { data: gatewaysData, error: gatewaysError } = await supabase
-        .from('payment_gateways')
-        .select('*')
-        .order('id');
-
-      if (gatewaysError) throw gatewaysError;
-
-      setPackages(packagesData || []);
-      setGateways(gatewaysData || []);
-
-    } catch (error) {
-      console.error('Error loading data:', error);
-      toast.error('Error al cargar la configuración');
+      await Promise.all([
+        loadPackages(),
+        loadGateways(),
+        loadStatistics()
+      ]);
+    } catch (err) {
+      setError('Error al cargar los datos: ' + err.message);
+      console.error('Error loading data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Cargar paquetes
+  const loadPackages = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_all_packages_admin');
+      if (error) throw error;
+      setPackages(data || []);
+    } catch (err) {
+      console.error('Error loading packages:', err);
+      throw err;
+    }
+  };
 
-  // ==========================================
-  // LÓGICA DE PAQUETES
-  // ==========================================
+  // Cargar pasarelas
+  const loadGateways = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_gateways_config_admin');
+      if (error) throw error;
+      setGateways(data || []);
+    } catch (err) {
+      console.error('Error loading gateways:', err);
+      throw err;
+    }
+  };
 
-  const handleEditPackage = (pkg = null) => {
+  // Cargar estadísticas
+  const loadStatistics = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_sales_statistics');
+      if (error) throw error;
+      setStatistics(data && data.length > 0 ? data[0] : null);
+    } catch (err) {
+      console.error('Error loading statistics:', err);
+      throw err;
+    }
+  };
+
+  // Manejar creación/edición de paquete
+  const handleSavePackage = async () => {
+    try {
+      setLoading(true);
+      
+      if (editingPackage) {
+        // Actualizar paquete existente
+        const { error } = await supabase.rpc('update_premium_package', {
+          p_package_id: editingPackage.id,
+          p_name: packageForm.name,
+          p_description: packageForm.description,
+          p_points_amount: parseInt(packageForm.points_amount),
+          p_price_cop: parseFloat(packageForm.price_cop),
+          p_discount_percentage: parseInt(packageForm.discount_percentage),
+          p_is_active: editingPackage.is_active,
+          p_is_featured: packageForm.is_featured,
+          p_badge_text: packageForm.badge_text || null
+        });
+        
+        if (error) throw error;
+        showToast('Paquete actualizado exitosamente', 'success');
+      } else {
+        // Crear nuevo paquete
+        const { error } = await supabase.rpc('create_premium_package', {
+          p_name: packageForm.name,
+          p_description: packageForm.description,
+          p_points_amount: parseInt(packageForm.points_amount),
+          p_price_cop: parseFloat(packageForm.price_cop),
+          p_discount_percentage: parseInt(packageForm.discount_percentage),
+          p_is_featured: packageForm.is_featured,
+          p_badge_text: packageForm.badge_text || null
+        });
+        
+        if (error) throw error;
+        showToast('Paquete creado exitosamente', 'success');
+      }
+      
+      // Recargar paquetes y cerrar modal
+      await loadPackages();
+      closePackageModal();
+    } catch (err) {
+      console.error('Error saving package:', err);
+      showToast('Error al guardar el paquete: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Manejar eliminación de paquete
+  const handleDeletePackage = async (packageId) => {
+    if (!confirm('¿Estás seguro de desactivar este paquete?')) return;
+    
+    try {
+      setLoading(true);
+      const { error } = await supabase.rpc('delete_premium_package', {
+        p_package_id: packageId
+      });
+      
+      if (error) throw error;
+      showToast('Paquete desactivado exitosamente', 'success');
+      await loadPackages();
+    } catch (err) {
+      console.error('Error deleting package:', err);
+      showToast('Error al desactivar el paquete: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Manejar actualización de pasarela - REPARADO
+  const handleSaveGateway = async () => {
+    try {
+      setLoading(true);
+      
+      // Validar que haya credenciales antes de guardar
+      const hasCredentials = gatewayForm.gateway_name === 'mercadopago' 
+        ? (gatewayForm.credentials.public_key && gatewayForm.credentials.access_token)
+        : (gatewayForm.credentials.api_key);
+
+      if (gatewayForm.is_active && !hasCredentials) {
+        showToast('Debes ingresar las credenciales antes de activar la pasarela', 'error');
+        setLoading(false);
+        return;
+      }
+
+      // Preparar credenciales según la pasarela
+      let credentialsToSave = {};
+      if (gatewayForm.gateway_name === 'mercadopago') {
+        credentialsToSave = {
+          public_key: gatewayForm.credentials.public_key || '',
+          access_token: gatewayForm.credentials.access_token || ''
+        };
+      } else if (gatewayForm.gateway_name === 'bold') {
+        credentialsToSave = {
+          api_key: gatewayForm.credentials.api_key || ''
+        };
+      }
+
+      console.log('Guardando pasarela:', {
+        gateway: gatewayForm.gateway_name,
+        is_active: gatewayForm.is_active,
+        is_default: gatewayForm.is_default,
+        credentials: credentialsToSave
+      });
+
+      const { error } = await supabase.rpc('update_gateway_config', {
+        p_gateway_name: gatewayForm.gateway_name,
+        p_is_active: gatewayForm.is_active,
+        p_is_default: gatewayForm.is_default,
+        p_credentials: credentialsToSave,
+        p_settings: null
+      });
+      
+      if (error) {
+        console.error('Error al guardar:', error);
+        throw error;
+      }
+      
+      showToast('Pasarela actualizada exitosamente', 'success');
+      await loadGateways();
+      closeGatewayModal();
+    } catch (err) {
+      console.error('Error saving gateway:', err);
+      showToast('Error al guardar la pasarela: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Funciones de gestión de modales
+  const openPackageModal = (pkg = null) => {
     if (pkg) {
-      setCurrentPackage(pkg);
+      setEditingPackage(pkg);
+      setPackageForm({
+        name: pkg.name,
+        description: pkg.description,
+        points_amount: pkg.points_amount.toString(),
+        price_cop: pkg.price_cop.toString(),
+        discount_percentage: pkg.discount_percentage || 0,
+        is_featured: pkg.is_featured || false,
+        badge_text: pkg.badge_text || ''
+      });
     } else {
-      setCurrentPackage({
+      setEditingPackage(null);
+      setPackageForm({
         name: '',
         description: '',
-        points_amount: 100,
-        price_cop: 10000,
+        points_amount: '',
+        price_cop: '',
         discount_percentage: 0,
-        is_active: true,
         is_featured: false,
         badge_text: ''
       });
     }
-    setIsEditingPackage(true);
+    setShowPackageModal(true);
   };
 
-  const handleDeletePackage = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar este paquete?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('point_packages')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      toast.success('Paquete eliminado');
-      loadData();
-    } catch (error) {
-      console.error('Error deleting package:', error);
-      toast.error('Error al eliminar el paquete');
-    }
+  const closePackageModal = () => {
+    setShowPackageModal(false);
+    setEditingPackage(null);
+    setPackageForm({
+      name: '',
+      description: '',
+      points_amount: '',
+      price_cop: '',
+      discount_percentage: 0,
+      is_featured: false,
+      badge_text: ''
+    });
   };
 
-  const handleSavePackage = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-
-    try {
-      const packageData = {
-        name: currentPackage.name,
-        description: currentPackage.description,
-        points_amount: parseInt(currentPackage.points_amount),
-        price_cop: parseFloat(currentPackage.price_cop),
-        discount_percentage: parseInt(currentPackage.discount_percentage || 0),
-        is_active: currentPackage.is_active,
-        is_featured: currentPackage.is_featured,
-        badge_text: currentPackage.badge_text,
-        updated_at: new Date()
-      };
-
-      if (currentPackage.id) {
-        const { error } = await supabase
-          .from('point_packages')
-          .update(packageData)
-          .eq('id', currentPackage.id);
-        if (error) throw error;
-        toast.success('Paquete actualizado');
-      } else {
-        const { error } = await supabase
-          .from('point_packages')
-          .insert(packageData);
-        if (error) throw error;
-        toast.success('Paquete creado');
+  const openGatewayModal = (gateway) => {
+    setEditingGateway(gateway);
+    setGatewayForm({
+      gateway_name: gateway.gateway_name,
+      is_active: gateway.is_active,
+      is_default: gateway.is_default,
+      credentials: gateway.credentials || {
+        public_key: '',
+        access_token: '',
+        api_key: ''
       }
-
-      setIsEditingPackage(false);
-      setCurrentPackage(null);
-      loadData();
-    } catch (error) {
-      console.error('Error saving package:', error);
-      toast.error('Error al guardar el paquete');
-    } finally {
-      setSaving(false);
-    }
+    });
+    setShowCredentials({});
+    setShowGatewayModal(true);
   };
 
-  // ==========================================
-  // LÓGICA DE PASARELAS
-  // ==========================================
-
-  const handleConfigureGateway = (gateway) => {
-    setSelectedGateway(gateway);
-    setShowSecrets(false);
-  };
-
-  // ✅ CORRECCIÓN: Usar FormData para capturar inputs correctamente
-  const handleSaveGatewayConfig = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-
-    const formData = new FormData(e.currentTarget);
-
-    try {
-      const isActive = formData.get('is_active') === 'on';
-      const isDefault = formData.get('is_default') === 'on';
-      
-      let credentials = selectedGateway.credentials || {};
-
-      // Si es MercadoPago, capturamos explícitamente
-      if (selectedGateway.gateway_name === 'mercadopago') {
-        const publicKey = formData.get('public_key');
-        const accessToken = formData.get('access_token');
-
-        if (publicKey && accessToken) {
-          credentials = {
-            public_key: publicKey.trim(),
-            access_token: accessToken.trim()
-          };
-        }
+  const closeGatewayModal = () => {
+    setShowGatewayModal(false);
+    setEditingGateway(null);
+    setGatewayForm({
+      gateway_name: '',
+      is_active: false,
+      is_default: false,
+      credentials: {
+        public_key: '',
+        access_token: '',
+        api_key: ''
       }
-
-      const gatewayData = {
-        id: selectedGateway.id,
-        gateway_name: selectedGateway.gateway_name,
-        display_name: selectedGateway.display_name,
-        is_active: isActive,
-        is_default: isDefault,
-        credentials: credentials,
-        updated_at: new Date()
-      };
-
-      // Si esta es default, quitar default a las demás
-      if (isDefault) {
-        await supabase
-          .from('payment_gateways')
-          .update({ is_default: false })
-          .neq('id', selectedGateway.id);
-      }
-
-      const { error } = await supabase
-        .from('payment_gateways')
-        .upsert(gatewayData);
-
-      if (error) throw error;
-
-      toast.success('Configuración guardada');
-      setSelectedGateway(null);
-      loadData();
-
-    } catch (error) {
-      console.error('Error saving gateway config:', error);
-      toast.error(error.message || 'Error al guardar configuración');
-    } finally {
-      setSaving(false);
-    }
+    });
+    setShowCredentials({});
   };
 
-  if (loading) {
+  // Sistema de notificaciones
+  const showToast = (message, type = 'info') => {
+    // Implementación simple de toast
+    const toastColors = {
+      success: 'bg-green-500',
+      error: 'bg-red-500',
+      info: 'bg-blue-500'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 ${toastColors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in-down`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('animate-fade-out-up');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  };
+
+  // Formatear números
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0
+    }).format(value);
+  };
+
+  if (loading && packages.length === 0) {
     return (
-      <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando configuración...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <p className="text-red-600">{error}</p>
+          <button
+            onClick={loadAllData}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8">
-      <Toaster position="top-right" />
-      
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configuración de Puntos Premium</h1>
-          <p className="text-gray-600">Gestiona los paquetes de puntos y pasarelas de pago</p>
-        </div>
-        <button 
-          onClick={loadData}
-          className="p-2 text-gray-500 hover:text-blue-600 transition-colors"
-        >
-          <RefreshCw size={20} />
-        </button>
-      </div>
-
-      {/* SECCIÓN DE PAQUETES */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <Package size={20} />
-            Paquetes de Puntos
-          </h2>
-          <button
-            onClick={() => handleEditPackage()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={18} />
-            Nuevo Paquete
-          </button>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Star className="h-8 w-8 text-yellow-500" />
+            Gestión de Puntos Premium
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Administra paquetes de puntos y pasarelas de pago
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {packages.map((pkg) => (
-            <div 
-              key={pkg.id} 
-              className={`bg-white border rounded-xl p-6 shadow-sm relative ${
-                !pkg.is_active ? 'opacity-75 bg-gray-50' : ''
-              }`}
-            >
-              {pkg.is_active && (
-                <span className="absolute top-4 right-4 px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                  Activo
-                </span>
-              )}
-              
-              <div className="mb-4">
-                <h3 className="text-xl font-bold text-gray-900">{pkg.name}</h3>
-                <p className="text-sm text-gray-500">{pkg.description}</p>
+        {/* Estadísticas */}
+        {statistics && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Ventas Totales</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {statistics.total_sales || 0}
+                  </p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-blue-500" />
               </div>
+            </div>
 
-              <div className="space-y-2 mb-6">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Puntos:</span>
-                  <span className="font-bold text-blue-600">{pkg.points_amount.toLocaleString()}</span>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Ingresos</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {formatCurrency(statistics.total_revenue || 0)}
+                  </p>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Precio:</span>
-                  <div className="text-right">
-                    {pkg.discount_percentage > 0 && (
-                      <span className="text-xs text-gray-400 line-through block">
-                        ${pkg.price_cop.toLocaleString()}
-                      </span>
-                    )}
-                    <span className="font-bold text-gray-900">
-                      ${(pkg.price_cop * (1 - pkg.discount_percentage/100)).toLocaleString()}
-                    </span>
-                  </div>
+                <DollarSign className="h-8 w-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Puntos Vendidos</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {(statistics.total_points_sold || 0).toLocaleString()}
+                  </p>
                 </div>
-                {pkg.discount_percentage > 0 && (
-                  <div className="mt-2 text-center">
-                    <span className="px-2 py-1 bg-green-50 text-green-600 text-xs rounded border border-green-100">
-                      {pkg.discount_percentage}% descuento
-                    </span>
+                <Award className="h-8 w-8 text-purple-500" />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Precio Promedio</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {formatCurrency(statistics.average_sale_price || 0)}
+                  </p>
+                </div>
+                <Package className="h-8 w-8 text-orange-500" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Paquetes */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Package className="h-6 w-6" />
+              Paquetes de Puntos
+            </h2>
+            <button
+              onClick={() => openPackageModal()}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              <Plus className="h-5 w-5" />
+              Nuevo Paquete
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {packages.map((pkg) => (
+              <div
+                key={pkg.id}
+                className={`bg-white rounded-lg shadow overflow-hidden ${
+                  !pkg.is_active ? 'opacity-60' : ''
+                } ${pkg.is_featured ? 'ring-2 ring-yellow-400' : ''}`}
+              >
+                {pkg.is_featured && (
+                  <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-2 text-sm font-medium flex items-center gap-2">
+                    <Star className="h-4 w-4" />
+                    {pkg.badge_text || 'Destacado'}
                   </div>
                 )}
-              </div>
-
-              <div className="flex gap-2 pt-4 border-t border-gray-100">
-                <button
-                  onClick={() => handleEditPackage(pkg)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <Edit2 size={16} /> Editar
-                </button>
-                <button
-                  onClick={() => handleDeletePackage(pkg.id)}
-                  className="px-3 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* SECCIÓN DE PASARELAS */}
-      <section className="pt-8 border-t border-gray-200">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <CreditCard size={20} />
-            Pasarelas de Pago
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {gateways.map((gateway) => (
-            <div 
-              key={gateway.id}
-              className={`border rounded-xl p-6 transition-all ${
-                gateway.is_active 
-                  ? 'bg-white border-green-200 shadow-sm' 
-                  : 'bg-gray-50 border-gray-200 opacity-75'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-3 rounded-full ${
-                    gateway.gateway_name === 'mercadopago' ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-600'
-                  }`}>
-                    <CreditCard size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg text-gray-900">{gateway.display_name}</h3>
-                    <p className="text-sm text-gray-500 font-mono">{gateway.gateway_name}</p>
-                  </div>
-                </div>
                 
-                <div className="flex flex-col items-end gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    gateway.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
-                  }`}>
-                    {gateway.is_active ? 'Activa' : 'Inactiva'}
-                  </span>
-                  {gateway.is_default && (
-                    <span className="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                      Predeterminada
-                    </span>
-                  )}
+                <div className="p-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">
+                    {pkg.name}
+                  </h3>
+                  <p className="text-gray-600 text-sm mb-4">
+                    {pkg.description}
+                  </p>
+                  
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Puntos:</span>
+                      <span className="font-bold text-blue-600">
+                        {pkg.points_amount.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Precio:</span>
+                      <span className="font-bold text-green-600">
+                        {formatCurrency(pkg.price_cop)}
+                      </span>
+                    </div>
+                    {pkg.discount_percentage > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Descuento:</span>
+                        <span className="font-bold text-red-600">
+                          {pkg.discount_percentage}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openPackageModal(pkg)}
+                      className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 px-3 py-2 rounded-lg hover:bg-blue-100 transition"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => handleDeletePackage(pkg.id)}
+                      className="flex-1 flex items-center justify-center gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100 transition"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Desactivar
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="space-y-2 mb-6">
-                <p className="text-sm text-gray-600">Métodos soportados:</p>
-                <div className="flex flex-wrap gap-2">
-                  {gateway.supported_methods?.map((method) => (
-                    <span key={method} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded border">
-                      {method.replace('_', ' ')}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={() => handleConfigureGateway(gateway)}
-                className="w-full py-2 px-4 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2"
-              >
-                <Settings size={18} />
-                Configurar
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </section>
 
-      {/* MODAL DE PAQUETES */}
-      {isEditingPackage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        {/* Pasarelas de Pago */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <CreditCard className="h-6 w-6" />
+              Pasarelas de Pago
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {gateways.map((gateway) => (
+              <div
+                key={gateway.id}
+                className="bg-white rounded-lg shadow p-6"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      {gateway.display_name}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {gateway.gateway_name}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {gateway.is_active && (
+                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" />
+                        Activa
+                      </span>
+                    )}
+                    {gateway.is_default && (
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                        Predeterminada
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-2">Credenciales configuradas:</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {gateway.credentials?.public_key && (
+                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                        Public Key
+                      </span>
+                    )}
+                    {gateway.credentials?.access_token && (
+                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                        Access Token
+                      </span>
+                    )}
+                    {gateway.credentials?.api_key && (
+                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                        API Key
+                      </span>
+                    )}
+                    {!gateway.credentials?.public_key && !gateway.credentials?.access_token && !gateway.credentials?.api_key && (
+                      <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs">
+                        Sin credenciales
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => openGatewayModal(gateway)}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                >
+                  <Settings className="h-5 w-5" />
+                  Configurar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Paquete */}
+      {showPackageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h3 className="text-xl font-bold text-gray-900">
-                {currentPackage.id ? 'Editar Paquete' : 'Nuevo Paquete'}
+                {editingPackage ? 'Editar Paquete' : 'Nuevo Paquete'}
               </h3>
-              <button onClick={() => setIsEditingPackage(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
+              <button
+                onClick={closePackageModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
               </button>
             </div>
-            
-            <form onSubmit={handleSavePackage} className="p-6 space-y-4">
+
+            <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Paquete</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre del Paquete
+                </label>
                 <input
                   type="text"
-                  value={currentPackage.name}
-                  onChange={(e) => setCurrentPackage({...currentPackage, name: e.target.value})}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  required
+                  value={packageForm.name}
+                  onChange={(e) => setPackageForm({ ...packageForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ej: Paquete Básico"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción
+                </label>
                 <textarea
-                  value={currentPackage.description}
-                  onChange={(e) => setCurrentPackage({...currentPackage, description: e.target.value})}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  rows="2"
+                  value={packageForm.description}
+                  onChange={(e) => setPackageForm({ ...packageForm, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Descripción del paquete"
+                  rows="3"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Puntos</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Cantidad de Puntos
+                  </label>
                   <input
                     type="number"
-                    value={currentPackage.points_amount}
-                    onChange={(e) => setCurrentPackage({...currentPackage, points_amount: e.target.value})}
-                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
+                    value={packageForm.points_amount}
+                    onChange={(e) => setPackageForm({ ...packageForm, points_amount: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="1000"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Precio (COP)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Precio (COP)
+                  </label>
                   <input
                     type="number"
-                    value={currentPackage.price_cop}
-                    onChange={(e) => setCurrentPackage({...currentPackage, price_cop: e.target.value})}
-                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
+                    value={packageForm.price_cop}
+                    onChange={(e) => setPackageForm({ ...packageForm, price_cop: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="50000"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descuento (%)
+                </label>
+                <input
+                  type="number"
+                  value={packageForm.discount_percentage}
+                  onChange={(e) => setPackageForm({ ...packageForm, discount_percentage: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                  min="0"
+                  max="100"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
-                  <input
-                    type="number"
-                    value={currentPackage.discount_percentage}
-                    onChange={(e) => setCurrentPackage({...currentPackage, discount_percentage: e.target.value})}
-                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    min="0" max="100"
-                  />
+                  <label className="block text-sm font-medium text-gray-700">
+                    Marcar como Destacado
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Los paquetes destacados se muestran con un badge especial
+                  </p>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={packageForm.is_featured}
+                    onChange={(e) => setPackageForm({ ...packageForm, is_featured: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {packageForm.is_featured && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Badge (Opcional)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Texto del Badge (opcional)
+                  </label>
                   <input
                     type="text"
-                    value={currentPackage.badge_text || ''}
-                    onChange={(e) => setCurrentPackage({...currentPackage, badge_text: e.target.value})}
-                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="Ej: ¡Popular!"
+                    value={packageForm.badge_text}
+                    onChange={(e) => setPackageForm({ ...packageForm, badge_text: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ej: Más Popular"
                   />
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div className="flex gap-6 pt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={currentPackage.is_active}
-                    onChange={(e) => setCurrentPackage({...currentPackage, is_active: e.target.checked})}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Activo</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={currentPackage.is_featured}
-                    onChange={(e) => setCurrentPackage({...currentPackage, is_featured: e.target.checked})}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Destacado</span>
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t mt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingPackage(false)}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                >
-                  {saving ? 'Guardando...' : 'Guardar Paquete'}
-                </button>
-              </div>
-            </form>
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={closePackageModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSavePackage}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="h-5 w-5" />
+                {editingPackage ? 'Actualizar' : 'Crear Paquete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE PASARELAS */}
-      {selectedGateway && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Settings size={20} className="text-blue-600" />
-                Configurar {selectedGateway.display_name}
+      {/* Modal de Pasarela */}
+      {showGatewayModal && editingGateway && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-xl font-bold text-gray-900">
+                Configurar {editingGateway.display_name}
               </h3>
-              <button 
-                onClick={() => setSelectedGateway(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+              <button
+                onClick={closeGatewayModal}
+                className="text-gray-400 hover:text-gray-600"
               >
-                <X size={24} />
+                <X className="h-6 w-6" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveGatewayConfig} className="p-6 space-y-6">
-              {/* Configuración Específica de Mercado Pago */}
-              {selectedGateway.gateway_name.toLowerCase() === 'mercadopago' && (
-                <div className="space-y-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-bold text-blue-900 uppercase tracking-wider">Credenciales API</h4>
-                    <button
-                      type="button"
-                      onClick={() => setShowSecrets(!showSecrets)}
-                      className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1"
-                    >
-                      {showSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
-                      {showSecrets ? 'Ocultar' : 'Mostrar'}
-                    </button>
-                  </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Estado de la Pasarela
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Activa esta pasarela para que los usuarios puedan usarla
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={gatewayForm.is_active}
+                    onChange={(e) => setGatewayForm({ ...gatewayForm, is_active: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-blue-800 mb-1">Public Key</label>
-                      {/* ✅ CORRECCIÓN: name="public_key" agregado */}
-                      <input
-                        type={showSecrets ? "text" : "password"}
-                        name="public_key"
-                        defaultValue={selectedGateway.credentials?.public_key || ''}
-                        className="w-full p-2.5 border border-blue-200 rounded-md font-mono text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none"
-                        placeholder="TEST-..."
-                        required
-                      />
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Pasarela Predeterminada
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Se seleccionará automáticamente para los usuarios
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={gatewayForm.is_default}
+                    onChange={(e) => setGatewayForm({ ...gatewayForm, is_default: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-4">Credenciales API</h4>
+                
+                {editingGateway.gateway_name === 'mercadopago' && (
+                  <>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Public Key
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCredentials['public_key'] ? 'text' : 'password'}
+                          value={gatewayForm.credentials.public_key || ''}
+                          onChange={(e) => setGatewayForm({
+                            ...gatewayForm,
+                            credentials: { ...gatewayForm.credentials, public_key: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                          placeholder="APP_USR-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCredentials(prev => ({ ...prev, public_key: !prev.public_key }))}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showCredentials['public_key'] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-blue-800 mb-1">Access Token</label>
-                      {/* ✅ CORRECCIÓN: name="access_token" agregado */}
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Access Token
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCredentials['access_token'] ? 'text' : 'password'}
+                          value={gatewayForm.credentials.access_token || ''}
+                          onChange={(e) => setGatewayForm({
+                            ...gatewayForm,
+                            credentials: { ...gatewayForm.credentials, access_token: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                          placeholder="APP_USR-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCredentials(prev => ({ ...prev, access_token: !prev.access_token }))}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showCredentials['access_token'] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editingGateway.gateway_name === 'bold' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      API Key
+                    </label>
+                    <div className="relative">
                       <input
-                        type={showSecrets ? "text" : "password"}
-                        name="access_token"
-                        defaultValue={selectedGateway.credentials?.access_token || ''}
-                        className="w-full p-2.5 border border-blue-200 rounded-md font-mono text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none"
-                        placeholder="TEST-..."
-                        required
+                        type={showCredentials['api_key'] ? 'text' : 'password'}
+                        value={gatewayForm.credentials.api_key || ''}
+                        onChange={(e) => setGatewayForm({
+                          ...gatewayForm,
+                          credentials: { ...gatewayForm.credentials, api_key: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                        placeholder="pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowCredentials(prev => ({ ...prev, api_key: !prev.api_key }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showCredentials['api_key'] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-start gap-2 mt-2 text-xs text-blue-700 bg-white/50 p-2 rounded">
-                    <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-                    <p>
-                      Asegúrate de usar las credenciales de <strong>Producción</strong> para ventas reales o <strong>Pruebas</strong> para desarrollo.
-                    </p>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {/* Opciones Generales */}
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-                  <div>
-                    <span className="font-medium text-gray-900 block">Estado de la Pasarela</span>
-                    <span className="text-xs text-gray-500">Activa esta pasarela para que los usuarios puedan usarla</span>
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex gap-2">
+                    <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-yellow-800">
+                      <p className="font-medium">Información importante:</p>
+                      <ul className="mt-2 space-y-1 list-disc list-inside">
+                        <li>Usa credenciales de prueba para desarrollo</li>
+                        <li>Las credenciales se guardan de forma segura</li>
+                        <li>Verifica que las credenciales sean correctas antes de activar</li>
+                      </ul>
+                    </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    {/* ✅ CORRECCIÓN: name="is_active" agregado */}
-                    <input 
-                      type="checkbox" 
-                      name="is_active" 
-                      defaultChecked={selectedGateway.is_active}
-                      className="sr-only peer" 
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-                  <div>
-                    <span className="font-medium text-gray-900 block">Pasarela Predeterminada</span>
-                    <span className="text-xs text-gray-500">Se seleccionará automáticamente para los usuarios</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    {/* ✅ CORRECCIÓN: name="is_default" agregado */}
-                    <input 
-                      type="checkbox" 
-                      name="is_default" 
-                      defaultChecked={selectedGateway.is_default}
-                      className="sr-only peer" 
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
                 </div>
               </div>
+            </div>
 
-              {/* Botones de Acción */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setSelectedGateway(null)}
-                  className="px-5 py-2.5 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-                  disabled={saving}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save size={18} />
-                      Guardar Configuración
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={closeGatewayModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveGateway}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="h-5 w-5" />
+                Guardar Configuración
+              </button>
+            </div>
           </div>
         </div>
       )}
