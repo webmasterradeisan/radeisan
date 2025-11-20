@@ -1,8 +1,10 @@
+// src/components/admin/AdminSidebar.jsx
 // ============================================
 // COMPONENTE: AdminSidebar
 // ============================================
 // Navegación lateral del panel de administración
 // Con menú dinámico basado en permisos
+// ✅ ACTUALIZADO: Agregada sección "Tienda / Pedidos"
 // ============================================
 
 import React from 'react';
@@ -92,6 +94,16 @@ const getMenuItems = () => [
     icon: 'Gift',
     description: 'Gestión de recompensas',
     requiredPermission: 'manage_rewards',
+    badge: null
+  },
+  // ✅ NUEVA OPCIÓN: GESTIÓN DE PEDIDOS DE LA TIENDA
+  {
+    id: 'shop-orders',
+    name: 'Tienda / Pedidos',
+    path: '/admin/shop-orders',
+    icon: 'ShoppingBag', // Icono de bolsa de compras
+    description: 'Gestión de pedidos y envíos',
+    requiredPermission: 'manage_rewards', // Usamos el mismo permiso de recompensas
     badge: null
   },
   {
