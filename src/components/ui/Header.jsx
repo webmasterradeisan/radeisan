@@ -279,6 +279,18 @@ const Header = () => {
                 </button>
 
                 <Link 
+                  to="/shop" 
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/shop'
+                      ? 'bg-primary/10 text-primary' 
+                      : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                  }`}
+                >
+                  <Icon name="ShoppingBag" size={18} />
+                  <span>Tienda</span>
+                </Link>
+
+                <Link 
                   to="/rewards" 
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     location.pathname === '/rewards'
@@ -569,6 +581,17 @@ const Header = () => {
                        <button onClick={() => {handleOrientationNavigate('horizontal'); setIsMainMenuModalOpen(false);}} className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium w-full text-left transition-colors ${isOrientationActive('horizontal') ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
                           <Icon name="Monitor" size={20} /><span>Videos</span>
                        </button>
+
+                      <Link 
+                          to="/shop" 
+                          onClick={() => setIsMainMenuModalOpen(false)} 
+                          className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors ${
+                            location.pathname === '/shop' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          <Icon name="ShoppingBag" size={20} />
+                          <span>Tienda</span>
+                        </Link>
                        
                        <Link to="/rewards" onClick={() => setIsMainMenuModalOpen(false)} className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors ${location.pathname === '/rewards' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
                           <Icon name="Gift" size={20} /><span>Recompensas</span>
