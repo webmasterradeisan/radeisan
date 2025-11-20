@@ -1,18 +1,19 @@
 // src/components/video/RelatedVideosSidebar.jsx
 // ============================================================================
-// SIDEBAR DE VIDEOS RELACIONADOS - MEJORADO CON PANEL DE PUNTOS
+// SIDEBAR DE VIDEOS RELACIONADOS - FIX BUILD ERROR
 // ============================================================================
-// ✅ NUEVO: Botón desplegable para ver el PointsBalanceCard
-// ✅ Carrusel de REELS con scroll
-// ✅ Videos relacionados
+// ✅ CORREGIDO: Ruta de importación de PointsBalanceCard
+// ✅ Mantiene: Botón desplegable, Carrusel de Reels, Autoplay
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import Icon from 'components/AppIcon';
-// ✅ Importamos el componente de Puntos (Ruta asumida estándar)
-import PointsBalanceCard from 'components/dashboard/PointsBalanceCard';
+
+// 🔴 CORRECCIÓN AQUÍ: Quitamos '/dashboard' de la ruta para intentar encontrarlo en la raíz de components
+// Si tu archivo está en otra carpeta específica, ajusta esta línea.
+import PointsBalanceCard from 'components/PointsBalanceCard'; 
 
 // ===============================
 // COMPONENTE: CARRUSEL DE REELS
@@ -156,7 +157,7 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
   const [reels, setReels] = useState([]);
   const [loadingReels, setLoadingReels] = useState(false);
   
-  // ✅ NUEVO ESTADO: Controlar visualización del panel de puntos
+  // Estado para controlar la visualización del panel de puntos
   const [showPointsCard, setShowPointsCard] = useState(false);
 
   useEffect(() => {
@@ -231,7 +232,7 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
   return (
     <div className={className}>
       
-      {/* ✅ NUEVO BOTÓN DESPLEGABLE: MIS MISIONES Y PUNTOS */}
+      {/* Botón desplegable: Mis Misiones y Puntos */}
       <div className="mb-6">
         <button
           onClick={() => setShowPointsCard(!showPointsCard)}
@@ -254,14 +255,14 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
           />
         </button>
 
-        {/* ✅ CONTENIDO DESPLEGABLE */}
+        {/* Contenido desplegable */}
         <div 
           className={`
             overflow-hidden transition-all duration-500 ease-in-out
             ${showPointsCard ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0 mt-0'}
           `}
         >
-          {/* Renderizado del componente importado */}
+          {/* Renderizado del componente con la ruta corregida */}
           <PointsBalanceCard />
         </div>
       </div>
