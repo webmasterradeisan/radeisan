@@ -1,10 +1,8 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSION FINAL BLINDADA & AUTOPLAY
-// ✅ CORREGIDO: Anti-farming "Informativo" (Igual que ReelsContainer)
-// ✅ NUEVO: Autoplay del siguiente video al terminar
-// ✅ NUEVO: Reproducción automática al cargar
-// ✅ CORREGIDO: Renderizado de descripción (Caracteres extraños)
+// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA
+// ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
+// ✅ MANTIENE: Autoplay, Anti-farming blindado, Regalos, Comentarios.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -684,10 +682,14 @@ const VideoPlayerPage = () => {
   useEffect(() => { if (videoId) { loadComments(); } }, [videoId, loadComments]);
   useEffect(() => { return () => { if (controlsTimeoutRef.current) { clearTimeout(controlsTimeoutRef.current); } }; }, []);
 
+  // ✅ FUNCIÓN CORREGIDA: Evita "Infinity:NaN"
   const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00'; const mins = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60);
+    if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '0:00'; 
+    const mins = Math.floor(seconds / 60); 
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+  
   const formatNumber = (num) => {
     if (num === null || num === undefined) return '0'; if (num >= 1000000) { return (num / 1000000).toFixed(1) + 'M'; } if (num >= 1000) { return (num / 1000).toFixed(1) + 'K'; } return num?.toString() || '0';
   };
