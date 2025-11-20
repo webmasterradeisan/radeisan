@@ -3,8 +3,8 @@
 // POINTS CONTEXT - GESTIÓN GLOBAL DEL SISTEMA DE PUNTOS
 // ============================================================================
 // ✅ CORRECCIÓN CRÍTICA V4.0: UNIFICACIÓN DE BILLETERAS
-// 🔥 SOLUCIÓN REAL-TIME: Ahora escucha a 'user_profiles' en lugar de 'user_points'
-// 🔥 SINCRONIZACIÓN: El Frontend reacciona inmediatamente a los cambios del SQL
+// 🔥 SOLUCIÓN REAL-TIME: Escucha a 'user_profiles'
+// 🔥 EXPORT: Se expone triggerAnimation para corrección visual de colores
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -60,7 +60,6 @@ export const PointsProvider = ({ children }) => {
   const isLoadingRef = useRef(false);
   
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
-    // ... (Lógica optimista intacta)
     setMissions(prev => {
       const targetMission = prev.find(m => m.mission_type === missionType);
       
@@ -112,8 +111,6 @@ export const PointsProvider = ({ children }) => {
     setLoading(true);
 
     try {
-      // Nota: initializeUserPoints podría estar usando user_points internamente, 
-      // pero getUserPoints lee de user_profiles según tus logs anteriores.
       await initializeUserPoints(user.id);
       
       const [pointsResult, missionsResult, statsResult] = await Promise.all([
@@ -136,7 +133,6 @@ export const PointsProvider = ({ children }) => {
               const existingMission = prev.find(m => m.id === serverMission.id);
               const isOptimisticMission = serverMission.mission_type === optimisticMissionTypeRef.current;
               
-              // Lógica de protección optimista
               if (isOptimisticMission && existingMission?._optimisticTimestamp && (Date.now() - existingMission._optimisticTimestamp) < 3000) return existingMission;
               if (existingMission?._optimistic && serverMission.current_count < existingMission.current_count) {
                 if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -169,20 +165,18 @@ export const PointsProvider = ({ children }) => {
     if (user && isAuthenticated) {
       console.log('🔌 [PointsContext] Conectando suscripciones Real-Time...');
 
-      // ✅ CORRECCIÓN PRINCIPAL: Escuchar 'user_profiles'
       const pointsSubscription = supabase
         .channel('public:user_profiles_points_update')
         .on('postgres_changes',
           {
-            event: 'UPDATE', // Solo nos importa si el saldo cambia
+            event: 'UPDATE',
             schema: 'public',
-            table: 'user_profiles', // <--- LA TABLA REAL
-            filter: `id=eq.${user.id}` // <--- IMPORTANTE: user_profiles usa 'id', no 'user_id'
+            table: 'user_profiles',
+            filter: `id=eq.${user.id}`
           },
           (payload) => {
             console.log('🔄 [Real-Time] Cambio de Puntos en Perfil detectado!', payload);
             
-            // Pequeño debounce para no recargar si solo cambió el nombre o la foto
             const newPremium = payload.new.premium_points;
             const oldPremium = payload.old.premium_points;
             const newFree = payload.new.free_points;
@@ -197,7 +191,6 @@ export const PointsProvider = ({ children }) => {
         )
         .subscribe();
 
-      // Mantenemos la escucha de transacciones por si acaso
       const transactionsSubscription = supabase
         .channel('public:points_transactions')
         .on('postgres_changes',
@@ -216,7 +209,6 @@ export const PointsProvider = ({ children }) => {
         )
         .subscribe();
 
-      // Misiones
       const missionsSubscription = supabase
         .channel('public:mission_progress')
         .on('postgres_changes',
@@ -227,7 +219,6 @@ export const PointsProvider = ({ children }) => {
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
-             // Lógica de protección optimista para misiones
              const timeSinceOptimistic = Date.now() - lastOptimisticUpdateRef.current;
              if (timeSinceOptimistic < 2000 && optimisticMissionTypeRef.current) {
                 if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -320,7 +311,8 @@ export const PointsProvider = ({ children }) => {
     deductPoints,
     refreshPoints,
     updateMissionOptimistic,
-    rollbackMission
+    rollbackMission,
+    triggerAnimation // ✅ AGREGADO: Exportamos para control manual
   };
 
   return (
