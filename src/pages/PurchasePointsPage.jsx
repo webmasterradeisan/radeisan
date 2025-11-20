@@ -15,15 +15,15 @@ import {
 const PurchasePointsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  // ✅ CORRECCIÓN: Usamos las variables exactas que exporta PointsContext
-  const { freePoints, premiumPoints, refreshPoints } = usePoints(); 
+  // ✅ USAMOS triggerAnimation del contexto
+  const { freePoints, premiumPoints, refreshPoints, triggerAnimation } = usePoints();
 
   // === ESTADOS GLOBALES ===
   const [activeTab, setActiveTab] = useState('buy_points'); // 'buy_points' | 'gift_store'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // === ESTADOS: COMPRA DE PUNTOS ===
+  // === ESTADOS: COMPRA DE PUNTOS (ORIGINAL) ===
   const [packages, setPackages] = useState([]);
   const [gateways, setGateways] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -32,7 +32,7 @@ const PurchasePointsPage = () => {
   const [purchasing, setPurchasing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  // === ESTADOS: TIENDA DE REGALOS ===
+  // === ESTADOS: TIENDA DE REGALOS (HÍBRIDA) ===
   const [gifts, setGifts] = useState([]);
   const [selectedGift, setSelectedGift] = useState(null);
   const [paymentMethodGift, setPaymentMethodGift] = useState('points'); // 'points' | 'direct'
@@ -57,7 +57,7 @@ const PurchasePointsPage = () => {
     setError(null);
 
     try {
-      // Refrescar puntos al entrar para asegurar sincronización con Header
+      // Refrescar para asegurar sincronización
       if (refreshPoints) await refreshPoints();
 
       // 1. Inicializar servicio de pagos
@@ -69,7 +69,7 @@ const PurchasePointsPage = () => {
       if (packagesError) throw packagesError;
       setPackages(packagesData || []);
 
-      // 3. Cargar Pasarelas
+      // 3. Cargar Pasarelas (MercadoPago, etc.)
       const activeGateways = paymentService.getActiveGateways();
       setGateways(activeGateways || []);
       
@@ -101,7 +101,7 @@ const PurchasePointsPage = () => {
     }
   };
 
-  // === 1. COMPRA DE PAQUETES ===
+  // === 1. COMPRA DE PAQUETES DE PUNTOS (ORIGINAL) ===
   const handlePurchasePackage = async () => {
     if (!selectedPackage || !selectedGateway) {
       setError('Por favor selecciona un paquete y método de pago');
@@ -143,7 +143,7 @@ const PurchasePointsPage = () => {
 
     try {
         const giftTransactionObject = {
-            id: selectedGift.id,
+            id: selectedGift.id, 
             name: `Regalo: ${selectedGift.name}`,
             price_cop: selectedGift.price_cop,
             description: `Regalo para @${selectedRecipient.username}`,
@@ -180,13 +180,11 @@ const PurchasePointsPage = () => {
       }
   };
 
-  // === 3. ENVÍO DE REGALO CON PUNTOS ===
+  // === 3. ENVÍO DE REGALO CON PUNTOS (MEJORADO) ===
   const handleSendGiftWithPoints = async () => {
     if (!selectedGift || !selectedRecipient) return;
 
-    // ✅ CORRECCIÓN: Usamos premiumPoints directamente del contexto
     const currentBalance = premiumPoints || 0;
-    
     if (currentBalance < selectedGift.cost_points) {
         setError('No tienes suficientes Puntos Premium. ¡Compra un paquete o paga directo!');
         return;
@@ -205,7 +203,13 @@ const PurchasePointsPage = () => {
         if (data && !data.success) throw new Error(data.error);
 
         setGiftSuccess(true);
-        if (refreshPoints) await refreshPoints(); 
+        
+        // ✅ AQUÍ FORZAMOS LA ANIMACIÓN DE COLOR VERDE (PREMIUM)
+        if (triggerAnimation) {
+           triggerAnimation(selectedGift.cost_points, 'deduct', 'premium');
+        }
+
+        if (refreshPoints) await refreshPoints();
 
         setTimeout(() => {
             setGiftSuccess(false);
@@ -221,7 +225,7 @@ const PurchasePointsPage = () => {
     }
   };
 
-  // Helpers
+  // Helpers UI
   const handleSearchUsers = async (query) => {
     setSearchQuery(query);
     if (query.length < 3) { setSearchResults([]); return; }
@@ -275,7 +279,7 @@ const PurchasePointsPage = () => {
             </div>
           </div>
 
-          {/* BALANCE ACTUAL (CORREGIDO) */}
+          {/* BALANCE ACTUAL */}
           <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl p-6 mb-6 shadow-xl">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -290,13 +294,11 @@ const PurchasePointsPage = () => {
               <div className="flex items-center gap-4">
                 <div className="text-center">
                   <p className="text-white/80 text-xs">Puntos Gratis</p>
-                  {/* ✅ USAMOS freePoints */}
                   <p className="text-white text-2xl font-bold">{freePoints || 0}</p>
                 </div>
                 <div className="w-px h-12 bg-white/30"></div>
                 <div className="text-center">
                   <p className="text-white/80 text-xs">Puntos Premium</p>
-                  {/* ✅ USAMOS premiumPoints */}
                   <p className="text-green-300 text-2xl font-bold">{premiumPoints || 0}</p>
                 </div>
               </div>
@@ -521,7 +523,6 @@ const PurchasePointsPage = () => {
                                     <span className="font-bold text-gray-900 text-sm">Usar Puntos</span>
                                  </div>
                                  <p className="text-xl font-bold text-pink-600">{selectedGift.cost_points} pts</p>
-                                 {/* ✅ USAMOS premiumPoints CORRECTO */}
                                  <p className="text-[10px] text-gray-500">Saldo: {premiumPoints || 0}</p>
                               </div>
                               
