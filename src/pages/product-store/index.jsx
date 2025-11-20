@@ -99,114 +99,145 @@ const ProductStorePage = () => {
       </Helmet>
       <Header />
       
-      <div className="min-h-screen bg-background pt-20 pb-12 px-4">
+      <div className="min-h-screen bg-background pt-24 pb-12 px-4">
         <div className="max-w-7xl mx-auto">
           
-          {/* Encabezado de la Tienda */}
-          <div className="flex flex-col md:flex-row gap-6 mb-8">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Tienda de Canje</h1>
-              <p className="text-muted-foreground">
-                Usa tus puntos acumulados para recibir productos reales en la puerta de tu casa.
-              </p>
-              
-              <div className="mt-4 bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100 flex items-start gap-3 max-w-2xl">
-                <Icon name="Truck" className="mt-1 flex-shrink-0" size={20} />
-                <div>
-                  <p className="font-bold text-sm">Envíos Físicos</p>
-                  <p className="text-sm">Al canjear, te pediremos tu dirección y teléfono para que el equipo de mensajería te entregue tu recompensa.</p>
-                </div>
-              </div>
-            </div>
+          {/* 1. HEADER DE PÁGINA (Ancho Completo) */}
+          <div className="mb-8 text-center md:text-left">
+            <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">Tienda de Canje</h1>
+            <p className="text-muted-foreground text-lg max-w-3xl">
+              Usa tus puntos acumulados para recibir productos reales en la puerta de tu casa.
+            </p>
+          </div>
+
+          {/* 2. LAYOUT PRINCIPAL (Grid Sidebar + Contenido) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-8 items-start">
             
-            {/* Tarjeta de Saldo (Reutilizada) */}
-            <div className="w-full md:w-[350px] flex-shrink-0">
-                 <PointsBalanceCard 
+            {/* --- SIDEBAR IZQUIERDO (Sticky) --- */}
+            <aside className="space-y-6 lg:sticky lg:top-24">
+                {/* Tarjeta de Puntos */}
+                <PointsBalanceCard 
                     freePoints={freePoints}
                     premiumPoints={premiumPoints}
                     pointsEarnedToday={pointsEarnedToday}
                     missions={missions}
                     loading={pointsLoading}
-                 />
-            </div>
-          </div>
-
-          {/* Grid de Productos */}
-          {loadingProducts ? (
-            <div className="flex justify-center py-20">
-              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-20 bg-muted/30 rounded-2xl border border-dashed border-border">
-              <Icon name="ShoppingBag" size={64} className="mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-xl font-bold text-muted-foreground">No hay productos disponibles</h3>
-              <p className="text-sm text-muted-foreground">Vuelve pronto para ver nuevas recompensas.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {products.map((product) => {
-                const canAfford = freePoints >= product.price_points;
-                const hasStock = product.stock > 0;
-
-                return (
-                  <div key={product.id} className="group bg-card border border-border rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col h-full">
-                    {/* Imagen */}
-                    <div className="aspect-square bg-muted relative overflow-hidden">
-                      <img 
-                        src={product.image_url || '/placeholder-product.jpg'} 
-                        alt={product.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                      {!hasStock && (
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                            <span className="bg-red-600 text-white px-4 py-2 rounded-full font-bold tracking-wider shadow-lg transform -rotate-12">AGOTADO</span>
-                        </div>
-                      )}
+                    className="shadow-md"
+                />
+                
+                {/* Info Card de Envío */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-blue-100 rounded-full text-blue-600">
+                        <Icon name="Truck" size={20} />
                     </div>
-                    
-                    {/* Info */}
-                    <div className="p-5 flex-1 flex flex-col">
-                      <div className="mb-4">
-                        <h3 className="font-bold text-lg mb-2 line-clamp-2 group-hover:text-primary transition-colors">
-                            {product.title}
-                        </h3>
-                        <p className="text-sm text-muted-foreground line-clamp-3">
-                            {product.description || 'Sin descripción disponible.'}
-                        </p>
-                      </div>
-                      
-                      <div className="mt-auto pt-4 border-t border-border">
-                        <div className="flex items-center justify-between mb-4">
-                           <div className="flex flex-col">
-                               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Precio</span>
-                               <div className="flex items-center gap-1 text-orange-500 font-bold text-xl">
-                                  <Icon name="Star" size={20} className="fill-current" />
-                                  {product.price_points.toLocaleString()}
-                               </div>
-                           </div>
-                           <div className="text-right">
-                               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Disponibles</span>
-                               <p className="font-mono text-sm text-foreground">{product.stock}</p>
-                           </div>
-                        </div>
-                        
-                        <Button 
-                          fullWidth 
-                          size="lg"
-                          variant={canAfford ? 'default' : 'outline'}
-                          disabled={!hasStock || !canAfford}
-                          onClick={() => handleRedeemClick(product)}
-                          className={canAfford && hasStock ? "shadow-lg shadow-primary/20" : "opacity-70"}
-                        >
-                          {!hasStock ? 'Sin Stock' : canAfford ? 'Canjear Ahora' : `Te faltan ${product.price_points - freePoints}`}
-                        </Button>
-                      </div>
+                    <div>
+                      <h3 className="font-bold text-blue-900 text-sm">Envíos Físicos</h3>
+                      <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                        Los productos son reales. Al canjear, solicitaremos tu dirección y teléfono para coordinar la entrega por mensajería.
+                      </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+            </aside>
+
+            {/* --- CONTENIDO DERECHO (Productos) --- */}
+            <main>
+                {/* Encabezado de Sección */}
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                    <Icon name="ShoppingBag" className="text-primary" />
+                    Catálogo de Productos
+                  </h2>
+                  <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                    {products.length} disponibles
+                  </span>
+                </div>
+
+                {/* Grid de Productos */}
+                {loadingProducts ? (
+                  <div className="flex justify-center py-20 bg-card rounded-2xl border border-border">
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-sm text-muted-foreground">Cargando catálogo...</p>
+                    </div>
+                  </div>
+                ) : products.length === 0 ? (
+                  <div className="text-center py-20 bg-muted/30 rounded-2xl border border-dashed border-border">
+                    <Icon name="ShoppingBag" size={64} className="mx-auto mb-4 text-muted-foreground/50" />
+                    <h3 className="text-xl font-bold text-muted-foreground">No hay productos disponibles</h3>
+                    <p className="text-sm text-muted-foreground">Vuelve pronto para ver nuevas recompensas.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {products.map((product) => {
+                      const canAfford = freePoints >= product.price_points;
+                      const hasStock = product.stock > 0;
+
+                      return (
+                        <div key={product.id} className="group bg-card border border-border rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col h-full relative">
+                          {/* Imagen */}
+                          <div className="aspect-square bg-white relative overflow-hidden border-b border-border/50">
+                            <img 
+                              src={product.image_url || '/placeholder-product.jpg'} 
+                              alt={product.title}
+                              className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+                            />
+                            {!hasStock && (
+                              <div className="absolute inset-0 bg-background/80 backdrop-blur-[2px] flex items-center justify-center z-10">
+                                  <span className="bg-destructive text-destructive-foreground px-4 py-2 rounded-full text-sm font-bold shadow-lg transform -rotate-12 border border-white/20">
+                                    AGOTADO
+                                  </span>
+                              </div>
+                            )}
+                            {/* Badge de Precio Flotante */}
+                            <div className="absolute top-3 right-3 bg-background/90 backdrop-blur-md border border-border shadow-sm rounded-full px-3 py-1 flex items-center gap-1 z-20">
+                                <Icon name="Star" size={14} className="text-orange-500 fill-orange-500" />
+                                <span className="text-sm font-bold text-foreground">{product.price_points.toLocaleString()}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Info */}
+                          <div className="p-5 flex-1 flex flex-col">
+                            <div className="mb-4 flex-1">
+                              <h3 className="font-bold text-lg mb-2 line-clamp-2 group-hover:text-primary transition-colors">
+                                  {product.title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                                  {product.description || 'Sin descripción disponible.'}
+                              </p>
+                            </div>
+                            
+                            <div className="mt-auto pt-4 border-t border-border">
+                              <div className="flex items-center justify-between mb-4 text-xs">
+                                 <span className={`font-medium ${hasStock ? 'text-green-600 bg-green-100 px-2 py-0.5 rounded' : 'text-red-600 bg-red-100 px-2 py-0.5 rounded'}`}>
+                                    {hasStock ? 'Disponible' : 'Sin Stock'}
+                                 </span>
+                                 <span className="text-muted-foreground">
+                                     {product.stock} unidades
+                                 </span>
+                              </div>
+                              
+                              <Button 
+                                fullWidth 
+                                size="lg"
+                                variant={canAfford ? 'default' : 'outline'}
+                                disabled={!hasStock || !canAfford}
+                                onClick={() => handleRedeemClick(product)}
+                                className={`font-bold transition-all ${canAfford && hasStock ? "shadow-lg shadow-primary/20 hover:shadow-primary/40" : "opacity-70"}`}
+                              >
+                                {!hasStock ? 'Agotado' : canAfford ? 'Canjear Ahora' : `Te faltan ${(product.price_points - freePoints).toLocaleString()}`}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+            </main>
+
+          </div>
         </div>
       </div>
 
@@ -215,44 +246,46 @@ const ProductStorePage = () => {
       {/* ========================== */}
       {showCheckoutModal && selectedProduct && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-background rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden transform transition-all scale-100">
+          <div className="bg-background rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden transform transition-all scale-100 border border-border">
             
-            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/50">
+            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/30">
               <h3 className="font-bold text-lg flex items-center gap-2">
-                <Icon name="Package" /> Datos de Envío
+                <Icon name="Package" className="text-primary" /> 
+                Datos de Envío
               </h3>
               {!orderSuccess && (
-                <button onClick={() => setShowCheckoutModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
-                    <Icon name="X" size={24} />
+                <button onClick={() => setShowCheckoutModal(false)} className="text-muted-foreground hover:text-foreground transition-colors bg-transparent hover:bg-muted p-2 rounded-full">
+                    <Icon name="X" size={20} />
                 </button>
               )}
             </div>
 
             {orderSuccess ? (
               <div className="p-8 text-center flex flex-col items-center justify-center min-h-[300px]">
-                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6 animate-bounce">
-                  <Icon name="Check" size={48} className="text-green-600" />
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 animate-bounce border-4 border-green-50">
+                  <Icon name="Check" size={40} className="text-green-600" />
                 </div>
                 <h2 className="text-2xl font-bold text-foreground mb-2">¡Orden Recibida!</h2>
-                <p className="text-muted-foreground mb-8 max-w-xs mx-auto">
-                  Tu canje por <strong>{selectedProduct.title}</strong> ha sido procesado. Te contactaremos pronto para el envío.
+                <p className="text-muted-foreground mb-8 max-w-xs mx-auto leading-relaxed">
+                  Tu canje por <strong className="text-foreground">{selectedProduct.title}</strong> ha sido procesado. Te contactaremos pronto para el envío.
                 </p>
-                <Button onClick={() => setShowCheckoutModal(false)} size="lg" className="min-w-[200px]">
+                <Button onClick={() => setShowCheckoutModal(false)} size="lg" className="min-w-[200px] shadow-lg shadow-primary/20">
                   Volver a la Tienda
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleConfirmRedeem} className="p-6 space-y-5">
                 {/* Resumen Producto */}
-                <div className="flex gap-4 p-3 bg-muted/50 rounded-xl border border-border">
-                    <div className="w-16 h-16 bg-background rounded-lg overflow-hidden flex-shrink-0 border border-border">
-                        <img src={selectedProduct.image_url} className="w-full h-full object-cover" alt="" />
+                <div className="flex gap-4 p-3 bg-muted/30 rounded-xl border border-border/50">
+                    <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex-shrink-0 border border-border flex items-center justify-center p-1">
+                        <img src={selectedProduct.image_url} className="w-full h-full object-contain" alt="" />
                     </div>
                     <div>
-                        <p className="font-bold text-sm line-clamp-1">{selectedProduct.title}</p>
-                        <p className="text-orange-500 font-bold text-sm flex items-center gap-1 mt-1">
+                        <p className="font-bold text-sm line-clamp-1 mb-1">{selectedProduct.title}</p>
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-bold">
+                            <Icon name="Star" size={12} className="fill-current" />
                             -{selectedProduct.price_points.toLocaleString()} Puntos
-                        </p>
+                        </div>
                     </div>
                 </div>
 
@@ -283,7 +316,7 @@ const ProductStorePage = () => {
                             <input 
                                 type="tel" required
                                 className="w-full p-3 border border-border rounded-xl bg-background focus:ring-2 focus:ring-primary outline-none transition-all"
-                                placeholder="Celular para contacto"
+                                placeholder="Celular contacto"
                                 value={shippingInfo.phone}
                                 onChange={e => setShippingInfo({...shippingInfo, phone: e.target.value})}
                             />
@@ -302,7 +335,7 @@ const ProductStorePage = () => {
                 </div>
 
                 <div className="pt-2">
-                    <Button type="submit" fullWidth disabled={processingOrder} size="lg" className="font-bold">
+                    <Button type="submit" fullWidth disabled={processingOrder} size="lg" className="font-bold h-12 shadow-md">
                         {processingOrder ? (
                            <><Icon name="Loader" className="animate-spin mr-2" /> Procesando...</>
                         ) : 'Confirmar Envío'}
