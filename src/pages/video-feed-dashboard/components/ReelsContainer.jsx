@@ -1,7 +1,7 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSION FINAL BLINDADA
-// ✅ CORREGIDO: Anti-farming "Optimista" (Bloqueo inmediato al primer click)
+// REELS CONTAINER - VERSION FINAL BLINDADA & INFORMATIVA
+// ✅ CORREGIDO: Anti-farming "Informativo" (Avisa si es un Re-Like sin puntos)
 // ✅ FUNCIONAL: Navegación (Teclado, Rueda, Touch)
 // ✅ FUNCIONAL: Bloqueo de Auto-Like
 // ============================================================================
@@ -393,6 +393,8 @@ const ReelsContainer = ({
   // ===============================
   // 5. MANEJADORES DE ACCIONES (Likes, Follows, etc.)
   // ===============================
+  
+  // ✅✅✅ ACCIÓN DE LIKE (CORREGIDA: Manejo de Re-Likes)
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
@@ -400,7 +402,7 @@ const ReelsContainer = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
 
-      // 🛑 BLOQUEO DE AUTO-LIKE
+      // 🛑 1. BLOQUEO DE AUTO-LIKE
       const targetVideo = videos.find(v => v.id === videoId);
       if (targetVideo && targetVideo.creator?.id === user.id) {
           showPointsNotification('No puedes dar like a tus propios videos', videoId, 'restriction');
@@ -444,27 +446,32 @@ const ReelsContainer = ({
             return;
         }
 
-        // 🛑🛑🛑 ANTI-FARMING BLINDADO (Lógica corregida) 🛑🛑🛑
+        // 🛑🛑🛑 ANTI-FARMING & GESTIÓN DE PUNTOS 🛑🛑🛑
         // Verificar si YA fue recompensado en esta sesión
         const alreadyRewarded = pointsRewardedIds.has(videoId);
 
-        if (!alreadyRewarded && !likeError) {
-            // 1. Marcamos INMEDIATAMENTE (antes de la API) para evitar doble click/farming
+        if (alreadyRewarded) {
+            // ⚠️ CASO RE-LIKE: El usuario quitó el like y lo volvió a poner.
+            // No damos puntos, no actualizamos misiones, pero avisamos claramente.
+            console.log('ℹ️ Re-like detectado: Sin puntos extra');
+            showPointsNotification('Like restaurado (Sin puntos extra)', videoId, 'info');
+        } else {
+            // ✅ CASO NUEVO LIKE: Primer like de la sesión a este video.
             setPointsRewardedIds(prev => new Set([...prev, videoId]));
 
+            // Actualización Optimista de la Misión
             const missionSnapshot = [...missions];
             updateMissionOptimistic('give_like', 1);
             
             try {
               const missionResult = await missionsService.trackGiveLike('reel', videoId);
               
-              // Si el resultado es exitoso, mostramos los puntos
               if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
                 await addPoints(missionResult.points_earned, missionResult.message, 'free'); 
                 await refreshPoints();
                 showPointsNotification(`🎉 Misión Completa: +${missionResult.points_earned} puntos`, videoId, 'success');
               } else if (missionResult.result === 'already_completed') {
-                showPointsNotification('✓ Like registrado (Misión ya completada hoy)', videoId, 'info');
+                showPointsNotification('Like registrado (Misión diaria completa)', videoId, 'info');
                 rollbackMission(missionSnapshot);
               } else {
                 showPointsNotification('✓ Like registrado', videoId, 'info');
@@ -473,7 +480,6 @@ const ReelsContainer = ({
             } catch (pointsError) {
               console.error('❌ Error puntos:', pointsError);
               rollbackMission(missionSnapshot);
-              // NOTA: No quitamos el ID del Set. Si falló, falló. Evitamos reintentos infinitos en la misma sesión.
             }
         }
       }
@@ -481,6 +487,7 @@ const ReelsContainer = ({
       setDislikedVideos(newDislikedVideos);
     } catch (error) {
       console.error('❌ Error like:', error);
+      showPointsNotification('Error al procesar like', videoId, 'error');
     }
   };
 
