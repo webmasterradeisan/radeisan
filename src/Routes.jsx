@@ -1,4 +1,4 @@
-// src/Routes.jsx - ACTUALIZADO CON SISTEMA DE REGALOS
+// src/Routes.jsx - ACTUALIZADO Y CORREGIDO (FIX PROFILE LOADING)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -316,8 +316,9 @@ const Routes = () => {
                   />
 
                   {/* PERFIL - ✅ REAL (PÚBLICO) */}
+                  {/* 🔴🔴🔴 CORRECCIÓN AQUÍ: Cambiado de :userId a :identifier */}
                   <Route 
-                    path="/profile/:userId" 
+                    path="/profile/:identifier" 
                     element={
                       <ProtectedRoute>
                         <MobileLayoutWrapper>
