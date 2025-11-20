@@ -3,28 +3,23 @@ import { supabase } from '../lib/supabase';
 
 /**
  * Obtener los puntos actuales del usuario desde user_profiles (La fuente de la verdad)
- * @param {string} userId - ID del usuario
- * @returns {Object} - Objeto con total, free y premium
  */
 export const getUserPoints = async (userId) => {
   try {
     // ✅ LEEMOS DE LA TABLA REAL: user_profiles
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('free_points, premium_points') // Solo las columnas que importan
+      .select('free_points, premium_points') 
       .eq('id', userId)
       .single();
 
     if (error) {
       console.error('Error fetching user points:', error);
-      // Si hay error, retornamos ceros para no romper la UI
       return { total: 0, free: 0, premium: 0 };
     }
 
-    // 🔍 LOG DE DIAGNÓSTICO (Míralo en la consola del navegador con F12)
-    console.log('💰 [pointsService] Saldo Real DB:', data);
+    // console.log('💰 [pointsService] Saldo Real DB:', data);
 
-    // Manejo seguro de nulos
     const free = data?.free_points || 0;
     const premium = data?.premium_points || 0;
 
@@ -40,12 +35,10 @@ export const getUserPoints = async (userId) => {
 };
 
 /**
- * Sumar puntos al usuario (Usando RPC para seguridad)
+ * Sumar puntos al usuario
  */
 export const addPoints = async (userId, amount, type = 'free', actionType = 'earned', referenceId = null) => {
   try {
-    // Llamada a la función RPC de base de datos
-    // NOTA: Asegúrate de que tu función SQL 'add_user_points' actualice 'user_profiles'
     const { data, error } = await supabase.rpc('add_user_points', {
       p_user_id: userId,
       p_amount: amount,
@@ -68,8 +61,6 @@ export const addPoints = async (userId, amount, type = 'free', actionType = 'ear
  */
 export const deductPoints = async (userId, amount, type = 'free', actionType = 'spend') => {
   try {
-    // Llamada a la función RPC de base de datos
-    // NOTA: Asegúrate de que tu función SQL 'deduct_user_points' actualice 'user_profiles'
     const { data, error } = await supabase.rpc('deduct_user_points', {
       p_user_id: userId,
       p_amount: amount,
@@ -109,11 +100,9 @@ export const getPointsHistory = async (userId, limit = 20) => {
 
 /**
  * Inicializar puntos si no existen
- * ✅ CORREGIDO: Ahora verifica user_profiles en lugar de user_points
  */
 export const initializeUserPoints = async (userId) => {
   try {
-    // 1. Verificar si el usuario ya tiene el perfil configurado
     const { data: profile, error } = await supabase
       .from('user_profiles')
       .select('premium_points, free_points')
@@ -122,10 +111,7 @@ export const initializeUserPoints = async (userId) => {
 
     if (error) throw error;
 
-    // 2. Si los puntos son NULL, los inicializamos en 0
     if (profile && (profile.premium_points === null || profile.free_points === null)) {
-      console.log('🔧 [pointsService] Inicializando puntos nulos en 0...');
-      
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
@@ -139,7 +125,6 @@ export const initializeUserPoints = async (userId) => {
 
     return { success: true };
   } catch (error) {
-    // Si el error es porque no encuentra la fila, es un problema mayor de auth
     console.error('Error initializing points:', error);
     return { success: false, error: error.message };
   }
@@ -150,19 +135,38 @@ export const initializeUserPoints = async (userId) => {
  */
 export const getUserPurchaseHistory = async (userId) => {
   try {
-    // Asumiendo que tienes una tabla para historial de compras de paquetes
-    // Si usas 'points_transactions' para esto, ajusta la query
     const { data, error } = await supabase
       .from('points_transactions') 
       .select('*')
       .eq('user_id', userId)
-      .eq('action_type', 'purchase') // Filtramos solo compras
+      .eq('action_type', 'purchase') 
       .order('created_at', { ascending: false });
 
     if (error) throw error;
     return { success: true, purchases: data || [] };
   } catch (error) {
     console.error('Error getting purchase history:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ✅ NUEVO: RESTAURAMOS LA FUNCIÓN FALTANTE
+/**
+ * Enviar regalo (wrapper para la lógica nueva)
+ * Esto soluciona el error de build en GiftPointsModal.jsx
+ */
+export const giftPoints = async (receiverId, giftId) => {
+  try {
+    const { data, error } = await supabase.rpc('send_virtual_gift', {
+      receiver_id: receiverId,
+      gift_id: giftId
+    });
+
+    if (error) throw error;
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error gifting points:', error);
     return { success: false, error: error.message };
   }
 };
