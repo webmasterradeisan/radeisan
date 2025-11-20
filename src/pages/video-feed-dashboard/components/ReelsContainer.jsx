@@ -1,11 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSION FINAL ANTI-FARMING & NAVEGACIÓN RESTAURADA
-// ✅ CORREGIDO: Bloqueo de Auto-Like (No puedes darte like a ti mismo)
-// ✅ CORREGIDO: Anti-farming local (No puntos dobles por quitar/poner like)
-// ✅ RESTAURADO: Navegación por Scroll (Rueda del mouse)
-// ✅ RESTAURADO: Navegación por Teclado (Flechas y Espacio)
-// ✅ RESTAURADO: Navegación Táctil (Swipe en celulares)
+// REELS CONTAINER - VERSION FINAL BLINDADA
+// ✅ CORREGIDO: Anti-farming "Optimista" (Bloqueo inmediato al primer click)
+// ✅ FUNCIONAL: Navegación (Teclado, Rueda, Touch)
+// ✅ FUNCIONAL: Bloqueo de Auto-Like
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -66,6 +64,7 @@ const ReelsContainer = ({
 
   // Estados de tracking de misiones y acciones realizadas
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
+  // ✅ ANTI-FARMING: Set para recordar qué videos ya procesaron puntos en esta sesión
   const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
   const [actionsPerformed, setActionsPerformed] = useState({
     saves: new Set(),
@@ -96,7 +95,7 @@ const ReelsContainer = ({
   };
 
   // ===============================
-  // 1. DEFINICIÓN DE FUNCIONES DE NAVEGACIÓN (Primero, para ser usadas en useEffects)
+  // 1. DEFINICIÓN DE FUNCIONES DE NAVEGACIÓN
   // ===============================
   
   const navigateNext = useCallback(() => {
@@ -144,7 +143,7 @@ const ReelsContainer = ({
   // 2. EVENT LISTENERS (Scroll, Teclado)
   // ===============================
 
-  // Mouse Wheel Navigation (Desktop) - RESTAURADO
+  // Mouse Wheel Navigation (Desktop)
   useEffect(() => {
     if (!isDesktop) return;
 
@@ -171,7 +170,7 @@ const ReelsContainer = ({
     }
   }, [isDesktop, currentIndex, videos.length]);
 
-  // Keyboard Navigation - RESTAURADO
+  // Keyboard Navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -195,7 +194,6 @@ const ReelsContainer = ({
   // 3. LÓGICA DE INICIALIZACIÓN Y DATOS
   // ===============================
 
-  // Convertir ID del video a índice
   const getInitialReelIndex = useCallback(() => {
     if (!selectedReelId) return 0;
     const index = videos.findIndex(video => video.id === selectedReelId);
@@ -203,7 +201,6 @@ const ReelsContainer = ({
     return index;
   }, [selectedReelId, videos]);
 
-  // Sincronización Inicial
   useEffect(() => {
     if (videos.length === 0) return;
     const correctIndex = getInitialReelIndex();
@@ -219,7 +216,6 @@ const ReelsContainer = ({
     }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
-  // Cargar usuario y acciones
   useEffect(() => {
     const loadCurrentUserAndActions = async () => {
       try {
@@ -233,15 +229,12 @@ const ReelsContainer = ({
           
           setCurrentUser(profile || { id: user.id, name: 'Usuario', avatar: null, username: 'usuario' });
 
-          // Cargar likes
           const { data: likesData } = await supabase.from('video_likes').select('video_id').eq('user_id', user.id);
           if (likesData) setLikedVideos(new Set(likesData.map(l => l.video_id)));
 
-          // Cargar guardados
           const { data: savedData } = await supabase.from('saved_videos').select('video_id').eq('user_id', user.id);
           if (savedData) setSavedVideos(new Set(savedData.map(s => s.video_id)));
 
-          // Cargar seguidos
           const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
           if (followsData) setFollowedCreators(new Set(followsData.map(f => f.following_id)));
         }
@@ -252,7 +245,6 @@ const ReelsContainer = ({
     loadCurrentUserAndActions();
   }, [videos]);
 
-  // Inicializar contadores
   useEffect(() => {
     const initialCounters = {};
     videos.forEach(video => {
@@ -265,7 +257,6 @@ const ReelsContainer = ({
     setVideoCounters(initialCounters);
   }, [videos]);
 
-  // Contadores Real-time
   useEffect(() => {
     const loadRealTimeCounters = async () => {
       if (videos.length === 0) return;
@@ -293,7 +284,6 @@ const ReelsContainer = ({
   // 4. LÓGICA DE REPRODUCCIÓN Y TRACKING
   // ===============================
 
-  // Auto-Play Inicial y Navegación
   useEffect(() => {
     if (hasPlayedInitial.current || videos.length === 0) return;
 
@@ -321,7 +311,6 @@ const ReelsContainer = ({
     setTimeout(attemptPlay, 250);
   }, [videos, currentIndex, mutedVideos]);
 
-  // Gestión de Play/Pause al cambiar slide
   useEffect(() => {
     if (videos.length === 0) return;
     const initialIndex = getInitialReelIndex();
@@ -349,7 +338,6 @@ const ReelsContainer = ({
     }
   }, [currentIndex, isAutoPlaying, videos, mutedVideos, getInitialReelIndex]);
 
-  // Tracking de Vistas
   useEffect(() => {
     const currentVideo = videoRefs.current[currentIndex];
     const currentVideoData = videos[currentIndex];
@@ -424,16 +412,21 @@ const ReelsContainer = ({
       const isCurrentlyLiked = newLikedVideos.has(videoId);
       
       if (isCurrentlyLiked) {
-        // Unlike
+        // ==============================
+        // QUITAR LIKE (Unlike)
+        // ==============================
         newLikedVideos.delete(videoId);
         setVideoCounters(prev => ({
           ...prev,
           [videoId]: { ...prev[videoId], likes: Math.max(0, (prev[videoId]?.likes || 0) - 1) }
         }));
+        
         await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
         showPointsNotification('Like removido', videoId, 'info');
       } else {
-        // Like
+        // ==============================
+        // DAR LIKE
+        // ==============================
         newLikedVideos.add(videoId);
         if (newDislikedVideos.has(videoId)) newDislikedVideos.delete(videoId);
         
@@ -442,6 +435,7 @@ const ReelsContainer = ({
           [videoId]: { ...prev[videoId], likes: (prev[videoId]?.likes || 0) + 1 }
         }));
 
+        // Insertar Like en BD
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         
         if (likeError && likeError.code !== '23505') {
@@ -450,15 +444,21 @@ const ReelsContainer = ({
             return;
         }
 
-        // 🛑 ANTI-FARMING LOCAL
-        if (!pointsRewardedIds.has(videoId) && !likeError) {
+        // 🛑🛑🛑 ANTI-FARMING BLINDADO (Lógica corregida) 🛑🛑🛑
+        // Verificar si YA fue recompensado en esta sesión
+        const alreadyRewarded = pointsRewardedIds.has(videoId);
+
+        if (!alreadyRewarded && !likeError) {
+            // 1. Marcamos INMEDIATAMENTE (antes de la API) para evitar doble click/farming
+            setPointsRewardedIds(prev => new Set([...prev, videoId]));
+
             const missionSnapshot = [...missions];
             updateMissionOptimistic('give_like', 1);
             
             try {
               const missionResult = await missionsService.trackGiveLike('reel', videoId);
-              setPointsRewardedIds(prev => new Set([...prev, videoId]));
-
+              
+              // Si el resultado es exitoso, mostramos los puntos
               if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
                 await addPoints(missionResult.points_earned, missionResult.message, 'free'); 
                 await refreshPoints();
@@ -473,6 +473,7 @@ const ReelsContainer = ({
             } catch (pointsError) {
               console.error('❌ Error puntos:', pointsError);
               rollbackMission(missionSnapshot);
+              // NOTA: No quitamos el ID del Set. Si falló, falló. Evitamos reintentos infinitos en la misma sesión.
             }
         }
       }
