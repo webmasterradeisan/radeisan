@@ -3,10 +3,12 @@ import { supabase } from '../lib/supabase';
 
 /**
  * Obtener los puntos actuales del usuario desde user_profiles (La fuente de la verdad)
+ * @param {string} userId - ID del usuario
+ * @returns {Object} - Objeto con total, free y premium
  */
 export const getUserPoints = async (userId) => {
   try {
-    // ✅ LEEMOS DE LA TABLA REAL: user_profiles
+    // ✅ ACTUALIZADO: Lee de 'user_profiles' donde está el saldo real
     const { data, error } = await supabase
       .from('user_profiles')
       .select('free_points, premium_points') 
@@ -76,7 +78,7 @@ export const deductPoints = async (userId, amount, type = 'free', actionType = '
 };
 
 /**
- * Obtener historial de transacciones
+ * Obtener historial simple (últimos N movimientos)
  */
 export const getPointsHistory = async (userId, limit = 20) => {
   try {
@@ -97,7 +99,42 @@ export const getPointsHistory = async (userId, limit = 20) => {
 };
 
 /**
+ * ✅ RESTAURADO: Obtener historial PAGINADO
+ * (Necesario para src/pages/user-profile-settings/index.jsx)
+ */
+export const getUserPointsHistory = async (userId, page = 1, limit = 10) => {
+  try {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, count, error } = await supabase
+      .from('points_transactions')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    return { 
+      success: true, 
+      history: data || [],
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching paginated history:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Inicializar puntos si no existen
+ * ✅ ACTUALIZADO: Verifica e inicializa en 'user_profiles'
  */
 export const initializeUserPoints = async (userId) => {
   try {
@@ -109,6 +146,7 @@ export const initializeUserPoints = async (userId) => {
 
     if (error) throw error;
 
+    // Si los puntos son NULL, los inicializamos en 0
     if (profile && (profile.premium_points === null || profile.free_points === null)) {
       const { error: updateError } = await supabase
         .from('user_profiles')
@@ -149,11 +187,13 @@ export const getUserPurchaseHistory = async (userId) => {
 };
 
 // ===========================================================
-// ✅ FUNCIONES RESTAURADAS (Para compatibilidad con componentes viejos)
+// ✅ WRAPPERS Y FUNCIONES DE COMPATIBILIDAD
+// (Necesarios para componentes antiguos que usan nombres específicos)
 // ===========================================================
 
 /**
- * Enviar regalo (Wrapper para la lógica nueva)
+ * Enviar regalo (Wrapper para la lógica nueva de la DB)
+ * Necesario para: src/components/GiftPointsModal.jsx
  */
 export const giftPoints = async (receiverId, giftId) => {
   try {
@@ -163,7 +203,6 @@ export const giftPoints = async (receiverId, giftId) => {
     });
 
     if (error) throw error;
-
     return { success: true, data };
   } catch (error) {
     console.error('Error gifting points:', error);
@@ -172,15 +211,15 @@ export const giftPoints = async (receiverId, giftId) => {
 };
 
 /**
- * Wrapper específico para sumar Puntos Gratis
- * Soluciona el error en PhotoQuickUpload.jsx
+ * Wrapper para sumar Puntos Gratis
+ * Necesario para: src/components/PhotoQuickUpload.jsx
  */
 export const addFreePoints = async (userId, amount, actionType = 'earned', referenceId = null) => {
   return await addPoints(userId, amount, 'free', actionType, referenceId);
 };
 
 /**
- * Wrapper específico para sumar Puntos Premium
+ * Wrapper para sumar Puntos Premium
  */
 export const addPremiumPoints = async (userId, amount, actionType = 'earned', referenceId = null) => {
   return await addPoints(userId, amount, 'premium', actionType, referenceId);
