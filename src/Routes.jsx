@@ -1,4 +1,4 @@
-// src/Routes.jsx - ACTUALIZADO Y CORREGIDO (FIX PROFILE LOADING + TIENDA)
+// src/Routes.jsx - ACTUALIZADO Y CORREGIDO (FIX PROFILE LOADING + TIENDA COMPLETA)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -82,6 +82,9 @@ import TransactionsManagement from './pages/admin/TransactionsManagement';
 // ✅ NUEVO - GESTIÓN DE PEDIDOS DE TIENDA (ADMIN)
 import OrdersManagement from './pages/admin-shop/OrdersManagement';
 
+// ✅ NUEVO - GESTIÓN DE INVENTARIO DE TIENDA (ADMIN)
+import ShopInventory from './pages/admin-shop/ShopInventory';
+
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
 // ===============================
@@ -146,37 +149,6 @@ const Unauthorized = () => (
         >
           Volver al Dashboard
         </Link>
-      </div>
-    </div>
-  </div>
-);
-
-// ===============================
-// PLACEHOLDER SOLO PARA LOGS
-// ===============================
-const AdminPlaceholder = ({ title, description, requiredPermission }) => (
-  <div className="p-6">
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">{title}</h2>
-          <p className="text-gray-600 mb-6">{description}</p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              Esta sección se implementará próximamente.
-            </p>
-            {requiredPermission && (
-              <p className="text-xs text-blue-600 mt-2 font-mono">
-                Permiso requerido: {requiredPermission}
-              </p>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -544,6 +516,16 @@ const Routes = () => {
                       element={
                         <ProtectedAdminRoute requiredPermission="manage_rewards">
                           <OrdersManagement />
+                        </ProtectedAdminRoute>
+                      } 
+                    />
+
+                    {/* 📦 NUEVO - Inventario de Tienda - ✅ REAL */}
+                    <Route 
+                      path="shop-inventory" 
+                      element={
+                        <ProtectedAdminRoute requiredPermission="manage_rewards">
+                          <ShopInventory />
                         </ProtectedAdminRoute>
                       } 
                     />
