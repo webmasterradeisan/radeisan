@@ -1,4 +1,4 @@
-// src/Routes.jsx - ACTUALIZADO Y CORREGIDO (FIX PROFILE LOADING)
+// src/Routes.jsx - ACTUALIZADO Y CORREGIDO (FIX PROFILE LOADING + TIENDA)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -35,6 +35,9 @@ import NotFound from "pages/NotFound";
 import UserProfileSettings from './pages/user-profile-settings';
 import BusinessMarketplace from './pages/business-marketplace';
 import PointsRewardsStore from './pages/points-rewards-store';
+
+// ✅ NUEVO - TIENDA DE PRODUCTOS FÍSICOS
+import ProductStorePage from './pages/product-store';
 
 // ✅ NUEVO - PERFIL PÚBLICO
 import PublicProfilePage from './pages/PublicProfilePage';
@@ -75,6 +78,9 @@ import PremiumPointsConfig from './pages/admin-premium-points/PremiumPointsConfi
 
 // ✅ NUEVO - GESTIÓN DE TRANSACCIONES (ADMIN)
 import TransactionsManagement from './pages/admin/TransactionsManagement';
+
+// ✅ NUEVO - GESTIÓN DE PEDIDOS DE TIENDA (ADMIN)
+import OrdersManagement from './pages/admin-shop/OrdersManagement';
 
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
@@ -352,6 +358,18 @@ const Routes = () => {
                     } 
                   />
 
+                  {/* 🛍️ NUEVA TIENDA DE PRODUCTOS FÍSICOS - ✅ NUEVO */}
+                  <Route 
+                    path="/shop" 
+                    element={
+                      <ProtectedRoute>
+                        <MobileLayoutWrapper>
+                          <ProductStorePage />
+                        </MobileLayoutWrapper>
+                      </ProtectedRoute>
+                    } 
+                  />
+
                   {/* 💎 COMPRA DE PUNTOS PREMIUM - ✅ REAL */}
                   <Route 
                     path="/purchase-points" 
@@ -516,6 +534,16 @@ const Routes = () => {
                       element={
                         <ProtectedAdminRoute requiredPermission="manage_transactions">
                           <TransactionsManagement />
+                        </ProtectedAdminRoute>
+                      } 
+                    />
+
+                    {/* 🛍️ NUEVO - Gestión de Pedidos (Tienda) - ✅ REAL */}
+                    <Route 
+                      path="shop-orders" 
+                      element={
+                        <ProtectedAdminRoute requiredPermission="manage_rewards">
+                          <OrdersManagement />
                         </ProtectedAdminRoute>
                       } 
                     />
