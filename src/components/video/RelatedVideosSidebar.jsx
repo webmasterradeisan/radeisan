@@ -1,9 +1,10 @@
 // src/components/video/RelatedVideosSidebar.jsx
 // ============================================================================
-// SIDEBAR DE VIDEOS RELACIONADOS - RUTA CORREGIDA
+// SIDEBAR DE VIDEOS RELACIONADOS - FINAL INTEGRADO
 // ============================================================================
-// ✅ CORREGIDO: Import real de PointsBalanceCard usando la ruta confirmada.
-// ✅ FUNCIONAL: Botón desplegable que muestra el saldo real.
+// ✅ CORREGIDO: Importación de PointsBalanceCard desde la ruta correcta.
+// ✅ CORREGIDO: Conexión con usePoints() para obtener datos reales.
+// ✅ FUNCIONAL: El panel ahora muestra el saldo real y misiones del usuario.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -11,7 +12,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import Icon from 'components/AppIcon';
 
-// ✅ RUTA CORREGIDA: Calculada desde 'src/components/video' hacia 'src/pages/...'
+// ✅ 1. Importamos el Contexto para obtener los datos reales
+import { usePoints } from 'contexts/PointsContext';
+
+// ✅ 2. Ruta correcta confirmada del componente visual
 import PointsBalanceCard from '../../pages/points-rewards-store/components/PointsBalanceCard';
 
 // ===============================
@@ -156,8 +160,17 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
   const [reels, setReels] = useState([]);
   const [loadingReels, setLoadingReels] = useState(false);
   
-  // ✅ Estado para controlar la visualización del panel de puntos
+  // Estado para controlar la visualización del panel de puntos
   const [showPointsCard, setShowPointsCard] = useState(false);
+
+  // ✅ 3. OBTENCIÓN DE DATOS REALES DESDE EL CONTEXTO
+  const { 
+    freePoints, 
+    premiumPoints, 
+    pointsEarnedToday, 
+    missions, 
+    loading: pointsLoading 
+  } = usePoints();
 
   useEffect(() => {
     let filtered = videos.filter(video => {
@@ -254,14 +267,20 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
           />
         </button>
 
-        {/* ✅ CONTENIDO DESPLEGABLE (CON COMPONENTE REAL) */}
+        {/* ✅ CONTENIDO DESPLEGABLE (AHORA CON DATOS REALES) */}
         <div 
           className={`
             overflow-hidden transition-all duration-500 ease-in-out
             ${showPointsCard ? 'max-h-[800px] opacity-100 mt-3' : 'max-h-0 opacity-0 mt-0'}
           `}
         >
-          <PointsBalanceCard />
+          <PointsBalanceCard 
+            freePoints={freePoints}
+            premiumPoints={premiumPoints}
+            pointsEarnedToday={pointsEarnedToday}
+            missions={missions}
+            loading={pointsLoading}
+          />
         </div>
       </div>
 
