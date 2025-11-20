@@ -18,8 +18,6 @@ export const getUserPoints = async (userId) => {
       return { total: 0, free: 0, premium: 0 };
     }
 
-    // console.log('💰 [pointsService] Saldo Real DB:', data);
-
     const free = data?.free_points || 0;
     const premium = data?.premium_points || 0;
 
@@ -35,7 +33,7 @@ export const getUserPoints = async (userId) => {
 };
 
 /**
- * Sumar puntos al usuario
+ * Sumar puntos al usuario (Genérico)
  */
 export const addPoints = async (userId, amount, type = 'free', actionType = 'earned', referenceId = null) => {
   try {
@@ -57,7 +55,7 @@ export const addPoints = async (userId, amount, type = 'free', actionType = 'ear
 };
 
 /**
- * Deducir puntos al usuario
+ * Deducir puntos al usuario (Genérico)
  */
 export const deductPoints = async (userId, amount, type = 'free', actionType = 'spend') => {
   try {
@@ -150,10 +148,12 @@ export const getUserPurchaseHistory = async (userId) => {
   }
 };
 
-// ✅ NUEVO: RESTAURAMOS LA FUNCIÓN FALTANTE
+// ===========================================================
+// ✅ FUNCIONES RESTAURADAS (Para compatibilidad con componentes viejos)
+// ===========================================================
+
 /**
- * Enviar regalo (wrapper para la lógica nueva)
- * Esto soluciona el error de build en GiftPointsModal.jsx
+ * Enviar regalo (Wrapper para la lógica nueva)
  */
 export const giftPoints = async (receiverId, giftId) => {
   try {
@@ -169,4 +169,19 @@ export const giftPoints = async (receiverId, giftId) => {
     console.error('Error gifting points:', error);
     return { success: false, error: error.message };
   }
+};
+
+/**
+ * Wrapper específico para sumar Puntos Gratis
+ * Soluciona el error en PhotoQuickUpload.jsx
+ */
+export const addFreePoints = async (userId, amount, actionType = 'earned', referenceId = null) => {
+  return await addPoints(userId, amount, 'free', actionType, referenceId);
+};
+
+/**
+ * Wrapper específico para sumar Puntos Premium
+ */
+export const addPremiumPoints = async (userId, amount, actionType = 'earned', referenceId = null) => {
+  return await addPoints(userId, amount, 'premium', actionType, referenceId);
 };
