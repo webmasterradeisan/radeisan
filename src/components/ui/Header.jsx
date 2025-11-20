@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePoints } from '../../contexts/PointsContext';
-import { useNotification } from '../../contexts/NotificationContext'; // ✅ Importamos el contexto de notificaciones
+import { useNotification } from '../../contexts/NotificationContext'; 
 import Icon from '../AppIcon';
 import Button from './Button';
 import PointsBalanceIndicator from './PointsBalanceIndicator';
@@ -12,7 +12,6 @@ const Header = () => {
   const { user, isAdmin, signOut } = useAuth();
   const { totalPoints, freePoints, premiumPoints, loading: pointsLoading } = usePoints();
   
-  // ✅ Consumimos el contexto de notificaciones
   const { 
     notifications, 
     unreadCount, 
@@ -83,7 +82,7 @@ const Header = () => {
     { name: 'Reels', path: '/reels', icon: 'Smartphone' },
     { name: 'Videos', path: '/explore', icon: 'Monitor' },
     { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
-    { name: 'Tienda', path: '/shop', icon: 'ShoppingBag' }, // ✅ AGREGADO: Tienda (ShoppingBag)
+    { name: 'Tienda', path: '/shop', icon: 'ShoppingBag' }, // ✅ AGREGADO
   ];
 
   // Si es admin, agregamos el link al panel
