@@ -1,10 +1,11 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
-import { supabase } from '../../../../lib/supabase';
-import { useAuth } from '../../../../contexts/AuthContext';
-// Eliminamos addPoints porque los puntos solo se dan al completar la misión
-import { updateMissionProgress } from '../../../../services/missionsService'; 
+// ✅ CORRECCIÓN DE RUTAS (3 niveles en lugar de 4)
+import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../contexts/AuthContext';
+import { usePoints } from '../../../contexts/PointsContext'; 
+import { updateMissionProgress } from '../../../services/missionsService'; 
 import VideoPlayer from './VideoPlayer';
 import { Heart, MessageCircle, Share2, Volume2, VolumeX } from 'lucide-react';
 
@@ -25,7 +26,7 @@ const ReelItem = ({ video, isActive, onVideoView, onLike, onShare, isMuted, togg
       setIsPlaying(false);
       if (viewStartTime && !hasCountedView && isActive) {
         const duration = Date.now() - viewStartTime;
-        // Si vio más de 5 segundos, contamos la vista para la misión
+        // Si vio más de 5 segundos, contamos la vista
         if (duration > 5000) { 
           onVideoView(video.id);
           setHasCountedView(true);
@@ -46,8 +47,8 @@ const ReelItem = ({ video, isActive, onVideoView, onLike, onShare, isMuted, togg
           className="w-full h-full object-cover"
         />
         
-        {/* Overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white">
+          {/* Botones Laterales */}
           <div className="absolute right-4 bottom-20 flex flex-col gap-6 items-center">
             
             {/* LIKE */}
@@ -117,7 +118,7 @@ const ReelsContainer = () => {
   const [isMuted, setIsMuted] = useState(true);
   
   const { user } = useAuth();
-  // Ya no necesitamos usePoints aquí porque no damos puntos directos
+  const { addPoints, triggerAnimation } = usePoints(); // Usamos triggerAnimation del contexto
   const containerRef = useRef(null);
   const awardedPointsCache = useRef(new Set());
 
@@ -169,26 +170,24 @@ const ReelsContainer = () => {
   }, [handleScroll]);
 
   // ========================================================================
-  // LÓGICA DE MISIONES (Solo progreso, sin puntos directos)
+  // LÓGICA DE MISIONES
   // ========================================================================
 
-  // 1. VIEW: Ver video completo
+  // 1. VIEW
   const handleVideoView = async (videoId) => {
     if (!user || awardedPointsCache.current.has(videoId)) return;
 
-    // Marcamos localmente para no contar el mismo video dos veces en la sesión
+    // Solo marcamos para no repetir, no damos puntos por view simple
     awardedPointsCache.current.add(videoId);
 
-    // Actualizamos el progreso de la misión "Ver 5 videos"
-    // ID DB: 'watch_videos'
+    // Misión: Ver videos
     await updateMissionProgress(user.id, 'watch_videos', 1);
   };
 
-  // 2. LIKE: Dar me gusta
+  // 2. LIKE
   const handleLike = async (videoId, currentLikeStatus) => {
     if (!user) return;
 
-    // Optimistic UI
     setVideos(prev => prev.map(v => {
       if (v.id === videoId) {
         return {
@@ -202,14 +201,12 @@ const ReelsContainer = () => {
 
     try {
       if (currentLikeStatus) {
-        // Si quita el like, no "restamos" progreso de misión (generalmente las misiones son acumulativas)
         await supabase.from('video_likes').delete().match({ video_id: videoId, user_id: user.id });
       } else {
         const { error } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         if (error) throw error;
 
-        // Solo avanzamos la misión si es un NUEVO like
-        // ID DB: 'give_like'
+        // Misión: Dar Like
         await updateMissionProgress(user.id, 'give_like', 1);
       }
     } catch (error) {
@@ -217,7 +214,7 @@ const ReelsContainer = () => {
     }
   };
 
-  // 3. SHARE: Compartir video
+  // 3. SHARE
   const handleShare = async (videoId) => {
     if (!user) return;
 
@@ -225,8 +222,7 @@ const ReelsContainer = () => {
     navigator.clipboard.writeText(url);
     alert('Enlace copiado al portapapeles');
 
-    // Avanzamos la misión de compartir
-    // ID DB: 'share_video'
+    // Misión: Compartir
     await updateMissionProgress(user.id, 'share_video', 1);
   };
 
