@@ -2,15 +2,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { usePoints } from './PointsContext'; // ✅ IMPORTAMOS PUNTOS
 
-// Creamos el contexto con un nombre único
 const GiftNotificationContext = createContext();
 
-// Hook personalizado con nombre único
 export const useGiftNotifications = () => useContext(GiftNotificationContext);
 
 export const GiftNotificationProvider = ({ children }) => {
   const { user } = useAuth();
+  const { refreshPoints } = usePoints(); // ✅ TRAEMOS EL REFRESCADOR
+  
   const [giftNotifications, setGiftNotifications] = useState([]);
   const [unreadGiftCount, setUnreadGiftCount] = useState(0);
   
@@ -26,7 +27,6 @@ export const GiftNotificationProvider = ({ children }) => {
 
     // 1. Cargar notificaciones de regalos existentes
     const fetchGiftNotifications = async () => {
-      // Filtramos por tipo 'gift_received' para no mezclar con otras notificaciones
       const { data } = await supabase
         .from('notifications')
         .select('*')
@@ -60,6 +60,10 @@ export const GiftNotificationProvider = ({ children }) => {
           if (newNotif.type === 'gift_received') {
             setGiftNotifications(prev => [newNotif, ...prev]);
             setUnreadGiftCount(prev => prev + 1);
+            
+            // ✅ CLAVE: Actualizamos saldo apenas llega la notificación
+            if (refreshPoints) refreshPoints();
+            
             setLatestGift(newNotif); // Activar Modal Sorpresa
           }
         }
@@ -69,7 +73,7 @@ export const GiftNotificationProvider = ({ children }) => {
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [user]);
+  }, [user, refreshPoints]);
 
   // Marcar regalo como visto
   const markGiftAsRead = async (id) => {
