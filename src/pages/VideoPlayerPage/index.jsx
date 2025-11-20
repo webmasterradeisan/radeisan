@@ -1,24 +1,10 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VERSION FINAL ESTABLE - CORREGIDA
-// ✅ 1. (FIX) loadRelatedVideos: Eliminada la selección de 'likes_count' (Arregla el crash/recarga).
-// ✅ 2. (VERIFICADO) fetchVideoData: Usa conteo directo (Arregla contadores en cero).
-// ✅ 3. (NUEVO) INTEGRACIÓN: Botón y Modal de Regalar Puntos (GiftPointsModal)
-// 🟢 4. (SINCRONIZADO) 'fetchVideoData' ahora consulta 'mission_progress'
-//    para el anti-farming diario (en lugar de 'user_video_points').
-// 🟢 5. (SINCRONIZADO) 'handleLike' ahora usa la misma lógica de notificación
-//    flotante que el ReelsContainer (progreso, completado, ya ganado).
-// 🟢 6. (CORREGIDO) Eliminadas llamadas a RPC 'increment/decrement_video_likes'
-//    que causaban el error 400.
-// 🟢 7. (CORREGIDO) Eliminadas todas las referencias a la tabla 'user_video_points'
-//    (que no existe) para prevenir errores '42P01'.
-// 🟢 8. (BUG FIX) Movidas las definiciones de togglePlayPause, toggleMute, etc., 
-//    antes del useEffect(handleKeyPress) para evitar ReferenceError (el crash).
-// ✅ 9. (CORREGIDO) trackWatchVideo ahora incluye parámetro de duración y detección reel/video
-// ✅ 10. (CORREGIDO) trackShareContent ahora usa parámetros correctos y detección reel/video
-// ✅ 11. (IMPLEMENTADO) trackFollowUser ahora captura resultados y muestra notificaciones
-// ✅ 12. (MEJORADO) trackComment ahora incluye detección de tipo reel/video
-// ✅ 13. (MEJORADO) trackGiveLike ahora incluye detección de tipo reel/video
+// VIDEO PLAYER PAGE - VERSION FINAL BLINDADA & AUTOPLAY
+// ✅ CORREGIDO: Anti-farming "Informativo" (Igual que ReelsContainer)
+// ✅ NUEVO: Autoplay del siguiente video al terminar
+// ✅ NUEVO: Reproducción automática al cargar
+// ✅ CORREGIDO: Renderizado de descripción (Caracteres extraños)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -40,7 +26,6 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import RelatedVideosSidebar from 'components/video/RelatedVideosSidebar';
 import useIsMobile from 'hooks/useIsMobile';
-// ✅ NUEVA IMPORTACIÓN
 import GiftPointsModal from 'components/GiftPointsModal'; 
 
 // Definición de la animación simple para el feedback 
@@ -64,7 +49,7 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addPoints: updatePointsContext } = usePoints(); 
+  const { addPoints: updatePointsContext, missions, updateMissionOptimistic, rollbackMission, refreshPoints } = usePoints(); 
   const isMobile = useIsMobile();
 
   const [video, setVideo] = useState(null);
@@ -84,7 +69,7 @@ const VideoPlayerPage = () => {
     comments: 0
   });
   
-  // ✅ NUEVO ESTADO: Control del Modal de Regalo
+  // Estado del Modal de Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -102,7 +87,9 @@ const VideoPlayerPage = () => {
   const [showReplies, setShowReplies] = useState({});
 
   const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
-  const [hasEarnedLikePoints, setHasEarnedLikePoints] = useState(false); // <--- ESTE ESTADO ES CLAVE
+  // ✅ ANTI-FARMING: Set para recordar qué videos ya procesaron puntos en esta sesión
+  const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
+  
   const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
   const [hasEarnedSharePoints, setHasEarnedSharePoints] = useState(false);
 
@@ -117,7 +104,7 @@ const VideoPlayerPage = () => {
     type: 'success', 
   });
   
-  // ✅ NUEVO ESTADO: Notificación específica para 'Like'
+  // Notificación específica para 'Like'
   const [likeNotification, setLikeNotification] = useState({
     show: false,
     message: '',
@@ -146,7 +133,6 @@ const VideoPlayerPage = () => {
   // FUNCIONES DE FEEDBACK
   // ===============================
 
-  // Notificación GRANDE (centro de pantalla)
   const showUserFeedback = useCallback((message, type = 'success', duration = 2500) => {
     setUserFeedback({ show: true, message, type });
     setTimeout(() => {
@@ -154,7 +140,6 @@ const VideoPlayerPage = () => {
     }, duration);
   }, []);
   
-  // ✅ NUEVA NOTIFICACIÓN: Pequeña, al lado del botón 'Like'
   const showLikeNotification = useCallback((message, type = 'success', duration = 2000) => {
     setLikeNotification({ show: true, message, type });
     setTimeout(() => {
@@ -163,7 +148,7 @@ const VideoPlayerPage = () => {
   }, []);
   
   // =================================================================
-  // ✅ INICIO: FUNCIONES DE CONTROL DE VIDEO (MOVIDAS AQUÍ PARA EVITAR ERROR)
+  // FUNCIONES DE CONTROL DE VIDEO
   // =================================================================
   const togglePlayPause = useCallback(() => { 
     const currentVideo = videoRef.current;
@@ -176,7 +161,7 @@ const VideoPlayerPage = () => {
       currentVideo.pause();
       setIsPlaying(false);
     }
-  }, []); // Sin dependencias
+  }, []);
 
   const handleVolumeChange = useCallback((e) => { 
     const newVolume = parseFloat(e.target.value);
@@ -186,7 +171,7 @@ const VideoPlayerPage = () => {
     if (miniVideoRef.current) miniVideoRef.current.volume = newVolume;
 
     setIsMuted(newVolume === 0);
-  }, []); // Sin dependencias
+  }, []);
 
   const toggleMute = useCallback(() => { 
     const newMuted = !isMuted;
@@ -202,7 +187,7 @@ const VideoPlayerPage = () => {
       if (videoRef.current) videoRef.current.volume = 0.5;
       if (miniVideoRef.current) miniVideoRef.current.volume = 0.5;
     }
-  }, [isMuted, volume]); // Dependencias: isMuted, volume
+  }, [isMuted, volume]);
   
   const toggleFullscreen = useCallback(async () => { 
     if (!containerRef.current) return;
@@ -211,32 +196,19 @@ const VideoPlayerPage = () => {
       if (!document.fullscreenElement) {
         await containerRef.current.requestFullscreen();
         setIsFullscreen(true);
-
         if (isMobile && screen.orientation && screen.orientation.lock) {
-          try {
-            await screen.orientation.lock('landscape');
-          } catch (err) {
-            console.log('No se pudo bloquear orientación:', err);
-          }
+          try { await screen.orientation.lock('landscape'); } catch (err) { console.log('No lock:', err); }
         }
       } else {
         await document.exitFullscreen();
         setIsFullscreen(false);
-
-        if (isMobile && screen.orientation && screen.orientation.unlock) {
-          screen.orientation.unlock();
-        }
+        if (isMobile && screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); }
       }
-    } catch (err) {
-      console.error('Fullscreen error:', err);
-    }
-  }, [isMobile]); // Dependencia: isMobile
-  // =================================================================
-  // ✅ FIN: FUNCIONES DE CONTROL DE VIDEO
-  // =================================================================
+    } catch (err) { console.error('Fullscreen error:', err); }
+  }, [isMobile]);
 
   // ===============================
-  // CONTROLES DE TECLADO (CORREGIDO)
+  // CONTROLES DE TECLADO
   // ===============================
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -250,16 +222,9 @@ const VideoPlayerPage = () => {
         case 'k':
           e.preventDefault();
           if (isMinimized) {
-            if (currentVideo.paused) {
-              currentVideo.play();
-              setIsPlaying(true);
-            } else {
-              currentVideo.pause();
-              setIsPlaying(false);
-            }
-          } else {
-            togglePlayPause();
-          }
+            if (currentVideo.paused) { currentVideo.play(); setIsPlaying(true); } 
+            else { currentVideo.pause(); setIsPlaying(false); }
+          } else { togglePlayPause(); }
           break;
         case 'f':
           e.preventDefault();
@@ -285,62 +250,41 @@ const VideoPlayerPage = () => {
           e.preventDefault();
           handleVolumeChange({ target: { value: Math.max(0, volume - 0.1) } });
           break;
-        default:
-          break;
+        default: break;
       }
     };
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-    // ✅ Dependencias correctas, ahora que las funciones están definidas arriba
   }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); 
 
   // ===============================
-  // FUNCIONES DE DRAG & DROP (sin cambios)
+  // FUNCIONES DE DRAG & DROP
   // ===============================
   const handleMouseDown = (e) => {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
+    e.preventDefault(); e.stopPropagation();
     setIsDragging(true);
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
-    setDragOffset({
-      x: clientX - miniPlayerPosition.x,
-      y: clientY - miniPlayerPosition.y
-    });
+    setDragOffset({ x: clientX - miniPlayerPosition.x, y: clientY - miniPlayerPosition.y });
   };
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
-    
     e.preventDefault();
-
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
     const newX = clientX - dragOffset.x;
     const newY = clientY - dragOffset.y;
-
     const miniWidth = isMobile ? 250 : 400;
     const miniHeight = isMobile ? 180 : 250;
     const maxX = window.innerWidth - miniWidth - 20;
     const maxY = window.innerHeight - miniHeight - 20;
-
-    const boundedX = Math.max(10, Math.min(newX, maxX));
-    const boundedY = Math.max(10, Math.min(newY, maxY));
-
-    setMiniPlayerPosition({ x: boundedX, y: boundedY });
+    setMiniPlayerPosition({ x: Math.max(10, Math.min(newX, maxX)), y: Math.max(10, Math.min(newY, maxY)) });
   }, [isDragging, dragOffset, isMobile]);
 
-  const handleMouseUp = useCallback(() => {
-    if (isDragging) {
-      setIsDragging(false);
-    }
-  }, [isDragging]);
+  const handleMouseUp = useCallback(() => { if (isDragging) setIsDragging(false); }, [isDragging]);
 
   useEffect(() => {
     if (isDragging) {
@@ -348,7 +292,6 @@ const VideoPlayerPage = () => {
       document.addEventListener('mouseup', handleMouseUp);
       document.addEventListener('touchmove', handleMouseMove, { passive: false });
       document.addEventListener('touchend', handleMouseUp);
-      
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -361,57 +304,29 @@ const VideoPlayerPage = () => {
   const handleMinimize = () => {
     const mainVideo = videoRef.current;
     if (!mainVideo) return;
-
     const currentTime = mainVideo.currentTime;
     const wasPlaying = !mainVideo.paused;
-
-    mainVideo.pause();
-    setIsPlaying(false); 
-    setIsMinimized(true);
-
+    mainVideo.pause(); setIsPlaying(false); setIsMinimized(true);
     setTimeout(() => {
       const miniVideo = miniVideoRef.current;
       if (miniVideo) {
-        miniVideo.currentTime = currentTime;
-        miniVideo.volume = volume;
-        miniVideo.muted = isMuted;
-        
-        if (wasPlaying) {
-          miniVideo.play()
-            .then(() => setIsPlaying(true)) 
-            .catch(err => console.error('Error play mini:', err));
-        }
+        miniVideo.currentTime = currentTime; miniVideo.volume = volume; miniVideo.muted = isMuted;
+        if (wasPlaying) miniVideo.play().then(() => setIsPlaying(true)).catch(console.error);
       }
     }, 100);
   };
 
   const handleMaximize = () => {
     const mainVideo = videoRef.current;
-    const miniVideo = miniPlayerRef.current;
-
-    if (!mainVideo || !miniVideo) return;
-
+    if (!mainVideo) return;
     const currentTime = miniVideoRef.current?.currentTime || mainVideo.currentTime;
     const wasPlaying = miniVideoRef.current?.paused === false;
-
-    if (miniVideoRef.current) {
-        miniVideoRef.current.pause();
-    }
-    setIsPlaying(false);
-    setIsMinimized(false);
-
+    if (miniVideoRef.current) miniVideoRef.current.pause();
+    setIsPlaying(false); setIsMinimized(false);
     setTimeout(() => {
-      mainVideo.currentTime = currentTime;
-      mainVideo.volume = volume;
-      mainVideo.muted = isMuted;
-      
-      if (wasPlaying) {
-        mainVideo.play()
-          .then(() => setIsPlaying(true))
-          .catch(err => console.error('Error play main:', err));
-      }
+      mainVideo.currentTime = currentTime; mainVideo.volume = volume; mainVideo.muted = isMuted;
+      if (wasPlaying) mainVideo.play().then(() => setIsPlaying(true)).catch(console.error);
     }, 100);
-
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
@@ -421,371 +336,130 @@ const VideoPlayerPage = () => {
 
   const fetchUserProfile = useCallback(async () => {
     if (!user) return;
-
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, username, avatar_url, is_verified')
-        .eq('id', user.id)
-        .single();
-
+      const { data, error } = await supabase.from('user_profiles').select('id, full_name, username, avatar_url, is_verified').eq('id', user.id).single();
       if (error) throw error;
       setUserProfile(data);
-    } catch (err) {
-      console.error('❌ Error al cargar perfil de usuario:', err);
-    }
+    } catch (err) { console.error('❌ Error al cargar perfil:', err); }
   }, [user]);
 
   const fetchVideoData = useCallback(async () => {
     if (!videoId) return;
-
     try {
-      setLoading(true);
-      setError(null);
-
-      const { data: videoData, error: videoError } = await supabase
-        .from('videos')
-        .select('*, views_count') // Seleccionamos views_count
-        .eq('id', videoId)
-        .eq('is_published', true) 
-        .single();
-
+      setLoading(true); setError(null);
+      const { data: videoData, error: videoError } = await supabase.from('videos').select('*, views_count').eq('id', videoId).eq('is_published', true).single();
       if (videoError) throw videoError;
 
       if (videoData?.user_id) {
-        const { data: creatorData, error: creatorError } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, username, avatar_url, is_verified')
-          .eq('id', videoData.user_id)
-          .single();
-
+        const { data: creatorData, error: creatorError } = await supabase.from('user_profiles').select('id, full_name, username, avatar_url, is_verified').eq('id', videoData.user_id).single();
         if (!creatorError && creatorData) {
           videoData.creator = {
-            id: creatorData.id,
-            name: creatorData.full_name,
-            username: creatorData.username,
-            profile_image_url: creatorData.avatar_url,
-            is_verified: creatorData.is_verified
+            id: creatorData.id, name: creatorData.full_name, username: creatorData.username, profile_image_url: creatorData.avatar_url, is_verified: creatorData.is_verified
           };
         }
       }
-
       setVideo(videoData);
 
-      // ❌ ELIMINADO: RPC 'increment_video_views'
-      // await supabase.rpc('increment_video_views', { video_id: videoId });
+      const { count: likesCount } = await supabase.from('video_likes').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
+      const { count: dislikesCount } = await supabase.from('video_dislikes').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
+      const { count: commentsCount } = await supabase.from('video_comments').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
 
-      // =========================================================================
-      // ✅ IMPLEMENTACIÓN DE CONTEO DIRECTO (SOLUCIÓN AL BUG DEL CONTADOR EN CERO)
-      // =========================================================================
-      
-      const { count: likesCount } = await supabase
-        .from('video_likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('video_id', videoId);
-        
-      const { count: dislikesCount } = await supabase
-        .from('video_dislikes')
-        .select('*', { count: 'exact', head: true })
-        .eq('video_id', videoId);
-
-      const { count: commentsCount } = await supabase
-        .from('video_comments')
-        .select('*', { count: 'exact', head: true })
-        .eq('video_id', videoId);
-
-      // Leemos 'views_count' de los datos del video
-      // (La vista ya no se incrementa aquí, se debe hacer con un trigger o en 'handleTimeUpdate')
       setVideoCounters({
-        likes: likesCount || 0,
-        dislikes: dislikesCount || 0,
-        views: videoData.views_count || 0, // Usar el valor existente
-        comments: commentsCount || 0
+        likes: likesCount || 0, dislikes: dislikesCount || 0, views: videoData.views_count || 0, comments: commentsCount || 0
       });
-      // =========================================================================
 
       if (user) {
-        const { data: likeData } = await supabase
-          .from('video_likes')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const { data: likeData } = await supabase.from('video_likes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
         setLiked(!!likeData);
-
-        const { data: dislikeData } = await supabase
-          .from('video_dislikes')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const { data: dislikeData } = await supabase.from('video_dislikes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
         setDisliked(!!dislikeData);
-
-        const { data: savedData } = await supabase
-          .from('saved_videos')
-          .select('*')
-          .eq('video_id', videoId)
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const { data: savedData } = await supabase.from('saved_videos').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
         setSaved(!!savedData);
-
         if (videoData.user_id) {
-          const { data: followData } = await supabase
-            .from('user_follows') // 🛑 Asumido: 'user_follows'
-            .select('*')
-            .eq('follower_id', user.id)
-            .eq('following_id', videoData.user_id)
-            .maybeSingle();
+          const { data: followData } = await supabase.from('user_follows').select('*').eq('follower_id', user.id).eq('following_id', videoData.user_id).maybeSingle();
           setFollowing(!!followData);
         }
-
-        // ================================================================
-        // ✅ SINCRONIZACIÓN: Cargar 'mission_progress' para anti-farming
-        // ================================================================
-        try {
-          const today = new Date().toISOString().split('T')[0];
-            
-          // 1. Buscar el ID de la misión 'like_videos'
-          const { data: missionLike } = await supabase
-            .from('daily_missions')
-            .select('id')
-            .eq('mission_type', 'like_videos') //
-            .single();
-
-          if (missionLike) {
-            // 2. Buscar si el usuario ya completó esa misión HOY
-            const { data: progressData, error: progressError } = await supabase
-              .from('mission_progress') //
-              .select('is_completed')
-              .eq('user_id', user.id)
-              .eq('mission_id', missionLike.id)
-              .eq('date', today)
-              .single();
-            
-            if (progressError && progressError.code !== 'PGRST116') {
-               throw progressError; // Lanzar error si no es "fila no encontrada"
-            }
-            setHasEarnedLikePoints(progressData && progressData.is_completed);
-          } else {
-             setHasEarnedLikePoints(false);
-          }
-
-          // 3. Repetir para 'comment_videos'
-          const { data: missionComment } = await supabase
-            .from('daily_missions')
-            .select('id')
-            .eq('mission_type', 'comment_videos') //
-            .single();
-
-          if (missionComment) {
-            const { data: progressData, error: progressError } = await supabase
-              .from('mission_progress')
-              .select('is_completed')
-              .eq('user_id', user.id)
-              .eq('mission_id', missionComment.id)
-              .eq('date', today)
-              .single();
-            
-             if (progressError && progressError.code !== 'PGRST116') {
-               throw progressError;
-             }
-             setHasEarnedCommentPoints(progressData && progressData.is_completed);
-          } else {
-            setHasEarnedCommentPoints(false);
-          }
-
-        } catch (err) {
-            console.error("Error al verificar progreso de misiones:", err);
-            setHasEarnedLikePoints(false); // Ser permisivo
-            setHasEarnedCommentPoints(false);
-        }
-        // ================================================================
-        // ✅ FIN: SINCRONIZACIÓN
-        // ================================================================
       }
-
       loadRelatedVideos();
+    } catch (err) { console.error('❌ Error al cargar video:', err); setError(err.message); } finally { setLoading(false); }
+  }, [videoId, user]); 
 
-    } catch (err) {
-      console.error('❌ Error al cargar video:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [videoId, user]); // 'loadRelatedVideos' se quitó de dependencias, se llama manualmente
-
-  // ✅ CORRECCIÓN DE VIDEOS RELACIONADOS (CRASH FIX)
   const loadRelatedVideos = async () => {
     try {
-      const { data, error } = await supabase
-        .from('videos')
-        // 🛑 SELECCIÓN CORREGIDA: Eliminadas likes_count, comments_count.
-        .select('id, title, description, thumbnail_url, duration_seconds, views_count, category, created_at, user_id, orientation')
-        .neq('id', videoId)
-        // 🛑 LÍNEA ELIMINADA: .eq('is_published', true) 
-        .limit(50);
-
+      const { data, error } = await supabase.from('videos').select('id, title, description, thumbnail_url, duration_seconds, views_count, category, created_at, user_id, orientation').neq('id', videoId).limit(50);
       if (error) throw error;
-
       const horizontalVideos = data.filter(v => !v.orientation || v.orientation === 'horizontal');
 
       if (horizontalVideos && horizontalVideos.length > 0) {
         const userIds = [...new Set(horizontalVideos.map(v => v.user_id).filter(Boolean))];
-
         if (userIds.length > 0) {
-          const { data: creatorsData } = await supabase
-            .from('user_profiles')
-            .select('id, full_name, username, avatar_url, is_verified')
-            .in('id', userIds);
-
+          const { data: creatorsData } = await supabase.from('user_profiles').select('id, full_name, username, avatar_url, is_verified').in('id', userIds);
           if (creatorsData) {
-            const creatorsMap = {};
-            creatorsData.forEach(creator => {
-              creatorsMap[creator.id] = creator;
-            });
-
+            const creatorsMap = {}; creatorsData.forEach(creator => { creatorsMap[creator.id] = creator; });
             const transformed = horizontalVideos.map(video => ({
-              id: video.id,
-              title: video.title,
-              thumbnail: video.thumbnail_url,
-              duration: video.duration_seconds,
-              views: video.views_count,
-              views_count: video.views_count,
-              // likes: video.likes_count, // 🛑 Eliminado
-              category: video.category,
-              created_at: video.created_at,
-              orientation: video.orientation,
-              creator: creatorsMap[video.user_id] ? {
-                id: creatorsMap[video.user_id].id,
-                name: creatorsMap[video.user_id].full_name,
-                username: creatorsMap[video.user_id].username,
-                profile_image_url: creatorsMap[video.user_id].avatar_url,
-                is_verified: creatorsMap[video.user_id].is_verified
-              } : null
+              id: video.id, title: video.title, thumbnail: video.thumbnail_url, duration: video.duration_seconds, views: video.views_count, views_count: video.views_count, category: video.category, created_at: video.created_at, orientation: video.orientation,
+              creator: creatorsMap[video.user_id] ? { id: creatorsMap[video.user_id].id, name: creatorsMap[video.user_id].full_name, username: creatorsMap[video.user_id].username, profile_image_url: creatorsMap[video.user_id].avatar_url, is_verified: creatorsMap[video.user_id].is_verified } : null
             }));
-
             const shuffled = transformed.sort(() => Math.random() - 0.5);
             setRelatedVideos(shuffled);
           }
         }
       }
-    } catch (err) {
-      console.error('❌ Error al cargar videos relacionados:', err);
-    }
+    } catch (err) { console.error('❌ Error al cargar videos relacionados:', err); }
   };
 
   const loadComments = useCallback(async () => {
     if (!videoId) return;
-
     try {
       setLoadingComments(true);
-
-      const { data: commentsData, error } = await supabase
-        .from('video_comments')
-        .select('*')
-        .eq('video_id', videoId)
-        .is('parent_comment_id', null)
-        .order('created_at', { ascending: false });
-
+      const { data: commentsData, error } = await supabase.from('video_comments').select('*').eq('video_id', videoId).is('parent_comment_id', null).order('created_at', { ascending: false });
       if (error) throw error;
-
       if (commentsData && commentsData.length > 0) {
         const commentIds = commentsData.map(c => c.id);
-        const { data: repliesData } = await supabase
-          .from('video_comments')
-          .select('*')
-          .in('parent_comment_id', commentIds);
-
+        const { data: repliesData } = await supabase.from('video_comments').select('*').in('parent_comment_id', commentIds);
         const allComments = [...commentsData, ...(repliesData || [])];
         const userIds = [...new Set(allComments.map(c => c.user_id).filter(Boolean))];
-
         let usersMap = {};
         if (userIds.length > 0) {
-          const { data: usersData } = await supabase
-            .from('user_profiles')
-            .select('id, full_name, username, avatar_url, is_verified')
-            .in('id', userIds);
-
-          if (usersData) {
-            usersData.forEach(userProfile => {
-              usersMap[userProfile.id] = {
-                id: userProfile.id,
-                name: userProfile.full_name,
-                username: userProfile.username,
-                profile_image_url: userProfile.avatar_url,
-                is_verified: userProfile.is_verified
-              };
-            });
-          }
+          const { data: usersData } = await supabase.from('user_profiles').select('id, full_name, username, avatar_url, is_verified').in('id', userIds);
+          if (usersData) { usersData.forEach(userProfile => { usersMap[userProfile.id] = { id: userProfile.id, name: userProfile.full_name, username: userProfile.username, profile_image_url: userProfile.avatar_url, is_verified: userProfile.is_verified }; }); }
         }
-
         commentsData.forEach(comment => {
-          if (comment.user_id && usersMap[comment.user_id]) {
-            comment.user = usersMap[comment.user_id];
-          }
-
-          comment.replies = (repliesData || [])
-            .filter(reply => reply.parent_comment_id === comment.id)
-            .map(reply => {
-              if (reply.user_id && usersMap[reply.user_id]) {
-                reply.user = usersMap[reply.user_id];
-              }
-              return reply;
-            });
+          if (comment.user_id && usersMap[comment.user_id]) comment.user = usersMap[comment.user_id];
+          comment.replies = (repliesData || []).filter(reply => reply.parent_comment_id === comment.id).map(reply => { if (reply.user_id && usersMap[reply.user_id]) reply.user = usersMap[reply.user_id]; return reply; });
         });
       }
-
       setComments(commentsData || []);
-    } catch (err) {
-      console.error('❌ Error al cargar comentarios:', err);
-    } finally {
-      setLoadingComments(false);
-    }
+    } catch (err) { console.error('❌ Error al cargar comentarios:', err); } finally { setLoadingComments(false); }
   }, [videoId]);
 
   // ===============================
-  // FUNCIONES DE INTERACCIÓN Y PUNTOS (CORREGIDAS)
+  // FUNCIONES DE INTERACCIÓN Y PUNTOS
   // ===============================
 
   const handleEarnViewPoints = async () => {
     if (hasEarnedViewPoints || !user) return;
-
     try {
       setHasEarnedViewPoints(true);
-      
-      // ✅ Obtener la duración actual del video
       const currentTime = videoRef.current?.currentTime || 30;
-      
-      // ✅ Detectar si es reel o video según orientación
       const isReel = video?.orientation === 'vertical';
       const contentType = isReel ? 'reel' : 'video';
-      
-      // ✅ PARÁMETROS CORRECTOS: (contentType, contentId, watchDuration)
       const result = await trackWatchVideo(contentType, videoId, currentTime);
 
-      if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
+      if (result.result === 'success' && result.points_earned > 0) {
         updatePointsContext(result.points_earned);
         showUserFeedback(`+${result.points_earned} PUNTOS por ver ${contentType} 🎉`, 'success');
       } else if (result.result === 'progress_updated') {
-        showUserFeedback(`Progreso registrado. ¡Sigue viendo ${contentType}s!`, 'success');
+        showUserFeedback(`Progreso registrado. ¡Sigue viendo!`, 'success');
       } else if (result.result === 'already_completed') {
-        showUserFeedback(`Ya completaste la misión de ver ${contentType}s hoy.`, 'restriction');
+        showUserFeedback(`Ya completaste la misión de ver hoy.`, 'restriction');
       }
-
-    } catch (err) {
-      console.error('❌ Error al otorgar puntos/misión por vista:', err);
-    }
+    } catch (err) { console.error('❌ Error view points:', err); }
   };
 
-
+  // ✅✅✅ ACCIÓN DE LIKE (LÓGICA EXACTA A REELS CONTAINER)
   const handleLike = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    const wasLiked = liked;
-    const newLikedState = !liked;
+    if (!user) { navigate('/login'); return; }
 
     try {
       if (liked) {
@@ -793,497 +467,242 @@ const VideoPlayerPage = () => {
         // QUITAR LIKE
         // ==============================
         setLiked(false);
-        setVideoCounters(prev => ({
-          ...prev,
-          likes: Math.max(0, prev.likes - 1)
-        }));
-
-        await supabase
-          .from('video_likes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
+        setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+        await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+        
       } else {
         // ==============================
         // DAR LIKE
         // ==============================
-        if (disliked) {
-          await handleDislike();
-        }
-
+        if (disliked) await handleDislike();
         setLiked(true);
-        setVideoCounters(prev => ({
-          ...prev,
-          likes: (prev.likes || 0) + 1
-        }));
+        setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
 
-        await supabase
-          .from('video_likes')
-          .insert({ video_id: videoId, user_id: user.id });
-
-        // ================================================================
-        // ✅ INICIO: LÓGICA DE NOTIFICACIONES SINCRONIZADA
-        // ================================================================
-        
-        if (!hasEarnedLikePoints) {
-          try {
-            // ✅ Detectar si es reel o video según orientación
-            const isReel = video?.orientation === 'vertical';
-            const contentType = isReel ? 'reel' : 'video';
-            
-            // ✅ Llamamos a la función SQL con detección de tipo
-            const result = await trackGiveLike(contentType, videoId); 
-            console.log('--- RESPUESTA DE TRACK GIVE LIKE (DEBUG) ---', result); 
-
-            if (result.result === 'success' && result.points_earned > 0) { 
-              // 1. MISIÓN COMPLETA
-              updatePointsContext(result.points_earned);
-              showLikeNotification(`Misión Completa: +${result.points_earned} puntos 🎉`, 'success');
-              setHasEarnedLikePoints(true); // Marcar como completada
-
-            } else if (result.result === 'progress_updated') {
-              // 2. PROGRESO REGISTRADO
-              showLikeNotification(`Acción registrada. Sigue dando Likes!`, 'success');
-                 
-            } else if (result.result === 'already_completed') {
-              // 3. ANTI-FARMING (Misión ya completada hoy)
-              showLikeNotification(`Ya completaste la misión de Likes hoy.`, 'restriction');
-              setHasEarnedLikePoints(true); // Marcar como completada
-            }
-            // (Si hay error, no hacemos nada y 'hasEarnedLikePoints' sigue 'false')
-
-          } catch (pointsError) {
-             console.error('❌ Error al otorgar puntos/misión por Like:', pointsError);
-          }
-        } else {
-          // ==============================
-          // YA GANÓ PUNTOS HOY
-          // ==============================
-          console.log('ℹ️ El usuario ya completó la misión de likes hoy.');
-          showLikeNotification('Ya completaste esta misión hoy', 'restriction');
+        // 1. Bloqueo de Auto-Like
+        if (video.user_id === user.id) {
+             showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
+             // Insertamos el like en BD (social) pero no procesamos puntos
+             await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+             return;
         }
+
+        // Insertar Like en BD (Acción Social)
+        const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+        if (likeError && likeError.code !== '23505') {
+            console.error('Error like:', likeError);
+            setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+            return;
+        }
+
         // ================================================================
-        // ✅ FIN: LÓGICA DE NOTIFICACIONES
+        // 🛑 ANTI-FARMING & PUNTOS
         // ================================================================
+        const alreadyRewarded = pointsRewardedIds.has(videoId);
+
+        if (alreadyRewarded) {
+            // CASO RE-LIKE (Informativo)
+            console.log('ℹ️ Re-like detectado: Sin puntos extra');
+            showLikeNotification('Like restaurado (Sin puntos extra)', 'info');
+        } else {
+            // CASO NUEVO LIKE
+            setPointsRewardedIds(prev => new Set([...prev, videoId]));
+            
+            // Actualización Optimista de la Misión
+            const missionSnapshot = [...missions];
+            updateMissionOptimistic('give_like', 1);
+            
+            try {
+              const isReel = video?.orientation === 'vertical';
+              const contentType = isReel ? 'reel' : 'video';
+              const result = await trackGiveLike(contentType, videoId);
+              
+              if (result.result === 'success' && result.points_earned > 0) { 
+                updatePointsContext(result.points_earned); 
+                await refreshPoints();
+                showLikeNotification(`Misión Completa: +${result.points_earned} puntos 🎉`, 'success');
+              } else if (result.result === 'already_completed') {
+                showLikeNotification('Like registrado (Misión diaria completa)', 'info');
+                rollbackMission(missionSnapshot);
+              } else {
+                showLikeNotification('✓ Like registrado', 'info');
+                await refreshPoints();
+              }
+            } catch (pointsError) {
+              console.error('❌ Error puntos:', pointsError);
+              rollbackMission(missionSnapshot);
+            }
+        }
       }
     } catch (err) {
       console.error('Error en like:', err);
-      setLiked(wasLiked); 
-      setVideoCounters(prev => ({ 
-        ...prev, 
-        likes: Math.max(0, prev.likes - (newLikedState ? 1 : -1)) 
-      }));
     }
   };
 
   const handleDislike = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+    if (!user) { navigate('/login'); return; }
     try {
       if (disliked) {
-        setDisliked(false);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: Math.max(0, prev.dislikes - 1)
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
+        setDisliked(false); setVideoCounters(prev => ({ ...prev, dislikes: Math.max(0, prev.dislikes - 1) }));
+        await supabase.from('video_dislikes').delete().eq('video_id', videoId).eq('user_id', user.id);
       } else {
-        if (liked) {
-          // ✅ Llamamos a handleLike, que quitará el like
-          await handleLike(); 
-        }
-        setDisliked(true);
-        setVideoCounters(prev => ({
-          ...prev,
-          dislikes: prev.dislikes + 1
-        }));
-
-        await supabase
-          .from('video_dislikes')
-          .insert({ video_id: videoId, user_id: user.id });
-
+        if (liked) await handleLike();
+        setDisliked(true); setVideoCounters(prev => ({ ...prev, dislikes: prev.dislikes + 1 }));
+        await supabase.from('video_dislikes').insert({ video_id: videoId, user_id: user.id });
       }
-    } catch (err) {
-      console.error('Error en dislike:', err);
-    }
+    } catch (err) { console.error('Error en dislike:', err); }
   };
 
   const handleSave = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+    if (!user) { navigate('/login'); return; }
     try {
       if (saved) {
-        setSaved(false);
-        await supabase
-          .from('saved_videos')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
+        setSaved(false); await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id);
       } else {
-        setSaved(true);
-        await supabase
-          .from('saved_videos')
-          .insert({ video_id: videoId, user_id: user.id });
-        
-        try {
-          // (Asumimos que 'save_video' es el tipo de misión correcto)
-          trackMissionProgress('save_video', 'video', videoId); 
-        } catch (missionError) {
-          console.error('❌ Error al registrar misión de Guardar:', missionError);
-        }
-        // Usamos la notificación grande para esto
+        setSaved(true); await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
         showUserFeedback('Video guardado en favoritos', 'success', 1500);
       }
-    } catch (err) {
-      console.error('Error al guardar:', err);
-    }
+    } catch (err) { console.error('Error al guardar:', err); }
   };
 
   const handleShare = async () => {
-    if (!user) {
-        navigate('/login');
-        return;
-    }
-    
-    const url = `${window.location.origin}/video/${videoId}`;
-    setShareLink(url);
-    setShowShareModal(true);
-
+    if (!user) { navigate('/login'); return; }
+    const url = `${window.location.origin}/video/${videoId}`; setShareLink(url); setShowShareModal(true);
     if (!hasEarnedSharePoints) {
       setHasEarnedSharePoints(true); 
-      
       try {
-        // ✅ Detectar si es reel o video según orientación
         const isReel = video?.orientation === 'vertical';
         const contentType = isReel ? 'reel' : 'video';
-        
-        // ✅ PARÁMETROS CORRECTOS: (contentType, contentId, shareCount, metadata)
-        const result = await trackShareContent(
-          contentType,
-          videoId,
-          1,                              // ✅ Cantidad de veces compartido
-          { platform: 'link' }            // ✅ Metadata con plataforma
-        );
-
-        if (result.result === 'success' && result.points_earned && result.points_earned > 0) {
-          updatePointsContext(result.points_earned);
-          showUserFeedback(`+${result.points_earned} PUNTOS por Compartir ${contentType} 📢`, 'success');
+        const result = await trackShareContent(contentType, videoId, 1, { platform: 'link' });
+        if (result.result === 'success' && result.points_earned > 0) {
+          updatePointsContext(result.points_earned); showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
         } else if (result.result === 'progress_updated') {
-          showUserFeedback(`Progreso registrado. ¡Sigue compartiendo!`, 'success');
+          showUserFeedback(`Progreso registrado.`, 'success');
         } else if (result.result === 'already_completed') {
-          showUserFeedback(`Ya completaste la misión de compartir hoy.`, 'restriction');
-        } else if (result.result === 'already_paid') {
-          showUserFeedback('PUNTOS YA GANADOS por compartir este contenido.', 'restriction');
-        } else if (result.result === 'error') {
-           setHasEarnedSharePoints(false);
-        }
-      } catch (pointsError) {
-        console.error('❌ Error al otorgar puntos/misión por Compartir:', pointsError);
-        setHasEarnedSharePoints(false);
-      }
+          showUserFeedback(`Misión de compartir completada hoy.`, 'restriction');
+        } else if (result.result === 'error') { setHasEarnedSharePoints(false); }
+      } catch (pointsError) { console.error('❌ Error share:', pointsError); setHasEarnedSharePoints(false); }
     }
   };
   
-  // ✅ NUEVA FUNCIÓN: Abrir Modal de Regalo
   const handleGift = () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    if (user.id === video.user_id) {
-      // Usamos la notificación grande
-      showUserFeedback('No puedes regalar puntos a tu propio video.', 'restriction');
-      return;
-    }
+    if (!user) { navigate('/login'); return; }
+    if (user.id === video.user_id) { showUserFeedback('No puedes regalar puntos a tu propio video.', 'restriction'); return; }
     setShowGiftModal(true);
   };
   
-  // ✅ NUEVA FUNCIÓN: Manejar el éxito del regalo
-  const handleGiftSuccess = (amount) => {
-    // Usamos la notificación grande
-    showUserFeedback(`¡Regalo enviado! ${amount} puntos para el creador.`, 'success');
-    // Si necesitas actualizar cualquier contador del video (ej. contador de regalos), hazlo aquí.
-  };
+  const handleGiftSuccess = (amount) => { showUserFeedback(`¡Regalo enviado! ${amount} puntos.`, 'success'); };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareLink);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
-  };
+  const handleCopyLink = () => { navigator.clipboard.writeText(shareLink); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 2000); };
 
   const handleFollow = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
+    if (!user) { navigate('/login'); return; }
     if (!video?.user_id) return;
-
     try {
       if (following) {
-        // Dejar de seguir
-        setFollowing(false);
-        await supabase
-          .from('user_follows')
-          .delete()
-          .eq('follower_id', user.id)
-          .eq('following_id', video.user_id);
-        
+        setFollowing(false); await supabase.from('user_follows').delete().eq('follower_id', user.id).eq('following_id', video.user_id);
         showUserFeedback('Dejaste de seguir a este creador', 'success', 1500);
       } else {
-        // Seguir
-        setFollowing(true);
-        await supabase
-          .from('user_follows')
-          .insert({
-            follower_id: user.id,
-            following_id: video.user_id
-          });
-        
-        // ✅ TRACKING DE MISIÓN - IMPLEMENTADO CORRECTAMENTE
+        setFollowing(true); await supabase.from('user_follows').insert({ follower_id: user.id, following_id: video.user_id });
         try {
           const result = await trackFollowUser(video.user_id);
-          
           if (result.result === 'success' && result.points_earned > 0) {
-            updatePointsContext(result.points_earned);
-            showUserFeedback(`+${result.points_earned} PUNTOS por Seguir creador 👥`, 'success');
-          } else if (result.result === 'progress_updated') {
-            showUserFeedback('Progreso registrado. ¡Sigue siguiendo creadores!', 'success');
-          } else if (result.result === 'already_completed') {
-            showUserFeedback('Ya completaste la misión de seguir hoy.', 'restriction');
-          } else {
-            // Si no hay misión activa, solo mostrar mensaje básico
-            showUserFeedback('Ahora sigues a este creador', 'success', 1500);
-          }
-        } catch (missionError) {
-          console.error('❌ Error al registrar misión de Seguir:', missionError);
-          // Mostrar mensaje básico aunque falle el tracking
-          showUserFeedback('Ahora sigues a este creador', 'success', 1500);
-        }
+            updatePointsContext(result.points_earned); showUserFeedback(`+${result.points_earned} PUNTOS por Seguir 👥`, 'success');
+          } else { showUserFeedback('Ahora sigues a este creador', 'success', 1500); }
+        } catch (missionError) { showUserFeedback('Ahora sigues a este creador', 'success', 1500); }
       }
-    } catch (err) {
-      console.error('Error al seguir:', err);
-    }
+    } catch (err) { console.error('Error al seguir:', err); }
   };
 
   const handleSubmitComment = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    if (!newComment.trim()) return;
-
+    e.preventDefault(); if (!user) { navigate('/login'); return; } if (!newComment.trim()) return;
     try {
-      const commentData = {
-        video_id: videoId,
-        user_id: user.id,
-        content: newComment.trim(),
-        parent_comment_id: replyingTo
-      };
-
-      const { data, error } = await supabase
-        .from('video_comments')
-        .insert(commentData)
-        .select('*')
-        .single();
-
+      const commentData = { video_id: videoId, user_id: user.id, content: newComment.trim(), parent_comment_id: replyingTo };
+      const { data, error } = await supabase.from('video_comments').insert(commentData).select('*').single();
       if (error) throw error;
+      const { data: userData } = await supabase.from('user_profiles').select('id, full_name, username, avatar_url, is_verified').eq('id', user.id).single();
+      if (userData) { data.user = { id: userData.id, name: userData.full_name, username: userData.username, profile_image_url: userData.avatar_url, is_verified: userData.is_verified }; }
+      setVideoCounters(prev => ({ ...prev, comments: prev.comments + 1 }));
 
-      const { data: userData } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, username, avatar_url, is_verified')
-        .eq('id', user.id)
-        .single();
-
-      if (userData) {
-        data.user = {
-          id: userData.id,
-          name: userData.full_name,
-          username: userData.username,
-          profile_image_url: userData.avatar_url,
-          is_verified: userData.is_verified
-        };
-      }
-
-      setVideoCounters(prev => ({
-        ...prev,
-        comments: prev.comments + 1
-      }));
-
-      // ✅ CORREGIDO: Lógica de notificación de comentarios con detección de tipo
       if (!hasEarnedCommentPoints) {
         setHasEarnedCommentPoints(true); 
-        
         try {
-          // ✅ Detectar si es reel o video según orientación
-          const isReel = video?.orientation === 'vertical';
-          const contentType = isReel ? 'reel' : 'video';
-          
-          // ✅ Usar contentType en lugar de 'video' hardcodeado
+          const isReel = video?.orientation === 'vertical'; const contentType = isReel ? 'reel' : 'video';
           const result = await trackComment(contentType, videoId);
-          console.log('--- RESPUESTA DE TRACK COMMENT (DEBUG) ---', result); 
-
           if (result.result === 'success' && result.points_earned > 0) {
-            updatePointsContext(result.points_earned);
-            showUserFeedback(`+${result.points_earned} PUNTOS por Comentar ${contentType} 💬`, 'success');
-          } else if (result.result === 'progress_updated') {
-            showUserFeedback('Comentario registrado. ¡Sigue así!', 'success');
-          } else if (result.result === 'already_paid') {
-            showUserFeedback('PUNTOS YA GANADOS por Comentar.', 'restriction');
-          } else if (result.result === 'already_completed') {
-            showUserFeedback('Misión de Comentarios ya completada hoy.', 'restriction');
-          } else if (result.result === 'error') {
-             setHasEarnedCommentPoints(false); // Permitir reintento
-          }
-        } catch (pointsError) {
-          console.error('❌ Error al otorgar puntos/misión por Comentar:', pointsError);
-          setHasEarnedCommentPoints(false);
-        }
+            updatePointsContext(result.points_earned); showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
+          } else if (result.result === 'error') { setHasEarnedCommentPoints(false); }
+        } catch (pointsError) { setHasEarnedCommentPoints(false); }
       }
 
-      if (replyingTo) {
-        setComments(prev => prev.map(comment => {
-          if (comment.id === replyingTo) {
-            return {
-              ...comment,
-              replies: [...(comment.replies || []), data]
-            };
-          }
-          return comment;
-        }));
-      } else {
-        setComments(prev => [data, ...prev]);
-      }
-
-      setNewComment('');
-      setReplyingTo(null);
-
-    } catch (err) {
-      console.error('Error al publicar comentario:', err);
-      setVideoCounters(prev => ({ ...prev, comments: Math.max(0, prev.comments - 1) }));
-    }
+      if (replyingTo) { setComments(prev => prev.map(comment => { if (comment.id === replyingTo) { return { ...comment, replies: [...(comment.replies || []), data] }; } return comment; })); } else { setComments(prev => [data, ...prev]); }
+      setNewComment(''); setReplyingTo(null);
+    } catch (err) { console.error('Error comentario:', err); setVideoCounters(prev => ({ ...prev, comments: Math.max(0, prev.comments - 1) })); }
   };
 
   const handleDeleteComment = async (commentId) => {
     if (!user) return;
-
     try {
-      await supabase
-        .from('video_comments')
-        .delete()
-        .eq('id', commentId)
-        .eq('user_id', user.id);
-
-      setVideoCounters(prev => ({
-        ...prev,
-        comments: Math.max(0, prev.comments - 1)
-      }));
-
+      await supabase.from('video_comments').delete().eq('id', commentId).eq('user_id', user.id);
+      setVideoCounters(prev => ({ ...prev, comments: Math.max(0, prev.comments - 1) }));
       setComments(prev => prev.filter(c => c.id !== commentId));
-      
-    } catch (err) {
-      console.error('Error al eliminar comentario:', err);
-    }
+    } catch (err) { console.error('Error al eliminar comentario:', err); }
   };
-
-  // ❌ FUNCIONES MOVIDAS A LA PARTE SUPERIOR DEL COMPONENTE
-  // togglePlayPause
-  // handleVolumeChange
-  // toggleMute
-  // toggleFullscreen
 
   const handleTimeUpdate = () => {
     const currentVideo = videoRef.current;
     if (!currentVideo) return;
-
     setProgress((currentVideo.currentTime / currentVideo.duration) * 100);
-
-    const currentTime = currentVideo.currentTime;
-
-    if (currentTime >= 30 && !hasEarnedViewPoints && user) {
-      handleEarnViewPoints();
-    }
+    if (currentVideo.currentTime >= 30 && !hasEarnedViewPoints && user) { handleEarnViewPoints(); }
+  };
+  
+  // ✅ NUEVA FUNCIÓN: AUTOPLAY SIGUIENTE VIDEO
+  const handleVideoEnded = () => {
+      setIsPlaying(false);
+      if (relatedVideos.length > 0) {
+          // Obtener el primer video de la lista de relacionados
+          const nextVideo = relatedVideos[0];
+          console.log('🎬 Video terminado. Reproduciendo siguiente:', nextVideo.title);
+          
+          // Navegar al siguiente video
+          navigate(`/video/${nextVideo.id}`);
+          window.scrollTo(0, 0);
+      }
   };
 
   const handleSeek = (e) => {
     if (!videoRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pos = (e.clientX - rect.left) / rect.width;
+    const rect = e.currentTarget.getBoundingClientRect(); const pos = (e.clientX - rect.left) / rect.width;
     videoRef.current.currentTime = pos * videoRef.current.duration;
   };
 
   const handleMouseMovePlayer = () => {
-    setShowControls(true);
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !isMinimized) {
-        setShowControls(false);
-      }
-    }, 3000);
+    setShowControls(true); if (controlsTimeoutRef.current) { clearTimeout(controlsTimeoutRef.current); }
+    controlsTimeoutRef.current = setTimeout(() => { if (isPlaying && !isMinimized) { setShowControls(false); } }, 3000);
   };
 
-  useEffect(() => {
-    fetchVideoData();
-    fetchUserProfile();
-  }, [fetchVideoData, fetchUserProfile]);
-
-  useEffect(() => {
-    if (videoId) {
-      loadComments();
-    }
-  }, [videoId, loadComments]);
-
-  useEffect(() => {
-    return () => {
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => { fetchVideoData(); fetchUserProfile(); }, [fetchVideoData, fetchUserProfile]);
+  useEffect(() => { if (videoId) { loadComments(); } }, [videoId, loadComments]);
+  useEffect(() => { return () => { if (controlsTimeoutRef.current) { clearTimeout(controlsTimeoutRef.current); } }; }, []);
 
   const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+    if (!seconds || isNaN(seconds)) return '0:00'; const mins = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-
   const formatNumber = (num) => {
-    if (num === null || num === undefined) return '0';
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num?.toString() || '0';
+    if (num === null || num === undefined) return '0'; if (num >= 1000000) { return (num / 1000000).toFixed(1) + 'M'; } if (num >= 1000) { return (num / 1000).toFixed(1) + 'K'; } return num?.toString() || '0';
   };
 
+  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA
   const getDisplayedDescription = () => {
     if (!video.description) return '';
-    if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
-      return video.description;
-    }
-    return video.description.substring(0, DESCRIPTION_MAX_LENGTH) + '...';
+    // Asegura que no haya caracteres extraños si la DB tiene basura
+    try {
+        if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
+          return video.description;
+        }
+        return video.description.substring(0, DESCRIPTION_MAX_LENGTH) + '...';
+    } catch(e) { return ''; }
   };
-
   const shouldShowToggleButton = video?.description && video.description.length > DESCRIPTION_MAX_LENGTH;
 
   // ===============================
@@ -1291,70 +710,21 @@ const VideoPlayerPage = () => {
   // ===============================
 
   if (loading) {
-    return (
-      <>
-        <Header />
-        <div className="min-h-screen bg-background pt-16">
-          <div className="max-w-7xl mx-auto px-4 py-8">
-            <div className="animate-pulse space-y-4">
-              <div className="aspect-video bg-muted rounded-lg"></div>
-              <div className="h-8 bg-muted rounded w-3/4"></div>
-              <div className="h-4 bg-muted rounded w-1/2"></div>
-            </div>
-          </div>
-        </div>
-      </>
-    );
+    return ( <> <Header /> <div className="min-h-screen bg-background pt-16"> <div className="max-w-7xl mx-auto px-4 py-8"> <div className="animate-pulse space-y-4"> <div className="aspect-video bg-muted rounded-lg"></div> <div className="h-8 bg-muted rounded w-3/4"></div> <div className="h-4 bg-muted rounded w-1/2"></div> </div> </div> </div> </> );
   }
-
   if (error || !video) {
-    return (
-      <>
-        <Header />
-        <div className="min-h-screen bg-background pt-16">
-          <div className="max-w-7xl mx-auto px-4 py-8 text-center">
-            <Icon name="AlertCircle" className="w-16 h-16 text-destructive mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Video no encontrado</h2>
-            <p className="text-muted-foreground mb-4">
-              El video que buscas no existe o fue eliminado.
-            </p>
-            <Button onClick={() => navigate('/')}>
-              Volver al inicio
-            </Button>
-          </div>
-        </div>
-      </>
-    );
+    return ( <> <Header /> <div className="min-h-screen bg-background pt-16"> <div className="max-w-7xl mx-auto px-4 py-8 text-center"> <Icon name="AlertCircle" className="w-16 h-16 text-destructive mx-auto mb-4" /> <h2 className="text-2xl font-bold mb-2">Video no encontrado</h2> <p className="text-muted-foreground mb-4"> El video que buscas no existe o fue eliminado. </p> <Button onClick={() => navigate('/')}> Volver al inicio </Button> </div> </div> </> );
   }
 
   return (
     <>
-      <Helmet>
-        <title>{video.title} - Radeisan</title>
-        <meta name="description" content={video.description} />
-      </Helmet>
-
+      <Helmet> <title>{video.title} - Radeisan</title> <meta name="description" content={video.description} /> </Helmet>
       <Header />
-
-      {/* ❌ FEEDBACK VISUAL GRANDE (Ahora solo para acciones generales) */}
       {userFeedback.show && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4 backdrop-blur-sm bg-black/10">
-          <div 
-            className={`
-              p-8 rounded-2xl text-center shadow-2xl transition-all duration-300 transform 
-              ${userFeedback.type === 'success' ? 'bg-green-600/95 border-green-300' : 'bg-red-600/95 border-red-300'} 
-              text-white border-4
-              animate-pop-in
-            `}
-            style={{ minWidth: '320px', maxWidth: '90%' }}
-          >
-            <Icon 
-              name={userFeedback.type === 'success' ? 'Zap' : 'AlertTriangle'} 
-              className="w-12 h-12 mx-auto mb-3" 
-            />
-            <h2 className="text-3xl font-extrabold mb-1 uppercase">
-              {userFeedback.type === 'success' ? '¡Éxito!' : 'Acción Restringida'}
-            </h2>
+          <div className={`p-8 rounded-2xl text-center shadow-2xl transition-all duration-300 transform ${userFeedback.type === 'success' ? 'bg-green-600/95 border-green-300' : 'bg-red-600/95 border-red-300'} text-white border-4 animate-pop-in`} style={{ minWidth: '320px', maxWidth: '90%' }}>
+            <Icon name={userFeedback.type === 'success' ? 'Zap' : 'AlertTriangle'} className="w-12 h-12 mx-auto mb-3" />
+            <h2 className="text-3xl font-extrabold mb-1 uppercase"> {userFeedback.type === 'success' ? '¡Éxito!' : 'Acción Restringida'} </h2>
             <p className="text-xl font-semibold">{userFeedback.message}</p>
           </div>
         </div>
@@ -1365,138 +735,35 @@ const VideoPlayerPage = () => {
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1">
               {/* Video Player Principal */}
-              <div
-                ref={containerRef}
-                className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${
-                  isMinimized ? 'opacity-30 pointer-events-none' : 'opacity-100'
-                }`}
-                onMouseMove={!isMinimized ? handleMouseMovePlayer : undefined}
-                onMouseLeave={() => isPlaying && !isMinimized && setShowControls(false)}
-              >
+              <div ref={containerRef} className={`relative bg-black rounded-lg overflow-hidden shadow-2xl group transition-all duration-300 ${isMinimized ? 'opacity-30 pointer-events-none' : 'opacity-100'}`} onMouseMove={!isMinimized ? handleMouseMovePlayer : undefined} onMouseLeave={() => isPlaying && !isMinimized && setShowControls(false)}>
+                {/* ✅ VIDEO CON AUTOPLAY */}
                 <video
                   ref={videoRef}
                   src={video.video_url}
                   className="w-full aspect-video object-contain"
+                  autoPlay // ✅ Autoplay nativo
                   onLoadedMetadata={(e) => setDuration(e.target.duration)}
                   onTimeUpdate={handleTimeUpdate}
-                  onEnded={() => setIsPlaying(false)}
+                  onEnded={handleVideoEnded} // ✅ Autoplay siguiente video
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
-
-                {!isMinimized && (
-                  <div 
-                    className="absolute inset-0 cursor-pointer"
-                    onClick={togglePlayPause}
-                  />
-                )}
-
-                {isMinimized && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
-                    <div className="text-center text-white">
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Icon name="Minimize2" className="w-10 h-10" />
-                      </div>
-                      <p className="text-sm">Reproduciendo en mini-player</p>
-                    </div>
-                  </div>
-                )}
-
-                <div
-                  className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 pointer-events-none ${
-                    showControls && !isMinimized ? 'opacity-100' : 'opacity-0'
-                  }`}
-                >
-                  {!isPlaying && !isMinimized && (
-                    <button
-                      onClick={togglePlayPause}
-                      className="absolute inset-0 flex items-center justify-center pointer-events-auto"
-                    >
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors">
-                        <Icon name="Play" className="w-10 h-10 text-white ml-1" />
-                      </div>
-                    </button>
-                  )}
-
+                {!isMinimized && ( <div className="absolute inset-0 cursor-pointer" onClick={togglePlayPause} /> )}
+                {isMinimized && ( <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none"> <div className="text-center text-white"> <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4"> <Icon name="Minimize2" className="w-10 h-10" /> </div> <p className="text-sm">Reproduciendo en mini-player</p> </div> </div> )}
+                <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 pointer-events-none ${showControls && !isMinimized ? 'opacity-100' : 'opacity-0'}`}>
+                  {!isPlaying && !isMinimized && ( <button onClick={togglePlayPause} className="absolute inset-0 flex items-center justify-center pointer-events-auto"> <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"> <Icon name="Play" className="w-10 h-10 text-white ml-1" /> </div> </button> )}
                   <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2 pointer-events-auto">
-                    <div
-                      className="h-1 bg-white/30 rounded-full cursor-pointer group/progress"
-                      onClick={handleSeek}
-                    >
-                      <div
-                        className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all"
-                        style={{ width: `${progress}%` }}
-                      >
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div>
-                      </div>
-                    </div>
-
+                    <div className="h-1 bg-white/30 rounded-full cursor-pointer group/progress" onClick={handleSeek}> <div className="h-full bg-red-600 rounded-full relative group-hover/progress:h-1.5 transition-all" style={{ width: `${progress}%` }}> <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"></div> </div> </div>
                     <div className="flex items-center justify-between text-white">
                       <div className="flex items-center gap-2 md:gap-4">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            togglePlayPause();
-                          }}
-                          className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                        >
-                          <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} />
-                        </button>
-
+                        <button onClick={(e) => { e.stopPropagation(); togglePlayPause(); }} className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"> <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 18 : 20} /> </button>
                         <div className="flex items-center gap-2 group/volume">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMute();
-                            }}
-                            className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                          >
-                            <Icon
-                              name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'}
-                              size={isMobile ? 18 : 20}
-                            />
-                          </button>
-                          {!isMobile && (
-                            <input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={volume}
-                              onChange={handleVolumeChange}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-0 group-hover/volume:w-20 transition-all"
-                            />
-                          )}
+                          <button onClick={(e) => { e.stopPropagation(); toggleMute(); }} className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"> <Icon name={isMuted ? 'VolumeX' : volume > 0.5 ? 'Volume2' : 'Volume1'} size={isMobile ? 18 : 20} /> </button>
+                          {!isMobile && ( <input type="range" min="0" max="1" step="0.01" value={volume} onChange={handleVolumeChange} onClick={(e) => e.stopPropagation()} className="w-0 group-hover/volume:w-20 transition-all" /> )}
                         </div>
-
-                        <span className="text-xs md:text-sm font-medium">
-                          {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)}
-                        </span>
+                        <span className="text-xs md:text-sm font-medium"> {formatTime(videoRef.current?.currentTime)} / {formatTime(duration)} </span>
                       </div>
-
-                      <div className="flex items-center gap-1 md:gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMinimize();
-                          }}
-                          className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                          title="Minimizar"
-                        >
-                          <Icon name="Minimize2" size={isMobile ? 18 : 20} />
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFullscreen();
-                          }}
-                          className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"
-                        >
-                          <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} />
-                        </button>
-                      </div>
+                      <div className="flex items-center gap-1 md:gap-2"> <button onClick={(e) => { e.stopPropagation(); handleMinimize(); }} className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors" title="Minimizar"> <Icon name="Minimize2" size={isMobile ? 18 : 20} /> </button> <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:bg-white/20 p-1.5 md:p-2 rounded-full transition-colors"> <Icon name={isFullscreen ? 'Minimize' : 'Maximize'} size={isMobile ? 18 : 20} /> </button> </div>
                     </div>
                   </div>
                 </div>
@@ -1504,318 +771,56 @@ const VideoPlayerPage = () => {
 
               {/* Información del video */}
               <div className="mt-4 space-y-4">
-                <h1 className="text-lg md:text-xl font-bold text-foreground">
-                  {video.title}
-                </h1>
-
+                <h1 className="text-lg md:text-xl font-bold text-foreground"> {video.title} </h1>
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <Link to={`/profile/${video.creator?.username || 'unknown'}`}>
-                      <img
-                        src={video.creator?.profile_image_url || '/default-avatar.png'}
-                        alt={video.creator?.name || 'Usuario'}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    </Link>
+                    <Link to={`/profile/${video.creator?.username || 'unknown'}`}> <img src={video.creator?.profile_image_url || '/default-avatar.png'} alt={video.creator?.name || 'Usuario'} className="w-10 h-10 rounded-full object-cover" /> </Link>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <Link
-                          to={`/profile/${video.creator?.username || 'unknown'}`}
-                          className="font-semibold text-sm md:text-base text-foreground hover:text-primary"
-                        >
-                          {video.creator?.name || 'Usuario'}
-                        </Link>
-                        {video.creator?.is_verified && (
-                          <Icon name="BadgeCheck" size={16} className="text-blue-500" />
-                        )}
-                      </div>
-                      <p className="text-xs md:text-sm text-muted-foreground">
-                        {formatNumber(videoCounters.views)} visualizaciones
-                      </p>
+                      <div className="flex items-center gap-2"> <Link to={`/profile/${video.creator?.username || 'unknown'}`} className="font-semibold text-sm md:text-base text-foreground hover:text-primary"> {video.creator?.name || 'Usuario'} </Link> {video.creator?.is_verified && ( <Icon name="BadgeCheck" size={16} className="text-blue-500" /> )} </div>
+                      <p className="text-xs md:text-sm text-muted-foreground"> {formatNumber(videoCounters.views)} visualizaciones </p>
                     </div>
-                    {user?.id !== video.user_id && (
-                      <Button
-                        onClick={handleFollow}
-                        variant={following ? 'outline' : 'default'}
-                        size="sm"
-                        className="ml-auto md:ml-4"
-                      >
-                        {following ? 'Siguiendo' : 'Seguir'}
-                      </Button>
-                    )}
+                    {user?.id !== video.user_id && ( <Button onClick={handleFollow} variant={following ? 'outline' : 'default'} size="sm" className="ml-auto md:ml-4"> {following ? 'Siguiendo' : 'Seguir'} </Button> )}
                   </div>
-
-                  {/* ================================================== */}
-                  {/* ✅ GRUPO DE BOTONES CON NOTIFICACIÓN              */}
-                  {/* ================================================== */}
                   <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                    {/* ✅ AÑADIDO 'relative' a este contenedor */}
                     <div className="relative flex items-center bg-muted rounded-full overflow-hidden">
-                      <button
-                        onClick={handleLike}
-                        className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${
-                          liked ? 'text-primary' : ''
-                        }`}
-                      >
-                        <Icon name="ThumbsUp" size={18} className={liked ? 'fill-current' : ''} />
-                        <span className="font-medium text-sm">{formatNumber(videoCounters.likes)}</span>
-                      </button>
-
-                      <button
-                        onClick={handleDislike}
-                        className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${
-                          disliked ? 'text-primary' : ''
-                        }`}
-                      >
-                        <Icon name="ThumbsDown" size={18} className={disliked ? 'fill-current' : ''} />
-                        <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span>
-                      </button>
-                      
-                      {/* ✅ NOTIFICACIÓN DE PUNTOS DE LIKE AÑADIDA */}
-                      {likeNotification.show && (
-                        <div 
-                          className={`absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg shadow-lg text-white font-bold text-xs whitespace-nowrap animate-bounce z-20
-                          ${likeNotification.type === 'success' 
-                            ? 'bg-gradient-to-r from-yellow-400 to-orange-500'
-                            : 'bg-gradient-to-r from-gray-500 to-gray-600'
-                          }
-                        `}>
-                          {likeNotification.message}
-                        </div>
-                      )}
+                      <button onClick={handleLike} className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${liked ? 'text-primary' : ''}`}> <Icon name="ThumbsUp" size={18} className={liked ? 'fill-current' : ''} /> <span className="font-medium text-sm">{formatNumber(videoCounters.likes)}</span> </button>
+                      <button onClick={handleDislike} className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${disliked ? 'text-primary' : ''}`}> <Icon name="ThumbsDown" size={18} className={disliked ? 'fill-current' : ''} /> <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span> </button>
+                      {likeNotification.show && ( <div className={`absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg shadow-lg text-white font-bold text-xs whitespace-nowrap animate-bounce z-20 ${likeNotification.type === 'success' ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'}`}> {likeNotification.message} </div> )}
                     </div>
-                    
-                    {/* ✅ NUEVO BOTÓN: Regalar Puntos */}
-                    {user?.id !== video.user_id && (
-                        <button
-                            onClick={handleGift}
-                            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"
-                            title="Regalar Puntos al Creador"
-                        >
-                            <span className="text-lg font-extrabold text-yellow-600 mr-0.5 leading-none">R</span>
-                            <Icon name="Gift" size={18} className="fill-current text-yellow-600" />
-                            <span className="font-medium text-sm hidden sm:inline">Regalar</span>
-                        </button>
-                    )}
-
-                    <button
-                      onClick={handleShare}
-                      className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"
-                    >
-                      <Icon name="Share2" size={18} />
-                      <span className="font-medium text-sm">Compartir</span>
-                    </button>
-
-                    <button
-                      onClick={handleSave}
-                      className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap ${
-                        saved ? 'text-primary' : ''
-                      }`}
-                    >
-                      <Icon name="Bookmark" size={18} className={saved ? 'fill-current' : ''} />
-                      <span className="font-medium text-sm">{saved ? 'Guardado' : 'Guardar'}</span>
-                    </button>
+                    {user?.id !== video.user_id && ( <button onClick={handleGift} className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap" title="Regalar Puntos al Creador"> <span className="text-lg font-extrabold text-yellow-600 mr-0.5 leading-none">R</span> <Icon name="Gift" size={18} className="fill-current text-yellow-600" /> <span className="font-medium text-sm hidden sm:inline">Regalar</span> </button> )}
+                    <button onClick={handleShare} className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"> <Icon name="Share2" size={18} /> <span className="font-medium text-sm">Compartir</span> </button>
+                    <button onClick={handleSave} className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap ${saved ? 'text-primary' : ''}`}> <Icon name="Bookmark" size={18} className={saved ? 'fill-current' : ''} /> <span className="font-medium text-sm">{saved ? 'Guardado' : 'Guardar'}</span> </button>
                   </div>
                 </div>
-
                 <div className="bg-muted rounded-lg p-4">
-                  {/* Lógica de Ver Más/Ver Menos */}
-                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                  {/* ✅ DESCRIPCIÓN SEGURA Y FORMATEADA */}
+                  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                     {getDisplayedDescription()}
                   </p>
-
-                  {shouldShowToggleButton && (
-                    <button
-                      onClick={() => setShowFullDescription(prev => !prev)}
-                      className="text-sm font-medium text-primary hover:text-primary/80 mt-1"
-                    >
-                      {showFullDescription ? 'Ver menos' : 'Ver más'}
-                    </button>
-                  )}
-                  {/* Fin de Lógica Ver Más/Ver Menos */}
-
-                  {video.created_at && (
-                    <p className={`text-xs text-muted-foreground ${shouldShowToggleButton ? 'mt-1' : 'mt-2'}`}>
-                      Publicado el {new Date(video.created_at).toLocaleDateString('es-ES', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
-                  )}
+                  {shouldShowToggleButton && ( <button onClick={() => setShowFullDescription(prev => !prev)} className="text-sm font-medium text-primary hover:text-primary/80 mt-1"> {showFullDescription ? 'Ver menos' : 'Ver más'} </button> )}
+                  {video.created_at && ( <p className={`text-xs text-muted-foreground ${shouldShowToggleButton ? 'mt-1' : 'mt-2'}`}> Publicado el {new Date(video.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })} </p> )}
                 </div>
-
-                {/* Sección de comentarios */}
                 <div className="border-t pt-6">
-                  <h3 className="text-base md:text-lg font-bold mb-4">
-                    {formatNumber(videoCounters.comments)} comentarios
-                  </h3>
-
+                  <h3 className="text-base md:text-lg font-bold mb-4"> {formatNumber(videoCounters.comments)} comentarios </h3>
                   {user ? (
                     <form onSubmit={handleSubmitComment} className="mb-6">
-                      <div className="flex gap-3">
-                        <img
-                          src={userProfile?.avatar_url || '/default-avatar.png'}
-                          alt="Tu avatar"
-                          className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
-                        />
-                        <div className="flex-1">
-                          <input
-                            type="text"
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            placeholder={replyingTo ? 'Escribe una respuesta...' : 'Añade un comentario...'}
-                            className="w-full px-0 py-2 bg-transparent border-b border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground text-sm md:text-base"
-                          />
-                          <div className="flex items-center justify-end gap-2 mt-2">
-                            {replyingTo && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setReplyingTo(null)}
-                              >
-                                Cancelar
-                              </Button>
-                            )}
-                            <Button
-                              type="submit"
-                              size="sm"
-                              disabled={!newComment.trim()}
-                            >
-                              Comentar
-                            </Button>
-                          </div>
+                      <div className="flex gap-3"> <img src={userProfile?.avatar_url || '/default-avatar.png'} alt="Tu avatar" className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0" />
+                        <div className="flex-1"> <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={replyingTo ? 'Escribe una respuesta...' : 'Añade un comentario...'} className="w-full px-0 py-2 bg-transparent border-b border-border focus:border-primary outline-none text-foreground placeholder:text-muted-foreground text-sm md:text-base" />
+                          <div className="flex items-center justify-end gap-2 mt-2"> {replyingTo && ( <Button type="button" variant="ghost" size="sm" onClick={() => setReplyingTo(null)}> Cancelar </Button> )} <Button type="submit" size="sm" disabled={!newComment.trim()}> Comentar </Button> </div>
                         </div>
                       </div>
                     </form>
-                  ) : (
-                    <div className="bg-muted rounded-lg p-4 text-center mb-6">
-                      <p className="text-muted-foreground mb-2 text-sm">
-                        Inicia sesión para comentar
-                      </p>
-                      <Button onClick={() => navigate('/login')} size="sm">
-                        Iniciar sesión
-                      </Button>
-                    </div>
-                  )}
-
+                  ) : ( <div className="bg-muted rounded-lg p-4 text-center mb-6"> <p className="text-muted-foreground mb-2 text-sm"> Inicia sesión para comentar </p> <Button onClick={() => navigate('/login')} size="sm"> Iniciar sesión </Button> </div> )}
                   <div className="space-y-4">
-                    {loadingComments ? (
-                      <div className="text-center py-8">
-                        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                      </div>
-                    ) : comments.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground text-sm">
-                        No hay comentarios aún. ¡Sé el primero en comentar!
-                      </div>
-                    ) : (
+                    {loadingComments ? ( <div className="text-center py-8"> <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div> </div> ) : comments.length === 0 ? ( <div className="text-center py-8 text-muted-foreground text-sm"> No hay comentarios aún. ¡Sé el primero en comentar! </div> ) : (
                       comments.map((comment) => (
                         <div key={comment.id} className="space-y-3">
-                          <div className="flex gap-2 md:gap-3">
-                            <Link to={`/profile/${comment.user?.username || 'unknown'}`}>
-                              <img
-                                src={comment.user?.profile_image_url || '/default-avatar.png'}
-                                alt={comment.user?.name || 'Usuario'}
-                                className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
-                              />
-                            </Link>
+                          <div className="flex gap-2 md:gap-3"> <Link to={`/profile/${comment.user?.username || 'unknown'}`}> <img src={comment.user?.profile_image_url || '/default-avatar.png'} alt={comment.user?.name || 'Usuario'} className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0" /> </Link>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Link
-                                  to={`/profile/${comment.user?.username || 'unknown'}`}
-                                  className="font-semibold text-xs md:text-sm hover:text-primary"
-                                >
-                                  {comment.user?.name || 'Usuario'}
-                                </Link>
-                                {comment.user?.is_verified && (
-                                  <Icon name="BadgeCheck" size={14} className="text-blue-500" />
-                                )}
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(comment.created_at).toLocaleDateString('es-ES')}
-                                </span>
-                              </div>
-                              <p className="text-xs md:text-sm text-foreground mt-1">
-                                {comment.content}
-                              </p>
-                              <div className="flex items-center gap-4 mt-2">
-                                <button
-                                  onClick={() => setReplyingTo(comment.id)}
-                                  className="text-xs font-medium text-muted-foreground hover:text-primary"
-                                >
-                                  Responder
-                                </button>
-                                {user?.id === comment.user_id && (
-                                  <button
-                                    onClick={() => handleDeleteComment(comment.id)}
-                                    className="text-xs font-medium text-destructive hover:text-destructive/80"
-                                  >
-                                    Eliminar
-                                  </button>
-                                )}
-                              </div>
-
-                              {comment.replies && comment.replies.length > 0 && (
-                                <div className="mt-4 space-y-3">
-                                  {!showReplies[comment.id] ? (
-                                    <button
-                                      onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: true }))}
-                                      className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"
-                                    >
-                                      <Icon name="CornerDownRight" size={14} />
-                                      Ver {comment.replies.length} respuesta{comment.replies.length !== 1 ? 's' : ''}
-                                    </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: false }))}
-                                        className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"
-                                      >
-                                        <Icon name="CornerDownRight" size={14} />
-                                        Ocultar respuestas
-                                      </button>
-                                      {comment.replies.map((reply) => (
-                                        <div key={reply.id} className="flex gap-2 md:gap-3 ml-4 md:ml-6">
-                                          <Link to={`/profile/${reply.user?.username || 'unknown'}`}>
-                                            <img
-                                              src={reply.user?.profile_image_url || '/default-avatar.png'}
-                                              alt={reply.user?.name || 'Usuario'}
-                                              className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover flex-shrink-0"
-                                            />
-                                          </Link>
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                              <Link
-                                                to={`/profile/${reply.user?.username || 'unknown'}`}
-                                                className="font-semibold text-xs md:text-sm hover:text-primary"
-                                              >
-                                                {reply.user?.name || 'Usuario'}
-                                              </Link>
-                                              {reply.user?.is_verified && (
-                                                <Icon name="BadgeCheck" size={12} className="text-blue-500" />
-                                              )}
-                                              <span className="text-xs text-muted-foreground">
-                                                {new Date(reply.created_at).toLocaleDateString('es-ES')}
-                                              </span>
-                                            </div>
-                                            <p className="text-xs md:text-sm text-foreground mt-0.5">
-                                              {reply.content}
-                                            </p>
-                                            {user?.id === reply.user_id && (
-                                              <button
-                                                onClick={() => handleDeleteComment(reply.id)}
-                                                className="text-xs font-medium text-destructive hover:text-destructive/80 mt-2"
-                                              >
-                                                Eliminar
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </>
-                                  )}
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2 flex-wrap"> <Link to={`/profile/${comment.user?.username || 'unknown'}`} className="font-semibold text-xs md:text-sm hover:text-primary"> {comment.user?.name || 'Usuario'} </Link> {comment.user?.is_verified && ( <Icon name="BadgeCheck" size={14} className="text-blue-500" /> )} <span className="text-xs text-muted-foreground"> {new Date(comment.created_at).toLocaleDateString('es-ES')} </span> </div>
+                              <p className="text-xs md:text-sm text-foreground mt-1"> {comment.content} </p>
+                              <div className="flex items-center gap-4 mt-2"> <button onClick={() => setReplyingTo(comment.id)} className="text-xs font-medium text-muted-foreground hover:text-primary"> Responder </button> {user?.id === comment.user_id && ( <button onClick={() => handleDeleteComment(comment.id)} className="text-xs font-medium text-destructive hover:text-destructive/80"> Eliminar </button> )} </div>
+                              {comment.replies && comment.replies.length > 0 && ( <div className="mt-4 space-y-3"> {!showReplies[comment.id] ? ( <button onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: true }))} className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"> <Icon name="CornerDownRight" size={14} /> Ver {comment.replies.length} respuesta{comment.replies.length !== 1 ? 's' : ''} </button> ) : ( <> <button onClick={() => setShowReplies(prev => ({ ...prev, [comment.id]: false }))} className="text-xs md:text-sm font-medium text-primary hover:underline flex items-center gap-2"> <Icon name="CornerDownRight" size={14} /> Ocultar respuestas </button> {comment.replies.map((reply) => ( <div key={reply.id} className="flex gap-2 md:gap-3 ml-4 md:ml-6"> <Link to={`/profile/${reply.user?.username || 'unknown'}`}> <img src={reply.user?.profile_image_url || '/default-avatar.png'} alt={reply.user?.name || 'Usuario'} className="w-6 h-6 md:w-8 md:h-8 rounded-full object-cover flex-shrink-0" /> </Link> <div className="flex-1 min-w-0"> <div className="flex items-center gap-2 flex-wrap"> <Link to={`/profile/${reply.user?.username || 'unknown'}`} className="font-semibold text-xs md:text-sm hover:text-primary"> {reply.user?.name || 'Usuario'} </Link> {reply.user?.is_verified && ( <Icon name="BadgeCheck" size={12} className="text-blue-500" /> )} <span className="text-xs text-muted-foreground"> {new Date(reply.created_at).toLocaleDateString('es-ES')} </span> </div> <p className="text-xs md:text-sm text-foreground mt-0.5"> {reply.content} </p> {user?.id === reply.user_id && ( <button onClick={() => handleDeleteComment(reply.id)} className="text-xs font-medium text-destructive hover:text-destructive/80 mt-2"> Eliminar </button> )} </div> </div> ))} </> )} </div> )}
                             </div>
                           </div>
                         </div>
@@ -1825,13 +830,13 @@ const VideoPlayerPage = () => {
                 </div>
               </div>
             </div>
-
             {!isMobile && (
               <div className="lg:w-[400px] flex-shrink-0">
                 <RelatedVideosSidebar
                   videos={relatedVideos}
                   currentVideoId={videoId}
                   loading={loading}
+                  autoplayEnabled={true} // Pasamos true para activar la UI
                   onVideoSelect={(selectedVideo) => {
                     navigate(`/video/${selectedVideo.id}`);
                     window.scrollTo(0, 0);
@@ -1843,205 +848,39 @@ const VideoPlayerPage = () => {
         </div>
       </div>
       
-      {/* MINI-PLAYER FLOTANTE (sin cambios) */}
+      {/* MINI-PLAYER FLOTANTE */}
       {isMinimized && video && (
-        <div
-          ref={miniPlayerRef}
-          className="fixed bg-black rounded-lg shadow-2xl border-2 border-primary overflow-hidden"
-          style={{
-            left: `${miniPlayerPosition.x}px`,
-            top: `${miniPlayerPosition.y}px`,
-            width: isMobile ? '250px' : '400px',
-            zIndex: 9999,
-            cursor: isDragging ? 'grabbing' : 'grab',
-            touchAction: 'none'
-          }}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleMouseDown}
-        >
+        <div ref={miniPlayerRef} className="fixed bg-black rounded-lg shadow-2xl border-2 border-primary overflow-hidden" style={{ left: `${miniPlayerPosition.x}px`, top: `${miniPlayerPosition.y}px`, width: isMobile ? '250px' : '400px', zIndex: 9999, cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }} onMouseDown={handleMouseDown} onTouchStart={handleMouseDown}>
           <div className="relative aspect-video bg-black">
-            <video
-              ref={miniVideoRef}
-              src={video.video_url}
-              className="w-full h-full object-contain"
-              muted={isMuted}
-              volume={volume}
-              onTimeUpdate={(e) => {
-                setProgress((e.target.currentTime / e.target.duration) * 100);
-              }}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-            />
-
-            <div 
-              className="absolute inset-0 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                const miniVideo = miniVideoRef.current;
-                if (!miniVideo) return;
-
-                if (miniVideo.paused) {
-                  miniVideo.play();
-                  setIsPlaying(true);
-                } else {
-                  miniVideo.pause();
-                  setIsPlaying(false);
-                }
-              }}
-            />
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 20 : 24} className="text-white" />
-              </div>
-            </div>
-
+            <video ref={miniVideoRef} src={video.video_url} className="w-full h-full object-contain" muted={isMuted} volume={volume} onTimeUpdate={(e) => { setProgress((e.target.currentTime / e.target.duration) * 100); }} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} />
+            <div className="absolute inset-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); const miniVideo = miniVideoRef.current; if (!miniVideo) return; if (miniVideo.paused) { miniVideo.play(); setIsPlaying(true); } else { miniVideo.pause(); setIsPlaying(false); } }} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none"> <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"> <Icon name={isPlaying ? 'Pause' : 'Play'} size={isMobile ? 20 : 24} className="text-white" /> </div> </div>
             <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full pointer-events-none"></div>
           </div>
-
           <div className="p-2 md:p-3 bg-black/95 border-t border-primary/30">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-medium text-white truncate">
-                  {video.title}
-                </h4>
-                <p className="text-xs text-gray-400 truncate">
-                  {video.creator?.name || 'Usuario'}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const miniVideo = miniVideoRef.current;
-                    if (!miniVideo) return;
-
-                    if (miniVideo.paused) {
-                      miniVideo.play();
-                      setIsPlaying(true);
-                    } else {
-                      miniVideo.pause();
-                      setIsPlaying(false);
-                    }
-                  }}
-                  className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
-                  title={isPlaying ? 'Pausar' : 'Reproducir'}
-                >
-                  <Icon name={isPlaying ? 'Pause' : 'Play'} size={14} />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleMaximize();
-                  }}
-                  className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
-                  title="Maximizar"
-                >
-                  <Icon name="Maximize2" size={14} />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsMinimized(false);
-                  }}
-                  className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors"
-                  title="Cerrar"
-                >
-                  <Icon name="X" size={14} />
-                </button>
-              </div>
+              <div className="flex-1 min-w-0"> <h4 className="text-xs font-medium text-white truncate"> {video.title} </h4> <p className="text-xs text-gray-400 truncate"> {video.creator?.name || 'Usuario'} </p> </div>
+              <div className="flex items-center gap-1 flex-shrink-0"> <button onClick={(e) => { e.stopPropagation(); const miniVideo = miniVideoRef.current; if (!miniVideo) return; if (miniVideo.paused) { miniVideo.play(); setIsPlaying(true); } else { miniVideo.pause(); setIsPlaying(false); } }} className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors" title={isPlaying ? 'Pausar' : 'Reproducir'}> <Icon name={isPlaying ? 'Pause' : 'Play'} size={14} /> </button> <button onClick={(e) => { e.stopPropagation(); handleMaximize(); }} className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors" title="Maximizar"> <Icon name="Maximize2" size={14} /> </button> <button onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }} className="p-1.5 text-white hover:bg-white/10 rounded-full transition-colors" title="Cerrar"> <Icon name="X" size={14} /> </button> </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de compartir (sin cambios) */}
+      {/* Modal de compartir */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-lg max-w-md w-full p-4 md:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base md:text-lg font-bold">Compartir video</h3>
-              <button
-                onClick={() => setShowShareModal(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Icon name="X" size={20} />
-              </button>
-            </div>
-
+            <div className="flex items-center justify-between mb-4"> <h3 className="text-base md:text-lg font-bold">Compartir video</h3> <button onClick={() => setShowShareModal(false)} className="text-muted-foreground hover:text-foreground"> <Icon name="X" size={20} /> </button> </div>
             <div className="space-y-3 mb-4">
-              <a
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
-              >
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Icon name="Facebook" size={20} className="text-white" />
-                </div>
-                <span className="font-medium text-sm">Compartir en Facebook</span>
-              </a>
-
-              <a
-                href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(video.title)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
-              >
-                <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Icon name="Twitter" size={20} className="text-white" />
-                </div>
-                <span className="font-medium text-sm">Compartir en Twitter</span>
-              </a>
-
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"
-              >
-                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Icon name="MessageCircle" size={20} className="text-white" />
-                </div>
-                <span className="font-medium text-sm">Compartir en WhatsApp</span>
-              </a>
+              <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"> <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0"> <Icon name="Facebook" size={20} className="text-white" /> </div> <span className="font-medium text-sm">Compartir en Facebook</span> </a>
+              <a href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(video.title)}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"> <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center flex-shrink-0"> <Icon name="Twitter" size={20} className="text-white" /> </div> <span className="font-medium text-sm">Compartir en Twitter</span> </a>
+              <a href={`https://wa.me/?text=${encodeURIComponent(video.title + ' ' + shareLink)}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-muted rounded-lg hover:bg-muted-foreground/10 transition-colors"> <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0"> <Icon name="MessageCircle" size={20} className="text-white" /> </div> <span className="font-medium text-sm">Compartir en WhatsApp</span> </a>
             </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={shareLink}
-                readOnly
-                className="flex-1 px-3 py-2 bg-muted rounded-lg text-xs md:text-sm"
-              />
-              <Button onClick={handleCopyLink} size="sm">
-                {copySuccess ? (
-                  <>
-                    <Icon name="Check" size={16} className="mr-2" />
-                    Copiado
-                  </>
-                ) : (
-                  <>
-                    <Icon name="Copy" size={16} className="mr-2" />
-                    Copiar
-                  </>
-                )}
-              </Button>
-            </div>
+            <div className="flex items-center gap-2"> <input type="text" value={shareLink} readOnly className="flex-1 px-3 py-2 bg-muted rounded-lg text-xs md:text-sm" /> <Button onClick={handleCopyLink} size="sm"> {copySuccess ? ( <> <Icon name="Check" size={16} className="mr-2" /> Copiado </> ) : ( <> <Icon name="Copy" size={16} className="mr-2" /> Copiar </> )} </Button> </div>
           </div>
         </div>
       )}
-      
-      {/* ✅ NUEVO: MODAL DE REGALO DE PUNTOS */}
-      <GiftPointsModal
-        isOpen={showGiftModal}
-        onClose={() => setShowGiftModal(false)}
-        receiverId={video.user_id}
-        receiverUsername={video.creator?.username || video.creator?.name || 'Creador'}
-        contentId={videoId}
-        contentType="video"
-        onSuccess={handleGiftSuccess}
-      />
+      <GiftPointsModal isOpen={showGiftModal} onClose={() => setShowGiftModal(false)} receiverId={video.user_id} receiverUsername={video.creator?.username || video.creator?.name || 'Creador'} contentId={videoId} contentType="video" onSuccess={handleGiftSuccess} />
     </>
   );
 };
