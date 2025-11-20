@@ -78,13 +78,12 @@ const Header = () => {
     }
   };
 
-  // ✅ ITEMS DEL MENÚ PRINCIPAL (Agregada "Tienda")
   const mainNavItems = [
     { name: 'Inicio', path: '/dashboard', icon: 'Home' },
     { name: 'Reels', path: '/reels', icon: 'Smartphone' },
     { name: 'Videos', path: '/explore', icon: 'Monitor' },
     { name: 'Recompensas', path: '/rewards', icon: 'Gift' },
-    { name: 'Tienda', path: '/shop', icon: 'ShoppingBag' }, // ✅ NUEVA OPCIÓN
+    { name: 'Tienda', path: '/shop', icon: 'ShoppingBag' }, // ✅ AGREGADO: Tienda (ShoppingBag)
   ];
 
   // Si es admin, agregamos el link al panel
@@ -103,9 +102,12 @@ const Header = () => {
   }
 
   const handleNotificationClick = async (notification) => {
+    // Marcar como leída si no lo está
     if (!notification.is_read) {
       await markAsRead(notification.id);
     }
+    
+    // Cerrar el menú
     setIsNotificationsOpen(false);
     
     // Navegación inteligente según el tipo
@@ -170,7 +172,7 @@ const Header = () => {
               {/* Points Indicator (Desktop) */}
               <div className="hidden lg:block mr-2">
                 <PointsBalanceIndicator 
-                  points={totalPoints} 
+                  points={totalPoints} // Usamos totalPoints para retrocompatibilidad visual
                   showAnimation={true}
                   variant="minimal"
                 />
