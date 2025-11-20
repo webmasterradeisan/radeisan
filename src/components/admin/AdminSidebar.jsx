@@ -4,7 +4,7 @@
 // ============================================
 // Navegación lateral del panel de administración
 // Con menú dinámico basado en permisos
-// ✅ ACTUALIZADO: Agregada sección "Tienda / Pedidos"
+// ✅ ACTUALIZADO: Agregada sección "Tienda / Inventario"
 // ============================================
 
 import React from 'react';
@@ -96,7 +96,7 @@ const getMenuItems = () => [
     requiredPermission: 'manage_rewards',
     badge: null
   },
-  // ✅ NUEVA OPCIÓN: GESTIÓN DE PEDIDOS DE LA TIENDA
+  // ✅ GESTIÓN DE PEDIDOS DE LA TIENDA
   {
     id: 'shop-orders',
     name: 'Tienda / Pedidos',
@@ -104,6 +104,16 @@ const getMenuItems = () => [
     icon: 'ShoppingBag', // Icono de bolsa de compras
     description: 'Gestión de pedidos y envíos',
     requiredPermission: 'manage_rewards', // Usamos el mismo permiso de recompensas
+    badge: null
+  },
+  // ✅ NUEVO: GESTIÓN DE INVENTARIO DE LA TIENDA
+  {
+    id: 'shop-inventory',
+    name: 'Tienda / Inventario',
+    path: '/admin/shop-inventory',
+    icon: 'Tag', // Icono de etiqueta
+    description: 'Gestión de productos físicos',
+    requiredPermission: 'manage_rewards',
     badge: null
   },
   {
