@@ -4,6 +4,7 @@
 //    Ahora este componente acepta una prop `missions = []`
 // ✅ CORREGIDO: El botón "Ver Videos" ahora apunta a /dashboard
 // ✅ CORREGIDO: El botón "Historial" ahora apunta a /profile#historial-puntos
+// ✅ MEJORA UX: Indicador visual claro de "¡Completada!" en misiones
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -16,7 +17,7 @@ const PointsBalanceCard = ({
   premiumPoints = 0,
   pointsEarnedToday = 0, 
   nextRewardThreshold,
-  missions = [], // ✅ NUEVA PROP AÑADIDA
+  missions = [], // ✅ Array de misiones
   loading = false,
   className = '' 
 }) => {
@@ -141,16 +142,12 @@ const PointsBalanceCard = ({
       
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
-        {/* Botón "Ver Videos" (Corregido) */}
         <Link to="/dashboard"> 
           <Button variant="outline" size="sm" fullWidth iconName="Play" iconPosition="left">
             Ver Videos
           </Button>
         </Link>
         
-        {/* ================================================== */}
-        {/* ✅ CORRECCIÓN DE RUTA "HISTORIAL"                */}
-        {/* ================================================== */}
         <Link to="/profile#historial-puntos">
           <Button 
             variant="outline" 
@@ -165,7 +162,7 @@ const PointsBalanceCard = ({
       </div>
       
       {/* ================================================== */}
-      {/* ✅ NUEVO: Sección de Progreso de Misiones          */}
+      {/* ✅ SECCIÓN: Progreso de Misiones (MEJORADA)        */}
       {/* ================================================== */}
       <div className="border-t border-border pt-6 mt-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">
@@ -186,36 +183,50 @@ const PointsBalanceCard = ({
         {!loading && missions.length > 0 && (
           <div className="space-y-4">
             {missions.map((mission) => {
-              // Calcular progreso
-              const progress = mission.target_count > 0 
-                ? Math.min(Math.round((mission.current_count / mission.target_count) * 100), 100)
-                : (mission.is_completed ? 100 : 0);
+              // Calcular progreso (Si está completada, forzar 100%)
+              const progress = mission.is_completed 
+                ? 100 
+                : (mission.target_count > 0 
+                    ? Math.min(Math.round((mission.current_count / mission.target_count) * 100), 100)
+                    : 0);
+
+              // Estilos dinámicos
+              const isCompleted = mission.is_completed;
+              const statusColor = isCompleted ? 'text-success' : 'text-accent';
+              const barColor = isCompleted ? 'bg-success' : 'bg-accent';
+              const titleColor = isCompleted ? 'text-success font-bold' : 'text-foreground font-medium';
 
               return (
-                <div key={mission.id}>
+                <div key={mission.id} className="group">
                   <div className="flex items-center justify-between mb-1.5 text-sm">
-                    <div className="flex items-center">
+                    <div className="flex items-center overflow-hidden">
                       <Icon 
                         name={mission.icon || 'Target'} 
                         size={14} 
-                        className="text-accent mr-2" 
+                        className={`${statusColor} mr-2 flex-shrink-0`} 
                       />
-                      <span className="font-medium text-foreground truncate" title={mission.title}>
+                      <span className={`${titleColor} truncate`} title={mission.title}>
                         {mission.title}
                       </span>
                     </div>
-                    {/* Mostrar progreso solo si no está completada */}
-                    {!mission.is_completed ? (
-                      <span className="text-muted-foreground font-mono text-xs">
+                    
+                    {/* ✅ INDICADOR VISUAL DE ESTADO */}
+                    {!isCompleted ? (
+                      <span className="text-muted-foreground font-mono text-xs flex-shrink-0 ml-2">
                         {mission.current_count}/{mission.target_count}
                       </span>
                     ) : (
-                      <Icon name="CheckCircle" size={16} className="text-success" />
+                      <div className="flex items-center gap-1 text-success flex-shrink-0 ml-2 animate-in fade-in zoom-in duration-300">
+                        <span className="text-[10px] font-bold uppercase tracking-wider">¡Completada!</span>
+                        <Icon name="CheckCircle" size={16} />
+                      </div>
                     )}
                   </div>
-                  <div className="w-full bg-muted rounded-full h-1.5">
+                  
+                  {/* Barra de Progreso */}
+                  <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                     <div 
-                      className={`h-1.5 rounded-full transition-all ${mission.is_completed ? 'bg-success' : 'bg-accent'}`}
+                      className={`h-1.5 rounded-full transition-all duration-500 ${barColor}`}
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -227,10 +238,8 @@ const PointsBalanceCard = ({
 
         {/* Sin misiones activas */}
         {!loading && missions.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-2">
-            {/* El mensaje correcto se ve en la sección "Cómo ganar más puntos", 
-                pero si no hay misiones definidas, este es el mensaje de fallback: */}
-            No hay misiones activas disponibles.
+          <p className="text-sm text-muted-foreground text-center py-4 bg-muted/30 rounded-lg border border-dashed border-border">
+            No hay misiones activas disponibles hoy.
           </p>
         )}
       </div>
