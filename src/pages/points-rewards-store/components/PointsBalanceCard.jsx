@@ -1,10 +1,10 @@
 // src/pages/points-rewards-store/components/PointsBalanceCard.jsx
 // ============================================================================
-// ✅ NUEVO: Añadida sección de "Progreso de Misiones"
-//    Ahora este componente acepta una prop `missions = []`
-// ✅ CORREGIDO: El botón "Ver Videos" ahora apunta a /dashboard
-// ✅ CORREGIDO: El botón "Historial" ahora apunta a /profile#historial-puntos
-// ✅ MEJORA UX: Indicador visual claro de "¡Completada!" en misiones
+// POINTS BALANCE CARD - FIXED VISUAL COMPLETION
+// ============================================================================
+// ✅ CORREGIDO: Ahora detecta "Misión Cumplida" matemáticamente.
+//    Si llegas a 10/10, muestra el éxito AUNQUE la base de datos tarde un poco.
+// ✅ CORREGIDO: Evita el parpadeo visual (intermitencia).
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -17,7 +17,7 @@ const PointsBalanceCard = ({
   premiumPoints = 0,
   pointsEarnedToday = 0, 
   nextRewardThreshold,
-  missions = [], // ✅ Array de misiones
+  missions = [], 
   loading = false,
   className = '' 
 }) => {
@@ -69,7 +69,7 @@ const PointsBalanceCard = ({
         </div>
       </div>
       
-      {/* Current Balance (Combinado) */}
+      {/* Current Balance */}
       <div className="text-center mb-4">
         <div className="relative inline-block">
           <span className="text-5xl font-mono font-bold text-accent">
@@ -86,7 +86,7 @@ const PointsBalanceCard = ({
         <p className="text-lg font-medium text-foreground mt-1">puntos disponibles</p>
       </div>
 
-      {/* Mostrar el saldo dual por separado */}
+      {/* Saldo Dual */}
       <div className="flex justify-around border-b border-border pb-4 mb-4">
           <div className="text-center">
               <span className="text-xl font-bold text-orange-400 block">
@@ -120,7 +120,7 @@ const PointsBalanceCard = ({
         </div>
       )}
       
-      {/* Progress to Next Reward */}
+      {/* Progress Bar */}
       {nextRewardThreshold > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
@@ -140,7 +140,7 @@ const PointsBalanceCard = ({
         </div>
       )}
       
-      {/* Quick Actions */}
+      {/* Actions */}
       <div className="grid grid-cols-2 gap-3">
         <Link to="/dashboard"> 
           <Button variant="outline" size="sm" fullWidth iconName="Play" iconPosition="left">
@@ -149,85 +149,79 @@ const PointsBalanceCard = ({
         </Link>
         
         <Link to="/profile#historial-puntos">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            fullWidth 
-            iconName="History" 
-            iconPosition="left"
-          >
+          <Button variant="outline" size="sm" fullWidth iconName="History" iconPosition="left">
             Historial
           </Button>
         </Link>
       </div>
       
       {/* ================================================== */}
-      {/* ✅ SECCIÓN: Progreso de Misiones (MEJORADA)        */}
+      {/* ✅ PROGRESO DE MISIONES (LÓGICA MEJORADA)          */}
       {/* ================================================== */}
       <div className="border-t border-border pt-6 mt-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">
           Progreso de Misiones
         </h3>
         
-        {/* Estado de Carga */}
         {loading && missions.length === 0 && (
           <div className="space-y-3 animate-pulse">
             <div className="h-4 bg-muted rounded w-3/4"></div>
             <div className="h-2 bg-muted rounded w-full"></div>
             <div className="h-4 bg-muted rounded w-2/4"></div>
-            <div className="h-2 bg-muted rounded w-full"></div>
           </div>
         )}
 
-        {/* Misiones Cargadas */}
         {!loading && missions.length > 0 && (
           <div className="space-y-4">
             {missions.map((mission) => {
-              // Calcular progreso (Si está completada, forzar 100%)
-              const progress = mission.is_completed 
+              // ✅ LÓGICA HÍBRIDA: Es completada si la bandera lo dice O si los números coinciden.
+              // Esto arregla el "limbo" visual cuando llegas a 10/10 pero la DB aún no actualiza la bandera.
+              const isCompleted = mission.is_completed || (mission.target_count > 0 && mission.current_count >= mission.target_count);
+
+              // Calcular porcentaje visual (máximo 100%)
+              const percentage = isCompleted 
                 ? 100 
                 : (mission.target_count > 0 
                     ? Math.min(Math.round((mission.current_count / mission.target_count) * 100), 100)
                     : 0);
 
-              // Estilos dinámicos
-              const isCompleted = mission.is_completed;
-              const statusColor = isCompleted ? 'text-success' : 'text-accent';
-              const barColor = isCompleted ? 'bg-success' : 'bg-accent';
-              const titleColor = isCompleted ? 'text-success font-bold' : 'text-foreground font-medium';
+              // Colores dinámicos
+              const statusColor = isCompleted ? 'text-green-600' : 'text-accent';
+              const barColor = isCompleted ? 'bg-green-500' : 'bg-accent';
+              const titleClass = isCompleted ? 'text-green-700 font-bold' : 'text-foreground font-medium';
+              const iconName = isCompleted ? 'CheckCircle' : (mission.icon || 'Target');
 
               return (
                 <div key={mission.id} className="group">
                   <div className="flex items-center justify-between mb-1.5 text-sm">
                     <div className="flex items-center overflow-hidden">
                       <Icon 
-                        name={mission.icon || 'Target'} 
+                        name={iconName} 
                         size={14} 
                         className={`${statusColor} mr-2 flex-shrink-0`} 
                       />
-                      <span className={`${titleColor} truncate`} title={mission.title}>
+                      <span className={`${titleClass} truncate`} title={mission.title}>
                         {mission.title}
                       </span>
                     </div>
                     
-                    {/* ✅ INDICADOR VISUAL DE ESTADO */}
-                    {!isCompleted ? (
+                    {/* ✅ INDICADOR VISUAL */}
+                    {isCompleted ? (
+                      <div className="flex items-center gap-1 text-green-600 flex-shrink-0 ml-2 animate-in fade-in zoom-in duration-300">
+                        <span className="text-[10px] font-bold uppercase tracking-wider">¡Completada!</span>
+                      </div>
+                    ) : (
                       <span className="text-muted-foreground font-mono text-xs flex-shrink-0 ml-2">
                         {mission.current_count}/{mission.target_count}
                       </span>
-                    ) : (
-                      <div className="flex items-center gap-1 text-success flex-shrink-0 ml-2 animate-in fade-in zoom-in duration-300">
-                        <span className="text-[10px] font-bold uppercase tracking-wider">¡Completada!</span>
-                        <Icon name="CheckCircle" size={16} />
-                      </div>
                     )}
                   </div>
                   
-                  {/* Barra de Progreso */}
-                  <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                  {/* Barra */}
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden shadow-inner">
                     <div 
-                      className={`h-1.5 rounded-full transition-all duration-500 ${barColor}`}
-                      style={{ width: `${progress}%` }}
+                      className={`h-2 rounded-full transition-all duration-500 ease-out ${barColor}`}
+                      style={{ width: `${percentage}%` }}
                     />
                   </div>
                 </div>
@@ -236,10 +230,9 @@ const PointsBalanceCard = ({
           </div>
         )}
 
-        {/* Sin misiones activas */}
         {!loading && missions.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4 bg-muted/30 rounded-lg border border-dashed border-border">
-            No hay misiones activas disponibles hoy.
+            No hay misiones activas hoy.
           </p>
         )}
       </div>
