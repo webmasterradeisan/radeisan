@@ -1,9 +1,9 @@
 // src/components/video/RelatedVideosSidebar.jsx
 // ============================================================================
-// SIDEBAR DE VIDEOS RELACIONADOS - FIX BUILD ERROR
+// SIDEBAR DE VIDEOS RELACIONADOS - RUTA CORREGIDA
 // ============================================================================
-// ✅ CORREGIDO: Ruta de importación de PointsBalanceCard
-// ✅ Mantiene: Botón desplegable, Carrusel de Reels, Autoplay
+// ✅ CORREGIDO: Import real de PointsBalanceCard usando la ruta confirmada.
+// ✅ FUNCIONAL: Botón desplegable que muestra el saldo real.
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -11,9 +11,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from 'lib/supabase';
 import Icon from 'components/AppIcon';
 
-// 🔴 CORRECCIÓN AQUÍ: Quitamos '/dashboard' de la ruta para intentar encontrarlo en la raíz de components
-// Si tu archivo está en otra carpeta específica, ajusta esta línea.
-import PointsBalanceCard from 'components/PointsBalanceCard'; 
+// ✅ RUTA CORREGIDA: Calculada desde 'src/components/video' hacia 'src/pages/...'
+import PointsBalanceCard from '../../pages/points-rewards-store/components/PointsBalanceCard';
 
 // ===============================
 // COMPONENTE: CARRUSEL DE REELS
@@ -157,7 +156,7 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
   const [reels, setReels] = useState([]);
   const [loadingReels, setLoadingReels] = useState(false);
   
-  // Estado para controlar la visualización del panel de puntos
+  // ✅ Estado para controlar la visualización del panel de puntos
   const [showPointsCard, setShowPointsCard] = useState(false);
 
   useEffect(() => {
@@ -232,7 +231,7 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
   return (
     <div className={className}>
       
-      {/* Botón desplegable: Mis Misiones y Puntos */}
+      {/* ✅ BOTÓN DESPLEGABLE: MIS MISIONES Y PUNTOS */}
       <div className="mb-6">
         <button
           onClick={() => setShowPointsCard(!showPointsCard)}
@@ -255,14 +254,13 @@ const RelatedVideosSidebar = ({ videos = [], currentVideoId, autoplayEnabled = t
           />
         </button>
 
-        {/* Contenido desplegable */}
+        {/* ✅ CONTENIDO DESPLEGABLE (CON COMPONENTE REAL) */}
         <div 
           className={`
             overflow-hidden transition-all duration-500 ease-in-out
-            ${showPointsCard ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0 mt-0'}
+            ${showPointsCard ? 'max-h-[800px] opacity-100 mt-3' : 'max-h-0 opacity-0 mt-0'}
           `}
         >
-          {/* Renderizado del componente con la ruta corregida */}
           <PointsBalanceCard />
         </div>
       </div>
