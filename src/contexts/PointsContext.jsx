@@ -1,7 +1,9 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - VERSIÓN GAMIFICADA FINAL 🏆
-// ✅ Conecta el Modal de Celebración con el sistema de Likes.
+// POINTS CONTEXT - ARQUITECTURA "ECOSISTEMA UNIFICADO" 🏆
+// Basado en el éxito del módulo de Regalos:
+// 1. Escucha Realtime (Radar) para el saldo.
+// 2. Gestión centralizada del Modal de Celebración.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -13,7 +15,7 @@ import {
 } from '../services/missionsService';
 import { supabase } from '../lib/supabase';
 
-// 1. IMPORTACIÓN DEL MODAL (Asegúrate de que la ruta sea correcta)
+// 1. IMPORTACIÓN DEL MODAL (Pieza clave que faltaba)
 import MissionCompletedModal from '../components/MissionCompletedModal'; 
 
 const PointsContext = createContext();
@@ -27,18 +29,18 @@ export const usePoints = () => {
 export const PointsProvider = ({ children }) => {
   const { user } = useAuth();
   
-  // --- ESTADOS GLOBALES ---
+  // --- ESTADO GLOBAL ---
   const [points, setPoints] = useState({ total: 0, free: 0, premium: 0 });
   const [missions, setMissions] = useState([]);
   const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // --- ESTADOS VISUALES ---
+  // --- ESTADO VISUAL (ANIMACIONES DE MONEDAS) ---
   const [pointsAnimation, setPointsAnimation] = useState({
     show: false, amount: 0, type: 'earn', colorType: 'free'
   });
 
-  // 2. ESTADO PARA EL MODAL DE MISIÓN
+  // 2. ESTADO DEL MODAL DE MISIÓN (El gatillo visual)
   const [missionSuccessData, setMissionSuccessData] = useState({ show: false, points: 0 });
 
   const mountedRef = useRef(true);
@@ -75,23 +77,31 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // --- REAL-TIME (Escucha cambios en DB) ---
+  // --- RADAR REAL-TIME (Igual que en GiftNotificationContext) ---
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase.channel('points_realtime_updates')
+    const channel = supabase.channel('points_ecosystem_updates')
+      // Escuchar cambios en SALDO (Como en Regalos)
       .on('postgres_changes', { 
-        event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'user_profiles', 
+        filter: `id=eq.${user.id}` 
       }, () => loadAllData(false))
+      // Escuchar cambios en MISIONES
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'mission_progress', filter: `user_id=eq.${user.id}`
+        event: '*',
+        schema: 'public',
+        table: 'mission_progress',
+        filter: `user_id=eq.${user.id}`
       }, () => loadAllData(false))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [user, loadAllData]);
 
-  // --- ANIMACIONES ---
+  // --- FUNCIONES VISUALES ---
   const triggerAnimation = useCallback((amount, type = 'earn', colorType = 'free') => {
     if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
     setPointsAnimation({ show: true, amount, type, colorType });
@@ -100,19 +110,19 @@ export const PointsProvider = ({ children }) => {
     }, 3000);
   }, []);
 
-  // 3. FUNCIÓN PARA ACTIVAR EL MODAL
+  // 3. FUNCIÓN PARA DISPARAR EL MODAL (La que usa ReelsContainer)
   const notifyMissionComplete = (earnedPoints) => {
-    console.log("🏆 MODAL ACTIVADO: Ganaste", earnedPoints);
+    console.log("🚀 Evento Misión Cumplida Recibido:", earnedPoints);
     setMissionSuccessData({ show: true, points: earnedPoints });
   };
 
   const handleCloseMissionModal = () => {
     setMissionSuccessData({ show: false, points: 0 });
-    // Al cerrar, recargamos datos para asegurar que el saldo se vea actualizado
-    loadAllData(true); 
+    // Recarga estratégica al cerrar para asegurar sincronización total
+    loadAllData(true);
   };
 
-  // --- WRAPPERS ---
+  // --- WRAPPERS DE SERVICIO ---
   const addPoints = useCallback(async (amount, type = 'free') => {
     const res = await pointsService.addPoints(user.id, amount, type);
     if (res.success) triggerAnimation(amount, 'earn', type);
@@ -127,14 +137,20 @@ export const PointsProvider = ({ children }) => {
 
   const refreshPoints = () => loadAllData(true);
   const rollbackMission = useCallback(() => loadAllData(true), [loadAllData]);
-  
+
+  // Actualización Optimista (UI Instantánea)
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
-    setMissions(prev => prev.map(m => m.mission_type === missionType ? { ...m, current_count: Math.min(m.current_count + delta, m.target_count) } : m));
+    setMissions(prev => prev.map(m => {
+      if (m.mission_type === missionType) {
+        return { ...m, current_count: Math.min(m.current_count + delta, m.target_count), _optimistic: true };
+      }
+      return m;
+    }));
   }, []);
 
-  // Placeholder
-  const updateLocalBalance = () => {}; 
+  const updateLocalBalance = () => {}; // Mantener compatibilidad
 
+  // Inicialización
   useEffect(() => {
     mountedRef.current = true;
     loadAllData(true);
@@ -156,14 +172,14 @@ export const PointsProvider = ({ children }) => {
     updateMissionOptimistic,
     rollbackMission,
     updateLocalBalance,
-    notifyMissionComplete // 4. EXPORTAMOS LA FUNCIÓN (¡CRÍTICO!)
+    notifyMissionComplete // 4. EXPORTAMOS LA FUNCIÓN
   };
 
   return (
     <PointsContext.Provider value={value}>
       {children}
       
-      {/* 5. RENDERIZAMOS EL MODAL AQUÍ (¡CRÍTICO!) */}
+      {/* 5. RENDERIZAMOS EL MODAL GLOBAL (Igual que GiftNotificationContainer) */}
       <MissionCompletedModal 
         isOpen={missionSuccessData.show} 
         points={missionSuccessData.points} 
