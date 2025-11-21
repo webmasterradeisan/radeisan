@@ -4,6 +4,7 @@
 // Basado en el éxito del módulo de Regalos:
 // 1. Escucha Realtime (Radar) para el saldo.
 // 2. Gestión centralizada del Modal de Celebración.
+// 3. Actualización Optimista del Balance (Nuevo Fix).
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -15,7 +16,7 @@ import {
 } from '../services/missionsService';
 import { supabase } from '../lib/supabase';
 
-// 1. IMPORTACIÓN DEL MODAL (Pieza clave que faltaba)
+// 1. IMPORTACIÓN DEL MODAL (Pieza clave visual)
 import MissionCompletedModal from '../components/MissionCompletedModal'; 
 
 const PointsContext = createContext();
@@ -118,7 +119,7 @@ export const PointsProvider = ({ children }) => {
 
   const handleCloseMissionModal = () => {
     setMissionSuccessData({ show: false, points: 0 });
-    // Recarga estratégica al cerrar para asegurar sincronización total
+    // Recarga estratégica al cerrar para asegurar sincronización total con DB
     loadAllData(true);
   };
 
@@ -138,7 +139,7 @@ export const PointsProvider = ({ children }) => {
   const refreshPoints = () => loadAllData(true);
   const rollbackMission = useCallback(() => loadAllData(true), [loadAllData]);
 
-  // Actualización Optimista (UI Instantánea)
+  // Actualización Optimista (Barra de progreso de Misión)
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
     setMissions(prev => prev.map(m => {
       if (m.mission_type === missionType) {
@@ -148,7 +149,16 @@ export const PointsProvider = ({ children }) => {
     }));
   }, []);
 
-  const updateLocalBalance = () => {}; // Mantener compatibilidad
+  // 4. 🔥 CORRECCIÓN CRÍTICA: Actualización del Balance Local
+  // Esta función permite sumar puntos visualmente SIN esperar a la DB
+  const updateLocalBalance = useCallback((amount) => {
+    setPoints(prev => ({
+      ...prev,
+      total: (prev.total || 0) + amount,
+      free: (prev.free || 0) + amount
+    }));
+    setPointsEarnedToday(prev => (prev || 0) + amount);
+  }, []);
 
   // Inicialización
   useEffect(() => {
@@ -171,15 +181,15 @@ export const PointsProvider = ({ children }) => {
     refreshPoints,
     updateMissionOptimistic,
     rollbackMission,
-    updateLocalBalance,
-    notifyMissionComplete // 4. EXPORTAMOS LA FUNCIÓN
+    updateLocalBalance, // Exportamos la función corregida
+    notifyMissionComplete
   };
 
   return (
     <PointsContext.Provider value={value}>
       {children}
       
-      {/* 5. RENDERIZAMOS EL MODAL GLOBAL (Igual que GiftNotificationContainer) */}
+      {/* 5. RENDERIZAMOS EL MODAL GLOBAL (Siempre disponible) */}
       <MissionCompletedModal 
         isOpen={missionSuccessData.show} 
         points={missionSuccessData.points} 
