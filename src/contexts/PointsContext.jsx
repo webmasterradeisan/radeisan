@@ -1,10 +1,9 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - ARQUITECTURA "ECOSISTEMA UNIFICADO" 🏆
-// Basado en el éxito del módulo de Regalos:
-// 1. Escucha Realtime (Radar) para el saldo.
-// 2. Gestión centralizada del Modal de Celebración.
-// 3. Actualización Optimista del Balance (Nuevo Fix).
+// POINTS CONTEXT - VERSIÓN "SINCRO SEGURA" 🛡️
+// ✅ Fix: Debounce en Realtime (Espera 1.5s antes de recargar la DB).
+// ✅ Fix: updateLocalBalance activo para feedback instantáneo.
+// ✅ Gestión centralizada del Modal de Misiones.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -16,7 +15,7 @@ import {
 } from '../services/missionsService';
 import { supabase } from '../lib/supabase';
 
-// 1. IMPORTACIÓN DEL MODAL (Pieza clave visual)
+// 1. IMPORTACIÓN DEL MODAL
 import MissionCompletedModal from '../components/MissionCompletedModal'; 
 
 const PointsContext = createContext();
@@ -36,12 +35,12 @@ export const PointsProvider = ({ children }) => {
   const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // --- ESTADO VISUAL (ANIMACIONES DE MONEDAS) ---
+  // --- ESTADO VISUAL (ANIMACIONES) ---
   const [pointsAnimation, setPointsAnimation] = useState({
     show: false, amount: 0, type: 'earn', colorType: 'free'
   });
 
-  // 2. ESTADO DEL MODAL DE MISIÓN (El gatillo visual)
+  // 2. ESTADO DEL MODAL DE MISIÓN
   const [missionSuccessData, setMissionSuccessData] = useState({ show: false, points: 0 });
 
   const mountedRef = useRef(true);
@@ -78,28 +77,45 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // --- RADAR REAL-TIME (Igual que en GiftNotificationContext) ---
+  // --- RADAR REAL-TIME CON FRENO (DEBOUNCE) 🛑 ---
+  // Esto evita que el frontend lea el saldo "viejo" antes de que la DB termine de escribir.
   useEffect(() => {
     if (!user) return;
 
+    let timeoutId;
+
+    const handleRealtimeUpdate = () => {
+      // Si llega otro evento rápido, cancelamos el anterior y esperamos de nuevo
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      // Esperamos 1.5 segundos para asegurar que la DB esté lista
+      timeoutId = setTimeout(() => {
+        console.log("🔄 Sincronizando datos con la Base de Datos...");
+        loadAllData(false);
+      }, 1500); 
+    };
+
     const channel = supabase.channel('points_ecosystem_updates')
-      // Escuchar cambios en SALDO (Como en Regalos)
+      // Escuchar cambios en SALDO
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
         table: 'user_profiles', 
         filter: `id=eq.${user.id}` 
-      }, () => loadAllData(false))
+      }, handleRealtimeUpdate)
       // Escuchar cambios en MISIONES
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'mission_progress',
         filter: `user_id=eq.${user.id}`
-      }, () => loadAllData(false))
+      }, handleRealtimeUpdate)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      supabase.removeChannel(channel);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [user, loadAllData]);
 
   // --- FUNCIONES VISUALES ---
@@ -111,16 +127,15 @@ export const PointsProvider = ({ children }) => {
     }, 3000);
   }, []);
 
-  // 3. FUNCIÓN PARA DISPARAR EL MODAL (La que usa ReelsContainer)
+  // 3. FUNCIÓN PARA DISPARAR EL MODAL
   const notifyMissionComplete = (earnedPoints) => {
-    console.log("🚀 Evento Misión Cumplida Recibido:", earnedPoints);
+    console.log("🚀 Misión Cumplida! Puntos:", earnedPoints);
     setMissionSuccessData({ show: true, points: earnedPoints });
   };
 
   const handleCloseMissionModal = () => {
     setMissionSuccessData({ show: false, points: 0 });
-    // Recarga estratégica al cerrar para asegurar sincronización total con DB
-    loadAllData(true);
+    loadAllData(true); // Recarga final al cerrar para asegurar coherencia
   };
 
   // --- WRAPPERS DE SERVICIO ---
@@ -139,7 +154,7 @@ export const PointsProvider = ({ children }) => {
   const refreshPoints = () => loadAllData(true);
   const rollbackMission = useCallback(() => loadAllData(true), [loadAllData]);
 
-  // Actualización Optimista (Barra de progreso de Misión)
+  // Actualización Optimista (Misiones)
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
     setMissions(prev => prev.map(m => {
       if (m.mission_type === missionType) {
@@ -149,16 +164,22 @@ export const PointsProvider = ({ children }) => {
     }));
   }, []);
 
-  // 4. 🔥 CORRECCIÓN CRÍTICA: Actualización del Balance Local
-  // Esta función permite sumar puntos visualmente SIN esperar a la DB
+  // 4. 🔥 ACTUALIZACIÓN OPTIMISTA (BALANCE)
+  // Esta función suma puntos visualmente AL INSTANTE, sin esperar a la DB.
   const updateLocalBalance = useCallback((amount) => {
+    console.log(`💰 Actualizando balance local: +${amount}`);
+    
     setPoints(prev => ({
       ...prev,
       total: (prev.total || 0) + amount,
       free: (prev.free || 0) + amount
     }));
+    
     setPointsEarnedToday(prev => (prev || 0) + amount);
-  }, []);
+    
+    // Disparamos la animación de monedas también
+    triggerAnimation(amount, 'earn', 'free');
+  }, [triggerAnimation]);
 
   // Inicialización
   useEffect(() => {
@@ -181,7 +202,7 @@ export const PointsProvider = ({ children }) => {
     refreshPoints,
     updateMissionOptimistic,
     rollbackMission,
-    updateLocalBalance, // Exportamos la función corregida
+    updateLocalBalance, // ✅ Exportado para ReelsContainer
     notifyMissionComplete
   };
 
@@ -189,7 +210,7 @@ export const PointsProvider = ({ children }) => {
     <PointsContext.Provider value={value}>
       {children}
       
-      {/* 5. RENDERIZAMOS EL MODAL GLOBAL (Siempre disponible) */}
+      {/* 5. RENDERIZAMOS EL MODAL GLOBAL */}
       <MissionCompletedModal 
         isOpen={missionSuccessData.show} 
         points={missionSuccessData.points} 
