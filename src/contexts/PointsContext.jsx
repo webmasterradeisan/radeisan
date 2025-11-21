@@ -1,7 +1,8 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - MOTOR DE TIEMPO REAL
-// ✅ Clave: Expone 'updateLocalBalance' para que la UI reaccione instantáneamente.
+// POINTS CONTEXT - CON "ESCUDO ANTI-REBOTE" 🛡️
+// ✅ Solución: Bloquea la lectura del servidor por 3 segundos tras ganar puntos
+//    para evitar que el saldo viejo sobrescriba al nuevo.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -37,37 +38,59 @@ export const PointsProvider = ({ children }) => {
 
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
-  const lastOptimisticUpdateRef = useRef(0);
-  const optimisticMissionTypeRef = useRef(null);
+  
+  // 🛡️ EL ESCUDO: Timestamp de la última actualización manual
+  const lastManualUpdateRef = useRef(0); 
+  
   const debounceTimerRef = useRef(null);
 
   // ==========================================================================
-  // 🔥 FUNCIÓN MÁGICA: ACTUALIZACIÓN INSTANTÁNEA
+  // 1. ACTUALIZACIÓN MANUAL (INSTANTÁNEA)
   // ==========================================================================
   const updateLocalBalance = useCallback((amount, type = 'free') => {
-    console.log(`⚡ Actualizando saldo local: +${amount} (${type})`);
+    if (!mountedRef.current) return;
     
+    // 1. Activamos el ESCUDO: "No escuches al servidor por 3 segundos"
+    lastManualUpdateRef.current = Date.now(); 
+
+    // 2. Actualizamos la pantalla YA
     setPoints(prev => ({
       ...prev,
       total: (prev.total || 0) + amount,
-      [type]: (prev[type] || 0) + amount // Suma inmediata visual
+      [type]: (prev[type] || 0) + amount
     }));
 
     if (amount > 0) {
       setPointsEarnedToday(prev => prev + amount);
     }
+    console.log(`⚡ Saldo actualizado visualmente: +${amount}`);
+  }, []);
+
+  const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
+    setMissions(prev => {
+      return prev.map(mission => {
+        if (mission.mission_type === missionType) {
+          const newCount = Math.min(mission.current_count + delta, mission.target_count);
+          return { ...mission, current_count: newCount, _optimistic: true };
+        }
+        return mission;
+      });
+    });
   }, []);
 
   // ==========================================================================
-  // CARGA DE DATOS (SERVIDOR)
+  // 2. CARGA DE DATOS (SERVIDOR) - CON PROTECCIÓN
   // ==========================================================================
   const loadAllData = useCallback(async (forceRefresh = false) => {
     if (!mountedRef.current || !user) return;
 
-    // Protección anti-rebote: Si acabamos de actualizar visualmente, no recargamos inmediatamente
-    // para evitar que el servidor (lento) sobrescriba el dato nuevo con el viejo.
-    if (!forceRefresh && optimisticMissionTypeRef.current && (Date.now() - lastOptimisticUpdateRef.current < 2000)) {
-      return;
+    // 🛡️ LÓGICA DEL ESCUDO:
+    // Si hace menos de 3 segundos hicimos una actualización manual,
+    // ABORTAMOS la carga del servidor para no traer datos viejos.
+    const timeSinceManualUpdate = Date.now() - lastManualUpdateRef.current;
+    if (!forceRefresh && timeSinceManualUpdate < 3000) {
+      console.log("🛡️ Escudo activo: Ignorando datos del servidor para proteger el saldo visual.");
+      return; 
     }
 
     try {
@@ -80,6 +103,13 @@ export const PointsProvider = ({ children }) => {
       ]);
 
       if (mountedRef.current) {
+        // Doble chequeo por si el usuario ganó puntos MIENTRAS cargaba la data
+        if (Date.now() - lastManualUpdateRef.current < 3000) {
+             console.log("🛡️ Escudo activo post-carga: Descartando datos lentos.");
+             setLoading(false);
+             return;
+        }
+
         setPoints({
           total: pointsData?.total || 0,
           free: pointsData?.free || 0,
@@ -98,22 +128,38 @@ export const PointsProvider = ({ children }) => {
   }, [user]);
 
   // ==========================================================================
-  // REAL-TIME (Escucha cambios de otros dispositivos)
+  // 3. REAL-TIME (Escucha cambios)
   // ==========================================================================
   useEffect(() => {
     if (!user) return;
+
     const channel = supabase.channel('points_realtime_updates')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` }, () => loadAllData(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mission_progress', filter: `user_id=eq.${user.id}` }, () => {
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'user_profiles', 
+        filter: `id=eq.${user.id}` 
+      }, () => {
+        // Cuando llega un evento real, intentamos cargar, 
+        // pero loadAllData respetará el escudo si está activo.
+        loadAllData(true); 
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mission_progress',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(() => loadAllData(false), 1000);
       })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
   }, [user, loadAllData]);
 
   // ==========================================================================
-  // UTILIDADES
+  // 4. UTILIDADES Y EXPORTACIÓN
   // ==========================================================================
   const triggerAnimation = useCallback((amount, type = 'earn', colorType = 'free') => {
     if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
@@ -125,20 +171,25 @@ export const PointsProvider = ({ children }) => {
 
   const addPoints = useCallback(async (amount, type = 'free') => {
     const res = await pointsService.addPoints(user.id, amount, type);
-    if (res.success) { triggerAnimation(amount, 'earn', type); loadAllData(true); }
+    if (res.success) {
+        // Al usar addPoints manual, también activamos el escudo
+        updateLocalBalance(amount, type); 
+        triggerAnimation(amount, 'earn', type);
+    }
     return res;
-  }, [user, loadAllData, triggerAnimation]);
+  }, [user, updateLocalBalance, triggerAnimation]); // Quitamos loadAllData directo
 
-  const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
-    setMissions(prev => {
-      lastOptimisticUpdateRef.current = Date.now();
-      optimisticMissionTypeRef.current = missionType;
-      return prev.map(m => m.mission_type === missionType ? { ...m, current_count: Math.min(m.current_count + delta, m.target_count), _optimistic: true } : m);
-    });
-  }, []);
+  const deductPoints = useCallback(async (amount, type = 'free') => {
+    const res = await pointsService.deductPoints(user.id, amount, type);
+    if (res.success) {
+        updateLocalBalance(-amount, type);
+        triggerAnimation(amount, 'deduct', type);
+    }
+    return res;
+  }, [user, updateLocalBalance, triggerAnimation]);
 
-  const rollbackMission = useCallback(() => loadAllData(true), [loadAllData]);
   const refreshPoints = () => loadAllData(true);
+  const rollbackMission = useCallback(() => loadAllData(true), [loadAllData]);
 
   useEffect(() => { mountedRef.current = true; loadAllData(true); return () => { mountedRef.current = false; }; }, [loadAllData]);
 
@@ -152,10 +203,11 @@ export const PointsProvider = ({ children }) => {
     pointsAnimation,
     triggerAnimation,      
     addPoints,
+    deductPoints,          
     refreshPoints,
     updateMissionOptimistic,
     rollbackMission,
-    updateLocalBalance // <--- ¡ESTA ES LA IMPORTANTE!
+    updateLocalBalance 
   };
 
   return <PointsContext.Provider value={value}>{children}</PointsContext.Provider>;
