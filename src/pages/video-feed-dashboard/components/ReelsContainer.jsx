@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE BUG DE COLUMNA
-// ✅ SOLUCIÓN CRÍTICA: Se corrigió el typo de columna 'user_user' a 'user_id'.
-// ✅ Lógica: Rollback y Anti-Farming funcionan correctamente.
+// ✅ Solución del Error de Inserción (RLS/Restricción en video_likes).
+// ✅ Lógica: Rollback visual y exposición de error en caso de fallo de INSERT.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -299,15 +299,23 @@ const ReelsContainer = ({
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
-          const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
-          if (likeError && likeError.code !== '23505') {
-            showPointsNotification('Error al registrar like', videoId, 'error');
-            // Revertir contador visual si la inserción del like falla
-            setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
-            return;
+          // 🔥 BLOQUE DE INSERCIÓN DEL LIKE (Aquí ocurre el fallo de RLS)
+          const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+          
+          if (likeInsertError) {
+             // 1. Mostrar el error exacto de RLS/Constraint
+             showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message} (Code: ${likeInsertError.code})`, videoId, 'error');
+             
+             // 2. Revertir el contador visual inmediatamente
+             setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes || 0) - 1) } }));
+             
+             // 3. Revertir el estado del botón (blanco) y detener el proceso de misión
+             newLiked.delete(videoId); 
+             setLikedVideos(newLiked); 
+             return;
           }
 
-          // Lógica de Misiones (Solo si el Like se registró sin error crítico)
+          // Si la inserción del like fue exitosa, el proceso de misión continúa
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado (Sin puntos extra)', videoId, 'info');
           } else {
@@ -316,43 +324,42 @@ const ReelsContainer = ({
               const res = await missionsService.trackGiveLike('reel', videoId);
               
               if (res.result === 'success' && res.points_earned > 0) {
-                  // ÉXITO: La misión se completó y dio puntos
+                  // ÉXITO
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   await addPoints(res.points_earned, res.message, 'free');
                   await refreshPoints();
                   showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
-                  // Forzar la actualización visual a 10/10 SIN optimismo (server ya lo confirmó)
                   await updateMissionOptimistic('give_like', 1); 
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // PROGRESO NORMAL (e.g., 5/10 -> 6/10)
+                  // PROGRESO NORMAL
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  updateMissionOptimistic('give_like', 1); // Optimistic update aquí
+                  updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
-                  // 🛑 ANTI-FARMING o YA HECHA
-                  // Si el servidor dice que no sumó el punto, revertimos la subida optimista.
+                  // ANTI-FARMING o YA HECHA
                   rollbackMission(snapshot); 
                   showPointsNotification('Ya contaste puntos por este contenido hoy', videoId, 'warning'); 
 
               } else if (res.result === 'error_giving_points') {
-                  // Se guardó el 10/10, pero fallaron los puntos.
                   showPointsNotification('Error en la recompensa: El progreso fue guardado.', videoId, 'warning');
               } else {
-                  // Fallo desconocido: Volvemos al estado inicial
+                  // Fallo desconocido
                   rollbackMission(snapshot); 
                   showPointsNotification('Error desconocido al registrar misión', videoId, 'error'); 
               }
           }
+          // Si el like fue exitoso, actualizamos el estado likedVideos aquí,
+          // ya que se revirtió en la lógica de error, lo volvemos a poner si no hubo error.
+          setLikedVideos(newLiked);
+
       }
-      setLikedVideos(newLiked);
     } catch (err) { 
-        // 🚨 CATCH CRÍTICO: Muestra el error real del servidor/PostgREST
         console.error('Error like catch all:', err);
         rollbackMission(snapshot); 
-        const errorMessage = err.message || 'Error de red con la base de datos.';
-        showPointsNotification(`Error de red: ${errorMessage}`, videoId, 'error'); 
+        const errorMessage = err.message || 'Error de red con el servidor.';
+        showPointsNotification(`Error de red: ${errorMessage}`, videoId, 'error');
     }
   };
 
