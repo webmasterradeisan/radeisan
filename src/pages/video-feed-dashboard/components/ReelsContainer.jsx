@@ -2,7 +2,7 @@
 // ============================================================================
 // REELS CONTAINER - VERSIÓN "GAMIFICADA" 🏆
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ✅ Flujo: Like -> DB -> Éxito -> Modal "Misión Cumplida" -> Recarga al cerrar.
+// ✅ Flujo: Like -> DB -> Éxito -> Modal "Misión Cumplida" + Update Visual Inmediato.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -35,8 +35,9 @@ const ReelsContainer = ({
     missions, 
     updateMissionOptimistic, 
     rollbackMission, 
-    // 🔥 EXTRAEMOS LA FUNCIÓN PARA ABRIR EL MODAL DE CELEBRACIÓN
-    notifyMissionComplete
+    // 🔥 EXTRAEMOS LAS DOS FUNCIONES CLAVE
+    notifyMissionComplete,
+    updateLocalBalance 
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -252,7 +253,7 @@ const ReelsContainer = ({
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
                       const earned = Number(res.points_earned);
-                      // Usamos el modal si completa misión por ver (opcional, aquí dejamos el toast)
+                      if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
                   }
               });
@@ -260,7 +261,7 @@ const ReelsContainer = ({
       };
       v.addEventListener('timeupdate', handleTime);
       return () => v.removeEventListener('timeupdate', handleTime);
-  }, [currentIndex, videos, videoWatchedIds]);
+  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance]);
 
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
@@ -288,7 +289,7 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
-  // 🔥 LÓGICA ACTUALIZADA CON MODAL DE CELEBRACIÓN
+  // 🔥 LÓGICA ACTUALIZADA CON TRIPLE SEGURIDAD (DB + MODAL + VISUAL)
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
@@ -338,13 +339,15 @@ const ReelsContainer = ({
               if (res.result === 'success' && res.points_earned > 0) {
                   const earned = Number(res.points_earned);
 
-                  // 🚀 ¡MISIÓN CUMPLIDA! -> ABRIR MODAL
+                  // 1. 🚀 ¡MISIÓN CUMPLIDA! -> ABRIR MODAL
                   if (notifyMissionComplete) {
                       notifyMissionComplete(earned);
                   } else {
-                      // Fallback si notifyMissionComplete no existe
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
+
+                  // 2. 💰 ACTUALIZACIÓN VISUAL INMEDIATA
+                  if (updateLocalBalance) updateLocalBalance(earned);
 
                   // Marcamos el video como recompensado localmente
                   setPointsRewardedIds(p => new Set([...p, videoId]));
@@ -403,6 +406,7 @@ const ReelsContainer = ({
           missionsService.trackFollowUser(creatorId).then(r => {
              if(r.result==='success') { 
                  const earned = Number(r.points_earned);
+                 if (updateLocalBalance) updateLocalBalance(earned); // Update visual
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
              }
           });
@@ -425,7 +429,7 @@ const ReelsContainer = ({
      
      missionsService.trackShareContent('reel', video.id).then(r => {
          if(r.result==='success') {
-             // Dejamos que el websocket maneje el saldo
+            // Dejamos que el websocket maneje el saldo o forzamos si quieres
          }
      });
   };
@@ -483,6 +487,7 @@ const ReelsContainer = ({
           const result = await missionsService.trackComment('reel', videoId);
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
+              if (updateLocalBalance) updateLocalBalance(earned); // Update visual
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
@@ -682,23 +687,4 @@ const ReelsContainer = ({
                )) : <div className="text-center text-gray-500 py-10">No hay comentarios aún</div>}
             </div>
 
-            <div className="p-4 border-t">
-              {replyingTo && <div className="text-xs text-blue-500 mb-1 flex justify-between"><span>Respondiendo...</span><button onClick={handleCancelReply}>X</button></div>}
-              <div className="flex gap-2">
-                  <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comenta..." className="flex-1 border rounded px-3 py-2"/>
-                  <button onClick={()=>handleAddComment(currentVideo.id)} className="bg-blue-600 text-white p-2 rounded"><Icon name="Send" size={18}/></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Regalo */}
-      {showGiftModal && currentVideo && (
-        <GiftPointsModal isOpen={showGiftModal} onClose={()=>setShowGiftModal(false)} receiverId={currentVideo.creator?.id} contentId={currentVideo.id} contentType="reel" onSuccess={()=>{}} />
-      )}
-    </div>
-  );
-};
-
-export default ReelsContainer;
+            <div className="p
