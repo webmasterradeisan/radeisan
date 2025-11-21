@@ -1,6 +1,8 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - GESTIÓN GLOBAL Y REAL-TIME
+// POINTS CONTEXT - OPTIMIZADO PARA FEEDBACK INSTANTÁNEO ⚡
+// ✅ Se agregó 'updateLocalBalance' para sumar puntos visualmente al instante.
+// ✅ Se mantiene la sincronización real con Supabase de respaldo.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -21,7 +23,7 @@ export const usePoints = () => {
 };
 
 export const PointsProvider = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth(); // Mantenemos tu desestructuración original
   
   // Estado Global
   const [points, setPoints] = useState({ total: 0, free: 0, premium: 0 });
@@ -34,7 +36,7 @@ export const PointsProvider = ({ children }) => {
     show: false, amount: 0, type: 'earn', colorType: 'free'
   });
 
-  // Refs para control de concurrencia y actualizaciones optimistas
+  // Refs
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
   const lastOptimisticUpdateRef = useRef(0);
@@ -42,19 +44,32 @@ export const PointsProvider = ({ children }) => {
   const debounceTimerRef = useRef(null);
 
   // ==========================================================================
-  // 1. ACTUALIZACIÓN OPTIMISTA (UI Instantánea)
+  // 1. ACTUALIZACIÓN OPTIMISTA Y MANUAL (NUEVO)
   // ==========================================================================
   
+  // 🔥 ESTA ES LA FUNCIÓN QUE FALTA PARA QUE SEA INSTANTÁNEO
+  const updateLocalBalance = useCallback((amount, type = 'free') => {
+    if (!mountedRef.current) return;
+    
+    setPoints(prev => ({
+      ...prev,
+      total: (prev.total || 0) + amount,
+      [type]: (prev[type] || 0) + amount
+    }));
+
+    if (amount > 0) {
+      setPointsEarnedToday(prev => prev + amount);
+    }
+  }, []);
+
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
     setMissions(prev => {
-      // Marcar timestamp para evitar reescritura inmediata del servidor
       lastOptimisticUpdateRef.current = Date.now();
       optimisticMissionTypeRef.current = missionType;
       
       return prev.map(mission => {
         if (mission.mission_type === missionType) {
           const newCount = Math.min(mission.current_count + delta, mission.target_count);
-          // Retornamos la misión con flag optimista
           return { 
             ...mission, 
             current_count: newCount, 
@@ -67,7 +82,6 @@ export const PointsProvider = ({ children }) => {
   }, []);
 
   const rollbackMission = useCallback(() => {
-    // Forzar recarga si falla la operación
     loadAllData(true);
   }, []);
 
@@ -93,19 +107,16 @@ export const PointsProvider = ({ children }) => {
       ]);
 
       if (mountedRef.current) {
-        // Actualizar Puntos
         setPoints({
           total: pointsData?.total || 0,
           free: pointsData?.free || 0,
           premium: pointsData?.premium || 0
         });
 
-        // Actualizar Misiones (respetando optimismo si es muy reciente)
         if (missionsData.success) {
           setMissions(missionsData.missions);
         }
 
-        // Actualizar Stats
         if (statsData.success) {
           setPointsEarnedToday(statsData.stats?.points_today || 0);
         }
@@ -126,24 +137,20 @@ export const PointsProvider = ({ children }) => {
     if (!user) return;
 
     const channel = supabase.channel('points_realtime_updates')
-      // Escuchar cambios en puntos (tabla user_profiles)
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
         table: 'user_profiles', 
         filter: `id=eq.${user.id}` 
       }, (payload) => {
-        // Si cambian los puntos, recargar
         loadAllData(true);
       })
-      // Escuchar progreso de misiones
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'mission_progress',
         filter: `user_id=eq.${user.id}`
       }, () => {
-        // Debounce para recargar misiones
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(() => loadAllData(false), 1000);
       })
@@ -155,7 +162,7 @@ export const PointsProvider = ({ children }) => {
   }, [user, loadAllData]);
 
   // ==========================================================================
-  // 4. FUNCIONES EXPORTADAS (ANIMACIÓN Y GESTIÓN)
+  // 4. FUNCIONES EXPORTADAS
   // ==========================================================================
 
   const triggerAnimation = useCallback((amount, type = 'earn', colorType = 'free') => {
@@ -210,7 +217,8 @@ export const PointsProvider = ({ children }) => {
     deductPoints,          
     refreshPoints,
     updateMissionOptimistic,
-    rollbackMission
+    rollbackMission,
+    updateLocalBalance // <--- IMPORTANTE: Ahora está disponible para ReelsContainer
   };
 
   return (
