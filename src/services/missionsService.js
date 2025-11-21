@@ -1,8 +1,8 @@
 // src/services/missionsService.js
 // ============================================================================
 // MISSIONS SERVICE - VERSIÓN ESTABLE Y COMPLETA (FINAL)
-// ✅ CORRECCIÓN CRÍTICA: RPC renombrado a 'track_mission_update' para superar el bloqueo de caché.
-// ✅ Maneja el Anti-Farming y la compatibilidad legacy.
+// ✅ EXPORT FIX: getMissionStats ahora está correctamente exportado.
+// ✅ RPC: 'track_mission_update' para bypass de caché.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -125,6 +125,7 @@ export async function getDailyMissions(options = {}) {
 
 export async function getAllMissions(filters = {}) {
   try {
+    // Asumiendo que 'get_all_missions_admin' es el RPC para el panel
     const { data, error } = await supabase
       .rpc('get_all_missions_admin');
 
@@ -189,7 +190,36 @@ export async function getMissionsForProgressPanel() {
   }
 }
 
-// ... (Otras funciones de consulta getMissionProgress, getUserStreak, etc.)
+// ============================================================================
+// FUNCIONES DE ESTADÍSTICAS (Añadida y Exportada)
+// ============================================================================
+
+export async function getMissionStats() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    // Asumiendo que 'get_user_mission_stats' es el RPC para obtener estadísticas
+    const { data, error } = await supabase
+      .rpc('get_user_mission_stats', {
+        p_user_id: user.id
+      });
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      stats: data || {}
+    };
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de misiones:', error);
+    return {
+      success: false,
+      error: error.message,
+      stats: {}
+    };
+  }
+}
 
 // ============================================================================
 // TRACKING CORE (LÓGICA RPC CON RENOMBRE)
@@ -256,7 +286,6 @@ export async function trackUploadVideo(referenceId) {
 }
 
 export async function trackGiveLike(referenceType, referenceId) {
-  // 🔥 Importante: Este wrapper llama a la función principal que usa el RPC renombrado
   return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, referenceType, referenceId);
 }
 
@@ -280,9 +309,6 @@ export async function trackDailyLogin() {
   return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 'system', 'daily_login_' + new Date().toDateString());
 }
 
-// ... (Demas funciones de completado, rachas, stats y admin que ya tenias) ...
-
-
 // ============================================================================
 // EXPORTACIONES POR DEFECTO
 // ============================================================================
@@ -297,6 +323,9 @@ export default {
   getAllMissions,
   getMissionsForProgressPanel,
 
+  // Estadísticas (Añadida la exportación faltante)
+  getMissionStats,
+
   // Tracking
   trackMissionProgress,
   trackWatchVideo,
@@ -308,5 +337,5 @@ export default {
   trackFollowUser,
   trackDailyLogin,
   
-  // ... (Exportar todas las demás funciones que usa el contexto o el admin)
+  // ... (Agregar otras funciones de completado, rachas, y admin)
 };
