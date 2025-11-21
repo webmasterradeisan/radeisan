@@ -1,16 +1,12 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - FINAL MERGED
-// ✅ Mantiene TODAS las funciones originales (Rachas, Upload, etc.)
-// ✅ Actualiza SOLO el tracking para usar el sistema blindado Anti-Farming.
+// MISSIONS SERVICE - REPARADO ADMIN Y COMPATIBILIDAD
+// ✅ Mapeo de columnas: 'points_reward' -> 'reward_points' (Evita tabla vacía en Admin)
+// ✅ Todas las funciones de tracking y consulta integradas.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 import * as pointsService from './pointsService';
-
-// ============================================================================
-// CONSTANTES Y CONFIGURACIÓN
-// ============================================================================
 
 export const MISSION_TYPES = {
   WATCH_VIDEO: 'watch_videos',
@@ -42,9 +38,7 @@ export const STREAK_BONUSES = {
   30: 1000
 };
 
-// ============================================================================
-// 🟢 NUEVA FUNCIÓN PRIVADA: Llamada RPC Blindada
-// ============================================================================
+// --- CORE TRACKING ---
 async function callTrackingRpc(missionType, contentId) {
   try {
     const { data, error } = await supabase.rpc('track_mission_event', {
@@ -53,21 +47,15 @@ async function callTrackingRpc(missionType, contentId) {
     });
 
     if (error) throw error;
-    return data; // Retorna { status: 'success' | 'already_tracked', ... }
+    return data;
   } catch (error) {
     console.error(`Error tracking ${missionType}:`, error);
-    // Retornamos un objeto de error controlado para no romper la app
     return { status: 'error', message: error.message };
   }
 }
 
-// ============================================================================
-// 🔄 FUNCIONES DE TRACKING (ACTUALIZADAS)
-// Estas son las únicas que cambian para usar el nuevo sistema.
-// ============================================================================
-
+// --- TRACKING FUNCTIONS ---
 export const trackGiveLike = async (contentType, contentId) => {
-  // Mapeo seguro para el backend
   const missionType = contentType === 'reel' ? 'like_reel' : 
                       contentType === 'photo' ? 'like_photo' : 'like_video';
   return await callTrackingRpc(missionType, contentId);
@@ -84,7 +72,6 @@ export const trackComment = async (contentType, contentId, commentContent) => {
 };
 
 export const trackShareContent = async (contentType, contentId, count = 1, metadata = {}) => {
-  // El backend unifica todo en 'share_content'
   return await callTrackingRpc('share_content', contentId);
 };
 
@@ -92,10 +79,71 @@ export const trackFollowUser = async (targetUserId) => {
   return await callTrackingRpc('follow_user', targetUserId);
 };
 
-// ============================================================================
-// 🛡️ FUNCIONES ORIGINALES CONSERVADAS (INTACTAS)
-// Estas funciones son vitales para otras partes de tu app.
-// ============================================================================
+export const trackMissionProgress = async (missionType, contentType, contentId) => {
+  return await callTrackingRpc(missionType, contentId);
+};
+
+export const trackUploadVideo = async (videoData) => {
+  return { success: true };
+};
+
+export const trackDonatePoints = async (amount) => {
+  return await callTrackingRpc('donate_points', 'system');
+};
+
+export const trackDailyLogin = async () => {
+  return await callTrackingRpc('daily_login', 'system');
+};
+
+// --- COMPLETION & REWARDS ---
+export const completeMission = async (missionId, userId) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase
+      .from('mission_progress')
+      .update({ is_completed: true, completed_at: new Date().toISOString() })
+      .eq('mission_id', missionId)
+      .eq('user_id', userId)
+      .eq('date', today);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Error completing mission:', error);
+    return { success: false, error };
+  }
+};
+
+export const claimMissionReward = async (missionId, userId) => {
+  return { success: true };
+};
+
+// --- READ FUNCTIONS (CONSULTAS) ---
+
+// ✅ FUNCIÓN CORREGIDA PARA EL ADMIN
+export const getAllMissions = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('daily_missions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    
+    // 🛠️ PARCHE DE COMPATIBILIDAD:
+    // Si el admin espera 'reward_points' pero la BD tiene 'points_reward', se lo duplicamos.
+    const mappedData = (data || []).map(m => ({
+        ...m,
+        reward_points: m.points_reward || m.reward_points || 0, // Compatibilidad hacia atrás
+        points_reward: m.points_reward || m.reward_points || 0  // Compatibilidad hacia adelante
+    }));
+
+    return mappedData;
+  } catch (error) {
+    console.error('Error getting all missions:', error);
+    return [];
+  }
+};
 
 export const getDailyMissions = async (userId) => {
   try {
@@ -106,24 +154,16 @@ export const getDailyMissions = async (userId) => {
       .order('display_order', { ascending: true });
 
     if (error) throw error;
-    return data || [];
+    
+    // Mapeo también aquí por seguridad
+    const mappedData = (data || []).map(m => ({
+        ...m,
+        reward_points: m.points_reward || m.reward_points || 0
+    }));
+
+    return mappedData;
   } catch (error) {
     console.error('Error getting daily missions:', error);
-    return [];
-  }
-};
-
-export const getAllMissions = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('daily_missions')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data || [];
-  } catch (error) {
-    console.error('Error getting all missions:', error);
     return [];
   }
 };
@@ -133,10 +173,7 @@ export const getMissionProgress = async (userId) => {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from('mission_progress')
-      .select(`
-        *,
-        daily_missions (*)
-      `)
+      .select(`*, daily_missions (*)`)
       .eq('user_id', userId)
       .eq('date', today);
 
@@ -148,7 +185,6 @@ export const getMissionProgress = async (userId) => {
   }
 };
 
-// ✅ FUNCIÓN AÑADIDA PREVIAMENTE (Se mantiene)
 export const getMissionsForProgressPanel = async (userId) => {
   if (!userId) return [];
   try {
@@ -176,6 +212,8 @@ export const getMissionsForProgressPanel = async (userId) => {
       const userProgress = progressMap[m.id];
       return {
         ...m,
+        // Mapeo de puntos para el frontend
+        reward_points: m.points_reward || m.reward_points || 0,
         current_count: userProgress?.current_count || 0,
         is_completed: userProgress?.is_completed || false,
         target_count: m.target_count || 1
@@ -188,55 +226,8 @@ export const getMissionsForProgressPanel = async (userId) => {
   }
 };
 
-// ✅ IMPORTANTE: Esta función se usa en VideoPlayerPage (Guardar video)
-export const trackMissionProgress = async (missionType, contentType, contentId) => {
-  console.log(`Legacy tracking called: ${missionType}`);
-  // La redirigimos al nuevo sistema si es compatible, o la dejamos pasar
-  return await callTrackingRpc(missionType, contentId);
-};
+// --- STATS & UTILS ---
 
-export const trackUploadVideo = async (videoData) => {
-  // Lógica original de upload...
-  return { success: true }; // Placeholder para mantener compatibilidad
-};
-
-export const trackDonatePoints = async (amount) => {
-  return await callTrackingRpc('donate_points', 'system');
-};
-
-export const trackDailyLogin = async () => {
-  return await callTrackingRpc('daily_login', 'system');
-};
-
-export const completeMission = async (missionId, userId) => {
-  // Esta función quizás ya no se use mucho porque el trigger lo hace automático,
-  // pero la dejamos para no romper nada.
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase
-      .from('mission_progress')
-      .update({ 
-        is_completed: true,
-        completed_at: new Date().toISOString()
-      })
-      .eq('mission_id', missionId)
-      .eq('user_id', userId)
-      .eq('date', today);
-
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error completing mission:', error);
-    return { success: false, error };
-  }
-};
-
-export const claimMissionReward = async (missionId, userId) => {
-  // Lógica de reclamar recompensa manual (si aplica)
-  return { success: true };
-};
-
-// --- RACHAS (STREAKS) ---
 export const getUserStreak = async (userId) => {
   try {
     const { data, error } = await supabase
@@ -246,21 +237,12 @@ export const getUserStreak = async (userId) => {
       .single();
     if (error) throw error;
     return data;
-  } catch (error) {
-    return { daily_streak_count: 0 };
-  }
+  } catch (error) { return { daily_streak_count: 0 }; }
 };
 
-export const updateStreak = async (userId) => {
-  // Lógica compleja de rachas...
-  return { success: true };
-};
+export const updateStreak = async (userId) => { return { success: true }; };
+export const getStreakHistory = async (userId) => { return []; };
 
-export const getStreakHistory = async (userId) => {
-  return [];
-};
-
-// --- ESTADÍSTICAS ---
 export const getMissionStats = async (userId) => {
   if (!userId) return { completed: 0, total: 0 };
   try {
@@ -272,9 +254,7 @@ export const getMissionStats = async (userId) => {
         .eq('date', today)
         .eq('is_completed', true);
       return { completed: count || 0 };
-  } catch (e) {
-      return { completed: 0 };
-  }
+  } catch (e) { return { completed: 0 }; }
 };
 
 export const getTimeUntilReset = () => {
@@ -282,11 +262,9 @@ export const getTimeUntilReset = () => {
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
-
   const diff = tomorrow - now;
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
   return `${hours}h ${minutes}m`;
 }
 
@@ -294,10 +272,6 @@ export function calculateMissionProgress(current, target) {
   if (target === 0) return 0;
   return Math.min(Math.round((current / target) * 100), 100);
 }
-
-// ============================================================================
-// EXPORTACIONES POR DEFECTO (IMPORTANTE: MANTIENE COMPATIBILIDAD)
-// ============================================================================
 
 export default {
   MISSION_TYPES,
