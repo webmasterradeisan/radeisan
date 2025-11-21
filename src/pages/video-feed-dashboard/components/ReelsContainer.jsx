@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN MAESTRA FINAL (100% CÓDIGO COMPLETO)
-// ✅ Infinite Scroll Activado (Detecta final de lista).
-// ✅ Sincronización DB (refreshPoints en lugar de addPoints).
-// ✅ Modales de Comentarios y Regalos completos.
+// REELS CONTAINER - VERSIÓN "REAL TIME" FINAL 🚀
+// ✅ Infinite Scroll: OK.
+// ✅ Conexión DB: OK.
+// ✅ FIX TIEMPO REAL: Estrategia de doble refresco para asegurar visualización de puntos.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -32,7 +32,6 @@ const ReelsContainer = ({
   const isDesktop = !isMobile;
 
   // 1. LLAMADA A HOOKS Y CONTEXTOS
-  // Agregamos 'triggerAnimation' y mantenemos 'refreshPoints' para la sincronización real
   const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints, triggerAnimation } = usePoints();
   const { success, error: notifyError, warning, info } = useNotification();
 
@@ -109,12 +108,11 @@ const ReelsContainer = ({
       setEnableTransition(false);
       setTimeout(() => { setEnableTransition(true); isInitialMount.current = false; }, 100);
     } else { 
-      // Nota: Evitamos resetear el index si solo estamos cargando más videos al final
       if (videos.length <= 12 && currentIndex === 0) setCurrentIndex(correctIndex);
     }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
-  // Cargar datos del usuario actual
+  // Cargar datos del usuario
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -135,9 +133,9 @@ const ReelsContainer = ({
       } catch (e) { console.error(e); }
     };
     loadData();
-  }, [videos.length === 0]); // Solo carga inicial para optimizar
+  }, [videos.length === 0]);
 
-  // Inicializar contadores (Solo nuevos)
+  // Inicializar contadores
   useEffect(() => {
       setVideoCounters(prev => {
           const newCounters = { ...prev };
@@ -338,9 +336,14 @@ const ReelsContainer = ({
                   await updateMissionOptimistic('give_like', 1); 
                   showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
                   
-                  // 2. Disparamos animación (SIN PAGAR DE NUEVO) y refrescamos saldo
+                  // 2. Animación visual (monedas)
                   if (triggerAnimation) triggerAnimation(res.points_earned, 'earn', 'free');
+                  
+                  // 3. 🔥 DOBLE REFRESCO PARA ASEGURAR REAL-TIME
+                  // Primero intentamos leer el saldo inmediatamente
                   await refreshPoints(); 
+                  // Luego reintentamos en 1 segundo para asegurar que la DB haya terminado de escribir
+                  setTimeout(() => refreshPoints(), 1000);
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   setPointsRewardedIds(p => new Set([...p, videoId]));
@@ -392,7 +395,12 @@ const ReelsContainer = ({
       } else {
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
-             if(r.result==='success') { addPoints(r.points_earned, r.message, 'free'); showPointsNotification(`+${r.points_earned} por seguir`, videos[currentIndex]?.id, 'success'); }
+             if(r.result==='success') { 
+                 addPoints(r.points_earned, r.message, 'free'); 
+                 showPointsNotification(`+${r.points_earned} por seguir`, videos[currentIndex]?.id, 'success'); 
+                 // Aplicamos la misma estrategia aquí también para follows
+                 setTimeout(() => refreshPoints(), 1000);
+             }
           });
       }
       setFollowedCreators(newF);
@@ -421,7 +429,7 @@ const ReelsContainer = ({
   };
 
   // ===============================
-  // LÓGICA DE COMENTARIOS COMPLETA
+  // LÓGICA DE COMENTARIOS
   // ===============================
   const loadComments = async (videoId, retryCount = 0) => {
     try {
@@ -507,6 +515,7 @@ const ReelsContainer = ({
               <div key={video.id} className="w-full h-full flex-shrink-0 relative bg-black snap-start">
                 <video ref={el => videoRefs.current[index] = el} className="absolute w-full h-full object-cover" src={video.video_url || video.videoUrl} loop playsInline preload="auto" onLoadedData={()=>setLoadingVideo(false)} />
                 
+                {/* Loading Spinner específico */}
                 {loadingVideo && index===currentIndex && <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10"><div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div></div>}
 
                 {/* Info Overlay */}
@@ -518,6 +527,7 @@ const ReelsContainer = ({
                    </div>
                 </div>
                 
+                {/* Botón Play Central */}
                 {!isAutoPlaying && index === currentIndex && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center"><Icon name="Play" size={32} color="white"/></div>
@@ -543,7 +553,7 @@ const ReelsContainer = ({
           </div>
         </div>
 
-        {/* BOTONES DE ACCIÓN (Componente Separado) */}
+        {/* BOTONES DE ACCIÓN */}
         {currentVideo && (
             <VideoActionButtons 
                 video={currentVideo}
@@ -567,9 +577,7 @@ const ReelsContainer = ({
             />
         )}
 
-        {/* ========================================================
-            PANEL DE COMENTARIOS - DESKTOP (RESTAURADO)
-        ======================================================== */}
+        {/* MODAL DE COMENTARIOS - DESKTOP */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b">
@@ -629,7 +637,7 @@ const ReelsContainer = ({
         )}
       </div>
       
-      {/* MODAL DE COMENTARIOS - MOBILE (RESTAURADO) */}
+      {/* MODAL DE COMENTARIOS - MOBILE */}
       {showCommentsModal && currentVideo && isMobile && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={handleCloseComments}>
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
