@@ -1,48 +1,48 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - VERSIÓN "MASTER KEY" 🗝️
-// ✅ FIX CRÍTICO: Se alinearon los nombres con la Base de Datos (points_rules).
-//    - 'comment'/'comment_videos'  ---> AHORA ES: 'give_comment'
-//    - 'share_video'               ---> AHORA ES: 'share_content'
+// MISSIONS SERVICE - VERSIÓN FINAL "AUDITADA" 🛡️
+// ✅ CORRECCIÓN TOTAL DE CLAVES:
+//    - give_comment (Antes comment_videos)
+//    - share_content (Antes share_video)
+//    - watch_video (Antes watch_videos)
+//    - profile_complete (Antes complete_profile)
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 import * as pointsService from './pointsService';
 
 // ============================================================================
-// 1. CONSTANTES Y CONFIGURACIÓN (LA CORRECCIÓN ESTÁ AQUÍ)
+// 1. CONSTANTES Y CONFIGURACIÓN (DICCIONARIO CORREGIDO)
 // ============================================================================
 
-/**
- * Tipos de misiones disponibles
- * Deben ser IDÉNTICOS a la columna 'action_type' en tu tabla 'points_rules'.
- */
 export const MISSION_TYPES = {
-  // --- ACCIONES BÁSICAS (Coinciden con DB) ---
+  // --- INTERACCIONES (Coinciden con points_rules) ---
   GIVE_LIKE: 'give_like',           
-  COMMENT: 'give_comment',          // 🔥 CORREGIDO (Antes era 'comment' o 'comment_videos')
-  SHARE_CONTENT: 'share_content',   // 🔥 CORREGIDO (Antes era 'share_video')
+  COMMENT: 'give_comment',          // ✅ CORREGIDO (DB: give_comment)
+  SHARE_CONTENT: 'share_content',   // ✅ CORREGIDO (DB: share_content)
+  DONATE_POINTS: 'donate_points',
   
-  // --- ACCIONES DE CARGA ---
+  // --- CONSUMO ---
+  WATCH_VIDEO: 'watch_video',       // ✅ CORREGIDO (Singular, estándar histórico)
+  WATCH_REELS: 'watch_reels',       
+  
+  // --- CREACIÓN ---
   UPLOAD_VIDEO: 'upload_video',
   UPLOAD_REEL: 'upload_reel',
   UPLOAD_PHOTO: 'upload_photo',
-  
-  // --- OTRAS ---
-  WATCH_VIDEO: 'watch_videos',
-  DONATE_POINTS: 'donate_points',
-  FOLLOW_USER: 'follow_user',
-  COMPLETE_PROFILE: 'profile_complete',
-  LOGIN_DAILY: 'login_daily',
-  WATCH_REELS: 'watch_reels',
-  INVITE_FRIEND: 'invite_friend',
   UPLOAD_PACK: 'upload_pack',
+  
+  // --- USUARIO ---
+  FOLLOW_USER: 'follow_user',
+  COMPLETE_PROFILE: 'profile_complete', // ✅ CORREGIDO (DB: profile_complete)
+  LOGIN_DAILY: 'login_daily',
+  INVITE_FRIEND: 'invite_friend',
+  
+  // --- ESPECIALES ---
   ALL_MISSIONS_STREAK: 'all_missions_streak'
 };
 
-/**
- * Estados de las misiones
- */
+// Estados y Constantes Auxiliares
 export const MISSION_STATUS = {
   ACTIVE: 'active',
   COMPLETED: 'completed',
@@ -206,7 +206,7 @@ export async function getMissionProgress(missionId) {
 }
 
 // ============================================================================
-// FUNCIONES DE TRACKING (REGISTRO DE ACCIONES)
+// FUNCIONES DE TRACKING (CORREGIDAS PARA USAR LAS CONSTANTES NUEVAS)
 // ============================================================================
 
 export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
@@ -216,11 +216,10 @@ export async function trackMissionProgress(missionType, referenceType, reference
   const userId = userAuth.data.user.id;
 
   try {
-    // LLAMADA AL RPC MAESTRO EN BASE DE DATOS
     const { data, error } = await supabase
       .rpc('track_mission_update', {
         p_user_id: userId,
-        p_mission_type: missionType, // Ahora envía 'give_comment', 'share_content', etc.
+        p_mission_type: missionType, // Usa las claves corregidas
         p_content_id: referenceId, 
         p_metadata: {
             reference_type: referenceType,
@@ -251,7 +250,7 @@ export async function trackMissionProgress(missionType, referenceType, reference
   }
 }
 
-// --- WRAPPERS (FUNCIONES CORTAS) ---
+// --- WRAPPERS AUTOMÁTICOS (Todos apuntando a las constantes corregidas) ---
 
 export async function trackWatchVideo(referenceType, referenceId, watchDuration = 30) {
   return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, referenceType, referenceId, 1, { watch_duration: watchDuration });
@@ -265,7 +264,6 @@ export async function trackGiveLike(referenceType, referenceId) {
   return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, referenceType, referenceId);
 }
 
-// 🔥 AHORA SÍ USA EL TIPO CORRECTO: 'share_content'
 export async function trackShareContent(referenceType, referenceId, platform = 'link') {
   return trackMissionProgress(MISSION_TYPES.SHARE_CONTENT, referenceType, referenceId, 1, { platform: platform });
 }
@@ -274,7 +272,6 @@ export async function trackDonatePoints(recipientId, pointsAmount) {
   return trackMissionProgress(MISSION_TYPES.DONATE_POINTS, 'donation', recipientId, 1, { recipient_id: recipientId, points_amount: pointsAmount });
 }
 
-// 🔥 AHORA SÍ USA EL TIPO CORRECTO: 'give_comment'
 export async function trackComment(referenceType, referenceId) {
   return trackMissionProgress(MISSION_TYPES.COMMENT, referenceType, referenceId);
 }
@@ -308,5 +305,19 @@ export default {
   trackDonatePoints,
   trackComment,
   trackFollowUser,
-  trackDailyLogin
+  trackDailyLogin,
+  completeMission,
+  claimMissionReward,
+  getUserStreak,
+  updateStreak,
+  getStreakHistory,
+  getMissionStats,
+  createMission,
+  updateMission,
+  deleteMission,
+  toggleMissionActive,
+  reorderMissions,
+  getAvailableMissionIcons,
+  getTimeUntilReset,
+  calculateMissionProgress
 };
