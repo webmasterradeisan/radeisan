@@ -1,15 +1,14 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - VERSIÓN FINAL Y SEGURA
-// ✅ Mantiene TODAS las funciones que tu app ya usa (evita pantalla blanca).
-// ✅ Incluye "Parche de Compatibilidad" para que el Admin vea las misiones.
-// ✅ Conecta con el sistema Anti-Farming del backend.
+// MISSIONS SERVICE - VERSIÓN FINAL DEFENITIVA
+// ✅ FIX ADMIN: 'getAllMissions' mapea 'points_reward' a 'reward_points'.
+// ✅ FIX PANTALLA BLANCA: Mantiene 'trackMissionProgress' y otras funciones legacy.
+// ✅ ANTI-FARMING: Usa el RPC blindado para los eventos nuevos.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 import * as pointsService from './pointsService';
 
-// Constantes (Mantenidas)
 export const MISSION_TYPES = {
   WATCH_VIDEO: 'watch_videos',
   UPLOAD_VIDEO: 'upload_video',
@@ -40,7 +39,9 @@ export const STREAK_BONUSES = {
   30: 1000
 };
 
-// 🟢 CONEXIÓN AL BACKEND BLINDADO (Anti-Farming)
+// ============================================================================
+// 🟢 CORE TRACKING (RPC BLINDADO)
+// ============================================================================
 async function callTrackingRpc(missionType, contentId) {
   try {
     const { data, error } = await supabase.rpc('track_mission_event', {
@@ -49,14 +50,17 @@ async function callTrackingRpc(missionType, contentId) {
     });
 
     if (error) throw error;
-    return data; 
+    return data;
   } catch (error) {
     console.error(`Error tracking ${missionType}:`, error);
     return { status: 'error', message: error.message };
   }
 }
 
-// 🔄 FUNCIONES DE TRACKING (Actualizadas)
+// ============================================================================
+// 🔄 FUNCIONES DE TRACKING (NUEVAS Y LEGACY)
+// ============================================================================
+
 export const trackGiveLike = async (contentType, contentId) => {
   const missionType = contentType === 'reel' ? 'like_reel' : 
                       contentType === 'photo' ? 'like_photo' : 'like_video';
@@ -89,37 +93,21 @@ export const trackDonatePoints = async (amount) => {
   return await callTrackingRpc('donate_points', 'system');
 };
 
-// 🛡️ FUNCIONES LEGACY (Mantenidas para compatibilidad)
+// ✅ LEGACY: Mantenida porque VideoPlayerPage la usa para 'save_video'
 export const trackMissionProgress = async (missionType, contentType, contentId) => {
   return await callTrackingRpc(missionType, contentId);
 };
 
+// ✅ LEGACY: Placeholder para subida
 export const trackUploadVideo = async (videoData) => {
   return { success: true };
 };
 
-export const completeMission = async (missionId, userId) => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase
-      .from('mission_progress')
-      .update({ is_completed: true, completed_at: new Date().toISOString() })
-      .eq('mission_id', missionId)
-      .eq('user_id', userId)
-      .eq('date', today);
-    if (error) throw error;
-    return { success: true };
-  } catch (error) { return { success: false, error }; }
-};
-
-export const claimMissionReward = async (missionId, userId) => { return { success: true }; };
-
 // ============================================================================
-// 🛡️ CONSULTAS (READ) - AQUÍ ESTÁ LA SOLUCIÓN DEL ADMIN
+// 🛡️ CONSULTAS (READ) - FIX PARA ADMIN
 // ============================================================================
 
-// ✅ Esta función la usa el Panel Admin. 
-// Hacemos un "mapeo" para que si la BD dice 'points_reward', el Admin reciba 'reward_points'.
+// ✅ ESTA ES LA FUNCIÓN QUE USA EL PANEL DE ADMIN
 export const getAllMissions = async () => {
   try {
     const { data, error } = await supabase
@@ -129,11 +117,11 @@ export const getAllMissions = async () => {
 
     if (error) throw error;
 
-    // PARCHE DE COMPATIBILIDAD
+    // 🛠️ PARCHE: Duplicamos la columna para asegurar compatibilidad
     return (data || []).map(m => ({
         ...m,
-        reward_points: m.points_reward || m.reward_points || 0, 
-        points_reward: m.points_reward || m.reward_points || 0
+        reward_points: m.points_reward || m.reward_points || 0, // Para el panel viejo
+        points_reward: m.points_reward || m.reward_points || 0  // Para el sistema nuevo
     }));
   } catch (error) {
     console.error('Error getting all missions:', error);
@@ -218,7 +206,26 @@ export const getMissionsForProgressPanel = async (userId) => {
   }
 };
 
-// --- UTILS & STATS ---
+// ============================================================================
+// UTILIDADES Y OTROS (NO BORRAR)
+// ============================================================================
+
+export const completeMission = async (missionId, userId) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase
+      .from('mission_progress')
+      .update({ is_completed: true, completed_at: new Date().toISOString() })
+      .eq('mission_id', missionId)
+      .eq('user_id', userId)
+      .eq('date', today);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) { return { success: false, error }; }
+};
+
+export const claimMissionReward = async (missionId, userId) => { return { success: true }; };
 
 export const getUserStreak = async (userId) => {
   try {
@@ -255,7 +262,7 @@ export function calculateMissionProgress(current, target) {
   return Math.min(Math.round((current / target) * 100), 100);
 }
 
-// ✅ EXPORT DEFAULT COMPLETO
+// ✅ EXPORT DEFAULT (VITAL)
 export default {
   MISSION_TYPES,
   MISSION_STATUS,
