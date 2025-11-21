@@ -1,8 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - COMPLETO Y DEFINITIVO (SINTAXIS CORREGIDA)
-// ✅ Error "Missing Semicolon/Expected useState" en líneas 41-43 SOLUCIONADO.
-// ✅ Lógica de Misiones y Panel de Comentarios Restaurada.
+// REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE ROLLBACK
+// ✅ Lógica de Like/Misiones: La función handleLike es la última versión robusta.
+// ✅ Sintaxis: Declaración de estados con useState(new Set()) corregida.
+// ✅ Estructura: Botones separados y Panel de Comentarios Restaurado.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,7 +42,7 @@ const ReelsContainer = ({
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
   
-  // ✅ CORREGIDO: Declaración de useState(new Set())
+  // Declaración de Set() corregida con useState()
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [followedCreators, setFollowedCreators] = useState(new Set());
@@ -265,11 +266,15 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, COMENTARIOS)
+  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.) - Lógica Anti-Farming Corregida
   // ==========================================================================
 
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
+    
+    // Almacenamos el estado inicial antes de cualquier cambio optimista
+    const snapshot = missions.map(m => ({ ...m })); 
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
@@ -295,45 +300,59 @@ const ReelsContainer = ({
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
-          const { error } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
-          if (error && error.code !== '23505') {
+          const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+          if (likeError && likeError.code !== '23505') {
             showPointsNotification('Error al registrar like', videoId, 'error');
+            // Revertir contador visual si la inserción del like falla
+            setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
             return;
           }
 
-          // Lógica Anti-Farming y Puntos
+          // Lógica de Misiones (Solo si el Like se registró sin error crítico)
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado (Sin puntos extra)', videoId, 'info');
           } else {
-              const snapshot = missions.map(m => ({ ...m }));
-              updateMissionOptimistic('give_like', 1); 
               
-              try {
-                  const res = await missionsService.trackGiveLike('reel', videoId);
-                  
-                  if (res.result === 'success' && res.points_earned > 0) {
-                      setPointsRewardedIds(p => new Set([...p, videoId]));
-                      await addPoints(res.points_earned, res.message, 'free');
-                      await refreshPoints();
-                      showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
-                  } else if (res.result === 'already_paid') { 
-                      showPointsNotification('Ya contaste puntos por este contenido hoy', videoId, 'warning'); 
-                  } else if (res.result === 'already_completed') {
-                      rollbackMission(snapshot); 
-                      showPointsNotification('Misión de likes ya completada hoy', videoId, 'info');
-                  } else {
-                      setPointsRewardedIds(p => new Set([...p, videoId]));
-                      showPointsNotification('✓ Like registrado', videoId, 'info');
-                  }
-              } catch (err) {
-                  console.error(err);
-                  rollbackMission(snapshot);
-                  showPointsNotification('Error de conexión al servidor de misiones', videoId, 'error');
+              // 1. Llamar al servidor para tracking
+              const res = await missionsService.trackGiveLike('reel', videoId);
+              
+              if (res.result === 'success' && res.points_earned > 0) {
+                  // ÉXITO: La misión se completó y dio puntos
+                  setPointsRewardedIds(p => new Set([...p, videoId]));
+                  await addPoints(res.points_earned, res.message, 'free');
+                  await refreshPoints();
+                  showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
+                  // Forzar la actualización visual a 10/10 SIN optimismo (server ya lo confirmó)
+                  await updateMissionOptimistic('give_like', 1); 
+
+              } else if (res.result === 'progress_updated' || res.result === 'registered') {
+                  // PROGRESO NORMAL (e.g., 5/10 -> 6/10)
+                  setPointsRewardedIds(p => new Set([...p, videoId]));
+                  updateMissionOptimistic('give_like', 1); // Optimistic update aquí
+                  showPointsNotification('✓ Like registrado', videoId, 'info');
+
+              } else if (res.result === 'already_paid' || res.result === 'already_completed') {
+                  // 🛑 ANTI-FARMING o YA HECHA
+                  // Si el servidor dice que no sumó el punto, revertimos la subida optimista.
+                  rollbackMission(snapshot); 
+                  showPointsNotification('Ya contaste puntos por este contenido hoy', videoId, 'warning'); 
+
+              } else if (res.result === 'error_giving_points') {
+                  // Se guardó el 10/10, pero fallaron los puntos.
+                  showPointsNotification('Error en la recompensa: El progreso fue guardado.', videoId, 'warning');
+              } else {
+                  // Fallo desconocido: Volvemos al estado inicial
+                  rollbackMission(snapshot); 
+                  showPointsNotification('Error desconocido al registrar misión', videoId, 'error'); 
               }
           }
       }
       setLikedVideos(newLiked);
-    } catch (err) { console.error('Error like:', err); }
+    } catch (err) { 
+        console.error('Error like catch all:', err);
+        rollbackMission(snapshot); 
+        showPointsNotification('Error de conexión con el servidor.', videoId, 'error');
+    }
   };
 
   const handleDislike = async (videoId, e) => {
@@ -392,10 +411,7 @@ const ReelsContainer = ({
       setShowGiftModal(true);
   };
 
-  // ==========================================================================
-  // LÓGICA DE COMENTARIOS
-  // ==========================================================================
-  
+  // Lógica de Comentarios
   const loadComments = async (videoId, retryCount = 0) => {
     try {
       let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
@@ -531,7 +547,7 @@ const ReelsContainer = ({
         )}
 
         {/* ========================================================
-            PANEL DE COMENTARIOS - DESKTOP (RESTAURADO)
+            PANEL DE COMENTARIOS - DESKTOP
         ======================================================== */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4" onClick={e=>e.stopPropagation()}>
