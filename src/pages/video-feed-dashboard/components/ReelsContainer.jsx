@@ -1,9 +1,10 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "REAL TIME" FINAL 🚀
-// ✅ Infinite Scroll: OK.
-// ✅ Conexión DB: OK.
-// ✅ FIX TIEMPO REAL: Estrategia de doble refresco para asegurar visualización de puntos.
+// REELS CONTAINER - VERSIÓN FINAL MAESTRA 🚀
+// ✅ Infinite Scroll: Detecta final y carga más.
+// ✅ Feedback Instantáneo: Usa updateLocalBalance para mostrar puntos YA.
+// ✅ Seguridad: No usa addPoints manual (evita doble pago), confía en el SQL.
+// ✅ Completo: Incluye todos los modales y lógica de comentarios.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -32,7 +33,17 @@ const ReelsContainer = ({
   const isDesktop = !isMobile;
 
   // 1. LLAMADA A HOOKS Y CONTEXTOS
-  const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints, triggerAnimation } = usePoints();
+  // Importamos updateLocalBalance para la actualización visual instantánea
+  const { 
+    addPoints, 
+    missions, 
+    updateMissionOptimistic, 
+    rollbackMission, 
+    refreshPoints, 
+    triggerAnimation, 
+    updateLocalBalance 
+  } = usePoints();
+
   const { success, error: notifyError, warning, info } = useNotification();
 
   // 2. DECLARACIÓN DE ESTADOS
@@ -227,7 +238,7 @@ const ReelsContainer = ({
       }
   }, [currentIndex, isAutoPlaying, videos, mutedVideos]);
 
-  // Tracking
+  // Tracking View (Corregido para usar updateLocalBalance)
   useEffect(() => {
       const v = videoRefs.current[currentIndex];
       const d = videos[currentIndex];
@@ -246,15 +257,19 @@ const ReelsContainer = ({
               setVideoWatchedIds(p => new Set([...p, d.id]));
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
-                      addPoints(res.points_earned, res.message, 'free');
+                      // Actualización Instantánea
+                      if (updateLocalBalance) updateLocalBalance(res.points_earned, 'free');
+                      if (triggerAnimation) triggerAnimation(res.points_earned, 'earn', 'free');
+                      
                       showPointsNotification(`+${res.points_earned} PUNTOS por ver`, d.id, 'success');
+                      refreshPoints();
                   }
               });
           }
       };
       v.addEventListener('timeupdate', handleTime);
       return () => v.removeEventListener('timeupdate', handleTime);
-  }, [currentIndex, videos, videoWatchedIds, addPoints]);
+  }, [currentIndex, videos, videoWatchedIds, triggerAnimation, updateLocalBalance]);
 
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
@@ -325,24 +340,24 @@ const ReelsContainer = ({
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado (Sin puntos extra)', videoId, 'info');
           } else {
-              // Llamada al servidor
+              // Llamada al servidor (SQL Paga automáticamente)
               const res = await missionsService.trackGiveLike('reel', videoId);
               
               if (res.result === 'success' && res.points_earned > 0) {
-                  // ÉXITO: La DB ya pagó los puntos automáticamente
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   
-                  // 1. Actualizamos barra visualmente
+                  // 1. Actualizamos misiones visualmente
                   await updateMissionOptimistic('give_like', 1); 
-                  showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
                   
-                  // 2. Animación visual (monedas)
+                  // 2. 🔥 ACTUALIZACIÓN INSTANTÁNEA DE SALDO
+                  if (updateLocalBalance) updateLocalBalance(res.points_earned, 'free');
+                  
+                  // 3. Animación
                   if (triggerAnimation) triggerAnimation(res.points_earned, 'earn', 'free');
-                  
-                  // 3. 🔥 DOBLE REFRESCO PARA ASEGURAR REAL-TIME
-                  // Primero intentamos leer el saldo inmediatamente
-                  await refreshPoints(); 
-                  // Luego reintentamos en 1 segundo para asegurar que la DB haya terminado de escribir
+                  showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
+
+                  // 4. Sincronización DB (Respaldo)
+                  await refreshPoints();
                   setTimeout(() => refreshPoints(), 1000);
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
@@ -396,10 +411,12 @@ const ReelsContainer = ({
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
              if(r.result==='success') { 
-                 addPoints(r.points_earned, r.message, 'free'); 
+                 // Instantáneo
+                 if (updateLocalBalance) updateLocalBalance(r.points_earned, 'free');
+                 if (triggerAnimation) triggerAnimation(r.points_earned, 'earn', 'free');
+                 
                  showPointsNotification(`+${r.points_earned} por seguir`, videos[currentIndex]?.id, 'success'); 
-                 // Aplicamos la misma estrategia aquí también para follows
-                 setTimeout(() => refreshPoints(), 1000);
+                 refreshPoints();
              }
           });
       }
@@ -418,8 +435,13 @@ const ReelsContainer = ({
      if(e) {e.stopPropagation(); e.preventDefault();}
      if (navigator.share) await navigator.share({title: video.title, url: window.location.href});
      else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
+     
      missionsService.trackShareContent('reel', video.id).then(r => {
-         if(r.result==='success') addPoints(r.points_earned, r.message, 'free');
+         if(r.result==='success') {
+             if (updateLocalBalance) updateLocalBalance(r.points_earned, 'free');
+             if (triggerAnimation) triggerAnimation(r.points_earned, 'earn', 'free');
+             refreshPoints();
+         }
      });
   };
 
@@ -474,7 +496,13 @@ const ReelsContainer = ({
       if (!replyingTo) {
         try {
           const result = await missionsService.trackComment('reel', videoId);
-          if (result.result === 'success' && result.points_earned > 0) { await addPoints(result.points_earned, result.message, 'free'); showPointsNotification(`🎉 +${result.points_earned} puntos por comentar`, videoId, 'success'); } 
+          if (result.result === 'success' && result.points_earned > 0) { 
+              // Visual Instantáneo
+              if (updateLocalBalance) updateLocalBalance(result.points_earned, 'free');
+              if (triggerAnimation) triggerAnimation(result.points_earned, 'earn', 'free');
+              showPointsNotification(`🎉 +${result.points_earned} puntos por comentar`, videoId, 'success'); 
+              refreshPoints();
+          } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
         } catch (err) { console.error(err); }
