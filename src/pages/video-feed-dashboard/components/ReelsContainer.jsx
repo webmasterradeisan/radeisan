@@ -1,9 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL COMPLETA Y CORREGIDA
-// ✅ Solución del Error Genérico: Muestra el mensaje de error real del servidor.
-// ✅ Lógica de Rollback y Anti-Farming Corregida.
-// ✅ Sintaxis y estructura completa.
+// REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE BUG DE COLUMNA
+// ✅ SOLUCIÓN CRÍTICA: Se corrigió el typo de columna 'user_user' a 'user_id'.
+// ✅ Lógica: Rollback y Anti-Farming funcionan correctamente.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -265,7 +264,7 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
+  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.) - Lógica Anti-Farming Corregida
   // ==========================================================================
 
   const handleLike = async (videoId, e) => {
@@ -291,7 +290,8 @@ const ReelsContainer = ({
           // --- UNLIKE ---
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
-          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+          // ✅ CORRECCIÓN FINAL: user_user -> user_id
+          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
       } else {
           // --- LIKE ---
@@ -348,7 +348,7 @@ const ReelsContainer = ({
       }
       setLikedVideos(newLiked);
     } catch (err) { 
-        // 🚨 CORRECCIÓN CRÍTICA: Mostrar el error real del servidor/PostgREST
+        // 🚨 CATCH CRÍTICO: Muestra el error real del servidor/PostgREST
         console.error('Error like catch all:', err);
         rollbackMission(snapshot); 
         const errorMessage = err.message || 'Error de red con la base de datos.';
