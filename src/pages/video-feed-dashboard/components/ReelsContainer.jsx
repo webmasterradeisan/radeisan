@@ -1,8 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE BUG DE COLUMNA
+// REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE SINCRONIZACIÓN (PERFECCIONISTA)
 // ✅ Solución del Error de Inserción (RLS/Restricción en video_likes).
 // ✅ Lógica: Rollback visual y exposición de error en caso de fallo de INSERT.
+// ✅ Feedback Instantáneo: updateMissionOptimistic se ejecuta antes de refreshPoints.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -326,10 +327,18 @@ const ReelsContainer = ({
               if (res.result === 'success' && res.points_earned > 0) {
                   // ÉXITO
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  await addPoints(res.points_earned, res.message, 'free');
-                  await refreshPoints();
-                  showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
+                  
+                  // 🔥 CORRECCIÓN PERFECCIONISTA:
+                  // 1. Primero actualizamos el estado optimista (Visualmente la barra se llena YA)
                   await updateMissionOptimistic('give_like', 1); 
+                  
+                  // 2. Mostramos la notificación y damos los puntos
+                  showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
+                  await addPoints(res.points_earned, res.message, 'free');
+
+                  // 3. AL FINAL: Refrescamos desde el servidor para que el estado "is_completed" 
+                  // venga confirmado por la DB (Barra Verde "Completada")
+                  await refreshPoints();
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // PROGRESO NORMAL
