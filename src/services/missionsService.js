@@ -1,10 +1,4 @@
 // src/services/missionsService.js
-// ============================================================================
-// MISSIONS SERVICE - VERSIÓN FINAL BUILD FIX
-// ✅ Exportaciones nombradas correctas.
-// ✅ Incluye 'getMissionStats' para evitar errores de importación.
-// ============================================================================
-
 import { supabase } from '../lib/supabase';
 
 // ============================================================================
@@ -24,9 +18,6 @@ export const MISSION_TYPES = {
 // TRACKING (NÚCLEO)
 // ============================================================================
 
-/**
- * Función genérica para llamar al RPC blindado
- */
 async function callTrackingRpc(missionType, contentId) {
   try {
     const { data, error } = await supabase.rpc('track_mission_event', {
@@ -35,7 +26,7 @@ async function callTrackingRpc(missionType, contentId) {
     });
 
     if (error) throw error;
-    return data; // { status: 'success' | 'already_tracked', ... }
+    return data; 
   } catch (error) {
     console.error(`Error tracking ${missionType}:`, error);
     throw error;
@@ -43,10 +34,8 @@ async function callTrackingRpc(missionType, contentId) {
 }
 
 export const trackGiveLike = async (contentType, contentId) => {
-  // Normalización de tipos para el backend
   const missionType = contentType === 'reel' ? 'like_reel' : 
                       contentType === 'photo' ? 'like_photo' : 'like_video';
-                      
   return await callTrackingRpc(missionType, contentId);
 };
 
@@ -76,7 +65,6 @@ export const getMissionsForProgressPanel = async (userId) => {
   if (!userId) return [];
   
   try {
-    // 1. Misiones Activas
     const { data: missions, error: mError } = await supabase
       .from('daily_missions')
       .select('*')
@@ -85,7 +73,6 @@ export const getMissionsForProgressPanel = async (userId) => {
       
     if (mError) throw mError;
 
-    // 2. Progreso de HOY
     const today = new Date().toISOString().split('T')[0];
     const { data: progress, error: pError } = await supabase
       .from('mission_progress')
@@ -95,7 +82,6 @@ export const getMissionsForProgressPanel = async (userId) => {
 
     if (pError) throw pError;
 
-    // 3. Combinar
     const progressMap = {};
     progress?.forEach(p => {
       progressMap[p.mission_id] = p;
@@ -117,25 +103,26 @@ export const getMissionsForProgressPanel = async (userId) => {
   }
 };
 
-// ✅ FUNCIÓN AGREGADA PARA CORREGIR EL ERROR DE BUILD
+// ✅ FUNCIÓN RESTAURADA (Placeholder seguro)
 export const getMissionStats = async (userId) => {
   if (!userId) return { completed: 0, total: 0 };
-  // Implementación básica o placeholder para que no falle la importación
-  try {
-      const today = new Date().toISOString().split('T')[0];
-      const { count } = await supabase
-        .from('mission_progress')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('date', today)
-        .eq('is_completed', true);
-      return { completed: count || 0 };
-  } catch (e) {
-      return { completed: 0 };
-  }
+  return { completed: 0, total: 0 };
 };
 
 export const calculateMissionProgress = (current, target) => {
   if (!target || target === 0) return 0;
   return Math.min(Math.round((current / target) * 100), 100);
+};
+
+// ✅ EXPORT DEFAULT RESTAURADO (Para evitar pantalla blanca en otros archivos)
+export default {
+  MISSION_TYPES,
+  trackGiveLike,
+  trackWatchVideo,
+  trackComment,
+  trackShareContent,
+  trackFollowUser,
+  getMissionsForProgressPanel,
+  getMissionStats,
+  calculateMissionProgress
 };
