@@ -687,4 +687,23 @@ const ReelsContainer = ({
                )) : <div className="text-center text-gray-500 py-10">No hay comentarios aún</div>}
             </div>
 
-            <div className="p
+            <div className="p-4 border-t">
+              {replyingTo && <div className="text-xs text-blue-500 mb-1 flex justify-between"><span>Respondiendo...</span><button onClick={handleCancelReply}>X</button></div>}
+              <div className="flex gap-2">
+                  <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comenta..." className="flex-1 border rounded px-3 py-2"/>
+                  <button onClick={()=>handleAddComment(currentVideo.id)} className="bg-blue-600 text-white p-2 rounded"><Icon name="Send" size={18}/></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Regalo */}
+      {showGiftModal && currentVideo && (
+        <GiftPointsModal isOpen={showGiftModal} onClose={()=>setShowGiftModal(false)} receiverId={currentVideo.creator?.id} contentId={currentVideo.id} contentType="reel" onSuccess={()=>{}} />
+      )}
+    </div>
+  );
+};
+
+export default ReelsContainer;
