@@ -1,4 +1,4 @@
-// src/Routes.jsx - FINAL FIXED (AdminPlaceholder restored)
+// src/Routes.jsx - FINAL FIXED (Mission Notification Added)
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
@@ -8,9 +8,12 @@ import { PointsProvider } from "contexts/PointsContext";
 import { NotificationProvider } from "contexts/NotificationContext"; 
 import NotificationContainer from "components/notifications/NotificationContainer"; 
 
-// ✅ NUEVO: CONTEXTO Y CONTENEDOR DE REGALOS
+// ✅ CONTEXTO Y CONTENEDOR DE REGALOS
 import { GiftNotificationProvider } from "contexts/GiftNotificationContext";
 import GiftNotificationContainer from "components/notifications/GiftNotificationContainer";
+
+// ✅ NUEVO: CONTENEDOR DE NOTIFICACIONES DE MISIONES (FIX VISUAL)
+import MissionNotificationContainer from "components/notifications/MissionNotificationContainer";
 
 // SISTEMA ORIGINAL MANTENIDO
 import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/ProtectedRoute";
@@ -155,7 +158,7 @@ const Unauthorized = () => (
 );
 
 // ===============================
-// PLACEHOLDER SOLO PARA LOGS (RESTAURADO)
+// PLACEHOLDER SOLO PARA LOGS
 // ===============================
 const AdminPlaceholder = ({ title, description, requiredPermission }) => (
   <div className="p-6">
@@ -194,7 +197,7 @@ const Routes = () => {
       <AuthProvider>
         <PointsProvider>
           <NotificationProvider>
-            {/* ✅ WRAPPER DE REGALOS AÑADIDO */}
+            {/* ✅ WRAPPER DE REGALOS */}
             <GiftNotificationProvider> 
               <ErrorBoundary>
                 <ScrollToTop />
@@ -325,7 +328,6 @@ const Routes = () => {
                   />
 
                   {/* PERFIL - ✅ REAL (PÚBLICO) */}
-                  {/* 🔴🔴🔴 CORRECCIÓN AQUÍ: Cambiado de :userId a :identifier */}
                   <Route 
                     path="/profile/:identifier" 
                     element={
@@ -349,7 +351,7 @@ const Routes = () => {
                     } 
                   />
 
-                  {/* 🎁 TIENDA DE RECOMPENSAS - ✅ REAL (AGREGADO) */}
+                  {/* 🎁 TIENDA DE RECOMPENSAS - ✅ REAL */}
                   <Route 
                     path="/rewards" 
                     element={
@@ -385,285 +387,60 @@ const Routes = () => {
                     } 
                   />
 
-                  {/* Resultado de compra - Éxito */}
-                  <Route 
-                    path="/purchase/success" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PurchaseSuccess />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
-
-                  {/* Resultado de compra - Fallo */}
-                  <Route 
-                    path="/purchase/failure" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PurchaseFailure />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
-
-                  {/* Resultado de compra - Pendiente */}
-                  <Route 
-                    path="/purchase/pending" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PurchasePending />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                  {/* Resultados de compra */}
+                  <Route path="/purchase/success" element={<ProtectedRoute><MobileLayoutWrapper><PurchaseSuccess /></MobileLayoutWrapper></ProtectedRoute>} />
+                  <Route path="/purchase/failure" element={<ProtectedRoute><MobileLayoutWrapper><PurchaseFailure /></MobileLayoutWrapper></ProtectedRoute>} />
+                  <Route path="/purchase/pending" element={<ProtectedRoute><MobileLayoutWrapper><PurchasePending /></MobileLayoutWrapper></ProtectedRoute>} />
 
                   {/* =================== PLACEHOLDERS TEMPORALES =================== */}
 
-                  {/* EXPLORAR - ⏳ PLACEHOLDER */}
-                  <Route 
-                    path="/explore" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PlaceholderPage 
-                            title="Explorar Contenido" 
-                            description="Descubre nuevo contenido popular" 
-                          />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
-
-                  {/* NOTIFICACIONES - ⏳ PLACEHOLDER */}
-                  <Route 
-                    path="/notifications" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PlaceholderPage 
-                            title="Notificaciones" 
-                            description="Mantente al día con tu actividad" 
-                          />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
-
-                  {/* GUARDADOS - ⏳ PLACEHOLDER */}
-                  <Route 
-                    path="/saved" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PlaceholderPage 
-                            title="Contenido Guardado" 
-                            description="Accede a todo el contenido que has guardado" 
-                          />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
-
-                  {/* CONFIGURACIÓN - REDIRECCIÓN A /PROFILE (Implementación lista) */}
-                  <Route 
-                    path="/settings" 
-                    element={
-                      <ProtectedRoute>
-                        <Navigate to="/profile" replace />
-                      </ProtectedRoute>
-                    } 
-                  />
+                  <Route path="/explore" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Explorar Contenido" description="Descubre nuevo contenido popular" /></MobileLayoutWrapper></ProtectedRoute>} />
+                  <Route path="/notifications" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Notificaciones" description="Mantente al día con tu actividad" /></MobileLayoutWrapper></ProtectedRoute>} />
+                  <Route path="/saved" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Contenido Guardado" description="Accede a todo el contenido que has guardado" /></MobileLayoutWrapper></ProtectedRoute>} />
+                  <Route path="/settings" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
 
                   {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
                   
-                  <Route 
-                    path="/admin" 
-                    element={
-                      <ProtectedAdminRoute>
-                        <AdminLayout />
-                      </ProtectedAdminRoute>
-                    }
-                  >
-                    {/* Dashboard - ✅ REAL (Sprint 4) */}
+                  <Route path="/admin" element={<ProtectedAdminRoute><AdminLayout /></ProtectedAdminRoute>}>
                     <Route index element={<AdminDashboard />} />
-
-                    {/* Usuarios - ✅ REAL (Sprint 4) */}
-                    <Route 
-                      path="users" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_users">
-                          <UserManagement />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Categorías - ✅ REAL (Sprint 4) */}
-                    <Route 
-                      path="categories" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_categories">
-                          <CategoryManagement />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Puntos - ✅ REAL (Sprint 5) */}
-                    <Route 
-                      path="points" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_points">
-                          <PointsRulesEditor />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* 💎 NUEVO - Puntos Premium - ✅ REAL */}
-                    <Route 
-                      path="premium-points" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_points">
-                          <PremiumPointsConfig />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* 💰 NUEVO - Gestión de Transacciones - ✅ REAL */}
-                    <Route 
-                      path="transactions" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_transactions">
-                          <TransactionsManagement />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* 🛍️ NUEVO - Gestión de Pedidos de Tienda - ✅ REAL */}
-                    <Route 
-                      path="shop-orders" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_rewards">
-                          <OrdersManagement />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* 📦 NUEVO - Inventario de Tienda Física - ✅ REAL */}
-                    <Route 
-                      path="shop-inventory" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_rewards">
-                          <ShopInventory />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Misiones - ✅ REAL (NUEVO) */}
-                    <Route 
-                      path="missions" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_missions">
-                          <MissionsManagement />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Recompensas - ✅ REAL (Sprint 5) */}
-                    <Route 
-                      path="rewards" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_rewards">
-                          <RewardsManagement />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Moderación - ✅ REAL (Sprint 6) */}
-                    <Route 
-                      path="moderation" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="moderate_content">
-                          <ContentModeration />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Analytics - ✅ REAL (Sprint 6) */}
-                    <Route 
-                      path="analytics" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="view_analytics">
-                          <AdvancedAnalytics />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Branding - ✅ REAL (Sprint 5) */}
-                    <Route 
-                      path="settings" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="manage_settings">
-                          <BrandingSettings />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
-
-                    {/* Logs - ⏳ PLACEHOLDER (AHORA SÍ EXISTE) */}
-                    <Route 
-                      path="logs" 
-                      element={
-                        <ProtectedAdminRoute requiredPermission="view_logs">
-                          <AdminPlaceholder 
-                            title="Logs de Administración"
-                            description="Auditoría de acciones administrativas"
-                            requiredPermission="view_logs"
-                          />
-                        </ProtectedAdminRoute>
-                      } 
-                    />
+                    <Route path="users" element={<ProtectedAdminRoute requiredPermission="manage_users"><UserManagement /></ProtectedAdminRoute>} />
+                    <Route path="categories" element={<ProtectedAdminRoute requiredPermission="manage_categories"><CategoryManagement /></ProtectedAdminRoute>} />
+                    <Route path="points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PointsRulesEditor /></ProtectedAdminRoute>} />
+                    <Route path="premium-points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PremiumPointsConfig /></ProtectedAdminRoute>} />
+                    <Route path="transactions" element={<ProtectedAdminRoute requiredPermission="manage_transactions"><TransactionsManagement /></ProtectedAdminRoute>} />
+                    <Route path="shop-orders" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><OrdersManagement /></ProtectedAdminRoute>} />
+                    <Route path="shop-inventory" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><ShopInventory /></ProtectedAdminRoute>} />
+                    <Route path="missions" element={<ProtectedAdminRoute requiredPermission="manage_missions"><MissionsManagement /></ProtectedAdminRoute>} />
+                    <Route path="rewards" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><RewardsManagement /></ProtectedAdminRoute>} />
+                    <Route path="moderation" element={<ProtectedAdminRoute requiredPermission="moderate_content"><ContentModeration /></ProtectedAdminRoute>} />
+                    <Route path="analytics" element={<ProtectedAdminRoute requiredPermission="view_analytics"><AdvancedAnalytics /></ProtectedAdminRoute>} />
+                    <Route path="settings" element={<ProtectedAdminRoute requiredPermission="manage_settings"><BrandingSettings /></ProtectedAdminRoute>} />
+                    <Route path="logs" element={<ProtectedAdminRoute requiredPermission="view_logs"><AdminPlaceholder title="Logs de Administración" description="Auditoría de acciones administrativas" requiredPermission="view_logs" /></ProtectedAdminRoute>} />
                   </Route>
 
                   {/* Acceso no autorizado */}
-                  <Route 
-                    path="/unauthorized" 
-                    element={
-                      <UniversalRoute>
-                        <Unauthorized />
-                      </UniversalRoute>
-                    } 
-                  />
+                  <Route path="/unauthorized" element={<UniversalRoute><Unauthorized /></UniversalRoute>} />
 
-                  {/* =================== REDIRECTS =================== */}
+                  {/* =================== REDIRECTS & 404 =================== */}
                   
                   <Route path="/create" element={<Navigate to="/upload" replace />} />
                   <Route path="/home" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
-                  
-                  {/* Redirect de compra (por si alguien usa /buy-points) */}
                   <Route path="/buy-points" element={<Navigate to="/purchase-points" replace />} />
-
-                  {/* =================== 404 =================== */}
-                  
-                  <Route 
-                    path="*" 
-                    element={
-                      <UniversalRoute>
-                        <NotFound />
-                      </UniversalRoute>
-                    } 
-                  />
+                  <Route path="*" element={<UniversalRoute><NotFound /></UniversalRoute>} />
                   
                 </RouterRoutes>
               </ErrorBoundary>
               
               <NotificationContainer /> 
               
-              {/* ✅ RENDERIZADOR DE NOTIFICACIONES DE REGALOS (MODAL SORPRESA) */}
+              {/* ✅ RENDERIZADOR DE REGALOS (MODAL SORPRESA) */}
               <GiftNotificationContainer />
+
+              {/* ✅ NUEVO: RENDERIZADOR DE MISIONES (FLOTA SOBRE TODO) */}
+              {/* Esto asegura que el modal de 'Misión Cumplida' se vea sobre los videos */}
+              <MissionNotificationContainer /> 
               
             </GiftNotificationProvider>
           </NotificationProvider>
