@@ -1,8 +1,8 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - BLINDADO
-// ✅ Retorna respuestas completas del RPC para manejar 'already_tracked'.
-// ✅ Mapeo correcto de tipos (reel -> like_reel).
+// MISSIONS SERVICE - VERSIÓN FINAL BUILD FIX
+// ✅ Exportaciones nombradas correctas.
+// ✅ Incluye 'getMissionStats' para evitar errores de importación.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -43,8 +43,7 @@ async function callTrackingRpc(missionType, contentId) {
 }
 
 export const trackGiveLike = async (contentType, contentId) => {
-  // Convertir 'reel' -> 'like_reel', 'video' -> 'like_video'
-  // El backend unificará todo a 'give_like', pero enviamos el específico por claridad.
+  // Normalización de tipos para el backend
   const missionType = contentType === 'reel' ? 'like_reel' : 
                       contentType === 'photo' ? 'like_photo' : 'like_video';
                       
@@ -52,8 +51,6 @@ export const trackGiveLike = async (contentType, contentId) => {
 };
 
 export const trackWatchVideo = async (contentType, contentId, duration) => {
-  // La lógica de tiempo se maneja en el frontend/hook, aquí solo registramos el evento
-  // si cumple con el criterio.
   const missionType = contentType === 'reel' ? 'watch_reel' : 'watch_video';
   return await callTrackingRpc(missionType, contentId);
 };
@@ -64,7 +61,6 @@ export const trackComment = async (contentType, contentId) => {
 };
 
 export const trackShareContent = async (contentType, contentId, count = 1, metadata = {}) => {
-  // El RPC actual ignora metadata, pero lo dejamos preparado
   return await callTrackingRpc('share_content', contentId);
 };
 
@@ -80,9 +76,6 @@ export const getMissionsForProgressPanel = async (userId) => {
   if (!userId) return [];
   
   try {
-    // Traemos las misiones y el progreso del usuario en una sola llamada eficiente
-    // O hacemos un join manual si no tienes una vista preparada.
-    
     // 1. Misiones Activas
     const { data: missions, error: mError } = await supabase
       .from('daily_missions')
@@ -124,9 +117,24 @@ export const getMissionsForProgressPanel = async (userId) => {
   }
 };
 
-// ============================================================================
-// UTILIDADES
-// ============================================================================
+// ✅ FUNCIÓN AGREGADA PARA CORREGIR EL ERROR DE BUILD
+export const getMissionStats = async (userId) => {
+  if (!userId) return { completed: 0, total: 0 };
+  // Implementación básica o placeholder para que no falle la importación
+  try {
+      const today = new Date().toISOString().split('T')[0];
+      const { count } = await supabase
+        .from('mission_progress')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('date', today)
+        .eq('is_completed', true);
+      return { completed: count || 0 };
+  } catch (e) {
+      return { completed: 0 };
+  }
+};
+
 export const calculateMissionProgress = (current, target) => {
   if (!target || target === 0) return 0;
   return Math.min(Math.round((current / target) * 100), 100);
