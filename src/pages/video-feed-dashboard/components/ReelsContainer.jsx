@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - FINAL FIX (ANTI-FARMING VISUAL REAL-TIME)
-// ✅ CORREGIDO: Rollback inmediato si el servidor detecta farming.
-//    (Evita que la barra suba falsamente si el video ya fue contado).
-// ✅ FUNCIONAL: Navegación, Likes, Comentarios, Regalos.
+// REELS CONTAINER - FINAL FIX (DEEP SNAPSHOT & ANTI-FLICKER)
+// ✅ CORREGIDO: Rollback real (ahora usa copias profundas del estado).
+// ✅ MEJORA: Elimina la intermitencia guardando en memoria los "ya contados".
+// ✅ RESULTADO: Si das like repetido, la barra sube y baja INSTANTÁNEAMENTE (5->6->5).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -63,7 +63,8 @@ const ReelsContainer = ({
 
   // Estados de tracking
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
-  // ✅ Memoria local para evitar llamadas innecesarias (Optimización)
+  
+  // ✅ Memoria local para evitar llamadas innecesarias
   const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
   
   const [actionsPerformed, setActionsPerformed] = useState({
@@ -319,7 +320,7 @@ const ReelsContainer = ({
 
 
   // ==========================================================================
-  // 🔥 ACCIÓN DE LIKE - CORREGIDA CON ROLLBACK VISUAL
+  // 🔥 ACCIÓN DE LIKE - CORREGIDA CON COPIA PROFUNDA
   // ==========================================================================
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
@@ -357,7 +358,7 @@ const ReelsContainer = ({
           ...prev, [videoId]: { ...prev[videoId], likes: (prev[videoId]?.likes || 0) + 1 }
         }));
 
-        // Insertar Like en BD (Acción Social)
+        // Insertar Like en BD
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         
         if (likeError && likeError.code !== '23505') {
@@ -367,65 +368,64 @@ const ReelsContainer = ({
         }
 
         // ============================================================
-        // 🔥 ANTI-FARMING & ACTUALIZACIÓN OPTIMISTA
+        // 🔥 ANTI-FARMING: VERIFICACIÓN LOCAL Y REMOTA
         // ============================================================
         
-        // 1. Verificar si YA pagó en esta sesión (Local check)
-        const alreadyRewardedLocal = pointsRewardedIds.has(videoId);
-
-        if (alreadyRewardedLocal) {
-            // Ya sabemos que pagó, avisar y no llamar al backend
-            console.log('ℹ️ Localmente ya trackeado: Sin puntos extra');
+        // 1. Revisar memoria local (Set)
+        if (pointsRewardedIds.has(videoId)) {
+            console.log('ℹ️ Ya pagado (cache local): Ignorando puntos');
             showPointsNotification('Like restaurado (Sin puntos extra)', videoId, 'info');
         } else {
-            // No sabemos si pagó (o es nuevo), vamos a intentar.
+            // 2. Si no está en memoria, intentamos procesar.
             
-            // A. Marcar localmente (para evitar doble click inmediato)
-            setPointsRewardedIds(prev => new Set([...prev, videoId]));
-
-            // B. Guardar estado actual para Rollback
-            const missionSnapshot = [...missions];
+            // ⚠️ CLAVE: COPIA PROFUNDA DEL ESTADO ACTUAL (Para que el rollback funcione)
+            // Usamos map para crear nuevos objetos y romper la referencia.
+            const missionSnapshot = missions.map(m => ({ ...m }));
             
-            // C. ACTUALIZACIÓN OPTIMISTA (Subir la barra YA)
+            // 3. Actualización Optimista (El usuario ve 6/10 inmediatamente)
             updateMissionOptimistic('give_like', 1);
             
             try {
-              // D. Llamar al Backend
+              // 4. Llamar al Backend
               const missionResult = await missionsService.trackGiveLike('reel', videoId);
               
-              // E. MANEJO DE RESPUESTA DEL SERVIDOR
               if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
-                // ÉXITO REAL: Pagar y confirmar
+                // ÉXITO: Confirmar y guardar en memoria local
+                setPointsRewardedIds(prev => new Set([...prev, videoId]));
                 await addPoints(missionResult.points_earned, missionResult.message, 'free'); 
                 await refreshPoints();
                 showPointsNotification(`🎉 Misión Completa: +${missionResult.points_earned} puntos`, videoId, 'success');
-
-              } else if (missionResult.result === 'already_completed') {
-                 // YA COMPLETADA (Pero quizás la optimista la subió de más)
-                 showPointsNotification('Misión de likes ya completada hoy', videoId, 'info');
-                 rollbackMission(missionSnapshot); // Rollback para asegurar que quede en 10/10 y no 11/10
 
               } else if (
                    missionResult.status === 'already_tracked' || 
                    missionResult.result === 'already_tracked'
                 ) {
-                 // 🛑 DETECCIÓN DE FARMING DESDE BACKEND (El caso de F5)
-                 // El backend dice: "Este video ya lo conté hoy, no sumes nada".
-                 console.log('🛑 Backend reporta farming: Revertir progreso.');
+                 // 🛑 FARMING DETECTADO POR EL SERVIDOR
+                 // El usuario recargó la página, la memoria local se borró, pero el servidor recuerda.
+                 console.log('🛑 Servidor reporta farming: Revertir progreso.');
+                 
+                 // A. Guardar en memoria local para no volver a preguntar
+                 setPointsRewardedIds(prev => new Set([...prev, videoId]));
+                 
+                 // B. ROLLBACK INMEDIATO: Volver de 6/10 a 5/10
+                 rollbackMission(missionSnapshot);
                  
                  showPointsNotification('Like restaurado (Sin puntos extra)', videoId, 'info');
-                 
-                 // 🔥 ROLLBACK INMEDIATO: Bajar la barra que subimos optimistamente
-                 rollbackMission(missionSnapshot);
+
+              } else if (missionResult.result === 'already_completed') {
+                 // Misión ya terminada
+                 rollbackMission(missionSnapshot); // Asegurar que no pase de 10/10
+                 showPointsNotification('Misión de likes ya completada hoy', videoId, 'info');
 
               } else {
-                // Progreso normal
+                // Progreso normal (ej: 2/10 -> 3/10)
+                setPointsRewardedIds(prev => new Set([...prev, videoId]));
                 showPointsNotification('✓ Like registrado', videoId, 'info');
                 await refreshPoints();
               }
 
             } catch (pointsError) {
-              console.error('❌ Error puntos:', pointsError);
+              console.error('❌ Error backend:', pointsError);
               rollbackMission(missionSnapshot);
             }
         }
