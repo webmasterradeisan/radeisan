@@ -1,15 +1,16 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - VERSIÓN ESTABLE Y COMPLETA (FINAL)
-// ✅ EXPORT FIX: getMissionStats ahora está correctamente exportado.
-// ✅ RPC: 'track_mission_update' para bypass de caché.
+// MISSIONS SERVICE - VERSIÓN FINAL Y COMPLETA
+// ✅ INTEGRACIÓN: Todas las funciones legacy y admin de tu archivo (7) están incluidas.
+// ✅ FIX RPC: 'track_mission_event' renombrado a 'track_mission_update'.
+// ✅ FIX ADMIN: Mapeo de datos para compatibilidad.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
 import * as pointsService from './pointsService';
 
 // ============================================================================
-// CONSTANTES
+// CONSTANTES Y CONFIGURACIÓN
 // ============================================================================
 
 /**
@@ -51,6 +52,16 @@ export const MISSION_FREQUENCY = {
   WEEKLY: 'weekly',
   MONTHLY: 'monthly',
   ONE_TIME: 'one_time'
+};
+
+/**
+ * Bonus de rachas por días consecutivos
+ */
+export const STREAK_BONUSES = {
+  7: 50,   // 7 días consecutivos = +50 puntos bonus
+  10: 100, // 10 días = +100 puntos
+  30: 500, // 30 días = +500 puntos
+  100: 2000 // 100 días = +2000 puntos
 };
 
 // ============================================================================
@@ -125,7 +136,6 @@ export async function getDailyMissions(options = {}) {
 
 export async function getAllMissions(filters = {}) {
   try {
-    // Asumiendo que 'get_all_missions_admin' es el RPC para el panel
     const { data, error } = await supabase
       .rpc('get_all_missions_admin');
 
@@ -191,38 +201,7 @@ export async function getMissionsForProgressPanel() {
 }
 
 // ============================================================================
-// FUNCIONES DE ESTADÍSTICAS (Añadida y Exportada)
-// ============================================================================
-
-export async function getMissionStats() {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Usuario no autenticado');
-
-    // Asumiendo que 'get_user_mission_stats' es el RPC para obtener estadísticas
-    const { data, error } = await supabase
-      .rpc('get_user_mission_stats', {
-        p_user_id: user.id
-      });
-
-    if (error) throw error;
-
-    return {
-      success: true,
-      stats: data || {}
-    };
-  } catch (error) {
-    console.error('Error obteniendo estadísticas de misiones:', error);
-    return {
-      success: false,
-      error: error.message,
-      stats: {}
-    };
-  }
-}
-
-// ============================================================================
-// TRACKING CORE (LÓGICA RPC CON RENOMBRE)
+// FUNCIONES DE TRACKING - Registrar Progreso (CORREGIDA)
 // ============================================================================
 
 /**
@@ -230,13 +209,13 @@ export async function getMissionStats() {
  * ✅ USA EL NUEVO RPC 'track_mission_update'
  */
 export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
-  try {
-    const userAuth = await supabase.auth.getUser();
-    if (!userAuth.data.user) {
-      return { result: 'error', points_earned: 0, message: 'Usuario no autenticado' };
-    }
-    const userId = userAuth.data.user.id;
+  const userAuth = await supabase.auth.getUser();
+  if (!userAuth.data.user) {
+    return { result: 'error', points_earned: 0, message: 'Usuario no autenticado' };
+  }
+  const userId = userAuth.data.user.id;
 
+  try {
     // 🔥 RPC RENOMBRADO A track_mission_update PARA BYPASS DE CACHE
     const { data, error } = await supabase
       .rpc('track_mission_update', {
@@ -251,20 +230,33 @@ export async function trackMissionProgress(missionType, referenceType, reference
       });
 
     if (error) {
-      // ✅ MANEJO DE ANTI-FARMING (Error 23505)
-      if (error.code === '23505' || error.message?.includes('duplicate key')) {
-        return { 
-          result: 'already_paid', 
-          points_earned: 0, 
-          message: 'Acción ya registrada hoy.' 
-        };
-      }
-      // Re-lanza el error para que el Frontend lo capture
-      throw error;
+        // ✅ MANEJO DE ANTI-FARMING (Error 23505)
+        if (error.code === '23505' || error.message?.includes('duplicate key')) { 
+             return {
+                result: 'already_paid', 
+                points_earned: 0, 
+                message: 'Error de unicidad: Puntos ya ganados.'
+             };
+        }
+        // Si es cualquier otro error, se propaga al catch del frontend
+        throw error;
     }
     
-    // Devolver el resultado de los puntos obtenidos (success, progress_updated, already_completed)
-    return data || { result: 'registered', points_earned: 0 };
+    // 2. Devolver el resultado del RPC
+    if (data && data.result === 'success') {
+        return { result: 'success', points_earned: data.points_earned, message: `¡Misión completada! +${data.points_earned} puntos` };
+    }
+    if (data && data.result === 'already_paid') {
+        return { result: 'already_paid', points_earned: 0, message: 'Puntos ya ganados por esta acción.' };
+    }
+    if (data && data.result === 'progress_updated') {
+        return { result: 'progress_updated', points_earned: 0, message: 'Progreso registrado exitosamente.' };
+    }
+    if (data && data.result === 'already_completed') {
+        return { result: 'already_completed', points_earned: 0, message: 'Ya completaste esta misión hoy.' };
+    }
+
+    return { result: 'registered', points_earned: 0, message: 'Acción registrada, pero no hubo recompensa inmediata.' };
 
   } catch (error) {
     console.error('❌ [trackMissionProgress] Error tracking misión:', error);
@@ -273,40 +265,407 @@ export async function trackMissionProgress(missionType, referenceType, reference
   }
 }
 
-// ============================================================================
-// WRAPPERS LEGACY 
-// ============================================================================
-
-export async function trackWatchVideo(referenceType, referenceId, duration = 30) {
-  return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, referenceType, referenceId, 1, { duration });
+/**
+ * Tracking automático cuando el usuario ve un video
+ */
+export async function trackWatchVideo(referenceType, referenceId, watchDuration = 30) {
+  return trackMissionProgress(MISSION_TYPES.WATCH_VIDEO, referenceType, referenceId, 1, {
+    watch_duration: watchDuration
+  });
 }
 
+/**
+ * Tracking automático cuando el usuario sube un video 
+ */
 export async function trackUploadVideo(referenceId) {
-  return trackMissionProgress(MISSION_TYPES.UPLOAD_VIDEO, 'video', referenceId);
+  return trackMissionProgress(MISSION_TYPES.UPLOAD_VIDEO, 'video', referenceId, 1, {});
 }
 
+/**
+ * Tracking automático cuando el usuario da like
+ */
 export async function trackGiveLike(referenceType, referenceId) {
   return trackMissionProgress(MISSION_TYPES.GIVE_LIKE, referenceType, referenceId);
 }
 
+/**
+ * Tracking automático cuando el usuario comparte contenido
+ */
 export async function trackShareContent(referenceType, referenceId, platform = 'link') {
-  return trackMissionProgress(MISSION_TYPES.SHARE_CONTENT, referenceType, referenceId, 1, { platform });
+  return trackMissionProgress(MISSION_TYPES.SHARE_CONTENT, referenceType, referenceId, 1, {
+    platform: platform
+  });
 }
 
+/**
+ * Tracking automático cuando el usuario dona puntos
+ */
+export async function trackDonatePoints(recipientId, pointsAmount) {
+  return trackMissionProgress(MISSION_TYPES.DONATE_POINTS, 'donation', recipientId, 1, {
+    recipient_id: recipientId,
+    points_amount: pointsAmount
+  });
+}
+
+/**
+ * Tracking automático cuando el usuario comenta
+ */
 export async function trackComment(referenceType, referenceId) {
   return trackMissionProgress(MISSION_TYPES.COMMENT, referenceType, referenceId);
 }
 
-export async function trackFollowUser(followedId) {
-  return trackMissionProgress(MISSION_TYPES.FOLLOW_USER, 'user', followedId);
+/**
+ * Tracking automático cuando el usuario sigue a alguien
+ */
+export async function trackFollowUser(followedUserId) {
+  return trackMissionProgress(MISSION_TYPES.FOLLOW_USER, 'user', followedUserId, 1, {
+    followed_user_id: followedUserId
+  });
 }
 
-export async function trackDonatePoints(recipientId, amount) {
-  return trackMissionProgress(MISSION_TYPES.DONATE_POINTS, 'donation', recipientId, 1, { amount });
-}
-
+/**
+ * Tracking de login diario
+ */
 export async function trackDailyLogin() {
-  return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 'system', 'daily_login_' + new Date().toDateString());
+  return trackMissionProgress(MISSION_TYPES.LOGIN_DAILY, 'system', 'daily_login_' + new Date().toDateString(), 1, {
+    login_timestamp: new Date().toISOString()
+  });
+}
+
+// ============================================================================
+// FUNCIONES DE COMPLETADO Y RECOMPENSA
+// ============================================================================
+
+export async function completeMission(missionId, options = {}) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { grantReward = true, bonusPoints = 0 } = options;
+
+    const { data, error } = await supabase
+      .rpc('complete_user_mission', {
+        p_user_id: user.id,
+        p_mission_id: missionId,
+        p_grant_reward: grantReward,
+        p_bonus_points: bonusPoints
+      });
+
+    if (error) throw error;
+
+    return { success: true, data, message: 'Misión completada exitosamente' };
+  } catch (error) {
+    console.error('Error completando misión:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function claimMissionReward(missionId) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .rpc('claim_mission_reward', {
+        p_user_id: user.id,
+        p_mission_id: missionId
+      });
+
+    if (error) throw error;
+
+    return { success: true, pointsEarned: data?.points_earned || 0, message: 'Recompensa reclamada exitosamente' };
+  } catch (error) {
+    console.error('Error reclamando recompensa:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// FUNCIONES DE RACHAS (STREAKS)
+// ============================================================================
+
+export async function getUserStreak() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .from('user_streaks')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+
+    return { success: true, streak: data || null };
+  } catch (error) {
+    console.error('Error obteniendo racha:', error);
+    return { success: false, error: error.message, streak: null };
+  }
+}
+
+export async function updateStreak() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .rpc('update_user_streak', { p_user_id: user.id });
+
+    if (error) throw error;
+
+    return { success: true, streak: data };
+  } catch (error) {
+    console.error('Error actualizando racha:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getStreakHistory(limit = 30) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .from('user_streaks')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return { success: true, history: data || [] };
+  } catch (error) {
+    console.error('Error obteniendo historial de rachas:', error);
+    return { success: false, error: error.message, history: [] };
+  }
+}
+
+// ============================================================================
+// FUNCIONES DE ESTADÍSTICAS
+// ============================================================================
+
+export async function getMissionStats() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .rpc('get_user_mission_stats', { p_user_id: user.id });
+
+    if (error) throw error;
+
+    return { success: true, stats: data || {} };
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de misiones:', error);
+    return { success: false, error: error.message, stats: {} };
+  }
+}
+
+export async function getTopMissions(limit = 5) {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_top_missions', { p_limit: limit });
+
+    if (error) throw error;
+
+    return { success: true, missions: data || [] };
+  } catch (error) {
+    console.error('Error obteniendo top misiones:', error);
+    return { success: false, error: error.message, missions: [] };
+  }
+}
+
+// ============================================================================
+// FUNCIONES DE ADMINISTRACIÓN
+// ============================================================================
+
+export async function createMission(missionData) {
+  try {
+    const {
+      title,
+      description,
+      mission_type,
+      mission_key,
+      target_count,
+      points_reward,
+      frequency = 'daily',
+      icon,
+      is_active = true,
+      show_in_progress_panel = true,
+      display_order = 0
+    } = missionData;
+
+    const { data, error } = await supabase
+      .from('daily_missions')
+      .insert({
+        title,
+        description,
+        mission_type,
+        mission_key,
+        target_count,
+        points_reward,
+        frequency,
+        icon,
+        is_active,
+        show_in_progress_panel,
+        display_order
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { success: true, mission: data, message: 'Misión creada exitosamente' };
+  } catch (error) {
+    console.error('Error creando misión:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateMission(missionId, updates) {
+  try {
+    const { data, error } = await supabase
+      .from('daily_missions')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', missionId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { success: true, mission: data, message: 'Misión actualizada exitosamente' };
+  } catch (error) {
+    console.error('Error actualizando misión:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteMission(missionId) {
+  try {
+    const { error } = await supabase
+      .from('daily_missions')
+      .delete()
+      .eq('id', missionId);
+
+    if (error) throw error;
+
+    return { success: true, message: 'Misión eliminada exitosamente' };
+  } catch (error) {
+    console.error('Error eliminando misión:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function toggleMissionActive(missionId, isActive) {
+  return updateMission(missionId, { is_active: isActive });
+}
+
+export async function reorderMissions(missionOrders) {
+  try {
+    const updates = missionOrders.map(({ id, display_order }) => 
+      supabase
+        .from('daily_missions')
+        .update({ display_order })
+        .eq('id', id)
+    );
+
+    await Promise.all(updates);
+
+    return { success: true, message: 'Misiones reordenadas exitosamente' };
+  } catch (error) {
+    console.error('Error reordenando misiones:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// FUNCIONES DE UTILIDAD
+// ============================================================================
+
+export async function canCompleteMissionToday(missionId) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .from('mission_progress')
+      .select('completed_at, is_completed')
+      .eq('user_id', user.id)
+      .eq('mission_id', missionId)
+      .order('completed_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    if (!data) return true;
+
+    const today = new Date().toDateString();
+    const completedDate = new Date(data.completed_at).toDateString();
+
+    return today !== completedDate;
+  } catch (error) {
+    console.error('Error verificando disponibilidad de misión:', error);
+    return false;
+  }
+}
+
+export async function resetDailyMissions() {
+  try {
+    const { data, error } = await supabase
+      .rpc('reset_daily_mission_progress');
+
+    if (error) throw error;
+
+    return { success: true, resetCount: data?.reset_count || 0, message: `${data?.reset_count || 0} misiones reseteadas` };
+  } catch (error) {
+    console.error('Error reseteando misiones diarias:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export function getAvailableMissionIcons() {
+  return [
+    'Play',
+    'Upload',
+    'Heart',
+    'Share2',
+    'Gift',
+    'MessageCircle',
+    'UserPlus',
+    'CheckCircle',
+    'LogIn',
+    'Eye',
+    'Star',
+    'Trophy',
+    'Target',
+    'Zap',
+    'Flame'
+  ];
+}
+
+export function getTimeUntilReset() {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  const diff = tomorrow - now;
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  return `${hours}h ${minutes}m`;
+}
+
+export function calculateMissionProgress(current, target) {
+  if (target === 0) return 0;
+  return Math.min(Math.round((current / target) * 100), 100);
 }
 
 // ============================================================================
@@ -314,17 +673,18 @@ export async function trackDailyLogin() {
 // ============================================================================
 
 export default {
+  // Constantes
   MISSION_TYPES,
   MISSION_STATUS,
   MISSION_FREQUENCY,
+  STREAK_BONUSES,
 
   // Consultas
   getDailyMissions,
   getAllMissions,
+  getMissionProgress,
   getMissionsForProgressPanel,
-
-  // Estadísticas (Añadida la exportación faltante)
-  getMissionStats,
+  getTopMissions, // Añadida
 
   // Tracking
   trackMissionProgress,
@@ -336,6 +696,30 @@ export default {
   trackComment,
   trackFollowUser,
   trackDailyLogin,
-  
-  // ... (Agregar otras funciones de completado, rachas, y admin)
+
+  // Completado
+  completeMission,
+  claimMissionReward,
+
+  // Rachas
+  getUserStreak,
+  updateStreak,
+  getStreakHistory,
+
+  // Estadísticas
+  getMissionStats,
+
+  // Admin
+  createMission,
+  updateMission,
+  deleteMission,
+  toggleMissionActive,
+  reorderMissions,
+
+  // Utilidades
+  canCompleteMissionToday,
+  resetDailyMissions,
+  getAvailableMissionIcons,
+  getTimeUntilReset,
+  calculateMissionProgress
 };
