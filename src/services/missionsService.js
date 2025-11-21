@@ -1,9 +1,12 @@
 // src/services/missionsService.js
+// ============================================================================
+// MISSIONS SERVICE - FINAL REPAIR
+// ✅ Restauradas funciones perdidas: 'trackMissionProgress', 'trackDonatePoints'.
+// ✅ Mantiene la lógica blindada de Anti-Farming.
+// ============================================================================
+
 import { supabase } from '../lib/supabase';
 
-// ============================================================================
-// CONSTANTES
-// ============================================================================
 export const MISSION_TYPES = {
   WATCH_VIDEO: 'watch_videos',
   UPLOAD_VIDEO: 'upload_video',
@@ -14,10 +17,7 @@ export const MISSION_TYPES = {
   DAILY_LOGIN: 'daily_login'
 };
 
-// ============================================================================
-// TRACKING (NÚCLEO)
-// ============================================================================
-
+// --- NÚCLEO ---
 async function callTrackingRpc(missionType, contentId) {
   try {
     const { data, error } = await supabase.rpc('track_mission_event', {
@@ -32,6 +32,8 @@ async function callTrackingRpc(missionType, contentId) {
     throw error;
   }
 }
+
+// --- EXPORTACIONES ---
 
 export const trackGiveLike = async (contentType, contentId) => {
   const missionType = contentType === 'reel' ? 'like_reel' : 
@@ -57,20 +59,27 @@ export const trackFollowUser = async (targetUserId) => {
   return await callTrackingRpc('follow_user', targetUserId);
 };
 
-// ============================================================================
-// CONSULTAS (READ)
-// ============================================================================
+// ✅ RESTAURADA: Usada en VideoPlayerPage para 'save_video'
+export const trackMissionProgress = async (missionType, contentType, contentId) => {
+  // Mapeamos la llamada antigua al nuevo sistema RPC
+  return await callTrackingRpc(missionType, contentId);
+};
+
+// ✅ RESTAURADA: Por si acaso se usa en donaciones
+export const trackDonatePoints = async (amount) => {
+  return await callTrackingRpc('donate_points', 'system');
+};
+
+// --- CONSULTAS ---
 
 export const getMissionsForProgressPanel = async (userId) => {
   if (!userId) return [];
-  
   try {
     const { data: missions, error: mError } = await supabase
       .from('daily_missions')
       .select('*')
       .eq('is_active', true)
       .order('display_order', { ascending: true });
-      
     if (mError) throw mError;
 
     const today = new Date().toISOString().split('T')[0];
@@ -79,13 +88,10 @@ export const getMissionsForProgressPanel = async (userId) => {
       .select('*')
       .eq('user_id', userId)
       .eq('date', today);
-
     if (pError) throw pError;
 
     const progressMap = {};
-    progress?.forEach(p => {
-      progressMap[p.mission_id] = p;
-    });
+    progress?.forEach(p => { progressMap[p.mission_id] = p; });
 
     return missions.map(m => {
       const userProgress = progressMap[m.id];
@@ -96,14 +102,12 @@ export const getMissionsForProgressPanel = async (userId) => {
         target_count: m.target_count || 1
       };
     });
-
   } catch (error) {
     console.error('Error getting missions:', error);
     return [];
   }
 };
 
-// ✅ FUNCIÓN RESTAURADA (Placeholder seguro)
 export const getMissionStats = async (userId) => {
   if (!userId) return { completed: 0, total: 0 };
   return { completed: 0, total: 0 };
@@ -114,7 +118,7 @@ export const calculateMissionProgress = (current, target) => {
   return Math.min(Math.round((current / target) * 100), 100);
 };
 
-// ✅ EXPORT DEFAULT RESTAURADO (Para evitar pantalla blanca en otros archivos)
+// Export default para compatibilidad
 export default {
   MISSION_TYPES,
   trackGiveLike,
@@ -122,6 +126,8 @@ export default {
   trackComment,
   trackShareContent,
   trackFollowUser,
+  trackMissionProgress, // ✅ Agregada aquí también
+  trackDonatePoints,    // ✅ Agregada aquí también
   getMissionsForProgressPanel,
   getMissionStats,
   calculateMissionProgress
