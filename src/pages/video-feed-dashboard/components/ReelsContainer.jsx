@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL CONECTADA A DB
-// ✅ Solución del Error de Inserción (RLS/Restricción en video_likes).
-// ✅ Lógica: Rollback visual y exposición de error en caso de fallo de INSERT.
-// ✅ SINCRONIZACIÓN REAL: Usa refreshPoints() para leer el saldo que la DB ya depositó.
+// REELS CONTAINER - VERSIÓN MAESTRA FINAL (100% CÓDIGO COMPLETO)
+// ✅ Infinite Scroll Activado (Detecta final de lista).
+// ✅ Sincronización DB (refreshPoints en lugar de addPoints).
+// ✅ Modales de Comentarios y Regalos completos.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -15,7 +15,7 @@ import * as missionsService from 'services/missionsService';
 import Icon from 'components/AppIcon';
 import useIsMobile from 'hooks/useIsMobile';
 import GiftPointsModal from 'components/GiftPointsModal'; 
-import VideoActionButtons from './VideoActionButtons'; // Componente de Botones separado
+import VideoActionButtons from './VideoActionButtons'; 
 
 // ===============================
 // COMPONENTE PRINCIPAL: REELS CONTAINER
@@ -23,26 +23,25 @@ import VideoActionButtons from './VideoActionButtons'; // Componente de Botones 
 const ReelsContainer = ({ 
   videos = [], 
   selectedReelId = null,
-  onLoadMore, 
-  hasMore = true,
+  onLoadMore,     
+  hasMore = true, 
   loading = false 
 }) => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
 
-  // 1. LLAMADA A HOOKS Y CONTEXTOS (DEBE SER INCONDICIONAL)
-  // 🔥 CORRECCIÓN 1: Agregamos 'triggerAnimation' para efectos visuales sin lógica de pago
+  // 1. LLAMADA A HOOKS Y CONTEXTOS
+  // Agregamos 'triggerAnimation' y mantenemos 'refreshPoints' para la sincronización real
   const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints, triggerAnimation } = usePoints();
   const { success, error: notifyError, warning, info } = useNotification();
 
-  // 2. DECLARACIÓN DE ESTADOS (INCONDICIONAL)
+  // 2. DECLARACIÓN DE ESTADOS
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
   
-  // Declaración de Set() corregida con useState()
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [followedCreators, setFollowedCreators] = useState(new Set());
@@ -81,6 +80,19 @@ const ReelsContainer = ({
   };
 
   // ===============================
+  // 🚀 INFINITE SCROLL TRIGGER
+  // ===============================
+  useEffect(() => {
+    if (!onLoadMore || !hasMore || loading) return;
+
+    // Si estamos viendo uno de los últimos 2 videos, cargamos más
+    if (currentIndex >= videos.length - 2) {
+        console.log('🔄 Infinite Scroll: Solicitando más videos...');
+        onLoadMore();
+    }
+  }, [currentIndex, videos.length, onLoadMore, hasMore, loading]);
+
+  // ===============================
   // LÓGICA DE CARGA Y SINCRONIZACIÓN
   // ===============================
   const getInitialReelIndex = useCallback(() => {
@@ -96,10 +108,13 @@ const ReelsContainer = ({
       setCurrentIndex(correctIndex);
       setEnableTransition(false);
       setTimeout(() => { setEnableTransition(true); isInitialMount.current = false; }, 100);
-    } else { setCurrentIndex(correctIndex); }
+    } else { 
+      // Nota: Evitamos resetear el index si solo estamos cargando más videos al final
+      if (videos.length <= 12 && currentIndex === 0) setCurrentIndex(correctIndex);
+    }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
-  // Cargar datos del usuario actual y sus interacciones
+  // Cargar datos del usuario actual
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -120,21 +135,28 @@ const ReelsContainer = ({
       } catch (e) { console.error(e); }
     };
     loadData();
-  }, [videos]);
+  }, [videos.length === 0]); // Solo carga inicial para optimizar
 
-  // Inicializar y actualizar contadores
+  // Inicializar contadores (Solo nuevos)
   useEffect(() => {
-      const counters = {};
-      videos.forEach(v => {
-        counters[v.id] = { 
-          likes: v.likes || v.likes_count || 0, 
-          comments: v.comments || v.comments_count || 0, 
-          views: v.views || v.views_count || 0 
-        };
+      setVideoCounters(prev => {
+          const newCounters = { ...prev };
+          let changed = false;
+          videos.forEach(v => {
+              if (!newCounters[v.id]) {
+                  newCounters[v.id] = { 
+                      likes: v.likes || v.likes_count || 0, 
+                      comments: v.comments || v.comments_count || 0, 
+                      views: v.views || v.views_count || 0 
+                  };
+                  changed = true;
+              }
+          });
+          return changed ? newCounters : prev;
       });
-      setVideoCounters(counters);
   }, [videos]);
 
+  // Contadores Real-Time
   useEffect(() => {
     const loadRealTimeCounters = async () => {
       if (videos.length === 0) return;
@@ -159,10 +181,8 @@ const ReelsContainer = ({
   }, [currentIndex, videos]);
 
   // ===============================
-  // LÓGICA DEL REPRODUCTOR, VIEWS TRACKING Y NAVEGACIÓN
+  // LÓGICA DEL REPRODUCTOR
   // ===============================
-
-  // Lógica del reproductor (Play/Pause/Mute)
   useEffect(() => {
     if (hasPlayedInitial.current || videos.length === 0) return;
     const attemptPlay = () => {
@@ -177,7 +197,7 @@ const ReelsContainer = ({
     setTimeout(attemptPlay, 250);
   }, [videos, currentIndex, mutedVideos]);
 
-  // Navegación por scroll y teclado
+  // Navegación
   useEffect(() => {
       if (!isDesktop) return;
       const handleWheel = (e) => {
@@ -209,14 +229,13 @@ const ReelsContainer = ({
       }
   }, [currentIndex, isAutoPlaying, videos, mutedVideos]);
 
-  // Tracking de Vistas
+  // Tracking
   useEffect(() => {
       const v = videoRefs.current[currentIndex];
       const d = videos[currentIndex];
       if (!v || !d) return;
       
       const handleTime = async () => {
-          // Contar vista al 30%
           if ((v.currentTime / v.duration) * 100 > 30 && !videoWatchedIds.has(d.id + '_view')) {
              setVideoCounters(prev => ({
                 ...prev,
@@ -225,7 +244,6 @@ const ReelsContainer = ({
              setVideoWatchedIds(p => new Set([...p, d.id + '_view']));
           }
 
-          // Pagar puntos al 80%
           if ((v.currentTime / v.duration) * 100 > 80 && !videoWatchedIds.has(d.id)) {
               setVideoWatchedIds(p => new Set([...p, d.id]));
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
@@ -240,7 +258,6 @@ const ReelsContainer = ({
       return () => v.removeEventListener('timeupdate', handleTime);
   }, [currentIndex, videos, videoWatchedIds, addPoints]);
 
-  // Controles de navegación y Play/Pause
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
       const v = videoRefs.current[currentIndex];
@@ -250,12 +267,10 @@ const ReelsContainer = ({
   const navigateNext = useCallback(() => { if(currentIndex < videos.length-1) { setEnableTransition(true); setCurrentIndex(p=>p+1); setIsAutoPlaying(true); } }, [currentIndex, videos.length]);
   const navigatePrevious = useCallback(() => { if(currentIndex > 0) { setEnableTransition(true); setCurrentIndex(p=>p-1); setIsAutoPlaying(true); } }, [currentIndex]);
   
-  // Touch handlers
   const handleTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
   const handleTouchMove = (e) => { touchEndY.current = e.touches[0].clientY; };
   const handleTouchEnd = () => { if(Math.abs(touchStartY.current - touchEndY.current) > 50) touchStartY.current > touchEndY.current ? navigateNext() : navigatePrevious(); };
 
-  // Keyboard Navigation
   useEffect(() => {
       const k = (e) => {
           if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
@@ -266,13 +281,12 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.) - Lógica Anti-Farming Corregida
+  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
-    // Almacenamos el estado inicial antes de cualquier cambio optimista
     const snapshot = missions.map(m => ({ ...m })); 
     
     try {
@@ -289,89 +303,64 @@ const ReelsContainer = ({
       const isLiked = newLiked.has(videoId);
 
       if (isLiked) {
-          // --- UNLIKE ---
+          // UNLIKE
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
-          // ✅ CORRECCIÓN FINAL: user_user -> user_id
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
       } else {
-          // --- LIKE ---
+          // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
-          // 🔥 BLOQUE DE INSERCIÓN DEL LIKE (Aquí ocurre el fallo de RLS)
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
-             // 1. Mostrar el error exacto de RLS/Constraint
-             showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message} (Code: ${likeInsertError.code})`, videoId, 'error');
-             
-             // 2. Revertir el contador visual inmediatamente
+             showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
              setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes || 0) - 1) } }));
-             
-             // 3. Revertir el estado del botón (blanco) y detener el proceso de misión
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
           }
 
-          // Si la inserción del like fue exitosa, el proceso de misión continúa
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado (Sin puntos extra)', videoId, 'info');
           } else {
-              
-              // 1. Llamar al servidor para tracking
+              // Llamada al servidor
               const res = await missionsService.trackGiveLike('reel', videoId);
               
               if (res.result === 'success' && res.points_earned > 0) {
-                  // ÉXITO - LÓGICA DE CONEXIÓN DB
+                  // ÉXITO: La DB ya pagó los puntos automáticamente
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   
-                  // 1. Actualizamos barra de progreso visual (Feedback inmediato)
+                  // 1. Actualizamos barra visualmente
                   await updateMissionOptimistic('give_like', 1); 
-                  
-                  // 2. Notificación UI
                   showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
-
-                  // 🔥 CORRECCIÓN 2: Solo Animación y Refresco
-                  // Quitamos addPoints() porque el SQL ya pagó. Usamos triggerAnimation para la estética.
+                  
+                  // 2. Disparamos animación (SIN PAGAR DE NUEVO) y refrescamos saldo
                   if (triggerAnimation) triggerAnimation(res.points_earned, 'earn', 'free');
-
-                  // 3. OBLIGATORIO: Leer el saldo real desde la DB
-                  // Esto hace que el panel lateral pase de 0 a X porque lee user_profiles
-                  await refreshPoints();
+                  await refreshPoints(); 
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // PROGRESO NORMAL
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
-                  // ANTI-FARMING o YA HECHA
                   rollbackMission(snapshot); 
                   showPointsNotification('Ya contaste puntos por este contenido hoy', videoId, 'warning'); 
-
-              } else if (res.result === 'error_giving_points') {
-                  showPointsNotification('Error en la recompensa: El progreso fue guardado.', videoId, 'warning');
               } else {
-                  // Fallo desconocido
                   rollbackMission(snapshot); 
                   showPointsNotification('Error desconocido al registrar misión', videoId, 'error'); 
               }
           }
-          // Si el like fue exitoso, actualizamos el estado likedVideos aquí,
-          // ya que se revirtió en la lógica de error, lo volvemos a poner si no hubo error.
           setLikedVideos(newLiked);
-
       }
     } catch (err) { 
-        console.error('Error like catch all:', err);
+        console.error('Error like:', err);
         rollbackMission(snapshot); 
-        const errorMessage = err.message || 'Error de red con el servidor.';
-        showPointsNotification(`Error de red: ${errorMessage}`, videoId, 'error');
+        showPointsNotification('Error de red', videoId, 'error');
     }
   };
 
@@ -431,7 +420,9 @@ const ReelsContainer = ({
       setShowGiftModal(true);
   };
 
-  // Lógica de Comentarios
+  // ===============================
+  // LÓGICA DE COMENTARIOS COMPLETA
+  // ===============================
   const loadComments = async (videoId, retryCount = 0) => {
     try {
       let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
@@ -539,6 +530,16 @@ const ReelsContainer = ({
                 </div>
               </div>
             ))}
+
+            {/* INDICADOR DE CARGA FINAL (INFINITE SCROLL) */}
+            {loading && hasMore && (
+                <div className="w-full h-full flex-shrink-0 flex items-center justify-center bg-black text-white snap-start">
+                    <div className="text-center">
+                        <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                        <p>Cargando más reels...</p>
+                    </div>
+                </div>
+            )}
           </div>
         </div>
 
@@ -567,7 +568,7 @@ const ReelsContainer = ({
         )}
 
         {/* ========================================================
-            PANEL DE COMENTARIOS - DESKTOP
+            PANEL DE COMENTARIOS - DESKTOP (RESTAURADO)
         ======================================================== */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4" onClick={e=>e.stopPropagation()}>
@@ -628,7 +629,7 @@ const ReelsContainer = ({
         )}
       </div>
       
-      {/* MODAL DE COMENTARIOS - MOBILE */}
+      {/* MODAL DE COMENTARIOS - MOBILE (RESTAURADO) */}
       {showCommentsModal && currentVideo && isMobile && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={handleCloseComments}>
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
