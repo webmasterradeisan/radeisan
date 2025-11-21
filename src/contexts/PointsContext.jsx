@@ -1,8 +1,7 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - VERSIÓN "GAMIFICADA" CON MODAL Y REALTIME 🏆
-// ✅ Incluye: Escucha Realtime a DB (Técnica Regalo).
-// ✅ Incluye: Lógica para disparar el Modal de Misión Cumplida.
+// POINTS CONTEXT - VERSIÓN GAMIFICADA FINAL 🏆
+// ✅ Conecta el Modal de Celebración con el sistema de Likes.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -14,8 +13,7 @@ import {
 } from '../services/missionsService';
 import { supabase } from '../lib/supabase';
 
-// 1. IMPORTACIÓN OBLIGATORIA DEL MODAL
-// Asegúrate de tener el archivo en src/components/MissionCompletedModal.jsx
+// 1. IMPORTACIÓN DEL MODAL (Asegúrate de que la ruta sea correcta)
 import MissionCompletedModal from '../components/MissionCompletedModal'; 
 
 const PointsContext = createContext();
@@ -35,18 +33,18 @@ export const PointsProvider = ({ children }) => {
   const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // --- ESTADOS VISUALES (ANIMACIONES) ---
+  // --- ESTADOS VISUALES ---
   const [pointsAnimation, setPointsAnimation] = useState({
     show: false, amount: 0, type: 'earn', colorType: 'free'
   });
 
-  // 2. ESTADO PARA EL MODAL DE MISIÓN (¡NUEVO!)
+  // 2. ESTADO PARA EL MODAL DE MISIÓN
   const [missionSuccessData, setMissionSuccessData] = useState({ show: false, points: 0 });
 
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
   
-  // --- CARGA DE DATOS DESDE SERVIDOR ---
+  // --- CARGA DE DATOS ---
   const loadAllData = useCallback(async (forceLoadingSpinner = false) => {
     if (!mountedRef.current || !user) return;
 
@@ -77,36 +75,23 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // --- SISTEMA REAL-TIME (LA TÉCNICA DEL REGALO) ---
-  // Escucha cambios en la base de datos y actualiza el saldo solo.
+  // --- REAL-TIME (Escucha cambios en DB) ---
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase.channel('points_realtime_updates')
-      // Escuchar cambios en el SALDO (user_profiles)
       .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'user_profiles', 
-        filter: `id=eq.${user.id}` 
-      }, () => {
-        loadAllData(false); // Recarga silenciosa (sin spinner)
-      })
-      // Escuchar cambios en el PROGRESO (mission_progress)
+        event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` 
+      }, () => loadAllData(false))
       .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'mission_progress',
-        filter: `user_id=eq.${user.id}`
-      }, () => {
-        loadAllData(false); // Recarga silenciosa
-      })
+        event: '*', schema: 'public', table: 'mission_progress', filter: `user_id=eq.${user.id}`
+      }, () => loadAllData(false))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [user, loadAllData]);
 
-  // --- FUNCIONES DE ANIMACIÓN (MONEDAS VOLADORAS) ---
+  // --- ANIMACIONES ---
   const triggerAnimation = useCallback((amount, type = 'earn', colorType = 'free') => {
     if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
     setPointsAnimation({ show: true, amount, type, colorType });
@@ -115,57 +100,41 @@ export const PointsProvider = ({ children }) => {
     }, 3000);
   }, []);
 
-  // 3. FUNCIÓN PARA ACTIVAR EL MODAL (¡LA CLAVE!)
-  // Esta función la llamará ReelsContainer cuando detecte éxito.
+  // 3. FUNCIÓN PARA ACTIVAR EL MODAL
   const notifyMissionComplete = (earnedPoints) => {
     console.log("🏆 MODAL ACTIVADO: Ganaste", earnedPoints);
     setMissionSuccessData({ show: true, points: earnedPoints });
   };
 
-  // Al cerrar el modal, forzamos una recarga de datos para asegurar que todo esté sincronizado
   const handleCloseMissionModal = () => {
     setMissionSuccessData({ show: false, points: 0 });
+    // Al cerrar, recargamos datos para asegurar que el saldo se vea actualizado
     loadAllData(true); 
   };
 
-  // --- WRAPPERS Y UTILIDADES ---
+  // --- WRAPPERS ---
   const addPoints = useCallback(async (amount, type = 'free') => {
     const res = await pointsService.addPoints(user.id, amount, type);
-    if (res.success) {
-        triggerAnimation(amount, 'earn', type);
-        // No necesitamos updateLocalBalance manual, el Realtime lo hará.
-    }
+    if (res.success) triggerAnimation(amount, 'earn', type);
     return res;
   }, [user, triggerAnimation]);
 
   const deductPoints = useCallback(async (amount, type = 'free') => {
     const res = await pointsService.deductPoints(user.id, amount, type);
-    if (res.success) {
-        triggerAnimation(amount, 'deduct', type);
-    }
+    if (res.success) triggerAnimation(amount, 'deduct', type);
     return res;
   }, [user, triggerAnimation]);
 
   const refreshPoints = () => loadAllData(true);
   const rollbackMission = useCallback(() => loadAllData(true), [loadAllData]);
   
-  // Actualización optimista de la barra de misiones (solo visual)
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
-    setMissions(prev => {
-      return prev.map(mission => {
-        if (mission.mission_type === missionType) {
-          const newCount = Math.min(mission.current_count + delta, mission.target_count);
-          return { ...mission, current_count: newCount, _optimistic: true };
-        }
-        return mission;
-      });
-    });
+    setMissions(prev => prev.map(m => m.mission_type === missionType ? { ...m, current_count: Math.min(m.current_count + delta, m.target_count) } : m));
   }, []);
 
-  // Placeholder para compatibilidad (ya no se usa lógica manual, pero para que no rompa código viejo)
+  // Placeholder
   const updateLocalBalance = () => {}; 
 
-  // Inicialización
   useEffect(() => {
     mountedRef.current = true;
     loadAllData(true);
@@ -187,14 +156,14 @@ export const PointsProvider = ({ children }) => {
     updateMissionOptimistic,
     rollbackMission,
     updateLocalBalance,
-    notifyMissionComplete // 4. EXPORTAMOS LA FUNCIÓN
+    notifyMissionComplete // 4. EXPORTAMOS LA FUNCIÓN (¡CRÍTICO!)
   };
 
   return (
     <PointsContext.Provider value={value}>
       {children}
       
-      {/* 5. RENDERIZAMOS EL MODAL AQUÍ PARA QUE SEA GLOBAL */}
+      {/* 5. RENDERIZAMOS EL MODAL AQUÍ (¡CRÍTICO!) */}
       <MissionCompletedModal 
         isOpen={missionSuccessData.show} 
         points={missionSuccessData.points} 
