@@ -1,14 +1,8 @@
 // src/contexts/PointsContext.jsx
-// ============================================================================
-// POINTS CONTEXT - FINAL BUILD FIX
-// ✅ Importaciones limpias y verificadas.
-// ✅ Gestión de estado inmutable (Anti-Farming visual).
-// ============================================================================
-
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from 'lib/supabase';
-import { getMissionsForProgressPanel } from '../services/missionsService'; // ✅ Solo importamos lo que usamos
+import { getMissionsForProgressPanel } from '../services/missionsService'; 
 
 const PointsContext = createContext();
 
@@ -26,12 +20,10 @@ export const PointsProvider = ({ children }) => {
   const [pointsEarnedToday, setPointsEarnedToday] = useState(0);
   const [loading, setLoading] = useState(true);
   
-  // Estado para animación (+50 pts)
+  // Estado para animación
   const [pointsAnimation, setPointsAnimation] = useState({ show: false, amount: 0, type: 'free' });
 
-  // ==========================================
-  // CARGA DE DATOS
-  // ==========================================
+  // Carga de datos
   const loadAllData = useCallback(async () => {
     if (!user) {
       setPoints({ free: 0, premium: 0 });
@@ -41,7 +33,7 @@ export const PointsProvider = ({ children }) => {
     }
 
     try {
-      // 1. Cargar Puntos (Perfil)
+      // Cargar Puntos
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('free_points, premium_points')
@@ -55,7 +47,7 @@ export const PointsProvider = ({ children }) => {
         });
       }
 
-      // 2. Cargar Misiones
+      // Cargar Misiones
       const missionsData = await getMissionsForProgressPanel(user.id);
       setMissions(missionsData || []);
 
@@ -89,25 +81,33 @@ export const PointsProvider = ({ children }) => {
     return () => { supabase.removeChannel(subscription); };
   }, [user, loadAllData]);
 
+  // Acciones
+  const triggerAnimation = (amount, type = 'earn', pointType = 'free') => {
+    setPointsAnimation({ show: true, amount, type: pointType }); // type visual
+    setTimeout(() => setPointsAnimation({ show: false, amount: 0, type: 'free' }), 2000);
+  };
 
-  // ==========================================
-  // MÉTODOS DE ACCIÓN
-  // ==========================================
-
-  // 1. Sumar puntos localmente + animación
   const addPoints = async (amount, reason, type = 'free') => {
+    // Optimistic update
     setPoints(prev => ({
       ...prev,
       [type]: prev[type] + amount
     }));
-    
     setPointsEarnedToday(prev => prev + amount);
-    
-    setPointsAnimation({ show: true, amount, type });
-    setTimeout(() => setPointsAnimation({ show: false, amount: 0, type: 'free' }), 2000);
+    triggerAnimation(amount, 'earn', type);
   };
 
-  // 2. Actualizar Misión (Optimista e Inmutable)
+  // ✅ RESTAURADO: Función deductPoints (necesaria para compras manuales o UI legacy)
+  const deductPoints = async (amount, type = 'free') => {
+      // Esta función es mayormente visual/optimista ahora, 
+      // ya que el backend (SQL) maneja la resta real en la tienda.
+      setPoints(prev => ({
+          ...prev,
+          [type]: Math.max(0, prev[type] - amount)
+      }));
+      return { success: true };
+  };
+
   const updateMissionOptimistic = (missionKeyOrType, incrementBy = 1) => {
     setMissions(prevMissions => {
       return prevMissions.map(mission => {
@@ -126,7 +126,6 @@ export const PointsProvider = ({ children }) => {
     });
   };
 
-  // 3. Rollback
   const rollbackMission = (previousMissionsState) => {
     if (previousMissionsState && Array.isArray(previousMissionsState)) {
         console.log("🔄 Rolling back missions state...");
@@ -134,7 +133,6 @@ export const PointsProvider = ({ children }) => {
     }
   };
 
-  // 4. Refrescar todo
   const refreshPoints = async () => {
     await loadAllData();
   };
@@ -149,9 +147,11 @@ export const PointsProvider = ({ children }) => {
       loading,
       pointsAnimation,
       addPoints,
+      deductPoints, // ✅ Exportado de nuevo
       updateMissionOptimistic,
       rollbackMission,
-      refreshPoints
+      refreshPoints,
+      triggerAnimation // ✅ Exportado de nuevo
     }}>
       {children}
     </PointsContext.Provider>
