@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSION FINAL BLINDADA & INFORMATIVA
-// ✅ CORREGIDO: Anti-farming "Informativo" (Avisa si es un Re-Like sin puntos)
-// ✅ FUNCIONAL: Navegación (Teclado, Rueda, Touch)
-// ✅ FUNCIONAL: Bloqueo de Auto-Like
+// REELS CONTAINER - FINAL FIX (ANTI-FARMING VISUAL REAL-TIME)
+// ✅ CORREGIDO: Rollback inmediato si el servidor detecta farming.
+//    (Evita que la barra suba falsamente si el video ya fue contado).
+// ✅ FUNCIONAL: Navegación, Likes, Comentarios, Regalos.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,7 +23,6 @@ const ReelsContainer = ({
   videos = [], 
   selectedReelId = null,
   onLoadMore, 
-  onPointsEarned,
   hasMore = true,
   loading = false 
 }) => {
@@ -34,7 +33,7 @@ const ReelsContainer = ({
   // ✅ INTEGRACIÓN CON SISTEMA DE PUNTOS
   const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints } = usePoints();
   
-  // ✅ SISTEMA DE NOTIFICACIONES GLOBALES
+  // ✅ SISTEMA DE NOTIFICACIONES
   const { success, error, warning, info } = useNotification();
 
   // Estados principales
@@ -48,7 +47,7 @@ const ReelsContainer = ({
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
   
-  // Estados de contadores en tiempo real (optimistic updates)
+  // Estados de contadores
   const [videoCounters, setVideoCounters] = useState({});
   
   // Estados de comentarios
@@ -59,13 +58,14 @@ const ReelsContainer = ({
   const [showReplies, setShowReplies] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   
-  // Estado para el Modal de Regalo
+  // Estado Modal Regalo
   const [showGiftModal, setShowGiftModal] = useState(false); 
 
-  // Estados de tracking de misiones y acciones realizadas
+  // Estados de tracking
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
-  // ✅ ANTI-FARMING: Set para recordar qué videos ya procesaron puntos en esta sesión
+  // ✅ Memoria local para evitar llamadas innecesarias (Optimización)
   const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
+  
   const [actionsPerformed, setActionsPerformed] = useState({
     saves: new Set(),
     follows: new Set(),
@@ -82,128 +82,26 @@ const ReelsContainer = ({
   const hasPlayedInitial = useRef(false);
   const lastNavigationIndex = useRef(-1);
 
-  // ✅ SISTEMA GLOBAL: Función para mostrar notificaciones
+  // ✅ Helper de notificación
   const showPointsNotification = (message, videoId, type = 'success') => {
-    console.log('🔔 [NOTIFICACIÓN GLOBAL]:', { message, videoId, type });
-    if (type === 'success') {
-      success(message, { duration: 2500 });
-    } else if (type === 'error' || type === 'restriction') {
-      warning(message, { duration: 2500 });
-    } else if (type === 'info') {
-      info(message, { duration: 2500 });
-    }
+    if (type === 'success') success(message, { duration: 2500 });
+    else if (type === 'error' || type === 'restriction') warning(message, { duration: 2500 });
+    else info(message, { duration: 2500 });
   };
 
   // ===============================
-  // 1. DEFINICIÓN DE FUNCIONES DE NAVEGACIÓN
+  // INDEX & SYNC
   // ===============================
-  
-  const navigateNext = useCallback(() => {
-    if (currentIndex < videos.length - 1) {
-      setEnableTransition(true);
-      setCurrentIndex(prev => prev + 1);
-      setIsAutoPlaying(true);
-    }
-  }, [currentIndex, videos.length]);
-
-  const navigatePrevious = useCallback(() => {
-    if (currentIndex > 0) {
-      setEnableTransition(true);
-      setCurrentIndex(prev => prev - 1);
-      setIsAutoPlaying(true);
-    }
-  }, [currentIndex]);
-
-  const handlePlayPause = useCallback((e) => {
-    if (e && e.target.tagName !== 'VIDEO') return;
-    
-    const currentVideo = videoRefs.current[currentIndex];
-    if (currentVideo) {
-      if (currentVideo.paused) {
-        currentVideo.play();
-        setIsAutoPlaying(true);
-      } else {
-        currentVideo.pause();
-        setIsAutoPlaying(false);
-      }
-    }
-  }, [currentIndex]);
-
-  const handleTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
-  const handleTouchMove = (e) => { touchEndY.current = e.touches[0].clientY; };
-  const handleTouchEnd = () => {
-    const diff = touchStartY.current - touchEndY.current;
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) navigateNext();
-      else navigatePrevious();
-    }
-  };
-
-  // ===============================
-  // 2. EVENT LISTENERS (Scroll, Teclado)
-  // ===============================
-
-  // Mouse Wheel Navigation (Desktop)
-  useEffect(() => {
-    if (!isDesktop) return;
-
-    const handleWheel = (e) => {
-      e.preventDefault();
-      clearTimeout(handleWheel.timeout);
-      handleWheel.timeout = setTimeout(() => {
-        if (e.deltaY > 0 && currentIndex < videos.length - 1) {
-          setEnableTransition(true);
-          setCurrentIndex(prev => prev + 1);
-          setIsAutoPlaying(true);
-        } else if (e.deltaY < 0 && currentIndex > 0) {
-          setEnableTransition(true);
-          setCurrentIndex(prev => prev - 1);
-          setIsAutoPlaying(true);
-        }
-      }, 150);
-    };
-
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-      return () => container.removeEventListener('wheel', handleWheel);
-    }
-  }, [isDesktop, currentIndex, videos.length]);
-
-  // Keyboard Navigation
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      if (e.key === 'ArrowDown') navigateNext();
-      if (e.key === 'ArrowUp') navigatePrevious();
-      if (e.key === ' ') {
-        e.preventDefault();
-        handlePlayPause();
-      }
-      if (e.key === 'Escape' && showCommentsModal) {
-        handleCloseComments();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
-
-  // ===============================
-  // 3. LÓGICA DE INICIALIZACIÓN Y DATOS
-  // ===============================
-
   const getInitialReelIndex = useCallback(() => {
     if (!selectedReelId) return 0;
     const index = videos.findIndex(video => video.id === selectedReelId);
-    if (index < 0) return 0;
-    return index;
+    return index < 0 ? 0 : index;
   }, [selectedReelId, videos]);
 
   useEffect(() => {
     if (videos.length === 0) return;
     const correctIndex = getInitialReelIndex();
+    
     if (isInitialMount.current) {
       setCurrentIndex(correctIndex);
       setEnableTransition(false);
@@ -216,6 +114,9 @@ const ReelsContainer = ({
     }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
+  // ===============================
+  // LOAD USER DATA
+  // ===============================
   useEffect(() => {
     const loadCurrentUserAndActions = async () => {
       try {
@@ -238,9 +139,7 @@ const ReelsContainer = ({
           const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
           if (followsData) setFollowedCreators(new Set(followsData.map(f => f.following_id)));
         }
-      } catch (error) {
-        console.error('Error cargando usuario:', error);
-      }
+      } catch (error) { console.error('Error user data:', error); }
     };
     loadCurrentUserAndActions();
   }, [videos]);
@@ -266,50 +165,47 @@ const ReelsContainer = ({
       try {
         const { count: likesCount } = await supabase.from('video_likes').select('*', { count: 'exact', head: true }).eq('video_id', currentVideo.id);
         const { count: commentsCount } = await supabase.from('video_comments').select('*', { count: 'exact', head: true }).eq('video_id', currentVideo.id);
-
         setVideoCounters(prev => ({
           ...prev,
-          [currentVideo.id]: {
-            ...prev[currentVideo.id],
-            likes: likesCount || 0,
-            comments: commentsCount || 0
-          }
+          [currentVideo.id]: { ...prev[currentVideo.id], likes: likesCount || 0, comments: commentsCount || 0 }
         }));
-      } catch (error) { console.error('Error contadores:', error); }
+      } catch (error) { console.error('Error counters:', error); }
     };
     loadRealTimeCounters();
   }, [currentIndex, videos]);
 
   // ===============================
-  // 4. LÓGICA DE REPRODUCCIÓN Y TRACKING
+  // PLAYER LOGIC
   // ===============================
-
   useEffect(() => {
     if (hasPlayedInitial.current || videos.length === 0) return;
-
     const attemptPlay = () => {
       const currentVideo = videoRefs.current[currentIndex];
       if (!currentVideo) { setTimeout(attemptPlay, 100); return; }
-      
       videoRefs.current.forEach((video, index) => { if (video && index !== currentIndex) video.pause(); });
       currentVideo.muted = mutedVideos.has(videos[currentIndex]?.id);
-      
       const playPromise = currentVideo.play();
       if (playPromise !== undefined) {
-        playPromise.then(() => {
-            hasPlayedInitial.current = true;
-            lastNavigationIndex.current = currentIndex;
-        }).catch(() => {
-            currentVideo.muted = true;
-            currentVideo.play().then(() => {
-                hasPlayedInitial.current = true;
-                lastNavigationIndex.current = currentIndex;
-            });
-        });
+        playPromise.then(() => { hasPlayedInitial.current = true; lastNavigationIndex.current = currentIndex; })
+          .catch(() => { currentVideo.muted = true; currentVideo.play().then(() => { hasPlayedInitial.current = true; lastNavigationIndex.current = currentIndex; }); });
       }
     };
     setTimeout(attemptPlay, 250);
   }, [videos, currentIndex, mutedVideos]);
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      clearTimeout(handleWheel.timeout);
+      handleWheel.timeout = setTimeout(() => {
+        if (e.deltaY > 0 && currentIndex < videos.length - 1) setCurrentIndex(prev => prev + 1);
+        else if (e.deltaY < 0 && currentIndex > 0) setCurrentIndex(prev => prev - 1);
+      }, 150);
+    };
+    const container = containerRef.current;
+    if (container) { container.addEventListener('wheel', handleWheel, { passive: false }); return () => container.removeEventListener('wheel', handleWheel); }
+  }, [isDesktop, currentIndex, videos.length]);
 
   useEffect(() => {
     if (videos.length === 0) return;
@@ -326,10 +222,10 @@ const ReelsContainer = ({
       if (isNavigationChange) {
         currentVideo.currentTime = 0;
         lastNavigationIndex.current = currentIndex;
-        currentVideo.play().then(() => setIsAutoPlaying(true)).catch(() => {
-            currentVideo.muted = true;
-            currentVideo.play();
-        });
+        const playPromise = currentVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => setIsAutoPlaying(true)).catch(() => { currentVideo.muted = true; currentVideo.play().then(() => setIsAutoPlaying(true)); });
+        }
       } else if (isAutoPlaying) {
         currentVideo.play().catch(() => {});
       } else {
@@ -350,18 +246,13 @@ const ReelsContainer = ({
 
     const handleTimeUpdate = async () => {
       const watchedPercent = (currentVideo.currentTime / currentVideo.duration) * 100;
-      
       if (watchedPercent > 30 && !viewCounted && !videoWatchedIds.has(currentVideoData.id)) {
         viewCounted = true;
         setVideoCounters(prev => ({
           ...prev,
-          [currentVideoData.id]: {
-            ...prev[currentVideoData.id],
-            views: (prev[currentVideoData.id]?.views || 0) + 1
-          }
+          [currentVideoData.id]: { ...prev[currentVideoData.id], views: (prev[currentVideoData.id]?.views || 0) + 1 }
         }));
       }
-      
       if (watchedPercent > 80 && !videoWatchedIds.has(currentVideoData.id)) {
         setVideoWatchedIds(prev => new Set([...prev, currentVideoData.id]));
         missionsService.trackWatchVideo('reel', currentVideoData.id, currentVideo.currentTime)
@@ -369,11 +260,8 @@ const ReelsContainer = ({
             if (result.result === 'success' && result.points_earned > 0) {
               addPoints(result.points_earned, result.message, 'free');
               showPointsNotification(`+${result.points_earned} PUNTOS por ver reel 🎉`, currentVideoData.id, 'success');
-            } else if (result.result === 'already_completed') {
-              showPointsNotification('Ya completaste la misión de ver reels hoy.', currentVideoData.id, 'restriction');
             }
-          })
-          .catch(console.error);
+          }).catch(console.error);
       }
     };
 
@@ -391,10 +279,48 @@ const ReelsContainer = ({
   }, [currentIndex, videos, videoWatchedIds, addPoints]);
 
   // ===============================
-  // 5. MANEJADORES DE ACCIONES (Likes, Follows, etc.)
+  // CONTROLS
   // ===============================
-  
-  // ✅✅✅ ACCIÓN DE LIKE (CORREGIDA: Manejo de Re-Likes)
+  const handlePlayPause = useCallback((e) => {
+    if (e && e.target.tagName !== 'VIDEO') return;
+    const currentVideo = videoRefs.current[currentIndex];
+    if (currentVideo) {
+      if (currentVideo.paused) { currentVideo.play(); setIsAutoPlaying(true); } 
+      else { currentVideo.pause(); setIsAutoPlaying(false); }
+    }
+  }, [currentIndex]);
+
+  const navigateNext = useCallback(() => {
+    if (currentIndex < videos.length - 1) { setEnableTransition(true); setCurrentIndex(prev => prev + 1); setIsAutoPlaying(true); }
+  }, [currentIndex, videos.length]);
+
+  const navigatePrevious = useCallback(() => {
+    if (currentIndex > 0) { setEnableTransition(true); setCurrentIndex(prev => prev - 1); setIsAutoPlaying(true); }
+  }, [currentIndex]);
+
+  const handleTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
+  const handleTouchMove = (e) => { touchEndY.current = e.touches[0].clientY; };
+  const handleTouchEnd = () => {
+    const diff = touchStartY.current - touchEndY.current;
+    if (Math.abs(diff) > 50) { if (diff > 0) navigateNext(); else navigatePrevious(); }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowDown') navigateNext();
+      if (e.key === 'ArrowUp') navigatePrevious();
+      if (e.key === ' ') { e.preventDefault(); handlePlayPause(); }
+      if (e.key === 'Escape' && showCommentsModal) handleCloseComments();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
+
+
+  // ==========================================================================
+  // 🔥 ACCIÓN DE LIKE - CORREGIDA CON ROLLBACK VISUAL
+  // ==========================================================================
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
@@ -402,7 +328,7 @@ const ReelsContainer = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
 
-      // 🛑 1. BLOQUEO DE AUTO-LIKE
+      // 1. BLOQUEO DE AUTO-LIKE
       const targetVideo = videos.find(v => v.id === videoId);
       if (targetVideo && targetVideo.creator?.id === user.id) {
           showPointsNotification('No puedes dar like a tus propios videos', videoId, 'restriction');
@@ -414,30 +340,24 @@ const ReelsContainer = ({
       const isCurrentlyLiked = newLikedVideos.has(videoId);
       
       if (isCurrentlyLiked) {
-        // ==============================
-        // QUITAR LIKE (Unlike)
-        // ==============================
+        // --- UNLIKE ---
         newLikedVideos.delete(videoId);
         setVideoCounters(prev => ({
-          ...prev,
-          [videoId]: { ...prev[videoId], likes: Math.max(0, (prev[videoId]?.likes || 0) - 1) }
+          ...prev, [videoId]: { ...prev[videoId], likes: Math.max(0, (prev[videoId]?.likes || 0) - 1) }
         }));
-        
         await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
         showPointsNotification('Like removido', videoId, 'info');
+        
       } else {
-        // ==============================
-        // DAR LIKE
-        // ==============================
+        // --- LIKE ---
         newLikedVideos.add(videoId);
         if (newDislikedVideos.has(videoId)) newDislikedVideos.delete(videoId);
         
         setVideoCounters(prev => ({
-          ...prev,
-          [videoId]: { ...prev[videoId], likes: (prev[videoId]?.likes || 0) + 1 }
+          ...prev, [videoId]: { ...prev[videoId], likes: (prev[videoId]?.likes || 0) + 1 }
         }));
 
-        // Insertar Like en BD
+        // Insertar Like en BD (Acción Social)
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         
         if (likeError && likeError.code !== '23505') {
@@ -446,37 +366,64 @@ const ReelsContainer = ({
             return;
         }
 
-        // 🛑🛑🛑 ANTI-FARMING & GESTIÓN DE PUNTOS 🛑🛑🛑
-        // Verificar si YA fue recompensado en esta sesión
-        const alreadyRewarded = pointsRewardedIds.has(videoId);
+        // ============================================================
+        // 🔥 ANTI-FARMING & ACTUALIZACIÓN OPTIMISTA
+        // ============================================================
+        
+        // 1. Verificar si YA pagó en esta sesión (Local check)
+        const alreadyRewardedLocal = pointsRewardedIds.has(videoId);
 
-        if (alreadyRewarded) {
-            // ⚠️ CASO RE-LIKE: El usuario quitó el like y lo volvió a poner.
-            // No damos puntos, no actualizamos misiones, pero avisamos claramente.
-            console.log('ℹ️ Re-like detectado: Sin puntos extra');
+        if (alreadyRewardedLocal) {
+            // Ya sabemos que pagó, avisar y no llamar al backend
+            console.log('ℹ️ Localmente ya trackeado: Sin puntos extra');
             showPointsNotification('Like restaurado (Sin puntos extra)', videoId, 'info');
         } else {
-            // ✅ CASO NUEVO LIKE: Primer like de la sesión a este video.
+            // No sabemos si pagó (o es nuevo), vamos a intentar.
+            
+            // A. Marcar localmente (para evitar doble click inmediato)
             setPointsRewardedIds(prev => new Set([...prev, videoId]));
 
-            // Actualización Optimista de la Misión
+            // B. Guardar estado actual para Rollback
             const missionSnapshot = [...missions];
+            
+            // C. ACTUALIZACIÓN OPTIMISTA (Subir la barra YA)
             updateMissionOptimistic('give_like', 1);
             
             try {
+              // D. Llamar al Backend
               const missionResult = await missionsService.trackGiveLike('reel', videoId);
               
+              // E. MANEJO DE RESPUESTA DEL SERVIDOR
               if (missionResult.result === 'success' && missionResult.points_earned > 0) { 
+                // ÉXITO REAL: Pagar y confirmar
                 await addPoints(missionResult.points_earned, missionResult.message, 'free'); 
                 await refreshPoints();
                 showPointsNotification(`🎉 Misión Completa: +${missionResult.points_earned} puntos`, videoId, 'success');
+
               } else if (missionResult.result === 'already_completed') {
-                showPointsNotification('Like registrado (Misión diaria completa)', videoId, 'info');
-                rollbackMission(missionSnapshot);
+                 // YA COMPLETADA (Pero quizás la optimista la subió de más)
+                 showPointsNotification('Misión de likes ya completada hoy', videoId, 'info');
+                 rollbackMission(missionSnapshot); // Rollback para asegurar que quede en 10/10 y no 11/10
+
+              } else if (
+                   missionResult.status === 'already_tracked' || 
+                   missionResult.result === 'already_tracked'
+                ) {
+                 // 🛑 DETECCIÓN DE FARMING DESDE BACKEND (El caso de F5)
+                 // El backend dice: "Este video ya lo conté hoy, no sumes nada".
+                 console.log('🛑 Backend reporta farming: Revertir progreso.');
+                 
+                 showPointsNotification('Like restaurado (Sin puntos extra)', videoId, 'info');
+                 
+                 // 🔥 ROLLBACK INMEDIATO: Bajar la barra que subimos optimistamente
+                 rollbackMission(missionSnapshot);
+
               } else {
+                // Progreso normal
                 showPointsNotification('✓ Like registrado', videoId, 'info');
                 await refreshPoints();
               }
+
             } catch (pointsError) {
               console.error('❌ Error puntos:', pointsError);
               rollbackMission(missionSnapshot);
@@ -487,19 +434,17 @@ const ReelsContainer = ({
       setDislikedVideos(newDislikedVideos);
     } catch (error) {
       console.error('❌ Error like:', error);
-      showPointsNotification('Error al procesar like', videoId, 'error');
     }
   };
 
+  // ... (Resto de handlers igual)
   const handleDislike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
-
       const newDislikedVideos = new Set(dislikedVideos);
       const newLikedVideos = new Set(likedVideos);
-      
       if (newDislikedVideos.has(videoId)) {
         newDislikedVideos.delete(videoId);
       } else {
@@ -515,7 +460,6 @@ const ReelsContainer = ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
-
       const newSavedVideos = new Set(savedVideos);
       if (newSavedVideos.has(videoId)) {
         newSavedVideos.delete(videoId);
@@ -549,10 +493,8 @@ const ReelsContainer = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
       if (user.id === creatorId) return;
-
       const newFollowedCreators = new Set(followedCreators);
       const videoId = videos[currentIndex]?.id;
-
       if (newFollowedCreators.has(creatorId)) {
         newFollowedCreators.delete(creatorId);
         await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
@@ -565,15 +507,11 @@ const ReelsContainer = ({
           if (result.result === 'success' && result.points_earned > 0) {
             await addPoints(result.points_earned, result.message, 'free');
             showPointsNotification(`🎉 +${result.points_earned} puntos por seguir`, videoId, 'success');
-          } else {
-            showPointsNotification('✓ Ahora sigues a este creador', videoId, 'info');
-          }
+          } else { showPointsNotification('✓ Ahora sigues a este creador', videoId, 'info'); }
         } catch (pointsError) { console.error('Error puntos follow:', pointsError); }
       }
       setFollowedCreators(newFollowedCreators);
-    } catch (error) {
-      showPointsNotification('Error al seguir/dejar de seguir', videos[currentIndex]?.id, 'error');
-    }
+    } catch (error) { showPointsNotification('Error al seguir/dejar de seguir', videos[currentIndex]?.id, 'error'); }
   };
 
   const handleShare = async (video, e) => {
@@ -581,26 +519,16 @@ const ReelsContainer = ({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
-
       const videoId = video.id;
       const shareMethod = navigator.share ? 'native' : 'clipboard';
-      const hasSharedBefore = actionsPerformed.shares.has(videoId);
-
-      if (navigator.share) {
-        await navigator.share({ title: video.title || 'Reel', text: video.description || '', url: window.location.href });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        showPointsNotification('📋 Enlace copiado', videoId, 'info');
-      }
-
+      if (navigator.share) { await navigator.share({ title: video.title || 'Reel', text: video.description || '', url: window.location.href }); } 
+      else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('📋 Enlace copiado', videoId, 'info'); }
       try {
         const result = await missionsService.trackShareContent('reel', videoId, 1, { platform: shareMethod });
         if (result.result === 'success' && result.points_earned > 0) {
           await addPoints(result.points_earned, result.message, 'free');
           showPointsNotification(`🎉 +${result.points_earned} puntos por compartir`, videoId, 'success');
-        } else if (!hasSharedBefore) {
-          showPointsNotification('✓ Video compartido', videoId, 'info');
-        }
+        } else if (result.result === 'progress_updated') { showPointsNotification('✓ Video compartido', videoId, 'info'); }
         setActionsPerformed(prev => ({ ...prev, shares: new Set([...prev.shares, videoId]) }));
       } catch (pointsError) { console.error('Error share points:', pointsError); }
     } catch (error) { console.error('Error share:', error); }
@@ -611,68 +539,29 @@ const ReelsContainer = ({
     const currentVideo = videoRefs.current[currentIndex];
     if (currentVideo) {
       const newMutedVideos = new Set(mutedVideos);
-      if (newMutedVideos.has(videoId)) {
-        newMutedVideos.delete(videoId);
-        currentVideo.muted = false;
-      } else {
-        newMutedVideos.add(videoId);
-        currentVideo.muted = true;
-      }
+      if (newMutedVideos.has(videoId)) { newMutedVideos.delete(videoId); currentVideo.muted = false; } 
+      else { newMutedVideos.add(videoId); currentVideo.muted = true; }
       setMutedVideos(newMutedVideos);
     }
   };
 
-  // ===============================
-  // 6. SISTEMA DE COMENTARIOS
-  // ===============================
+  // COMENTARIOS
   const loadComments = async (videoId, retryCount = 0) => {
     try {
-      let { data, error } = await supabase
-        .from('video_comments')
-        .select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at')
-        .eq('video_id', videoId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        if (retryCount < 2) { await new Promise(resolve => setTimeout(resolve, 1000)); return loadComments(videoId, retryCount + 1); }
-        throw error;
-      }
-
+      let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
+      if (error) { if (retryCount < 2) { await new Promise(resolve => setTimeout(resolve, 1000)); return loadComments(videoId, retryCount + 1); } throw error; }
       if (data && data.length > 0) {
         const userIds = [...new Set(data.map(comment => comment.user_id))];
         const { data: usersData } = await supabase.from('user_profiles').select('id, full_name, avatar_url, username').in('id', userIds);
-
         if (usersData) {
-          const usersMap = {};
-          usersData.forEach(user => { usersMap[user.id] = user; });
+          const usersMap = {}; usersData.forEach(user => { usersMap[user.id] = user; });
           data = data.map(comment => {
             const userProfile = usersMap[comment.user_id];
-            return {
-              ...comment,
-              user: userProfile ? {
-                id: userProfile.id,
-                name: userProfile.full_name || userProfile.username || 'Usuario',
-                avatar: userProfile.avatar_url,
-                username: userProfile.username || userProfile.full_name || 'usuario'
-              } : { id: comment.user_id, name: 'Usuario', avatar: null, username: 'usuario' },
-              replies: []
-            };
+            return { ...comment, user: userProfile ? { id: userProfile.id, name: userProfile.full_name || userProfile.username || 'Usuario', avatar: userProfile.avatar_url, username: userProfile.username || userProfile.full_name || 'usuario' } : { id: comment.user_id, name: 'Usuario', avatar: null, username: 'usuario' }, replies: [] };
           });
-
-          const topLevelComments = [];
-          const repliesMap = {};
-          data.forEach(comment => {
-            if (comment.parent_comment_id) {
-              if (!repliesMap[comment.parent_comment_id]) repliesMap[comment.parent_comment_id] = [];
-              repliesMap[comment.parent_comment_id].push(comment);
-            } else {
-              topLevelComments.push(comment);
-            }
-          });
-          topLevelComments.forEach(comment => {
-            comment.replies = repliesMap[comment.id] || [];
-            comment.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-          });
+          const topLevelComments = []; const repliesMap = {};
+          data.forEach(comment => { if (comment.parent_comment_id) { if (!repliesMap[comment.parent_comment_id]) repliesMap[comment.parent_comment_id] = []; repliesMap[comment.parent_comment_id].push(comment); } else { topLevelComments.push(comment); } });
+          topLevelComments.forEach(comment => { comment.replies = repliesMap[comment.id] || []; comment.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); });
           data = topLevelComments;
         }
       }
@@ -680,208 +569,57 @@ const ReelsContainer = ({
     } catch (error) { setComments(prev => ({ ...prev, [videoId]: [] })); }
   };
 
-  const handleOpenComments = async (videoId, e) => {
-    if (e) { e.stopPropagation(); e.preventDefault(); }
-    setShowCommentsModal(true);
-    setReplyingTo(null);
-    setNewComment('');
-    await loadComments(videoId);
-  };
-
-  const handleCloseComments = () => {
-    setShowCommentsModal(false);
-    setReplyingTo(null);
-    setNewComment('');
-  };
-
+  const handleOpenComments = async (videoId, e) => { if (e) { e.stopPropagation(); e.preventDefault(); } setShowCommentsModal(true); setReplyingTo(null); setNewComment(''); await loadComments(videoId); };
+  const handleCloseComments = () => { setShowCommentsModal(false); setReplyingTo(null); setNewComment(''); };
   const handleAddComment = async (videoId) => {
     if (!newComment.trim()) { showPointsNotification('⚠️ Escribe algo antes de comentar', videoId, 'warning'); return; }
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { navigate('/login'); return; }
-
+      const { data: { user } } = await supabase.auth.getUser(); if (!user) { navigate('/login'); return; }
       const commentData = { video_id: videoId, user_id: user.id, content: newComment.trim(), parent_comment_id: replyingTo };
-      const { error } = await supabase.from('video_comments').insert(commentData).single();
-      if (error) throw error;
-
+      const { error } = await supabase.from('video_comments').insert(commentData).single(); if (error) throw error;
       if (!replyingTo) {
         try {
           const result = await missionsService.trackComment('reel', videoId);
-          if (result.result === 'success' && result.points_earned > 0) {
-            await addPoints(result.points_earned, result.message, 'free');
-            showPointsNotification(`🎉 +${result.points_earned} puntos por comentar`, videoId, 'success');
-          } else {
-            showPointsNotification('✓ Comentario agregado', videoId, 'info');
-          }
+          if (result.result === 'success' && result.points_earned > 0) { await addPoints(result.points_earned, result.message, 'free'); showPointsNotification(`🎉 +${result.points_earned} puntos por comentar`, videoId, 'success'); } 
+          else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
         } catch (err) { console.error(err); }
-      } else {
-        showPointsNotification('✓ Respuesta agregada', videoId, 'info');
-      }
-
-      setNewComment('');
-      setReplyingTo(null);
-      await loadComments(videoId);
+      } else { showPointsNotification('✓ Respuesta agregada', videoId, 'info'); }
+      setNewComment(''); setReplyingTo(null); await loadComments(videoId);
     } catch (error) { showPointsNotification('Error al comentar', videoId, 'error'); }
   };
 
-  const handleReply = (commentId, username) => {
-    setReplyingTo(commentId);
-    setNewComment(`@${username || 'Usuario'} `);
-    setTimeout(() => {
-      const input = document.querySelector('textarea[placeholder*="comentario"]');
-      if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-    }, 100);
-  };
-
+  const handleReply = (commentId, username) => { setReplyingTo(commentId); setNewComment(`@${username || 'Usuario'} `); setTimeout(() => { const input = document.querySelector('textarea[placeholder*="comentario"]'); if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } }, 100); };
   const handleCancelReply = () => { setReplyingTo(null); setNewComment(''); };
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
-
-  const formatCount = (count) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count?.toString() || '0';
-  };
-
-  const formatTimeAgo = (date) => {
-    const now = new Date();
-    const commentDate = new Date(date);
-    const diffInSeconds = Math.floor((now - commentDate) / 1000);
-    if (diffInSeconds < 60) return 'Ahora';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
-    return `${Math.floor(diffInSeconds / 604800)}sem`;
-  };
-
+  const formatCount = (count) => { if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`; if (count >= 1000) return `${(count / 1000).toFixed(1)}K`; return count?.toString() || '0'; };
+  const formatTimeAgo = (date) => { const now = new Date(); const commentDate = new Date(date); const diffInSeconds = Math.floor((now - commentDate) / 1000); if (diffInSeconds < 60) return 'Ahora'; if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`; if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`; if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`; return `${Math.floor(diffInSeconds / 604800)}sem`; };
   const getVideoCounter = (videoId, type) => videoCounters[videoId]?.[type] || 0;
 
   // ===============================
-  // 7. RENDERIZADO (JSX)
+  // RENDER
   // ===============================
   const currentVideo = videos[currentIndex];
-
   if (videos.length === 0 && !loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gray-900 text-white">
-        <Icon name="Video" size={48} className="text-pink-500 mb-4" />
-        <h2 className="text-xl font-bold mb-2">No hay videos disponibles</h2>
-        <button onClick={onLoadMore} className="mt-4 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded transition duration-300">Recargar</button>
-      </div>
-    );
+    return ( <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gray-900 text-white"> <Icon name="Video" size={48} className="text-pink-500 mb-4" /> <h2 className="text-xl font-bold mb-2">No hay videos disponibles</h2> <button onClick={onLoadMore} className="mt-4 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded transition duration-300">Recargar</button> </div> );
   }
 
   return (
     <div className="relative w-full h-full bg-white overflow-hidden">
       <div className="flex h-full w-full items-center justify-center">
         <div className={`relative overflow-hidden flex-shrink-0 ${isDesktop ? showCommentsModal ? 'w-[55%]' : 'w-full max-w-[500px]' : 'w-full'} ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}`}>
-          <div
-            ref={containerRef}
-            className={`w-full h-full relative transition-transform duration-500`}
-            style={{ 
-              transform: `translateY(${-currentIndex * 100}%)`,
-              transition: enableTransition ? 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)' : 'none'
-            }}
-            onClick={handlePlayPause}
-            onTouchStart={isMobile ? handleTouchStart : undefined}
-            onTouchMove={isMobile ? handleTouchMove : undefined}
-            onTouchEnd={isMobile ? handleTouchEnd : undefined}
-          >
+          <div ref={containerRef} className={`w-full h-full relative transition-transform duration-500`} style={{ transform: `translateY(${-currentIndex * 100}%)`, transition: enableTransition ? 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)' : 'none' }} onClick={handlePlayPause} onTouchStart={isMobile ? handleTouchStart : undefined} onTouchMove={isMobile ? handleTouchMove : undefined} onTouchEnd={isMobile ? handleTouchEnd : undefined}>
             {videos.map((video, index) => (
               <div key={video.id} className="w-full h-full flex-shrink-0 relative bg-black snap-start" style={{ height: '100%' }}>
-                <video
-                  ref={el => videoRefs.current[index] = el}
-                  className="absolute w-full h-full object-cover"
-                  src={video.video_url || video.videoUrl}
-                  loop playsInline preload="auto"
-                  onLoadedData={() => setLoadingVideo(false)}
-                  onError={(e) => console.error('Error de video:', e)}
-                />
-                {loadingVideo && index === currentIndex && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                    <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
-                {isMobile && (
-                  <div className="absolute bottom-8 left-4 right-24 z-10" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
-                      <div className="flex items-center space-x-2 mb-3">
-                        <Link to={`/profile/${video.creator?.id}`} className="font-bold hover:underline text-base text-white drop-shadow-lg" onClick={(e) => e.stopPropagation()}>
-                          @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
-                        </Link>
-                        {currentUser?.id !== video.creator?.id && (
-                          <button
-                            onClick={(e) => handleFollow(video.creator?.id, e)}
-                            className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${followedCreators.has(video.creator?.id) ? 'bg-white/20 text-white border border-white/30' : 'bg-pink-600 text-white hover:bg-pink-700'}`}
-                          >
-                            {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
-                          </button>
-                        )}
-                        <span className="text-gray-200 text-sm">•</span>
-                        <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
-                      </div>
-                      <div className="mb-3">
-                        <p className="text-sm leading-relaxed line-clamp-3 text-white drop-shadow-lg">{video.description || video.title}</p>
-                      </div>
-                      {video.tags && (
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {video.tags.slice(0, 3).map((tag, i) => <span key={i} className="text-sm font-semibold text-white drop-shadow-lg">#{tag}</span>)}
-                        </div>
-                      )}
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Icon name="Music" size={14} color="white" />
-                        <span className="truncate text-white drop-shadow-lg">{video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {isDesktop && (
-                  <div className="absolute bottom-4 left-4 right-4 z-10" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <Link to={`/profile/${video.creator?.id}`} className="font-bold hover:underline text-base text-white drop-shadow-lg" onClick={(e) => e.stopPropagation()}>
-                          @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'}
-                        </Link>
-                        {currentUser?.id !== video.creator?.id && (
-                          <button
-                            onClick={(e) => handleFollow(video.creator?.id, e)}
-                            className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${followedCreators.has(video.creator?.id) ? 'bg-white/20 text-white border border-white/30' : 'bg-pink-600 text-white hover:bg-pink-700'}`}
-                          >
-                            {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'}
-                          </button>
-                        )}
-                        <span className="text-gray-200 text-sm">•</span>
-                        <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span>
-                      </div>
-                      <div className="mb-2">
-                        <p className="text-sm leading-relaxed line-clamp-2 text-white drop-shadow-lg">{video.description || video.title}</p>
-                      </div>
-                      {video.tags && (
-                        <div className="flex flex-wrap gap-2">
-                          {video.tags.slice(0, 3).map((tag, i) => <span key={i} className="text-xs font-semibold text-white drop-shadow-lg">#{tag}</span>)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {!isAutoPlaying && index === currentIndex && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center">
-                      <Icon name="Play" size={32} color="white" />
-                    </div>
-                  </div>
-                )}
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
-                  <div className="h-full bg-red-500 transition-all" style={{ width: index === currentIndex ? '100%' : '0%', transitionDuration: index === currentIndex ? `${video.duration || 30}s` : '0s', transitionTimingFunction: 'linear' }} />
-                </div>
+                <video ref={el => videoRefs.current[index] = el} className="absolute w-full h-full object-cover" src={video.video_url || video.videoUrl} loop playsInline preload="auto" onLoadedData={() => setLoadingVideo(false)} onError={(e) => console.error('Error de video:', e)} />
+                {loadingVideo && index === currentIndex && ( <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10"> <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div> </div> )}
+                {isMobile && ( <div className="absolute bottom-8 left-4 right-24 z-10" onClick={(e) => e.stopPropagation()}> <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl"> <div className="flex items-center space-x-2 mb-3"> <Link to={`/profile/${video.creator?.id}`} className="font-bold hover:underline text-base text-white drop-shadow-lg" onClick={(e) => e.stopPropagation()}> @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'} </Link> {currentUser?.id !== video.creator?.id && ( <button onClick={(e) => handleFollow(video.creator?.id, e)} className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${followedCreators.has(video.creator?.id) ? 'bg-white/20 text-white border border-white/30' : 'bg-pink-600 text-white hover:bg-pink-700'}`}> {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'} </button> )} <span className="text-gray-200 text-sm">•</span> <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span> </div> <div className="mb-3"> <p className="text-sm leading-relaxed line-clamp-3 text-white drop-shadow-lg">{video.description || video.title}</p> </div> {video.tags && ( <div className="flex flex-wrap gap-2 mb-3"> {video.tags.slice(0, 3).map((tag, i) => <span key={i} className="text-sm font-semibold text-white drop-shadow-lg">#{tag}</span>)} </div> )} <div className="flex items-center space-x-2 text-sm"> <Icon name="Music" size={14} color="white" /> <span className="truncate text-white drop-shadow-lg">{video.audioTitle || `Sonido original - ${video.creator?.name || 'Creador'}`}</span> </div> </div> </div> )}
+                {isDesktop && ( <div className="absolute bottom-4 left-4 right-4 z-10" onClick={(e) => e.stopPropagation()}> <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl"> <div className="flex items-center space-x-2 mb-2"> <Link to={`/profile/${video.creator?.id}`} className="font-bold hover:underline text-base text-white drop-shadow-lg" onClick={(e) => e.stopPropagation()}> @{video.creator?.username || video.creator?.name?.toLowerCase().replace(/\s+/g, '') || 'usuario'} </Link> {currentUser?.id !== video.creator?.id && ( <button onClick={(e) => handleFollow(video.creator?.id, e)} className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${followedCreators.has(video.creator?.id) ? 'bg-white/20 text-white border border-white/30' : 'bg-pink-600 text-white hover:bg-pink-700'}`}> {followedCreators.has(video.creator?.id) ? 'Siguiendo' : 'Seguir'} </button> )} <span className="text-gray-200 text-sm">•</span> <span className="text-gray-200 text-sm">{video.timeAgo || 'Reciente'}</span> </div> <div className="mb-2"> <p className="text-sm leading-relaxed line-clamp-2 text-white drop-shadow-lg">{video.description || video.title}</p> </div> {video.tags && ( <div className="flex flex-wrap gap-2"> {video.tags.slice(0, 3).map((tag, i) => <span key={i} className="text-xs font-semibold text-white drop-shadow-lg">#{tag}</span>)} </div> )} </div> </div> )}
+                {!isAutoPlaying && index === currentIndex && ( <div className="absolute inset-0 flex items-center justify-center pointer-events-none"> <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center"> <Icon name="Play" size={32} color="white" /> </div> </div> )}
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20"> <div className="h-full bg-red-500 transition-all" style={{ width: index === currentIndex ? '100%' : '0%', transitionDuration: index === currentIndex ? `${video.duration || 30}s` : '0s', transitionTimingFunction: 'linear' }} /> </div>
               </div>
             ))}
-            {(loading || (currentIndex >= videos.length - 2 && hasMore)) && (
-              <div className="w-full h-full flex-shrink-0 relative bg-black/80 flex flex-col items-center justify-center text-white p-8">
-                <Icon name="Loader" size={48} className="animate-spin text-pink-500 mb-4" />
-                <p className="text-lg font-semibold">Cargando más videos...</p>
-              </div>
-            )}
+            {(loading || (currentIndex >= videos.length - 2 && hasMore)) && ( <div className="w-full h-full flex-shrink-0 relative bg-black/80 flex flex-col items-center justify-center text-white p-8"> <Icon name="Loader" size={48} className="animate-spin text-pink-500 mb-4" /> <p className="text-lg font-semibold">Cargando más videos...</p> </div> )}
           </div>
         </div>
 
@@ -895,67 +633,46 @@ const ReelsContainer = ({
                 </div>
               </Link>
               {!followedCreators.has(currentVideo.creator?.id) && currentUser?.id !== currentVideo.creator?.id && (
-                <button onClick={(e) => handleFollow(currentVideo.creator?.id, e)} className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg">
-                  <Icon name="Plus" size={16} color="white" />
-                </button>
+                <button onClick={(e) => handleFollow(currentVideo.creator?.id, e)} className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"> <Icon name="Plus" size={16} color="white" /> </button>
               )}
             </div>
 
             <div className="relative flex flex-col items-center space-y-1">
               <button onClick={(e) => handleLike(currentVideo.id, e)} className="flex flex-col items-center space-y-1">
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${likedVideos.has(currentVideo.id) ? 'text-red-500' : 'text-white hover:scale-110'}`}>
-                  <Icon name="ThumbsUp" size={26} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                </div>
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${likedVideos.has(currentVideo.id) ? 'text-red-500' : 'text-white hover:scale-110'}`}> <Icon name="ThumbsUp" size={26} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} /> </div>
                 <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
             </div>
 
             <button onClick={(e) => handleDislike(currentVideo.id, e)} className="flex flex-col items-center space-y-1">
-              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${dislikedVideos.has(currentVideo.id) ? 'text-gray-400' : 'text-white hover:scale-110'}`}>
-                <Icon name="ThumbsDown" size={26} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-              </div>
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${dislikedVideos.has(currentVideo.id) ? 'text-gray-400' : 'text-white hover:scale-110'}`}> <Icon name="ThumbsDown" size={26} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} /> </div>
             </button>
             
             {currentUser && currentUser.id !== currentVideo.creator?.id && (
                 <button onClick={(e) => handleGiftClick(currentVideo, e)} className="flex flex-col items-center space-y-1">
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-yellow-500 bg-white/20">
-                        <span className="text-xl font-extrabold mr-0.5 leading-none">R</span>
-                        <Icon name="Gift" size={20} className="fill-current" />
-                    </div>
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-yellow-500 bg-white/20"> <span className="text-xl font-extrabold mr-0.5 leading-none">R</span> <Icon name="Gift" size={20} className="fill-current" /> </div>
                 </button>
             )}
 
             <button onClick={(e) => handleOpenComments(currentVideo.id, e)} className="flex flex-col items-center space-y-1">
-              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
-                <Icon name="MessageCircle" size={26} />
-              </div>
+              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white"> <Icon name="MessageCircle" size={26} /> </div>
               <span className="font-semibold text-xs text-white">{formatCount(getVideoCounter(currentVideo.id, 'comments'))}</span>
             </button>
 
             <button onClick={(e) => handleSave(currentVideo.id, e)} className="flex flex-col items-center space-y-1">
-              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${savedVideos.has(currentVideo.id) ? 'text-yellow-400' : 'text-white hover:scale-110'}`}>
-                <Icon name="Bookmark" size={26} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-              </div>
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${savedVideos.has(currentVideo.id) ? 'text-yellow-400' : 'text-white hover:scale-110'}`}> <Icon name="Bookmark" size={26} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} /> </div>
             </button>
 
             <button onClick={(e) => handleShare(currentVideo, e)} className="flex flex-col items-center space-y-1">
-              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
-                <Icon name="Share2" size={26} />
-              </div>
+              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white"> <Icon name="Share2" size={26} /> </div>
             </button>
 
             <button onClick={(e) => handleMuteToggle(currentVideo.id, e)} className="flex flex-col items-center space-y-1">
-              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white">
-                <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={26} />
-              </div>
+              <div className="w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 transition-transform text-white"> <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={26} /> </div>
             </button>
 
             <button className="flex flex-col items-center mt-2" onClick={(e) => e.stopPropagation()}>
-              <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-lg">
-                <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
-                  <Icon name="Music" size={18} color="white" />
-                </div>
-              </div>
+              <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-lg"> <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow"> <Icon name="Music" size={18} color="white" /> </div> </div>
             </button>
           </div>
         )}
@@ -970,67 +687,46 @@ const ReelsContainer = ({
                 </div>
               </Link>
               {!followedCreators.has(currentVideo.creator?.id) && currentUser?.id !== currentVideo.creator?.id && (
-                <button onClick={(e) => handleFollow(currentVideo.creator?.id, e)} className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110">
-                  <Icon name="Plus" size={18} color="white" />
-                </button>
+                <button onClick={(e) => handleFollow(currentVideo.creator?.id, e)} className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg hover:scale-110"> <Icon name="Plus" size={18} color="white" /> </button>
               )}
             </div>
 
             <div className="relative flex flex-col items-center space-y-1">
               <button onClick={(e) => handleLike(currentVideo.id, e)} className="flex flex-col items-center space-y-1 group">
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}>
-                  <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-                </div>
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${likedVideos.has(currentVideo.id) ? 'bg-red-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-red-50'}`}> <Icon name="ThumbsUp" size={28} className={likedVideos.has(currentVideo.id) ? 'fill-current' : ''} /> </div>
                 <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">{formatCount(getVideoCounter(currentVideo.id, 'likes'))}</span>
               </button>
             </div>
 
             <button onClick={(e) => handleDislike(currentVideo.id, e)} className="flex flex-col items-center space-y-1 group">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}>
-                <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-              </div>
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${dislikedVideos.has(currentVideo.id) ? 'bg-gray-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-gray-50'}`}> <Icon name="ThumbsDown" size={28} className={dislikedVideos.has(currentVideo.id) ? 'fill-current' : ''} /> </div>
             </button>
             
             {currentUser && currentUser.id !== currentVideo.creator?.id && (
                 <button onClick={(e) => handleGiftClick(currentVideo, e)} className="flex flex-col items-center space-y-1 group" title="Regalar Puntos">
-                    <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-yellow-600 group-hover:bg-yellow-50">
-                        <span className="text-2xl font-extrabold mr-0.5 leading-none">R</span>
-                        <Icon name="Gift" size={24} className="fill-current" />
-                    </div>
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-yellow-600 group-hover:bg-yellow-50"> <span className="text-2xl font-extrabold mr-0.5 leading-none">R</span> <Icon name="Gift" size={24} className="fill-current" /> </div>
                 </button>
             )}
 
             <button onClick={(e) => handleOpenComments(currentVideo.id, e)} className="flex flex-col items-center space-y-1 group">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50">
-                <Icon name="MessageCircle" size={28} />
-              </div>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-blue-50"> <Icon name="MessageCircle" size={28} /> </div>
               <span className="font-bold text-sm text-gray-800 bg-white px-2 py-0.5 rounded-full shadow-sm">{formatCount(getVideoCounter(currentVideo.id, 'comments'))}</span>
             </button>
 
             <button onClick={(e) => handleSave(currentVideo.id, e)} className="flex flex-col items-center space-y-1 group">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}>
-                <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} />
-              </div>
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${savedVideos.has(currentVideo.id) ? 'bg-yellow-500 text-white scale-110' : 'bg-white text-gray-800 hover:scale-110 group-hover:bg-yellow-50'}`}> <Icon name="Bookmark" size={28} className={savedVideos.has(currentVideo.id) ? 'fill-current' : ''} /> </div>
             </button>
 
             <button onClick={(e) => handleShare(currentVideo, e)} className="flex flex-col items-center space-y-1 group">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50">
-                <Icon name="Share2" size={28} />
-              </div>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-green-50"> <Icon name="Share2" size={28} /> </div>
             </button>
 
             <button onClick={(e) => handleMuteToggle(currentVideo.id, e)} className="flex flex-col items-center space-y-1 group">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50">
-                <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={28} />
-              </div>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center hover:scale-110 transition-transform bg-white shadow-lg text-gray-800 group-hover:bg-purple-50"> <Icon name={mutedVideos.has(currentVideo.id) ? 'VolumeX' : 'Volume2'} size={28} /> </div>
             </button>
 
             <button className="flex flex-col items-center mt-2" onClick={(e) => e.stopPropagation()}>
-              <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform">
-                <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow">
-                  <Icon name="Music" size={20} color="white" />
-                </div>
-              </div>
+              <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:scale-110 transition-transform"> <div className="w-full h-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center animate-spin-slow"> <Icon name="Music" size={20} color="white" /> </div> </div>
             </button>
           </div>
         )}
