@@ -1,9 +1,8 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - VERSIÓN FINAL Y COMPLETA
-// ✅ INTEGRACIÓN: Todas las funciones legacy y admin de tu archivo (7) están incluidas.
-// ✅ FIX RPC: 'track_mission_event' renombrado a 'track_mission_update'.
-// ✅ FIX ADMIN: Mapeo de datos para compatibilidad.
+// MISSIONS SERVICE - VERSIÓN FINAL ESTABLE (BASADA EN ARCHIVO 20)
+// ✅ Contiene todas las funciones legacy (Fix "Pantalla en Blanco").
+// ✅ FIX RPC: 'track_mission_event' renombrado a 'track_mission_update' (Solución final a 42883).
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -58,10 +57,10 @@ export const MISSION_FREQUENCY = {
  * Bonus de rachas por días consecutivos
  */
 export const STREAK_BONUSES = {
-  7: 50,   // 7 días consecutivos = +50 puntos bonus
-  10: 100, // 10 días = +100 puntos
-  30: 500, // 30 días = +500 puntos
-  100: 2000 // 100 días = +2000 puntos
+  7: 50,
+  10: 100,
+  30: 500,
+  100: 2000
 };
 
 // ============================================================================
@@ -200,13 +199,37 @@ export async function getMissionsForProgressPanel() {
   }
 }
 
+export async function getMissionProgress(missionId) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no autenticado');
+
+    const { data, error } = await supabase
+      .from('mission_progress')
+      .select(`
+        *,
+        mission:daily_missions (*)
+      `)
+      .eq('user_id', user.id)
+      .eq('mission_id', missionId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+
+    return { success: true, progress: data || null };
+  } catch (error) {
+    console.error('Error obteniendo progreso de misión:', error);
+    return { success: false, error: error.message, progress: null };
+  }
+}
+
 // ============================================================================
 // FUNCIONES DE TRACKING - Registrar Progreso (CORREGIDA)
 // ============================================================================
 
 /**
  * Registrar progreso en una misión
- * ✅ USA EL NUEVO RPC 'track_mission_update'
+ * ✅ USA EL RPC RENOMBRADO 'track_mission_update'
  */
 export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
   const userAuth = await supabase.auth.getUser();
@@ -238,7 +261,6 @@ export async function trackMissionProgress(missionType, referenceType, reference
                 message: 'Error de unicidad: Puntos ya ganados.'
              };
         }
-        // Si es cualquier otro error, se propaga al catch del frontend
         throw error;
     }
     
@@ -260,7 +282,6 @@ export async function trackMissionProgress(missionType, referenceType, reference
 
   } catch (error) {
     console.error('❌ [trackMissionProgress] Error tracking misión:', error);
-    // Permite que el error se propague al catch final del ReelsContainer
     throw error; 
   }
 }
@@ -684,7 +705,7 @@ export default {
   getAllMissions,
   getMissionProgress,
   getMissionsForProgressPanel,
-  getTopMissions, // Añadida
+  getTopMissions,
 
   // Tracking
   trackMissionProgress,
