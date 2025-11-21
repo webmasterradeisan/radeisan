@@ -9,7 +9,7 @@ import AppIcon from '../AppIcon';
 import Button from './Button';
 
 // ============================================================================
-// COMPONENTES INTERNOS (MANTENIDOS EXACTAMENTE IGUAL)
+// COMPONENTES INTERNOS
 // ============================================================================
 
 const AnimatedPointsCounter = ({ points, animation, colorType }) => {
@@ -20,10 +20,8 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
   if (colorType === 'premium') textColor = 'text-green-600';
   else if (colorType === 'free') textColor = 'text-orange-400';
 
-  useEffect(() => {
-    setDisplayPoints(points);
-  }, [points]);
-
+  // ✅ CORRECCIÓN: Unificamos la lógica de actualización en un solo efecto
+  // Esto garantiza que si el saldo cambia (points), se actualice visualmente SIEMPRE.
   useEffect(() => {
     if (animation.show && animation.type === 'earn' && animation.pointType === colorType) {
       setIsAnimating(true);
@@ -43,11 +41,14 @@ const AnimatedPointsCounter = ({ points, animation, colorType }) => {
           requestAnimationFrame(animate);
         } else {
           setIsAnimating(false);
+          setDisplayPoints(end); // Asegurar valor final exacto
         }
       };
       requestAnimationFrame(animate);
     } else {
+      // Si no hay animación activa, actualización INMEDIATA (Instant Update)
       setDisplayPoints(points);
+      setIsAnimating(false);
     }
   }, [points, animation.show, animation.type, animation.pointType, colorType]);
 
@@ -96,6 +97,7 @@ const FloatingPointsNotification = ({ animation }) => {
 // ============================================================================
 const Header = () => {
   const { user, signOut, loading } = useAuth();
+  // ✅ Consumimos el contexto actualizado. Al cambiar 'freePoints' en PointsContext, esto renderiza de nuevo.
   const { freePoints, premiumPoints, pointsAnimation, loading: pointsLoading } = usePoints();
   const { branding } = useBranding();
   
@@ -104,12 +106,12 @@ const Header = () => {
   
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMainMenuModalOpen, setIsMainMenuModalOpen] = useState(false);
-  const [isNotifOpen, setIsNotifOpen] = useState(false); // ✅ ESTADO PARA EL MENÚ DE NOTIFICACIONES
+  const [isNotifOpen, setIsNotifOpen] = useState(false); 
   
   const navigate = useNavigate();
   const location = useLocation();
   const userMenuRef = useRef(null);
-  const notifMenuRef = useRef(null); // ✅ REF PARA EL BOTÓN DE NOTIFICACIONES
+  const notifMenuRef = useRef(null); 
   const mainMenuModalRef = useRef(null);
 
   // Cerrar menús al hacer click fuera
@@ -118,7 +120,6 @@ const Header = () => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
       }
-      // ✅ CERRAR NOTIFICACIONES AL CLICKEAR FUERA
       if (notifMenuRef.current && !notifMenuRef.current.contains(event.target)) {
         setIsNotifOpen(false);
       }
@@ -139,12 +140,12 @@ const Header = () => {
   useEffect(() => {
     setIsUserMenuOpen(false);
     setIsMainMenuModalOpen(false);
-    setIsNotifOpen(false); // ✅ CERRAR AL NAVEGAR
+    setIsNotifOpen(false); 
   }, [location.pathname]);
 
   const toggleUserMenu = () => setIsUserMenuOpen(!isUserMenuOpen);
   const toggleMainMenuModal = () => setIsMainMenuModalOpen(!isMainMenuModalOpen);
-  const toggleNotifMenu = () => setIsNotifOpen(!isNotifOpen); // ✅ TOGGLE NOTIFICACIONES
+  const toggleNotifMenu = () => setIsNotifOpen(!isNotifOpen); 
 
   const handleLogout = async () => {
     try {
@@ -174,7 +175,6 @@ const Header = () => {
     return <AppIcon name={name} size={size} color={color} className={className} />;
   };
 
-  // Determinar la ruta de configuración basada en el rol
   const configPath = user?.isAdmin ? '/admin/settings' : '/settings';
 
   return (
@@ -187,7 +187,6 @@ const Header = () => {
             
             {/* ------------------ IZQUIERDA: LOGO & MENU MOVIL ------------------ */}
             <div className="flex items-center space-x-2">
-                {/* Botón Hamburguesa (Solo Móvil) */}
                 {user && (
                     <Button 
                         id="mobile-main-menu-toggle"
@@ -201,7 +200,6 @@ const Header = () => {
                 )}
 
                 <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
-                  {/* Logo Personalizado */}
                   {branding.logo.primary ? (
                     <img 
                       src={branding.logo.primary} 
@@ -214,7 +212,6 @@ const Header = () => {
                     />
                   ) : null}
 
-                  {/* Fallback Icono */}
                   <div 
                     className="w-8 h-8 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center shadow-sm"
                     style={{ 
@@ -225,7 +222,6 @@ const Header = () => {
                     <Icon name="Video" size={20} color="white" />
                   </div>
                   
-                  {/* Nombre App (Solo si no hay logo imagen) */}
                   {!branding.logo.primary && (
                     <span 
                       className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
@@ -302,7 +298,6 @@ const Header = () => {
                   <span>Recompensas</span>
                 </Link>
 
-                {/* Link Admin (Solo Admins) */}
                 {user.isAdmin && (
                   <Link 
                     to="/admin" 
@@ -350,7 +345,6 @@ const Header = () => {
                     <span className="text-xs font-medium mt-[-2px] text-green-600">Puntos Premium</span>
                   </div>
                   
-                  {/* Botón Comprar Puntos */}
                   <Link 
                     to="/purchase-points" 
                     className="hidden md:flex items-center gap-2 text-white bg-green-600 px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm hover:shadow text-sm"
@@ -358,7 +352,6 @@ const Header = () => {
                     <span className='whitespace-nowrap'>Comprar Puntos</span>
                   </Link>
 
-                  {/* Botón Subir (Solo escritorio) */}
                   <Button size="sm" asChild className="hidden md:flex bg-red-500 hover:bg-red-600 transition-colors shadow-sm hover:shadow">
                     <Link to="/upload">
                       <Icon name="Plus" size={16} className="mr-2" />
@@ -366,7 +359,7 @@ const Header = () => {
                     </Link>
                   </Button>
 
-                  {/* ✅ CAMPANITA DE NOTIFICACIONES DE REGALOS */}
+                  {/* CAMPANITA DE NOTIFICACIONES */}
                   <div className="relative" ref={notifMenuRef}>
                     <Button 
                       variant="ghost" 
@@ -380,7 +373,6 @@ const Header = () => {
                       )}
                     </Button>
 
-                    {/* DROPDOWN DE NOTIFICACIONES */}
                     {isNotifOpen && (
                       <div className="absolute right-0 mt-2 w-80 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 ring-1 ring-black/5">
                         <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
@@ -406,7 +398,6 @@ const Header = () => {
                                 onClick={() => markGiftAsRead(notif.id)}
                                 className={`p-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer flex gap-3 transition-colors ${!notif.is_read ? 'bg-blue-50/40' : ''}`}
                               >
-                                {/* Icono/Imagen del Regalo */}
                                 <div className="w-10 h-10 bg-white border border-gray-100 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden p-1">
                                    {notif.data?.gift_icon ? (
                                      <img src={notif.data.gift_icon} className="w-full h-full object-contain" alt="Gift" />
@@ -414,8 +405,6 @@ const Header = () => {
                                      <Icon name="Gift" size={18} className="text-pink-500" />
                                    )}
                                 </div>
-                                
-                                {/* Contenido Texto */}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-bold text-gray-800 truncate">{notif.title}</p>
                                   <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{notif.message}</p>
@@ -423,8 +412,6 @@ const Header = () => {
                                     <Icon name="Star" size={10} className="fill-current"/> +{notif.data?.points_received || 0} Puntos
                                   </p>
                                 </div>
-
-                                {/* Indicador no leído */}
                                 {!notif.is_read && (
                                   <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0 animate-pulse"></div>
                                 )}
@@ -436,7 +423,7 @@ const Header = () => {
                     )}
                   </div>
 
-                  {/* MENÚ DE USUARIO (MANTENIDO) */}
+                  {/* MENÚ DE USUARIO */}
                   <div className="relative" ref={userMenuRef}>
                     <Button variant="ghost" size="icon" onClick={toggleUserMenu} className="rounded-full border border-transparent hover:border-border transition-all">
                       <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden shadow-sm">
@@ -451,13 +438,11 @@ const Header = () => {
                     {isUserMenuOpen && (
                       <div className="absolute right-0 mt-2 w-60 bg-popover border border-border rounded-xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
                         <div className="py-1">
-                          {/* Info Usuario */}
                           <div className="px-4 py-3 border-b border-border bg-muted/30">
                             <div className="text-sm font-bold text-foreground truncate">{user.name || 'Usuario'}</div>
                             <div className="text-xs text-muted-foreground truncate font-medium">{user.email}</div>
                           </div>
                           
-                          {/* Opciones */}
                           <div className="p-1">
                              <Link to="/profile" className="flex items-center px-3 py-2 text-sm text-foreground hover:bg-muted rounded-lg transition-colors" onClick={() => setIsUserMenuOpen(false)}>
                                <Icon name="User" size={16} className="mr-3 text-muted-foreground" />
@@ -506,7 +491,6 @@ const Header = () => {
                   </div>
                 </>
               ) : (
-                // NO AUTENTICADO
                 <div className="flex items-center space-x-4">
                   <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
                     Iniciar Sesión
@@ -520,24 +504,20 @@ const Header = () => {
           </div>
         </div>
         
-        {/* MODAL MENÚ MÓVIL (MANTENIDO IGUAL) */}
+        {/* MODAL MENÚ MÓVIL */}
         {isMainMenuModalOpen && user && (
            <div className="fixed inset-0 z-[100] md:hidden">
-              {/* Overlay */}
               <div 
                 className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
                 onClick={toggleMainMenuModal}
               ></div>
 
-              {/* Sidebar */}
               <div 
                 ref={mainMenuModalRef}
                 className="fixed left-0 top-0 w-72 h-screen bg-background shadow-2xl transition-transform duration-300 ease-out transform"
                 onClick={(e) => e.stopPropagation()}
               >
                  <div className="flex flex-col h-full overflow-y-auto p-5">
-                    
-                    {/* Header Móvil */}
                     <div className="flex justify-between items-center mb-8 flex-shrink-0">
                        <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2" onClick={() => setIsMainMenuModalOpen(false)}>
                           {branding.logo.primary ? (
@@ -568,7 +548,6 @@ const Header = () => {
                        </Button>
                     </div>
 
-                    {/* Links Móvil */}
                     <nav className="flex flex-col space-y-2 flex-grow">
                        <button onClick={() => {handleHomeNavigate(); setIsMainMenuModalOpen(false);}} className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium w-full text-left transition-colors ${location.pathname === '/dashboard' && (!location.state?.orientation || location.state?.orientation === 'all') ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
                           <Icon name="Home" size={20} /><span>Inicio</span>
