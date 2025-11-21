@@ -1,9 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - COMPLETO Y DEFINITIVO
-// ✅ Integración de VideoActionButtons (Botones separados).
-// ✅ Lógica de Like/Misiones con Anti-Farming y Notificaciones RESTAURADAS.
-// ✅ Panel de Comentarios 100% Funcional (Desktop y Mobile).
+// REELS CONTAINER - COMPLETO Y DEFINITIVO (SINTAXIS CORREGIDA)
+// ✅ Error "Missing Semicolon/Expected useState" en líneas 41-43 SOLUCIONADO.
+// ✅ Lógica de Misiones y Panel de Comentarios Restaurada.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,6 +16,9 @@ import useIsMobile from 'hooks/useIsMobile';
 import GiftPointsModal from 'components/GiftPointsModal'; 
 import VideoActionButtons from './VideoActionButtons'; // Componente de Botones separado
 
+// ===============================
+// COMPONENTE PRINCIPAL: REELS CONTAINER
+// ===============================
 const ReelsContainer = ({ 
   videos = [], 
   selectedReelId = null,
@@ -32,21 +34,24 @@ const ReelsContainer = ({
   const { success, error: notifyError, warning, info } = useNotification();
 
   // ===============================
-  // ESTADOS PRINCIPALES
+  // ESTADOS PRINCIPALES (Sintaxis corregida)
   // ===============================
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
-  const [dislikedVideos, setDislikedVideos] = new Set());
-  const [savedVideos, setSavedVideos] = new Set());
-  const [followedCreators, setFollowedCreators] = new Set());
+  
+  // ✅ CORREGIDO: Declaración de useState(new Set())
+  const [dislikedVideos, setDislikedVideos] = useState(new Set());
+  const [savedVideos, setSavedVideos] = useState(new Set());
+  const [followedCreators, setFollowedCreators] = useState(new Set());
+  
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
   
   const [videoCounters, setVideoCounters] = useState({});
   
-  // Estados de Comentarios (RESTAURADOS)
+  // Estados de Comentarios
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [comments, setComments] = useState({});
   const [newComment, setNewComment] = useState('');
@@ -93,6 +98,7 @@ const ReelsContainer = ({
     } else { setCurrentIndex(correctIndex); }
   }, [selectedReelId, videos, getInitialReelIndex]);
 
+  // Cargar datos del usuario actual y sus interacciones
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -103,8 +109,10 @@ const ReelsContainer = ({
             
             const { data: l } = await supabase.from('video_likes').select('video_id').eq('user_id', user.id);
             if (l) setLikedVideos(new Set(l.map(x => x.video_id)));
+            
             const { data: s } = await supabase.from('saved_videos').select('video_id').eq('user_id', user.id);
             if (s) setSavedVideos(new Set(s.map(x => x.video_id)));
+            
             const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
             if (f) setFollowedCreators(new Set(f.map(x => x.following_id)));
         }
@@ -113,6 +121,7 @@ const ReelsContainer = ({
     loadData();
   }, [videos]);
 
+  // Inicializar y actualizar contadores
   useEffect(() => {
       const counters = {};
       videos.forEach(v => {
@@ -125,7 +134,6 @@ const ReelsContainer = ({
       setVideoCounters(counters);
   }, [videos]);
 
-  // Cargar contadores en tiempo real al cambiar de video
   useEffect(() => {
     const loadRealTimeCounters = async () => {
       if (videos.length === 0) return;
@@ -149,10 +157,115 @@ const ReelsContainer = ({
     loadRealTimeCounters();
   }, [currentIndex, videos]);
 
-  // ... (MANTENER LÓGICA DEL REPRODUCTOR, VIEWS TRACKING, Y NAVEGACIÓN IGUAL) ...
+  // ===============================
+  // LÓGICA DEL REPRODUCTOR, VIEWS TRACKING Y NAVEGACIÓN
+  // ===============================
+
+  // Lógica del reproductor (Play/Pause/Mute)
+  useEffect(() => {
+    if (hasPlayedInitial.current || videos.length === 0) return;
+    const attemptPlay = () => {
+      const v = videoRefs.current[currentIndex];
+      if (!v) { setTimeout(attemptPlay, 100); return; }
+      videoRefs.current.forEach((vid, i) => { if (vid && i !== currentIndex) vid.pause(); });
+      v.muted = mutedVideos.has(videos[currentIndex]?.id);
+      v.play()
+        .then(() => { hasPlayedInitial.current = true; lastNavigationIndex.current = currentIndex; })
+        .catch(() => { v.muted=true; v.play(); hasPlayedInitial.current=true; });
+    };
+    setTimeout(attemptPlay, 250);
+  }, [videos, currentIndex, mutedVideos]);
+
+  // Navegación por scroll y teclado
+  useEffect(() => {
+      if (!isDesktop) return;
+      const handleWheel = (e) => {
+          e.preventDefault();
+          clearTimeout(handleWheel.timeout);
+          handleWheel.timeout = setTimeout(() => {
+              if (e.deltaY > 0 && currentIndex < videos.length - 1) setCurrentIndex(p => p + 1);
+              else if (e.deltaY < 0 && currentIndex > 0) setCurrentIndex(p => p - 1);
+          }, 150);
+      };
+      const c = containerRef.current;
+      if (c) { c.addEventListener('wheel', handleWheel, {passive:false}); return () => c.removeEventListener('wheel', handleWheel); }
+  }, [isDesktop, currentIndex, videos.length]);
+
+  useEffect(() => {
+      if (videos.length === 0) return;
+      const v = videoRefs.current[currentIndex];
+      if (v) {
+          videoRefs.current.forEach((vid, i) => { if(vid && i !== currentIndex) vid.pause(); });
+          v.muted = mutedVideos.has(videos[currentIndex]?.id);
+          if (lastNavigationIndex.current !== currentIndex) {
+              v.currentTime = 0; lastNavigationIndex.current = currentIndex;
+              v.play().then(()=>setIsAutoPlaying(true)).catch(()=>{v.muted=true; v.play().then(()=>setIsAutoPlaying(true));});
+          } else if (isAutoPlaying) {
+              v.play().catch(()=>{}); 
+          } else {
+              v.pause();
+          }
+      }
+  }, [currentIndex, isAutoPlaying, videos, mutedVideos]);
+
+  // Tracking de Vistas
+  useEffect(() => {
+      const v = videoRefs.current[currentIndex];
+      const d = videos[currentIndex];
+      if (!v || !d) return;
+      
+      const handleTime = async () => {
+          // Contar vista al 30%
+          if ((v.currentTime / v.duration) * 100 > 30 && !videoWatchedIds.has(d.id + '_view')) {
+             setVideoCounters(prev => ({
+                ...prev,
+                [d.id]: { ...prev[d.id], views: (prev[d.id]?.views || 0) + 1 }
+             }));
+             setVideoWatchedIds(p => new Set([...p, d.id + '_view']));
+          }
+
+          // Pagar puntos al 80%
+          if ((v.currentTime / v.duration) * 100 > 80 && !videoWatchedIds.has(d.id)) {
+              setVideoWatchedIds(p => new Set([...p, d.id]));
+              missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
+                  if (res.result === 'success' && res.points_earned > 0) {
+                      addPoints(res.points_earned, res.message, 'free');
+                      showPointsNotification(`+${res.points_earned} PUNTOS por ver`, d.id, 'success');
+                  }
+              });
+          }
+      };
+      v.addEventListener('timeupdate', handleTime);
+      return () => v.removeEventListener('timeupdate', handleTime);
+  }, [currentIndex, videos, videoWatchedIds, addPoints]);
+
+  // Controles de navegación y Play/Pause
+  const handlePlayPause = useCallback((e) => {
+      if (e && e.target.tagName !== 'VIDEO') return;
+      const v = videoRefs.current[currentIndex];
+      if (v) { if(v.paused) { v.play(); setIsAutoPlaying(true); } else { v.pause(); setIsAutoPlaying(false); } }
+  }, [currentIndex]);
+  
+  const navigateNext = useCallback(() => { if(currentIndex < videos.length-1) { setEnableTransition(true); setCurrentIndex(p=>p+1); setIsAutoPlaying(true); } }, [currentIndex, videos.length]);
+  const navigatePrevious = useCallback(() => { if(currentIndex > 0) { setEnableTransition(true); setCurrentIndex(p=>p-1); setIsAutoPlaying(true); } }, [currentIndex]);
+  
+  // Touch handlers
+  const handleTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
+  const handleTouchMove = (e) => { touchEndY.current = e.touches[0].clientY; };
+  const handleTouchEnd = () => { if(Math.abs(touchStartY.current - touchEndY.current) > 50) touchStartY.current > touchEndY.current ? navigateNext() : navigatePrevious(); };
+
+  // Keyboard Navigation
+  useEffect(() => {
+      const k = (e) => {
+          if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+          if(e.key==='ArrowDown') navigateNext(); if(e.key==='ArrowUp') navigatePrevious(); if(e.key===' ') {e.preventDefault(); handlePlayPause();}
+          if(e.key==='Escape' && showCommentsModal) handleCloseComments();
+      };
+      window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
+  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, COMENTARIOS)
   // ==========================================================================
 
   const handleLike = async (videoId, e) => {
@@ -222,15 +335,68 @@ const ReelsContainer = ({
       setLikedVideos(newLiked);
     } catch (err) { console.error('Error like:', err); }
   };
+
+  const handleDislike = async (videoId, e) => {
+      if (e) { e.stopPropagation(); e.preventDefault(); }
+      const newD = new Set(dislikedVideos);
+      if (newD.has(videoId)) newD.delete(videoId);
+      else { newD.add(videoId); if (likedVideos.has(videoId)) handleLike(videoId, e); }
+      setDislikedVideos(newD);
+  };
+
+  const handleSave = async (videoId, e) => {
+      if (e) { e.stopPropagation(); e.preventDefault(); }
+      const { data: { user } } = await supabase.auth.getUser();
+      const newS = new Set(savedVideos);
+      if (newS.has(videoId)) { newS.delete(videoId); await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id); }
+      else { newS.add(videoId); await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id }); }
+      setSavedVideos(newS);
+  };
+
+  const handleFollow = async (creatorId, e) => {
+      if(e) {e.stopPropagation(); e.preventDefault();}
+      const { data: { user } } = await supabase.auth.getUser();
+      if(user.id === creatorId) return;
+      const newF = new Set(followedCreators);
+      if(newF.has(creatorId)) {
+          newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
+          showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
+      } else {
+          newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
+          missionsService.trackFollowUser(creatorId).then(r => {
+             if(r.result==='success') { addPoints(r.points_earned, r.message, 'free'); showPointsNotification(`+${r.points_earned} por seguir`, videos[currentIndex]?.id, 'success'); }
+          });
+      }
+      setFollowedCreators(newF);
+  };
   
-  // (El resto de handlers como handleDislike, handleSave, handleFollow, etc., se mantienen como antes)
+  const handleMuteToggle = (videoId, e) => {
+      if(e) {e.stopPropagation(); e.preventDefault();}
+      const v = videoRefs.current[currentIndex];
+      const newM = new Set(mutedVideos);
+      if(newM.has(videoId)) { newM.delete(videoId); if(v) v.muted=false; } else { newM.add(videoId); if(v) v.muted=true; }
+      setMutedVideos(newM);
+  };
+
+  const handleShare = async (video, e) => {
+     if(e) {e.stopPropagation(); e.preventDefault();}
+     if (navigator.share) await navigator.share({title: video.title, url: window.location.href});
+     else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
+     missionsService.trackShareContent('reel', video.id).then(r => {
+         if(r.result==='success') addPoints(r.points_earned, r.message, 'free');
+     });
+  };
+
+  const handleGiftClick = (video, e) => {
+      if(e) {e.stopPropagation(); e.preventDefault();}
+      setShowGiftModal(true);
+  };
 
   // ==========================================================================
-  // LÓGICA DE COMENTARIOS (RESTAURADA)
+  // LÓGICA DE COMENTARIOS
   // ==========================================================================
   
   const loadComments = async (videoId, retryCount = 0) => {
-    // ... (Implementación completa de loadComments aquí) ...
     try {
       let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
       if (error) { if (retryCount < 2) { await new Promise(resolve => setTimeout(resolve, 1000)); return loadComments(videoId, retryCount + 1); } throw error; }
@@ -288,20 +454,56 @@ const ReelsContainer = ({
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
   const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/3600)}h`; return `${Math.floor(diff/86400)}d`; };
 
+
   // ==========================================================================
-  // RENDER
+  // RENDER PRINCIPAL
   // ==========================================================================
   const currentVideo = videos[currentIndex];
   const formatCount = (n) => n >= 1000 ? (n/1000).toFixed(1)+'K' : (n || 0);
 
-  // ... (MANTENER LÓGICA DE RENDERIZADO DEL REPRODUCTOR) ...
+  if (videos.length === 0 && !loading) return <div className="flex flex-col items-center justify-center h-screen text-white"><Icon name="Video" size={48} className="mb-4"/><p>No hay videos disponibles</p></div>;
 
   return (
     <div className="relative w-full h-full bg-white overflow-hidden">
       <div className="flex h-full w-full items-center justify-center">
         {/* CONTENEDOR DE VIDEO */}
         <div className={`relative overflow-hidden flex-shrink-0 ${isDesktop ? showCommentsModal ? 'w-[55%]' : 'w-full max-w-[500px]' : 'w-full'} ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}`}>
-          {/* ... Lógica de Renderizado de Video (map, video refs, progress bar) ... */}
+          
+          <div ref={containerRef} className="w-full h-full relative transition-transform duration-500" 
+               style={{ transform: `translateY(${-currentIndex * 100}%)`, transition: enableTransition ? 'transform 0.5s' : 'none' }}
+               onClick={handlePlayPause}
+               onTouchStart={isMobile ? handleTouchStart : undefined}
+               onTouchMove={isMobile ? handleTouchMove : undefined}
+               onTouchEnd={isMobile ? handleTouchEnd : undefined}>
+               
+            {videos.map((video, index) => (
+              <div key={video.id} className="w-full h-full flex-shrink-0 relative bg-black snap-start">
+                <video ref={el => videoRefs.current[index] = el} className="absolute w-full h-full object-cover" src={video.video_url || video.videoUrl} loop playsInline preload="auto" onLoadedData={()=>setLoadingVideo(false)} />
+                
+                {loadingVideo && index===currentIndex && <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10"><div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div></div>}
+
+                {/* Info Overlay */}
+                <div className={`absolute z-10 ${isMobile ? 'bottom-8 left-4 right-24' : 'bottom-4 left-4 right-4'}`} onClick={(e) => e.stopPropagation()}>
+                   <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
+                      <Link to={`/profile/${video.creator?.id}`} className="font-bold text-white hover:underline text-base shadow-black drop-shadow-md">@{video.creator?.username || video.creator?.name}</Link>
+                      <p className="text-sm text-white mt-2 line-clamp-2 drop-shadow-md">{video.description}</p>
+                      {video.tags && <div className="flex flex-wrap gap-2 mt-2">{video.tags.slice(0,3).map((tag,i)=><span key={i} className="text-xs font-bold text-white">#{tag}</span>)}</div>}
+                   </div>
+                </div>
+                
+                {!isAutoPlaying && index === currentIndex && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center"><Icon name="Play" size={32} color="white"/></div>
+                    </div>
+                )}
+                
+                {/* Barra Progreso */}
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
+                   <div className="h-full bg-red-500 transition-all" style={{ width: index===currentIndex ? '100%' : '0%', transitionDuration: index===currentIndex ? `${video.duration||30}s` : '0s', transitionTimingFunction:'linear' }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* BOTONES DE ACCIÓN (Componente Separado) */}
@@ -318,7 +520,13 @@ const ReelsContainer = ({
                 likesCount={formatCount(videoCounters[currentVideo.id]?.likes || 0)}
                 commentsCount={formatCount(videoCounters[currentVideo.id]?.comments || 0)}
                 onLike={handleLike}
-                // ... (El resto de Handlers)
+                onDislike={handleDislike}
+                onSave={handleSave}
+                onShare={handleShare}
+                onMute={handleMuteToggle}
+                onComment={handleOpenComments}
+                onFollow={handleFollow}
+                onGift={handleGiftClick}
             />
         )}
 
@@ -336,7 +544,36 @@ const ReelsContainer = ({
               {comments[currentVideo.id]?.length > 0 ? (
                 comments[currentVideo.id].map((comment) => (
                   <div key={comment.id} className="space-y-2">
-                    {/* ... Estructura de Comentario ... */}
+                    <div className="flex space-x-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                        {comment.user?.avatar ? <img src={comment.user.avatar} alt="Avatar" className="w-full h-full object-cover"/> : <div className="w-full h-full bg-purple-500 flex items-center justify-center text-white text-xs">{comment.user?.name?.charAt(0)}</div>}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2"><span className="font-semibold text-sm">{comment.user?.name}</span><span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span></div>
+                        <p className="text-sm mt-1">{comment.content}</p>
+                        <button onClick={() => handleReply(comment.id, comment.user?.username)} className="text-xs text-gray-500 hover:text-gray-700 mt-1">Responder</button>
+                        
+                        {comment.replies?.length > 0 && (
+                          <div className="mt-2">
+                            <button onClick={() => toggleReplies(comment.id)} className="text-xs text-blue-600 hover:text-blue-700">
+                              {showReplies[comment.id] ? 'Ocultar respuestas' : `Ver ${comment.replies.length} respuestas`}
+                            </button>
+                            {showReplies[comment.id] && (
+                              <div className="space-y-2 pl-4 border-l-2 border-gray-200 mt-2">
+                                {comment.replies.map((reply) => (
+                                  <div key={reply.id} className="flex space-x-2">
+                                    <div className="w-6 h-6 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
+                                       {reply.user?.avatar ? <img src={reply.user.avatar} alt="Av" className="w-full h-full object-cover"/> : <div className="w-full h-full bg-purple-400 flex items-center justify-center text-white text-[10px]">{reply.user?.name?.charAt(0)}</div>}
+                                    </div>
+                                    <div className="flex-1"><span className="font-semibold text-xs">{reply.user?.name}</span><p className="text-xs">{reply.content}</p></div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -345,7 +582,7 @@ const ReelsContainer = ({
             </div>
 
             <div className="p-4 border-t">
-              {replyingTo && (<div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded"><span className="text-sm text-blue-700">Respondiendo...</span><button onClick={handleCancelReply} className="text-blue-600"><Icon name="X" size={16} /></button></div>)}
+              {replyingTo && (<div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded"><span className="text-sm text-blue-700">Respondiendo a @{videos.find(v=>v.id===currentVideo.id)?.creator?.username}...</span><button onClick={handleCancelReply} className="text-blue-600"><Icon name="X" size={16} /></button></div>)}
               <div className="flex space-x-2">
                 <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Escribe un comentario..." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500" rows={1} />
                 <button onClick={() => handleAddComment(currentVideo.id)} disabled={!newComment.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"><Icon name="Send" size={20} /></button>
@@ -355,17 +592,56 @@ const ReelsContainer = ({
         )}
       </div>
       
-      {/* ========================================================
-          MODAL DE COMENTARIOS - MOBILE (RESTAURADO)
-      ======================================================== */}
+      {/* MODAL DE COMENTARIOS - MOBILE */}
       {showCommentsModal && currentVideo && isMobile && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={handleCloseComments}>
-            {/* ... Lógica y JSX del Modal de Comentarios para Mobile ... */}
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Comentarios ({formatCount(videoCounters[currentVideo.id]?.comments)})</h3>
+              <button onClick={handleCloseComments} className="p-2 hover:bg-gray-100 rounded-full"><Icon name="X" size={20} /></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+               {comments[currentVideo.id]?.length > 0 ? comments[currentVideo.id].map(comment => (
+                  <div key={comment.id} className="space-y-2">
+                      <div className="flex space-x-3">
+                          <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden">
+                             {comment.user?.avatar ? <img src={comment.user.avatar} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center bg-purple-500 text-white text-xs">{comment.user?.name?.charAt(0)}</div>}
+                          </div>
+                          <div className="flex-1">
+                              <div className="flex items-center gap-2"><span className="font-bold text-sm">{comment.user?.name}</span><span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span></div>
+                              <p className="text-sm">{comment.content}</p>
+                              <button onClick={()=>handleReply(comment.id, comment.user?.username)} className="text-xs text-gray-500 mt-1">Responder</button>
+                              
+                              {comment.replies?.length > 0 && (
+                                <div className="mt-2 pl-4 border-l-2">
+                                   <button onClick={()=>toggleReplies(comment.id)} className="text-xs text-blue-500">Ver respuestas</button>
+                                   {showReplies[comment.id] && comment.replies.map(r => (
+                                       <div key={r.id} className="flex gap-2 mt-2"><span className="font-bold text-xs">{r.user?.name}</span><p className="text-xs">{r.content}</p></div>
+                                   ))}
+                                </div>
+                              )}
+                          </div>
+                      </div>
+                  </div>
+               )) : <div className="text-center text-gray-500 py-10">No hay comentarios aún</div>}
+            </div>
+
+            <div className="p-4 border-t">
+              {replyingTo && <div className="text-xs text-blue-500 mb-1 flex justify-between"><span>Respondiendo...</span><button onClick={handleCancelReply}>X</button></div>}
+              <div className="flex gap-2">
+                  <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comenta..." className="flex-1 border rounded px-3 py-2"/>
+                  <button onClick={()=>handleAddComment(currentVideo.id)} className="bg-blue-600 text-white p-2 rounded"><Icon name="Send" size={18}/></button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Modal Regalo */}
-      {/* ... (Lógica Modal Regalo) ... */}
+      {showGiftModal && currentVideo && (
+        <GiftPointsModal isOpen={showGiftModal} onClose={()=>setShowGiftModal(false)} receiverId={currentVideo.creator?.id} contentId={currentVideo.id} contentType="reel" onSuccess={()=>{}} />
+      )}
     </div>
   );
 };
