@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE SINCRONIZACIÓN (PERFECCIONISTA)
+// REELS CONTAINER - VERSIÓN FINAL CONECTADA A DB
 // ✅ Solución del Error de Inserción (RLS/Restricción en video_likes).
 // ✅ Lógica: Rollback visual y exposición de error en caso de fallo de INSERT.
-// ✅ Feedback Instantáneo: updateMissionOptimistic se ejecuta antes de refreshPoints.
+// ✅ SINCRONIZACIÓN REAL: Usa refreshPoints() para leer el saldo que la DB ya depositó.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -32,7 +32,8 @@ const ReelsContainer = ({
   const isDesktop = !isMobile;
 
   // 1. LLAMADA A HOOKS Y CONTEXTOS (DEBE SER INCONDICIONAL)
-  const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints } = usePoints();
+  // 🔥 CORRECCIÓN 1: Agregamos 'triggerAnimation' para efectos visuales sin lógica de pago
+  const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints, triggerAnimation } = usePoints();
   const { success, error: notifyError, warning, info } = useNotification();
 
   // 2. DECLARACIÓN DE ESTADOS (INCONDICIONAL)
@@ -325,19 +326,21 @@ const ReelsContainer = ({
               const res = await missionsService.trackGiveLike('reel', videoId);
               
               if (res.result === 'success' && res.points_earned > 0) {
-                  // ÉXITO
+                  // ÉXITO - LÓGICA DE CONEXIÓN DB
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   
-                  // 🔥 CORRECCIÓN PERFECCIONISTA:
-                  // 1. Primero actualizamos el estado optimista (Visualmente la barra se llena YA)
+                  // 1. Actualizamos barra de progreso visual (Feedback inmediato)
                   await updateMissionOptimistic('give_like', 1); 
                   
-                  // 2. Mostramos la notificación y damos los puntos
+                  // 2. Notificación UI
                   showPointsNotification(`🎉 +${res.points_earned} puntos`, videoId, 'success');
-                  await addPoints(res.points_earned, res.message, 'free');
 
-                  // 3. AL FINAL: Refrescamos desde el servidor para que el estado "is_completed" 
-                  // venga confirmado por la DB (Barra Verde "Completada")
+                  // 🔥 CORRECCIÓN 2: Solo Animación y Refresco
+                  // Quitamos addPoints() porque el SQL ya pagó. Usamos triggerAnimation para la estética.
+                  if (triggerAnimation) triggerAnimation(res.points_earned, 'earn', 'free');
+
+                  // 3. OBLIGATORIO: Leer el saldo real desde la DB
+                  // Esto hace que el panel lateral pase de 0 a X porque lee user_profiles
                   await refreshPoints();
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
