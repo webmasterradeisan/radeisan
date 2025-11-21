@@ -1,8 +1,9 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - CON "ESCUDO ANTI-REBOTE" 🛡️
-// ✅ Solución: Bloquea la lectura del servidor por 3 segundos tras ganar puntos
-//    para evitar que el saldo viejo sobrescriba al nuevo.
+// POINTS CONTEXT - VERSIÓN FINAL "NUCLEAR" ☢️
+// ✅ Escudo Anti-Rebote: Bloquea datos viejos del servidor por 3s tras ganar.
+// ✅ Antena Global: Escucha eventos 'FORCE_UPDATE_POINTS' del navegador
+//    para garantizar que el Header se actualice pase lo que pase.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -45,26 +46,51 @@ export const PointsProvider = ({ children }) => {
   const debounceTimerRef = useRef(null);
 
   // ==========================================================================
-  // 1. ACTUALIZACIÓN MANUAL (INSTANTÁNEA)
+  // 1. ACTUALIZACIÓN MANUAL (La lógica que actualiza la UI)
   // ==========================================================================
   const updateLocalBalance = useCallback((amount, type = 'free') => {
     if (!mountedRef.current) return;
     
     // 1. Activamos el ESCUDO: "No escuches al servidor por 3 segundos"
+    // Esto protege el saldo nuevo de ser borrado por una petición lenta.
     lastManualUpdateRef.current = Date.now(); 
 
     // 2. Actualizamos la pantalla YA
-    setPoints(prev => ({
-      ...prev,
-      total: (prev.total || 0) + amount,
-      [type]: (prev[type] || 0) + amount
-    }));
+    setPoints(prev => {
+        const safeAmount = Number(amount) || 0;
+        const currentTotal = prev.total || 0;
+        const currentType = prev[type] || 0;
+
+        console.log(`⚡ UPDATE LOCAL: +${safeAmount} ${type} | Nuevo Total: ${currentTotal + safeAmount}`);
+
+        return {
+            ...prev,
+            total: currentTotal + safeAmount,
+            [type]: currentType + safeAmount
+        };
+    });
 
     if (amount > 0) {
       setPointsEarnedToday(prev => prev + amount);
     }
-    console.log(`⚡ Saldo actualizado visualmente: +${amount}`);
   }, []);
+
+  // 🔥 NUEVO: ANTENA GLOBAL PARA FORZAR ACTUALIZACIÓN
+  // Esta es la clave para arreglar el problema. Escucha eventos directos del navegador.
+  useEffect(() => {
+      const handleForceUpdate = (event) => {
+          if (event.detail && event.detail.amount) {
+              console.log('📡 EVENTO GLOBAL RECIBIDO: Forzando actualización de puntos');
+              updateLocalBalance(Number(event.detail.amount), event.detail.type || 'free');
+          }
+      };
+
+      window.addEventListener('FORCE_UPDATE_POINTS', handleForceUpdate);
+      
+      // Limpieza al desmontar
+      return () => window.removeEventListener('FORCE_UPDATE_POINTS', handleForceUpdate);
+  }, [updateLocalBalance]);
+
 
   const updateMissionOptimistic = useCallback((missionType, delta = 1) => {
     setMissions(prev => {
@@ -172,12 +198,11 @@ export const PointsProvider = ({ children }) => {
   const addPoints = useCallback(async (amount, type = 'free') => {
     const res = await pointsService.addPoints(user.id, amount, type);
     if (res.success) {
-        // Al usar addPoints manual, también activamos el escudo
         updateLocalBalance(amount, type); 
         triggerAnimation(amount, 'earn', type);
     }
     return res;
-  }, [user, updateLocalBalance, triggerAnimation]); // Quitamos loadAllData directo
+  }, [user, updateLocalBalance, triggerAnimation]); 
 
   const deductPoints = useCallback(async (amount, type = 'free') => {
     const res = await pointsService.deductPoints(user.id, amount, type);
