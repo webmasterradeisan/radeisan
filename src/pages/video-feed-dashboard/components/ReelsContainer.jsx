@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - VERSIÓN FINAL COMPLETA Y CORREGIDA
-// ✅ Solución del Error de Sintaxis (Hooks).
-// ✅ Solución del Bug de Rollback (9/10).
-// ✅ Funcionalidad de Comentarios y Botones Separados.
+// ✅ Solución del Error Genérico: Muestra el mensaje de error real del servidor.
+// ✅ Lógica de Rollback y Anti-Farming Corregida.
+// ✅ Sintaxis y estructura completa.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,7 +41,7 @@ const ReelsContainer = ({
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
   
-  // ✅ SINTAXIS CORREGIDA: useState(new Set())
+  // Declaración de Set() corregida con useState()
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [followedCreators, setFollowedCreators] = useState(new Set());
@@ -265,7 +265,7 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.) - Lógica Anti-Farming Corregida
+  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
   const handleLike = async (videoId, e) => {
@@ -291,7 +291,7 @@ const ReelsContainer = ({
           // --- UNLIKE ---
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
-          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_user', user.id);
+          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
           showPointsNotification('Like removido', videoId, 'info'); 
       } else {
           // --- LIKE ---
@@ -348,9 +348,11 @@ const ReelsContainer = ({
       }
       setLikedVideos(newLiked);
     } catch (err) { 
+        // 🚨 CORRECCIÓN CRÍTICA: Mostrar el error real del servidor/PostgREST
         console.error('Error like catch all:', err);
         rollbackMission(snapshot); 
-        showPointsNotification('Error de conexión con el servidor.', videoId, 'error');
+        const errorMessage = err.message || 'Error de red con la base de datos.';
+        showPointsNotification(`Error de red: ${errorMessage}`, videoId, 'error'); 
     }
   };
 
