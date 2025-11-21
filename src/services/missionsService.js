@@ -1,12 +1,13 @@
 // src/services/missionsService.js
 // ============================================================================
-// MISSIONS SERVICE - REPARADO ADMIN Y COMPATIBILIDAD
-// ✅ Mapeo de columnas: 'points_reward' -> 'reward_points' (Evita tabla vacía en Admin)
-// ✅ Todas las funciones de tracking y consulta integradas.
+// MISSIONS SERVICE - VERSIÓN MAESTRA
+// ✅ FIX ADMIN: Mapeo de columnas para que aparezcan las misiones en el panel.
+// ✅ MANTIENE: Todas las funciones legacy (Upload, Rachas, etc.).
+// ✅ ANTI-FARMING: Usa el sistema RPC blindado para likes/views.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
-import * as pointsService from './pointsService';
+import * as pointsService from './pointsService'; // Mantenemos importación original
 
 export const MISSION_TYPES = {
   WATCH_VIDEO: 'watch_videos',
@@ -38,7 +39,9 @@ export const STREAK_BONUSES = {
   30: 1000
 };
 
-// --- CORE TRACKING ---
+// ============================================================================
+// 🟢 CORE TRACKING (RPC BLINDADO)
+// ============================================================================
 async function callTrackingRpc(missionType, contentId) {
   try {
     const { data, error } = await supabase.rpc('track_mission_event', {
@@ -47,14 +50,17 @@ async function callTrackingRpc(missionType, contentId) {
     });
 
     if (error) throw error;
-    return data;
+    return data; // { status: 'success' | 'already_tracked', ... }
   } catch (error) {
     console.error(`Error tracking ${missionType}:`, error);
     return { status: 'error', message: error.message };
   }
 }
 
-// --- TRACKING FUNCTIONS ---
+// ============================================================================
+// 🔄 FUNCIONES DE TRACKING (USAN EL NUEVO SISTEMA)
+// ============================================================================
+
 export const trackGiveLike = async (contentType, contentId) => {
   const missionType = contentType === 'reel' ? 'like_reel' : 
                       contentType === 'photo' ? 'like_photo' : 'like_video';
@@ -79,48 +85,29 @@ export const trackFollowUser = async (targetUserId) => {
   return await callTrackingRpc('follow_user', targetUserId);
 };
 
-export const trackMissionProgress = async (missionType, contentType, contentId) => {
-  return await callTrackingRpc(missionType, contentId);
-};
-
-export const trackUploadVideo = async (videoData) => {
-  return { success: true };
+export const trackDailyLogin = async () => {
+  return await callTrackingRpc('daily_login', 'system');
 };
 
 export const trackDonatePoints = async (amount) => {
   return await callTrackingRpc('donate_points', 'system');
 };
 
-export const trackDailyLogin = async () => {
-  return await callTrackingRpc('daily_login', 'system');
+// ✅ MANTENIDA: Usada por VideoPlayerPage (Guardar video)
+export const trackMissionProgress = async (missionType, contentType, contentId) => {
+  return await callTrackingRpc(missionType, contentId);
 };
 
-// --- COMPLETION & REWARDS ---
-export const completeMission = async (missionId, userId) => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase
-      .from('mission_progress')
-      .update({ is_completed: true, completed_at: new Date().toISOString() })
-      .eq('mission_id', missionId)
-      .eq('user_id', userId)
-      .eq('date', today);
-
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error completing mission:', error);
-    return { success: false, error };
-  }
-};
-
-export const claimMissionReward = async (missionId, userId) => {
+// ✅ MANTENIDA: Upload Video (Lógica original o placeholder)
+export const trackUploadVideo = async (videoData) => {
   return { success: true };
 };
 
-// --- READ FUNCTIONS (CONSULTAS) ---
+// ============================================================================
+// 🛡️ CONSULTAS (READ) - CON FIX PARA ADMIN
+// ============================================================================
 
-// ✅ FUNCIÓN CORREGIDA PARA EL ADMIN
+// ✅ FIX: Esta función la usa el Panel Admin
 export const getAllMissions = async () => {
   try {
     const { data, error } = await supabase
@@ -129,22 +116,20 @@ export const getAllMissions = async () => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    
-    // 🛠️ PARCHE DE COMPATIBILIDAD:
-    // Si el admin espera 'reward_points' pero la BD tiene 'points_reward', se lo duplicamos.
-    const mappedData = (data || []).map(m => ({
-        ...m,
-        reward_points: m.points_reward || m.reward_points || 0, // Compatibilidad hacia atrás
-        points_reward: m.points_reward || m.reward_points || 0  // Compatibilidad hacia adelante
-    }));
 
-    return mappedData;
+    // 🛠️ PARCHE: Duplicamos la columna para que el Admin la encuentre
+    return (data || []).map(m => ({
+        ...m,
+        reward_points: m.points_reward || m.reward_points || 0, // Compatibilidad Admin
+        points_reward: m.points_reward || m.reward_points || 0
+    }));
   } catch (error) {
     console.error('Error getting all missions:', error);
     return [];
   }
 };
 
+// ✅ FIX: Esta función la usa el usuario
 export const getDailyMissions = async (userId) => {
   try {
     const { data, error } = await supabase
@@ -154,14 +139,12 @@ export const getDailyMissions = async (userId) => {
       .order('display_order', { ascending: true });
 
     if (error) throw error;
-    
-    // Mapeo también aquí por seguridad
-    const mappedData = (data || []).map(m => ({
+
+    // 🛠️ PARCHE: Compatibilidad
+    return (data || []).map(m => ({
         ...m,
         reward_points: m.points_reward || m.reward_points || 0
     }));
-
-    return mappedData;
   } catch (error) {
     console.error('Error getting daily missions:', error);
     return [];
@@ -185,6 +168,7 @@ export const getMissionProgress = async (userId) => {
   }
 };
 
+// ✅ Función vital para el Panel de Puntos (Con mapeo)
 export const getMissionsForProgressPanel = async (userId) => {
   if (!userId) return [];
   try {
@@ -212,8 +196,7 @@ export const getMissionsForProgressPanel = async (userId) => {
       const userProgress = progressMap[m.id];
       return {
         ...m,
-        // Mapeo de puntos para el frontend
-        reward_points: m.points_reward || m.reward_points || 0,
+        reward_points: m.points_reward || m.reward_points || 0, // Mapeo
         current_count: userProgress?.current_count || 0,
         is_completed: userProgress?.is_completed || false,
         target_count: m.target_count || 1
@@ -226,33 +209,43 @@ export const getMissionsForProgressPanel = async (userId) => {
   }
 };
 
-// --- STATS & UTILS ---
+// ============================================================================
+// UTILIDADES Y OTROS
+// ============================================================================
 
+export const completeMission = async (missionId, userId) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase
+      .from('mission_progress')
+      .update({ is_completed: true, completed_at: new Date().toISOString() })
+      .eq('mission_id', missionId)
+      .eq('user_id', userId)
+      .eq('date', today);
+    if (error) throw error;
+    return { success: true };
+  } catch (error) { return { success: false, error }; }
+};
+
+export const claimMissionReward = async (missionId, userId) => { return { success: true }; };
+
+// --- Rachas ---
 export const getUserStreak = async (userId) => {
   try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('daily_streak_count, last_login_date')
-      .eq('id', userId)
-      .single();
+    const { data, error } = await supabase.from('user_profiles').select('daily_streak_count, last_login_date').eq('id', userId).single();
     if (error) throw error;
     return data;
   } catch (error) { return { daily_streak_count: 0 }; }
 };
-
 export const updateStreak = async (userId) => { return { success: true }; };
 export const getStreakHistory = async (userId) => { return []; };
 
+// --- Estadísticas ---
 export const getMissionStats = async (userId) => {
   if (!userId) return { completed: 0, total: 0 };
   try {
       const today = new Date().toISOString().split('T')[0];
-      const { count } = await supabase
-        .from('mission_progress')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('date', today)
-        .eq('is_completed', true);
+      const { count } = await supabase.from('mission_progress').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('date', today).eq('is_completed', true);
       return { completed: count || 0 };
   } catch (e) { return { completed: 0 }; }
 };
@@ -273,6 +266,7 @@ export function calculateMissionProgress(current, target) {
   return Math.min(Math.round((current / target) * 100), 100);
 }
 
+// ✅ EXPORT DEFAULT COMPLETO (Vital para compatibilidad)
 export default {
   MISSION_TYPES,
   MISSION_STATUS,
