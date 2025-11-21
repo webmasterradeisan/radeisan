@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL CON CORRECCIÓN DE ROLLBACK
-// ✅ Lógica de Like/Misiones: La función handleLike es la última versión robusta.
-// ✅ Sintaxis: Declaración de estados con useState(new Set()) corregida.
-// ✅ Estructura: Botones separados y Panel de Comentarios Restaurado.
+// REELS CONTAINER - VERSIÓN FINAL COMPLETA Y CORREGIDA
+// ✅ Solución del Error de Sintaxis (Hooks).
+// ✅ Solución del Bug de Rollback (9/10).
+// ✅ Funcionalidad de Comentarios y Botones Separados.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -31,18 +31,17 @@ const ReelsContainer = ({
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
 
+  // 1. LLAMADA A HOOKS Y CONTEXTOS (DEBE SER INCONDICIONAL)
   const { addPoints, missions, updateMissionOptimistic, rollbackMission, refreshPoints } = usePoints();
   const { success, error: notifyError, warning, info } = useNotification();
 
-  // ===============================
-  // ESTADOS PRINCIPALES (Sintaxis corregida)
-  // ===============================
+  // 2. DECLARACIÓN DE ESTADOS (INCONDICIONAL)
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
   const [likedVideos, setLikedVideos] = useState(new Set());
   
-  // Declaración de Set() corregida con useState()
+  // ✅ SINTAXIS CORREGIDA: useState(new Set())
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
   const [followedCreators, setFollowedCreators] = useState(new Set());
@@ -292,7 +291,7 @@ const ReelsContainer = ({
           // --- UNLIKE ---
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
-          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+          await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_user', user.id);
           showPointsNotification('Like removido', videoId, 'info'); 
       } else {
           // --- LIKE ---
