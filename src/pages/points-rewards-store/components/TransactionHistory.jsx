@@ -1,7 +1,7 @@
 // src/pages/points-rewards-store/components/TransactionHistory.jsx
 // ============================================================================
-// ✅ FIX: Sincronizado con la tabla 'points_transactions'
-// ⭐️ FIX FINAL: Títulos amigables con Detección de Patrones para evitar nombres técnicos
+// ⭐️ MODO DIAGNÓSTICO: Se ha insertado un console.log en getTransactionTitle 
+//    para identificar la clave de misión persistente.
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -42,38 +42,46 @@ const TransactionHistory = ({
 
   // Función para 'traducir' el título de la transacción
   const getTransactionTitle = (transaction) => {
+    
+    // ⭐️ PUNTO DE INVESTIGACIÓN: Muestra el objeto completo en la consola
+    console.log("Objeto de Transacción para Diagnóstico:", transaction); 
+    
     const type = transaction?.transaction_type; 
-    const desc = transaction?.description;     
+    let desc = transaction?.description;     
     const points = transaction?.points_change;
 
-    // 1. Manejo de Descripciones Explícitas (e.g., Regalo, Compras Admin)
-    if (desc && desc !== 'other' && desc !== type) {
-      return desc;
-    }
+    // --- Mapeo de Claves Técnicas (Agresivo) ---
+    const missionKeyMap = {
+      'give_like': 'Puntos por Me Gusta',
+      'like_videos': 'Puntos por Me Gusta',
+      'video_like': 'Puntos por Me Gusta',
+      'comment_videos': 'Puntos por Comentar',
+      'upload_reel': 'Puntos por Subir Contenido',
+      'upload_video': 'Puntos por Subir Contenido',
+      'video_upload': 'Puntos por Subir Contenido',
+      'photo_upload': 'Puntos por Subir Contenido',
+      'share_content': 'Puntos por Compartir',
+    };
     
-    // 2. Traducción de Misiones/Acciones Comunes (Usando 'type' o 'desc')
+    // 1. Detección y corrección de la Descripción (FIX)
+    if (desc && missionKeyMap[desc]) {
+        // Si la descripción es una clave técnica, la reemplazamos inmediatamente.
+        desc = missionKeyMap[desc];
+    } else if (type && missionKeyMap[type]) {
+        // Si la descripción no está o no es técnica, pero el tipo sí lo es, usamos el tipo
+        desc = missionKeyMap[type];
+    }
+
+    // 2. Traducción basada en el campo final (description o transaction_type)
     const key = desc || type;
     
     switch (key) {
-      case 'give_like':
-      case 'like_videos':
-      case 'video_like':
-        return 'Puntos por Me Gusta';
-        
-      case 'comment':
-      case 'comment_videos':
-        return 'Puntos por Comentar';
-        
-      case 'share':
-      case 'share_content':
-        return 'Puntos por Compartir';
-        
-      case 'video_upload':
-      case 'upload_video': 
-      case 'upload_reel':  
-      case 'photo_upload':
-      case 'content_upload':
-        return 'Puntos por Subir Contenido';
+      // Casos de misiones (ya corregidos por el mapeo, pero usados para claridad)
+      case 'Puntos por Me Gusta':
+      case 'Puntos por Comentar':
+      case 'Puntos por Subir Contenido':
+      case 'Puntos por Compartir':
+        return key; 
         
       case 'video_view':
         return 'Puntos por Vista';
@@ -88,32 +96,20 @@ const TransactionHistory = ({
         if ((points || 0) < 0) return 'Canje de Recompensa (Gasto)';
         if ((points || 0) > 0) return 'Devolución/Reembolso de Puntos';
         break;
-      
+
       default:
-        // Si no hay match en el switch, pasamos al fallback de detección de patrones
-        break; 
+        // Si el valor no fue traducido (y no es 'other', 'purchase', etc.), asumimos que es un nombre técnico que pasó el mapeo
+        // y lo retornamos como "Transacción: [NOMBRE_TECNICO]" o "Ganancia: [NOMBRE_TECNICO]"
+        // Esto solo ocurriría si el campo de la misión no es 'description' ni 'transaction_type', lo cual es poco probable.
+        break;
     }
     
-    // 3. ⭐️ NUEVO FALLBACK: Detección de patrones genéricos (Cubre nombres técnicos no mapeados)
-    if (key && typeof key === 'string') {
-        const lowerKey = key.toLowerCase();
-        
-        if (lowerKey.includes('upload') || lowerKey.includes('_reel') || lowerKey.includes('_video')) {
-            return 'Puntos por Subir Contenido';
-        }
-        if (lowerKey.includes('like')) {
-            return 'Puntos por Me Gusta';
-        }
-        if (lowerKey.includes('comment')) {
-            return 'Puntos por Comentar';
-        }
-        // Si es una transacción que no se reconoció y tiene puntos, al menos decimos si fue ganancia o gasto
-        if ((points || 0) > 0) return `Ganancia: ${type}`; 
+    // Fallback final: Si el key sigue siendo un nombre técnico, lo mostramos con prefijo.
+    if (key === type && type !== 'other' && type !== 'purchase') {
+        return (points > 0) ? `Ganancia: ${type}` : `Transacción: ${type}`;
     }
 
-
-    // Fallback final
-    return (points > 0) ? `Ganancia: ${type}` : `Transacción: ${type}` || 'Transacción Desconocida';
+    return key || 'Transacción Desconocida';
 };
 
   // Icono basado en 'transaction_type' y 'points_change'
@@ -123,13 +119,13 @@ const TransactionHistory = ({
 
     if (type === 'other' && points < 0) return 'Gift'; // Canje
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
-    if (type === 'video_like' || type === 'give_like' || type === 'like_videos' || type.includes('like')) return 'Heart';
+    if (type === 'video_like' || type === 'give_like' || type === 'like_videos' || type?.includes('like')) return 'Heart';
     if (type === 'admin_adjustment') return 'Shield'; 
     if (type === 'video_view') return 'Play';
-    if (type === 'comment' || type === 'comment_videos' || type.includes('comment')) return 'MessageCircle';
+    if (type === 'comment' || type === 'comment_videos' || type?.includes('comment')) return 'MessageCircle';
     if (type === 'share' || type === 'share_content') return 'Share2';
-    // ⭐️ FIX: Incluimos todos los uploads por patrón
-    if (type.includes('upload') || type.includes('_reel') || type.includes('_video')) return 'Upload';
+    // Mantenemos el FIX de iconos por patrón
+    if (type?.includes('upload') || type?.includes('_reel') || type?.includes('_video')) return 'Upload';
     
     return (points > 0) ? 'TrendingUp' : 'TrendingDown';
   };
