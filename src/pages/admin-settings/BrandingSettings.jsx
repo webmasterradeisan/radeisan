@@ -13,12 +13,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppIcon from '../../components/AppIcon';
-// ✅ IMPORTACIÓN DE UTILIDADES: Usamos la definición global de DEFAULT_BRANDING y la función de aplicación.
-import { DEFAULT_BRANDING, applyBrandingToDOM } from '../../utils/branding';
+// ✅ CORRECCIÓN DE IMPORTACIÓN: Importamos el nombre correcto (DEFAULT_BRANDING_FALLBACK)
+// y lo renombramos a DEFAULT_BRANDING para compatibilidad interna si es necesario, 
+// o lo usamos directamente. Aquí optamos por usarlo directamente.
+import { applyBrandingToDOM, DEFAULT_BRANDING_FALLBACK } from '../../utils/branding'; 
 
 
 // ============================================================================
-// CONFIGURACIÓN POR DEFECTO (MOVIDA A utils/branding.js)
+// CONFIGURACIÓN POR DEFECTO (REEMPLAZADA)
 // ============================================================================
 // El código original de DEFAULT_BRANDING ha sido eliminado aquí.
 
@@ -54,7 +56,8 @@ export default function BrandingSettings() {
   // ============================================================================
 
   const [activeTab, setActiveTab] = useState('logos');
-  const [branding, setBranding] = useState(DEFAULT_BRANDING);
+  // ✅ CORREGIDO: Usamos DEFAULT_BRANDING_FALLBACK
+  const [branding, setBranding] = useState(DEFAULT_BRANDING_FALLBACK);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -190,8 +193,8 @@ export default function BrandingSettings() {
 
   const resetToDefaults = () => {
     if (window.confirm('¿Estás seguro de restaurar el branding por defecto?')) {
-      // ✅ Usa el DEFAULT_BRANDING importado
-      setBranding(DEFAULT_BRANDING);
+      // ✅ Usa el DEFAULT_BRANDING_FALLBACK importado
+      setBranding(DEFAULT_BRANDING_FALLBACK);
       setHasChanges(true);
     }
   };
@@ -253,9 +256,6 @@ export default function BrandingSettings() {
     setHasChanges(true);
   };
 
-  // ============================================================================
-  // APLICAR BRANDING AL DOM (ELIMINADA: Ahora se importa de ../../utils/branding)
-  // ============================================================================
 
   // ============================================================================
   // RENDER
