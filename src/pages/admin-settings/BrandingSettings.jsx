@@ -13,73 +13,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppIcon from '../../components/AppIcon';
+// ✅ IMPORTACIÓN DE UTILIDADES: Usamos la definición global de DEFAULT_BRANDING y la función de aplicación.
+import { DEFAULT_BRANDING, applyBrandingToDOM } from '../../utils/branding';
+
 
 // ============================================================================
-// CONFIGURACIÓN POR DEFECTO
+// CONFIGURACIÓN POR DEFECTO (MOVIDA A utils/branding.js)
 // ============================================================================
-
-const DEFAULT_BRANDING = {
-  // Logos e imágenes
-  logo: {
-    primary: '', // URL del logo principal
-    secondary: '', // URL del logo alternativo (para fondos oscuros)
-    favicon: '', // URL del favicon
-    icon: '' // Icono cuadrado para apps
-  },
-
-  // Esquema de colores
-  colors: {
-    primary: '#3B82F6', // Azul principal
-    secondary: '#8B5CF6', // Púrpura
-    accent: '#10B981', // Verde
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444',
-    info: '#3B82F6',
-    background: '#FFFFFF',
-    foreground: '#1F2937',
-    muted: '#6B7280',
-    border: '#E5E7EB'
-  },
-
-  // Tipografía
-  typography: {
-    fontFamily: 'Inter, system-ui, sans-serif',
-    headingFont: 'Inter, system-ui, sans-serif',
-    fontSize: {
-      xs: '0.75rem',
-      sm: '0.875rem',
-      base: '1rem',
-      lg: '1.125rem',
-      xl: '1.25rem',
-      '2xl': '1.5rem',
-      '3xl': '1.875rem',
-      '4xl': '2.25rem'
-    }
-  },
-
-  // Textos personalizados
-  texts: {
-    appName: 'Radeisan',
-    tagline: 'Conecta, Comparte, Gana',
-    welcomeMessage: '¡Bienvenido a nuestra comunidad!',
-    footerText: '© 2025 Radeisan. Todos los derechos reservados.',
-    pointsLabel: 'Puntos',
-    premiumPointsLabel: 'Puntos Premium',
-    rewardsTitle: 'Tienda de Recompensas',
-    uploadVideoText: 'Subir Video',
-    uploadPhotoText: 'Subir Foto'
-  },
-
-  // Configuración adicional
-  settings: {
-    darkModeEnabled: false,
-    roundedCorners: 'medium', // 'none', 'small', 'medium', 'large', 'full'
-    shadowStyle: 'medium', // 'none', 'small', 'medium', 'large'
-    buttonStyle: 'solid', // 'solid', 'outline', 'ghost'
-    animationsEnabled: true
-  }
-};
+// El código original de DEFAULT_BRANDING ha sido eliminado aquí.
 
 const PRESET_COLORS = [
   { name: 'Azul Océano', primary: '#3B82F6', secondary: '#0EA5E9' },
@@ -131,6 +72,7 @@ export default function BrandingSettings() {
 
   // Aplicar cambios en preview
   useEffect(() => {
+    // La función applyBrandingToDOM ahora se importa y se usa para el preview
     if (previewMode) {
       applyBrandingToDOM(branding);
     }
@@ -220,7 +162,7 @@ export default function BrandingSettings() {
       console.log('✅ Respuesta de Supabase:', data);
       console.log('✅ Branding guardado exitosamente');
 
-      // Aplicar branding al DOM
+      // Aplicar branding al DOM (Ahora importada)
       applyBrandingToDOM(branding);
 
       setSuccessMessage('Branding guardado exitosamente');
@@ -248,6 +190,7 @@ export default function BrandingSettings() {
 
   const resetToDefaults = () => {
     if (window.confirm('¿Estás seguro de restaurar el branding por defecto?')) {
+      // ✅ Usa el DEFAULT_BRANDING importado
       setBranding(DEFAULT_BRANDING);
       setHasChanges(true);
     }
@@ -256,7 +199,8 @@ export default function BrandingSettings() {
   // ============================================================================
   // FUNCIONES DE ACTUALIZACIÓN
   // ============================================================================
-
+  // ... (funciones updateLogo, updateColor, etc. se mantienen igual)
+  
   const updateLogo = (key, value) => {
     setBranding(prev => ({
       ...prev,
@@ -310,34 +254,8 @@ export default function BrandingSettings() {
   };
 
   // ============================================================================
-  // APLICAR BRANDING AL DOM
+  // APLICAR BRANDING AL DOM (ELIMINADA: Ahora se importa de ../../utils/branding)
   // ============================================================================
-
-  const applyBrandingToDOM = (brandingConfig) => {
-    const root = document.documentElement;
-
-    // Aplicar colores como variables CSS
-    Object.entries(brandingConfig.colors).forEach(([key, value]) => {
-      root.style.setProperty(`--color-${key}`, value);
-    });
-
-    // Aplicar tipografía
-    root.style.setProperty('--font-family', brandingConfig.typography.fontFamily);
-    root.style.setProperty('--heading-font', brandingConfig.typography.headingFont);
-
-    // Aplicar favicon si existe
-    if (brandingConfig.logo.favicon) {
-      const favicon = document.querySelector('link[rel="icon"]');
-      if (favicon) {
-        favicon.href = brandingConfig.logo.favicon;
-      }
-    }
-
-    // Aplicar título
-    if (brandingConfig.texts.appName) {
-      document.title = brandingConfig.texts.appName;
-    }
-  };
 
   // ============================================================================
   // RENDER
