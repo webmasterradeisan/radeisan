@@ -1,7 +1,7 @@
 // src/pages/points-rewards-store/components/TransactionHistory.jsx
 // ============================================================================
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
-// ✅ FIX: Añadida función 'getTransactionTitle' para traducir 'other'
+// ⭐️ FIX: Títulos amigables para el usuario (reemplazando mission_keys)
 // ✅ NUEVO: Añadidos filtros de fecha ('dateFilter', 'onDateFilterChange')
 // ✅ NUEVO: Añadidos campos de calendario 'Desde'/'Hasta'
 // ✅ NUEVO: Añadido botón 'Cargar Más' ('hasMore', 'onLoadMore')
@@ -46,27 +46,57 @@ const TransactionHistory = ({
 
   // Función para 'traducir' el título de la transacción
   const getTransactionTitle = (transaction) => {
-    const type = transaction?.transaction_type;
-    const desc = transaction?.description;
+    const type = transaction?.transaction_type; // e.g., 'video_like', 'other'
+    const desc = transaction?.description;     // A menudo contiene la mission_key (e.g., 'give_like')
     const points = transaction?.points_change;
 
+    // 1. Manejo de Descripciones Explícitas (e.g., Regalo de otro usuario)
     if (desc && desc !== 'other' && desc !== type) {
+      // Si la descripción no es genérica, la usamos (e.g., "Recibió regalo: Flor de...")
       return desc;
     }
-    if (type === 'other') {
-      if (points < 0) return 'Canje de Recompensa';
-      if (points > 0) return 'Puntos Devueltos';
-    }
-    if (type === 'video_like') return 'Puntos por Like';
-    if (type === 'admin_adjustment') return 'Ajuste de Administrador';
-    if (type === 'video_view') return 'Puntos por Vista';
-    if (type === 'comment') return 'Puntos por Comentario';
-    if (type === 'share') return 'Puntos por Compartir';
     
-    // Nueva línea para manejar tipos que faltan o son null
-    if (points > 0) return 'Puntos Ganados';
-    if (points < 0) return 'Puntos Utilizados';
+    // 2. Traducción de Misiones/Acciones Comunes (Usando 'type' o 'desc')
+    const key = desc || type;
+    
+    switch (key) {
+      case 'give_like':
+      case 'like_videos':
+      case 'video_like':
+        return 'Puntos por Me Gusta';
+        
+      case 'comment':
+      case 'comment_videos':
+        return 'Puntos por Comentar';
+        
+      case 'share':
+      case 'share_content':
+        return 'Puntos por Compartir';
+        
+      case 'video_upload':
+      case 'photo_upload':
+      case 'content_upload':
+        return 'Puntos por Subir Contenido';
+        
+      case 'video_view':
+        return 'Puntos por Vista';
+        
+      case 'purchase':
+        return 'Compra de Paquete de Puntos';
 
+      case 'admin_adjustment':
+        return 'Ajuste de Administrador';
+
+      case 'other':
+        if ((points || 0) < 0) return 'Canje de Recompensa (Gasto)';
+        if ((points || 0) > 0) return 'Devolución/Reembolso de Puntos';
+        break;
+
+      default:
+        // Fallback si no se reconoce el tipo
+        return (points > 0) ? `Ganancia: ${type}` : `Transacción: ${type}`;
+    }
+    
     return type || 'Transacción Desconocida';
   };
 
@@ -77,11 +107,12 @@ const TransactionHistory = ({
 
     if (type === 'other' && points < 0) return 'Gift'; // Canje
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
-    if (type === 'video_like') return 'Heart';
+    if (type === 'video_like' || type === 'give_like') return 'Heart';
     if (type === 'admin_adjustment') return 'Shield'; // Cambio a Shield para ajuste
     if (type === 'video_view') return 'Play';
-    if (type === 'comment') return 'MessageCircle';
-    if (type === 'share') return 'Share2';
+    if (type === 'comment' || type === 'comment_videos') return 'MessageCircle';
+    if (type === 'share' || type === 'share_content') return 'Share2';
+    if (type === 'video_upload' || type === 'photo_upload') return 'Upload';
     
     return (points > 0) ? 'TrendingUp' : 'TrendingDown'; // Usamos Trending en fallback
   };
