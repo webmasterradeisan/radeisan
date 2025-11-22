@@ -4,6 +4,7 @@
 //    de la página de recompensas, con filtros y paginación.
 // ✅ CORREGIDO: Añadido 'useEffect' para leer el hash de la URL (#historial-puntos)
 //    y activar la pestaña de Puntos automáticamente.
+// ⭐️ AJUSTADO: La pestaña 'Mis Compras' ahora usa UserOrdersTab como se especificó en el index(90).jsx.
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -14,12 +15,10 @@ import { usePoints } from '../../contexts/PointsContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
 import ProfileTabs from './components/ProfileTabs';
-// ❌ Componente de historial simple eliminado
-// import PointsHistory from './components/PointsHistory'; 
 // ✅ Componente de historial avanzado (de /rewards) importado
 import TransactionHistory from '../points-rewards-store/components/TransactionHistory'; 
 import SettingsPanel from './components/SettingsPanel';
-import PurchaseHistory from './components/PurchaseHistory';
+// ❌ ELIMINADO: import PurchaseHistory from './components/PurchaseHistory';
 import PhotoQuickUpload from '../../components/PhotoQuickUpload';
 import ProfileImageEditor from '../../components/ProfileImageEditor';
 import Icon from '../../components/AppIcon';
@@ -32,6 +31,11 @@ import PhotoDetailModal from '../../components/PhotoDetailModal';
 import { trackUploadVideo } from '../../services/missionsService';
 // ✅ Importación del servicio de historial paginado
 import { getUserPointsHistory } from '../../services/pointsService'; 
+
+// ✅ NUEVA IMPORTACIÓN: Componente de Compras del index(90).jsx
+// ASUMIENDO que UserOrdersTab está en la misma subcarpeta 'components'
+import UserOrdersTab from './components/UserOrdersTab'; 
+
 
 // ===============================
 // CONSTANTES
@@ -453,16 +457,7 @@ export const useUserPhotos = (userId) => {
   };
 };
 
-// Hook para compras - MOCK
-const usePurchaseHistory = () => {
-  const [purchases] = useState([]);
-  
-  return {
-    purchases,
-    loading: false,
-    error: null
-  };
-};
+// ❌ ELIMINADO: Hook para compras - MOCK
 
 // ===============================
 // COMPONENTE DE GRID DE FOTOS
@@ -1052,7 +1047,7 @@ const UserProfileSettings = () => {
 
   // ❌ Hook 'usePointsHistory' ELIMINADO
   
-  const { purchases } = usePurchaseHistory();
+  // ❌ Hook 'usePurchaseHistory' ELIMINADO
 
   // =================================================================
   // ✅ INICIO: Lógica para activar pestaña desde ancla (#)
@@ -1119,15 +1114,16 @@ const UserProfileSettings = () => {
   }, [profileData, videos, reels, photos, videoStats, reelStats, totalPoints, freePoints, premiumPoints]);
 
   // Calcular contadores para tabs
+  // Nota: El count de 'purchases' se fija en 0 ya que no hay mock/data real del hook de compras.
   const tabCounts = useMemo(() => ({
     videos: videos.length,
     reels: reels.length,
     photos: photos.length,
-    purchases: purchases.length, // Se mantiene el ID 'purchases'
+    purchases: 0, // Fijado en 0 al eliminar el hook mock/data real
     points: transactions.length, // ✅ Ahora usa el estado 'transactions' local
     liked: 0,
     playlists: 0
-  }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
+  }), [videos.length, reels.length, photos.length, transactions.length]);
 
   // ===============================
   // ✅ INICIO: LÓGICA DE HISTORIAL DE PUNTOS
@@ -1606,10 +1602,11 @@ const UserProfileSettings = () => {
         );
 
       case 'purchases': // Mantiene el ID 'purchases'
-        return <PurchaseHistory purchases={purchases} />;
+        // ✅ AHORA USA EL COMPONENTE DE COMPRAS DEL INDEX(90)
+        return <UserOrdersTab />;
 
       // ==================================================
-      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA (ya está corregida en este archivo)
+      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA
       // ==================================================
       case 'points':
         return (
@@ -1982,7 +1979,7 @@ const UserProfileSettings = () => {
                     { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
                     { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
-                    // ✅ CAMBIO DE LABEL: De 'Compras' a 'Mis Compras' para coincidir con el index(90).jsx
+                    // ✅ AJUSTADO: Usa el label "Mis Compras"
                     { id: 'purchases', label: 'Mis Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' }, 
                     { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
                     { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
