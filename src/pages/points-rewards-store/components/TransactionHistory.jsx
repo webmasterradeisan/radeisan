@@ -1,11 +1,7 @@
 // src/pages/points-rewards-store/components/TransactionHistory.jsx
 // ============================================================================
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
-// ⭐️ FIX: Títulos amigables para el usuario (reemplazando mission_keys)
-// ✅ NUEVO: Añadidos filtros de fecha ('dateFilter', 'onDateFilterChange')
-// ✅ NUEVO: Añadidos campos de calendario 'Desde'/'Hasta'
-// ✅ NUEVO: Añadido botón 'Cargar Más' ('hasMore', 'onLoadMore')
-// ⭐️ ROBUSTEZ: Añadidas comprobaciones de nulidad más estrictas para evitar errores de renderizado.
+// ⭐️ FIX FINAL: Títulos amigables para 'upload_reel' y 'upload_video'
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -52,7 +48,7 @@ const TransactionHistory = ({
 
     // 1. Manejo de Descripciones Explícitas (e.g., Regalo de otro usuario)
     if (desc && desc !== 'other' && desc !== type) {
-      // Si la descripción no es genérica, la usamos (e.g., "Recibió regalo: Flor de...")
+      // Si la descripción no es genérica, la usamos (e.g., "Envío regalo: Flor a @pedromolina2023")
       return desc;
     }
     
@@ -73,7 +69,10 @@ const TransactionHistory = ({
       case 'share_content':
         return 'Puntos por Compartir';
         
-      case 'video_upload':
+      // ⭐️ FIX APLICADO AQUÍ
+      case 'video_upload': // Cubre el caso 'upload_video'
+      case 'upload_video': 
+      case 'upload_reel':  // Cubre el caso 'upload_reel'
       case 'photo_upload':
       case 'content_upload':
         return 'Puntos por Subir Contenido';
@@ -82,8 +81,8 @@ const TransactionHistory = ({
         return 'Puntos por Vista';
         
       case 'purchase':
-        return 'Compra de Paquete de Puntos';
-
+        return 'Compra de Paquete de Puntos Premium (Admin)'; // Ajustado para ser más descriptivo
+        
       case 'admin_adjustment':
         return 'Ajuste de Administrador';
 
@@ -107,12 +106,13 @@ const TransactionHistory = ({
 
     if (type === 'other' && points < 0) return 'Gift'; // Canje
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
-    if (type === 'video_like' || type === 'give_like') return 'Heart';
+    if (type === 'video_like' || type === 'give_like' || type === 'like_videos') return 'Heart';
     if (type === 'admin_adjustment') return 'Shield'; // Cambio a Shield para ajuste
     if (type === 'video_view') return 'Play';
     if (type === 'comment' || type === 'comment_videos') return 'MessageCircle';
     if (type === 'share' || type === 'share_content') return 'Share2';
-    if (type === 'video_upload' || type === 'photo_upload') return 'Upload';
+    // ⭐️ FIX APLICADO AQUÍ
+    if (type === 'video_upload' || type === 'upload_video' || type === 'upload_reel' || type === 'photo_upload') return 'Upload';
     
     return (points > 0) ? 'TrendingUp' : 'TrendingDown'; // Usamos Trending en fallback
   };
