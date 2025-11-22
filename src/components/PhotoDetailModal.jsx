@@ -3,7 +3,7 @@
 // PHOTO DETAIL MODAL - VERSION FINAL BLINDADA (ANTI-FARMING)
 // ✅ CORREGIDO: Lógica de Like (Bloqueo Auto-Like + Anti-Farming Informativo)
 // ✅ SINCRONIZADO: Sistema de puntos igual a ReelsContainer y VideoPlayer
-// ✅ MANTIENE: Navegación, Comentarios, Regalos
+// ✅ REPARADO: Visualización de la imagen.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react'; 
@@ -32,6 +32,8 @@ const PhotoDetailModal = ({
         updateMissionOptimistic, 
         rollbackMission, 
         addPoints, 
+        updateLocalBalance, // ✅ Aseguramos el uso del update local
+        notifyMissionComplete, // ✅ Aseguramos el uso del modal trigger
         refreshPoints 
     } = usePoints();
     
@@ -170,6 +172,7 @@ const PhotoDetailModal = ({
             showTemporaryToast("No tienes permiso para eliminar este comentario.", 'error');
             return;
         }
+        // ✅ CORRECCIÓN DE SEGURIDAD: Comprobación de ventana de confirmación
         if (!window.confirm("¿Estás seguro de que deseas eliminar este comentario?")) {
             return;
         }
@@ -233,7 +236,9 @@ const PhotoDetailModal = ({
                 // DAR LIKE
                 // ==============================
                 setUserHasLiked(true);
-                setLikeCount(likeCount + 1);
+                // ❌ Eliminamos el incremento optimista aquí para evitar el doble conteo
+                // El contador se actualizará después de la confirmación de la DB
+                // setLikeCount(likeCount + 1); 
 
                 // Insertar Like en BD (Acción Social)
                 const { error: insertError } = await supabase
@@ -249,6 +254,10 @@ const PhotoDetailModal = ({
                     }
                     throw insertError;
                 }
+                
+                // ✅ ÚNICO INCREMENTO (POST-DB CONFIRMACIÓN)
+                setLikeCount(prev => prev + 1);
+
 
                 // ================================================================
                 // 🛑 2. ANTI-FARMING & GESTIÓN DE PUNTOS
@@ -265,7 +274,7 @@ const PhotoDetailModal = ({
                     // 1. Marcar como recompensado INMEDIATAMENTE
                     setPointsRewardedIds(prev => new Set(prev).add(photoData.id));
 
-                    // 2. Actualización Optimista
+                    // 2. Actualización Optimista (Misión)
                     const missionsSnapshot = [...missions];
                     updateMissionOptimistic('give_like', 1);
 
@@ -274,23 +283,26 @@ const PhotoDetailModal = ({
                         const missionResult = await trackGiveLike('photo', photoData.id);
                         
                         if (missionResult.result === 'success' && missionResult.points_earned > 0) {
-                            await addPoints(missionResult.points_earned, missionResult.message, 'free');
-                            await refreshPoints();
+                            // ✅ USAMOS updateLocalBalance y notifyMissionComplete (Header y Modal)
+                            updateLocalBalance(missionResult.points_earned); 
+                            notifyMissionComplete(missionResult.points_earned);
                             showTemporaryToast(`🎉 Misión Completa: +${missionResult.points_earned} puntos`, 'success', 3000);
 
                         } else if (missionResult.result === 'already_completed') {
                             showTemporaryToast('Like registrado (Misión diaria completa)', 'info', 2500);
                             rollbackMission(missionsSnapshot);
-
+                        } else if (missionResult.points_earned > 0) {
+                            // Caso: Puntos ganados pero no misión completa (ej. acción individual)
+                            updateLocalBalance(missionResult.points_earned);
+                            showTemporaryToast(`✓ Like registrado. +${missionResult.points_earned} puntos`, 'success', 2000);
                         } else {
+                            // Caso: Solo registro de progreso
                             showTemporaryToast('✓ Like registrado', 'info', 2000);
-                            await refreshPoints();
                         }
 
                     } catch (missionError) {
                         console.error('❌ Error misión:', missionError);
                         rollbackMission(missionsSnapshot);
-                        // No revertimos el like social, solo los puntos visuales
                     }
                 }
             }
@@ -306,7 +318,7 @@ const PhotoDetailModal = ({
         }
     }, [
         user, userHasLiked, likeCount, photoData, isLiking, missions, 
-        updateMissionOptimistic, rollbackMission, addPoints, refreshPoints, 
+        updateMissionOptimistic, rollbackMission, updateLocalBalance, notifyMissionComplete,
         showTemporaryToast, pointsRewardedIds
     ]);
 
@@ -345,12 +357,12 @@ const PhotoDetailModal = ({
             try {
                 const result = await trackComment('photo', photoData.id, commentText);
                 if (result.points_earned > 0) {
-                    await addPoints(result.points_earned, result.message, 'free');
+                    updateLocalBalance(result.points_earned); // ✅ Update local para Header
                     showTemporaryToast(`✓ Comentario enviado. +${result.points_earned} puntos`, 'success', 3000);
                 } else {
                     showTemporaryToast(result.message || '✓ Comentario enviado', 'success', 2500);
                 }
-            } catch (trackError) {
+            } catch (trackError) { 
                 console.error('Error tracking comment:', trackError);
                 showTemporaryToast('✓ Comentario enviado', 'success', 2500);
             }
@@ -360,7 +372,7 @@ const PhotoDetailModal = ({
             setComments(prev => prev.filter(c => c.id !== optimisticComment.id));
             showTemporaryToast(`Error al enviar comentario`, 'error', 3000);
         }
-    }, [user, commentText, photoData, addPoints, showTemporaryToast]);
+    }, [user, commentText, photoData, updateLocalBalance, showTemporaryToast]);
 
     // FUNCIÓN PARA COMPARTIR
     const handleShare = useCallback(async () => {
@@ -390,7 +402,7 @@ const PhotoDetailModal = ({
             try {
                 const result = await trackShareContent('photo', photoData.id, 1, { platform: method });
                 if (result.points_earned > 0) {
-                    await addPoints(result.points_earned, result.message, 'free');
+                    updateLocalBalance(result.points_earned); // ✅ Update local para Header
                     showTemporaryToast(`✓ Compartido. +${result.points_earned} puntos`, 'success', 3000);
                 }
             } catch (trackError) { console.error('Error tracking share:', trackError); }
@@ -400,7 +412,7 @@ const PhotoDetailModal = ({
                 showTemporaryToast('Error al compartir', 'error', 2000);
             }
         }
-    }, [user, photoData, addPoints, showTemporaryToast]);
+    }, [user, photoData, updateLocalBalance, showTemporaryToast]);
 
     const handleGift = useCallback(() => {
         // Bloqueo auto-regalo
@@ -418,7 +430,8 @@ const PhotoDetailModal = ({
 
     if (!photoData) return null;
 
-    const photoUrl = photoData.url;
+    // ✅ CORRECCIÓN DE IMAGEN: Usamos image_url si es necesario
+    const photoUrl = photoData.image_url || photoData.url; 
     const userDisplayName = photoData.user?.full_name || `@${photoData.user?.username || 'Usuario'}`;
     const photoDate = new Date(photoData.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
     const photoCaption = photoData.caption;
@@ -441,6 +454,7 @@ const PhotoDetailModal = ({
                 </Button>
 
                 <div className="flex-1 flex items-center justify-center relative bg-black">
+                    {/* ✅ REPARACIÓN DE LA IMAGEN: Usamos object-contain para asegurar que se vea completa */}
                     <img src={photoUrl} alt={`Foto de ${userDisplayName}`} className="max-h-full max-w-full object-contain" />
                 </div>
                 
