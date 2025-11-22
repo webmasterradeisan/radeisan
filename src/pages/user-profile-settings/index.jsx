@@ -4,7 +4,9 @@
 //    de la página de recompensas, con filtros y paginación.
 // ✅ CORREGIDO: Añadido 'useEffect' para leer el hash de la URL (#historial-puntos)
 //    y activar la pestaña de Puntos automáticamente.
-// ⭐️ AJUSTADO: La pestaña 'Mis Compras' ahora usa UserOrdersTab como se especificó en el index(90).jsx.
+// ⭐️ FIX CRÍTICO: Se añade validación a loadHistory para evitar llamadas a la API
+//    con fechas nulas cuando el filtro es 'custom', previniendo el error de la pantalla blanca.
+// ⭐️ AJUSTADO: La pestaña 'Mis Compras' ahora usa UserOrdersTab como se especificó.
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +35,6 @@ import { trackUploadVideo } from '../../services/missionsService';
 import { getUserPointsHistory } from '../../services/pointsService'; 
 
 // ✅ NUEVA IMPORTACIÓN: Componente de Compras del index(90).jsx
-// ASUMIENDO que UserOrdersTab está en la misma subcarpeta 'components'
 import UserOrdersTab from './components/UserOrdersTab'; 
 
 
@@ -235,12 +236,7 @@ export const useUserVideos = (userId) => {
       console.log('📊 Video stats calculated:', videoStats);
 
     } catch (err) {
-      console.error('💥 Error in fetchVideos:', {
-        message: err.message,
-        details: err.details,
-        hint: err.hint,
-        code: err.code
-      });
+      console.error('💥 Error in fetchVideos:', err);
       setError(err.message);
       setVideos([]);
       setStats({ totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
@@ -360,12 +356,7 @@ export const useUserReels = (userId) => {
       console.log('📊 Reel stats calculated:', reelStats);
 
     } catch (err) {
-      console.error('💥 Error in fetchReels:', {
-        message: err.message,
-        details: err.details,
-        hint: err.hint,
-        code: err.code
-      });
+      console.error('💥 Error in fetchReels:', err);
       setError(err.message);
       setReels([]);
       setStats({ totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
@@ -1133,50 +1124,90 @@ const UserProfileSettings = () => {
   const loadHistory = useCallback(async (pageNum, reset = false) => {
     if (!user?.id) return;
     setTransactionsLoading(true);
+    setError(null); // Limpiar errores en cada intento de carga
 
     let startDate = null;
     let endDate = null;
     const now = new Date();
     
-    if (dateFilter === 'today') {
+    // ⭐️ FIX CRÍTICO: Validar fechas para evitar error en la API
+    if (dateFilter === 'custom') {
+        // Si es filtro custom pero ninguna fecha se ha seleccionado, NO LLAMAR A LA API
+        if (!customStartDate && !customEndDate) {
+            setTransactions([]); // Limpiar transacciones para mostrar vacío
+            setTransactionsLoading(false);
+            return;
+        }
+        
+        if (customStartDate) {
+            startDate = new Date(customStartDate);
+        } else {
+            // Si falta customStartDate pero customEndDate está, usar inicio del tiempo
+            startDate = new Date(0); 
+        }
+
+        if (customEndDate) {
+            endDate = new Date(customEndDate);
+            endDate.setHours(23, 59, 59, 999);
+        } else {
+             // Si falta customEndDate, usar hoy
+            endDate = new Date(now.setHours(23, 59, 59, 999));
+        }
+
+    } else if (dateFilter === 'today') {
       startDate = new Date(now.setHours(0, 0, 0, 0));
     } else if (dateFilter === 'week') {
       const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
       startDate = new Date(firstDayOfWeek.setHours(0, 0, 0, 0));
     } else if (dateFilter === 'month') {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (dateFilter === 'custom') {
-        if (customStartDate) startDate = new Date(customStartDate);
-        if (customEndDate) {
-            endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-        }
-    }
-
-    const result = await getUserPointsHistory(user.id, {
-      startDate,
-      endDate,
-      page: pageNum
-    });
-
-    if (result.success) {
-      if (reset) {
-        setTransactions(result.data);
-      } else {
-        setTransactions(prev => [...prev, ...result.data]);
-      }
-      setHasMorePages(result.hasMore);
-    } else {
-      console.error("Error al cargar historial:", result.error);
     }
     
-    setTransactionsLoading(false);
+    // Si reset es true, pero no hay datos de fechas para custom, mantenemos los estados limpios
+
+    try {
+        const result = await getUserPointsHistory(user.id, {
+          startDate,
+          endDate,
+          page: pageNum
+        });
+    
+        if (result.success) {
+          if (reset) {
+            setTransactions(result.data);
+          } else {
+            setTransactions(prev => [...prev, ...result.data]);
+          }
+          setHasMorePages(result.hasMore);
+        } else {
+          // Si la API devuelve un error, lo registramos y limpiamos transacciones
+          console.error("Error al cargar historial:", result.error);
+          setTransactions([]); 
+          setHasMorePages(false);
+          setError(result.error?.message || "Error desconocido al cargar historial.");
+        }
+    } catch (e) {
+        // Manejo de errores de red o fallo general
+        console.error("Fallo general en loadHistory:", e);
+        setTransactions([]);
+        setHasMorePages(false);
+        setError(e.message || "Fallo de conexión al cargar historial.");
+    } finally {
+        setTransactionsLoading(false);
+    }
   }, [user, dateFilter, customStartDate, customEndDate]);
 
   // EFECTO PARA CARGAR EL HISTORIAL (Solo cuando la tab esté activa)
   useEffect(() => {
     if (user?.id && activeTab === 'points') {
       setPage(1); 
+      // ⭐️ Si es custom y no hay fechas, no cargamos, solo mostramos vacío.
+      if (dateFilter === 'custom' && !customStartDate && !customEndDate) {
+        setTransactions([]);
+        setHasMorePages(false);
+        setTransactionsLoading(false);
+        return; 
+      }
       loadHistory(1, true);
     }
   }, [user, activeTab, dateFilter, customStartDate, customEndDate, loadHistory]); 
@@ -1191,8 +1222,11 @@ const UserProfileSettings = () => {
   const handleDateFilterChange = (newDateFilter) => {
     setPage(1); 
     setDateFilter(newDateFilter);
-    setCustomStartDate('');
-    setCustomEndDate('');
+    // Si no es custom, limpiamos las fechas personalizadas
+    if (newDateFilter !== 'custom') {
+      setCustomStartDate('');
+      setCustomEndDate('');
+    }
   };
 
   const handleCustomStartDateChange = (date) => {
@@ -1602,13 +1636,30 @@ const UserProfileSettings = () => {
         );
 
       case 'purchases': // Mantiene el ID 'purchases'
-        // ✅ AHORA USA EL COMPONENTE DE COMPRAS DEL INDEX(90)
         return <UserOrdersTab />;
 
       // ==================================================
-      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA
+      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA (con manejo de errores)
       // ==================================================
       case 'points':
+        
+        // Muestra el error de la API si ocurrió
+        if (error) {
+            return (
+                <div className="text-center py-16">
+                    <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar el historial</h3>
+                    <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded max-w-lg mx-auto">
+                        {error}
+                    </p>
+                    <Button onClick={() => loadHistory(1, true)}>
+                        <Icon name="RefreshCw" size={16} className="mr-2" />
+                        Reintentar Carga
+                    </Button>
+                </div>
+            );
+        }
+
         return (
           // ✅ ID AÑADIDO PARA EL ANCLA DEL LINK
           <div id="historial-puntos" className="bg-card rounded-lg border p-4 sm:p-6"> 
