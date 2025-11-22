@@ -2,13 +2,81 @@
 // Layout wrapper que maneja la navegación móvil automáticamente
 
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Navigate } from 'react-router-dom'; // ✅ Importamos Navigate
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNavigation from './BottomNavigation';
+// ✅ IMPORTAR CONTEXTO PWA Y COMPONENTES NECESARIOS
+import { useInstallPrompt } from '../../Routes'; // Asume que Routes exporta useInstallPrompt
+import AppIcon from '../AppIcon'; // Asume que AppIcon está en components/AppIcon
+
+
+// ============================================================================
+// SUB-COMPONENTE: PROMPT DE INSTALACIÓN PWA
+// ============================================================================
+const PWAInstallPrompt = ({ deferredPrompt, setDeferredPrompt }) => {
+  if (!deferredPrompt) return null;
+
+  const handleInstallClick = async () => {
+    // 1. Mostrar el prompt del navegador
+    deferredPrompt.prompt();
+
+    // 2. Esperar la elección del usuario
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      console.log('PWA: Usuario aceptó la instalación.');
+    } else {
+      console.log('PWA: Usuario rechazó la instalación.');
+    }
+    
+    // 3. Limpiar el prompt para que no se muestre de nuevo
+    setDeferredPrompt(null);
+  };
+  
+  // Puedes usar colores primarios de branding aquí si estuvieran disponibles
+  const primaryColor = 'var(--color-primary, #3B82F6)'; 
+  const accentColor = 'var(--color-accent, #10B981)';
+
+  return (
+    <div 
+      className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 p-3 rounded-full shadow-2xl transition-all duration-300 animate-slide-up"
+      style={{ backgroundColor: accentColor }}
+    >
+      <button
+        onClick={handleInstallClick}
+        className="flex items-center gap-2 px-4 py-2 text-white font-semibold rounded-full focus:outline-none focus:ring-4 focus:ring-white/50"
+      >
+        <AppIcon name="Download" className="w-5 h-5" />
+        Instalar App (PWA)
+      </button>
+    </div>
+  );
+};
+
+
+// ============================================================================
+// COMPONENTE PRINCIPAL: MOBILE LAYOUT
+// ============================================================================
 
 const MobileLayout = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
+  
+  // ✅ CONTEXTO PWA: Obtenemos el evento deferredPrompt y la función para limpiarlo si es necesario
+  // Nota: Dado que useInstallPrompt solo retorna el prompt, usaremos un estado local
+  // o modificaremos el contexto en Routes.jsx para retornar el setter. 
+  // Por ahora, asumiremos que useInstallPrompt devuelve el evento.
+  const deferredPrompt = useInstallPrompt(); 
+  
+  // Para simplificar, si Routes.jsx no retorna el setter, creamos un estado local aquí
+  // y lo inicializamos con el valor del contexto, para que el subcomponente pueda limpiarlo.
+  const [installPrompt, setInstallPrompt] = useState(deferredPrompt);
+
+  useEffect(() => {
+    // Sincronizar el estado local si el contexto cambia (aunque en teoría solo debería ser al inicio)
+    setInstallPrompt(deferredPrompt);
+  }, [deferredPrompt]);
+
 
   // ===============================
   // DETECCIÓN DE DISPOSITIVO MÓVIL
@@ -43,31 +111,40 @@ const MobileLayout = ({ children }) => {
     '/about',
     '/features',
     '/terms',
-    '/privacy'
+    '/privacy',
+    '/admin' // ✅ Añadido para rutas de administración
   ];
 
   // Rutas fullscreen que necesitan tratamiento especial
   const fullscreenRoutes = [
     '/reels',
-    '/reel'
+    '/reel',
+    '/video' // ✅ Añadido para el reproductor de video
   ];
 
   const shouldShowBottomNav = () => {
     // No mostrar en desktop
     if (!isMobile) return false;
     
-    // No mostrar en rutas públicas
-    if (routesWithoutBottomNav.includes(location.pathname)) return false;
+    // No mostrar en rutas públicas y administración
+    if (routesWithoutBottomNav.some(route => location.pathname.startsWith(route))) return false;
     
     // No mostrar si la ruta comienza con alguna de las rutas sin nav
     if (routesWithoutBottomNav.some(route => location.pathname.startsWith(route))) return false;
     
+    // No mostrar si es una ruta fullscreen
+    if (isFullscreenRoute()) return false;
+
     return true;
   };
 
   const isFullscreenRoute = () => {
-    return fullscreenRoutes.some(route => location.pathname.startsWith(route));
+    // Usa un método más robusto para verificar rutas con parámetros
+    return fullscreenRoutes.some(route => 
+      location.pathname.startsWith(route) || (location.pathname.includes('/video/') && route === '/video')
+    );
   };
+
 
   // ===============================
   // CLASES DE CONTENEDOR
@@ -78,21 +155,22 @@ const MobileLayout = ({ children }) => {
     
     if (isMobile) {
       if (isFullscreenRoute()) {
-        // Rutas fullscreen (reels) ocupan toda la pantalla
+        // Rutas fullscreen (reels, video) ocupan toda la pantalla
         classes = 'min-h-screen';
       } else if (shouldShowBottomNav()) {
         // Rutas normales con bottom navigation - agregar padding bottom
-        classes = 'min-h-screen pb-20';
+        // Nota: pb-20 asume que BottomNavigation tiene unos 5rem de altura.
+        classes = 'min-h-screen pb-20'; 
       } else {
-        // Rutas móviles sin bottom navigation
+        // Rutas móviles sin bottom navigation (e.g., login, admin)
         classes = 'min-h-screen';
       }
     } else {
-      // Desktop - sin cambios
+      // Desktop - Contenido centrado o sin cambios estructurales
       classes = 'min-h-screen';
     }
     
-    return classes;
+    return classes + ' max-w-lg mx-auto bg-white shadow-lg lg:min-h-screen'; 
   };
 
   // ===============================
@@ -108,13 +186,21 @@ const MobileLayout = ({ children }) => {
 
       {/* BOTTOM NAVIGATION - Solo en móvil y rutas apropiadas */}
       {shouldShowBottomNav() && <BottomNavigation />}
+      
+      {/* ✅ NUEVO: PROMPT DE INSTALACIÓN PWA */}
+      {isMobile && !isFullscreenRoute() && deferredPrompt && (
+        <PWAInstallPrompt 
+          deferredPrompt={installPrompt} 
+          setDeferredPrompt={setInstallPrompt}
+        />
+      )}
     </div>
   );
 };
 
-// ===============================
-// HOC PARA INTEGRACIÓN FÁCIL
-// ===============================
+// ============================================================================
+// HOC Y RUTAS MODIFICADAS
+// ============================================================================
 
 // Higher Order Component para aplicar el layout automáticamente
 export const withMobileLayout = (Component) => {
@@ -147,9 +233,7 @@ export const MobileProtectedRoute = ({ children, requireAuth = true }) => {
   }
 
   if (requireAuth && !user) {
-    // Redirigir a login - esto debería usar Navigate de react-router
-    window.location.href = '/login';
-    return null;
+    return <Navigate to="/login" replace />; // ✅ Usar Navigate de react-router
   }
 
   return (
@@ -178,9 +262,7 @@ export const MobilePublicRoute = ({ children }) => {
   }
 
   if (user) {
-    // Redirigir a dashboard si ya está autenticado
-    window.location.href = '/dashboard';
-    return null;
+    return <Navigate to="/dashboard" replace />; // ✅ Usar Navigate de react-router
   }
 
   return (
