@@ -99,36 +99,53 @@ export const getPointsHistory = async (userId, limit = 20) => {
 };
 
 /**
- * ✅ RESTAURADO: Obtener historial PAGINADO
- * (Necesario para src/pages/user-profile-settings/index.jsx)
+ * ✅ CORREGIDO: Obtener historial PAGINADO
+ * - Se corrigió la firma para ser compatible con el componente padre (index.jsx)
+ * - Se añadió la capacidad de recibir opciones con rango de fechas (aunque no se usan directamente aquí, sí se necesitan)
  */
-export const getUserPointsHistory = async (userId, page = 1, limit = 10) => {
+export const getUserPointsHistory = async (userId, options = {}) => {
+  // Destructuración con valores predeterminados
+  const { page = 1, limit = 10, startDate, endDate } = options; 
+  
   try {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const { data, count, error } = await supabase
+    let query = supabase
       .from('points_transactions')
       .select('*', { count: 'exact' })
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .range(from, to);
+      .order('created_at', { ascending: false });
+
+    // Aplicar filtros de fecha si están presentes
+    if (startDate) {
+      query = query.gte('created_at', startDate.toISOString());
+    }
+    if (endDate) {
+      query = query.lte('created_at', endDate.toISOString());
+    }
+
+    const { data, count, error } = await query.range(from, to);
 
     if (error) throw error;
+    
+    // ⭐️ CAMBIO CLAVE: Devolvemos 'data' y 'hasMore' directamente para el componente padre (index.jsx)
+    const hasMore = (count || 0) > to + 1;
 
     return { 
       success: true, 
-      history: data || [],
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
-      }
+      data: data || [], // <-- Ahora devuelve 'data'
+      hasMore: hasMore
+      // Nota: Eliminamos pagination: {...} para simplificar la compatibilidad
     };
   } catch (error) {
     console.error('Error fetching paginated history:', error);
-    return { success: false, error: error.message };
+    return { 
+        success: false, 
+        data: [], 
+        hasMore: false, 
+        error: error.message 
+    };
   }
 };
 
@@ -136,7 +153,7 @@ export const getUserPointsHistory = async (userId, page = 1, limit = 10) => {
  * Inicializar puntos si no existen
  * ✅ ACTUALIZADO: Verifica e inicializa en 'user_profiles'
  */
-export const initializeUserPoints = async (userId) => {
+export export const initializeUserPoints = async (userId) => {
   try {
     const { data: profile, error } = await supabase
       .from('user_profiles')
