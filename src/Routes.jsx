@@ -1,5 +1,5 @@
-// src/Routes.jsx - FINAL FIXED (Mission Notification Added)
-import React from "react";
+// src/Routes.jsx - FINAL VERSION CON PERSISTENCIA DE BRANDING Y LÓGICA PWA
+import React, { useState, useEffect, createContext, useContext } from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
@@ -20,6 +20,24 @@ import { ProtectedRoute, PublicRoute, UniversalRoute } from "components/Protecte
 
 // MOBILE LAYOUT PARA APLICAR GRADUALMENTE
 import MobileLayout from "components/ui/MobileLayout";
+
+// ==================================================================
+// ✅ IMPORTACIÓN DE LÓGICA GLOBAL DE BRANDING Y SUPABASE
+// ==================================================================
+// Asegúrate de que esta ruta sea correcta para tu proyecto
+import { supabase } from './lib/supabase'; 
+import { applyBrandingToDOM, DEFAULT_BRANDING } from './utils/branding';
+// ==================================================================
+
+// ===============================
+// ✅ NUEVO: CONTEXTO PWA
+// ===============================
+/**
+ * Proporciona el objeto de evento PWA diferido para disparar la instalación.
+ * Será 'null' si la instalación ya ocurrió o el navegador no lo soporta.
+ */
+const InstallPromptContext = createContext(null);
+export const useInstallPrompt = () => useContext(InstallPromptContext);
 
 // ===============================
 // PÁGINAS DE APLICACIÓN
@@ -46,7 +64,7 @@ import ProductStorePage from './pages/product-store';
 import PublicProfilePage from './pages/PublicProfilePage';
 
 // ==================================================================
-// ✅ INICIO DE LA CORRECCIÓN 1: Importar componente de subida de fotos
+// ✅ CORRECCIÓN 1: Importar componente de subida de fotos
 // ==================================================================
 import PhotoUploadStudio from './pages/photo-upload-studio'; 
 // ==================================================================
@@ -88,16 +106,22 @@ import OrdersManagement from './pages/admin-shop/OrdersManagement';
 // ✅ NUEVO - GESTIÓN DE INVENTARIO DE TIENDA (ADMIN)
 import ShopInventory from './pages/admin-shop/ShopInventory';
 
+
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
 // ===============================
+/**
+ * Wrapper que envuelve el MobileLayout y pasa el deferredPrompt a través de props
+ * o un contexto si es necesario, pero aquí lo haremos a través de Context.
+ */
 const MobileLayoutWrapper = ({ children }) => (
+  // MobileLayout puede usar useInstallPrompt() para el botón de instalación
   <MobileLayout>{children}</MobileLayout>
 );
 
 // ===============================
 // COMPONENTES AUXILIARES
-// ===============================
+// ... (Componentes AuthCallback, PlaceholderPage, Unauthorized, AdminPlaceholder se mantienen igual)
 const AuthCallback = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
     <div className="text-center">
@@ -128,9 +152,6 @@ const PlaceholderPage = ({ title, description }) => (
   </div>
 );
 
-// ===============================
-// PÁGINA DE ACCESO NO AUTORIZADO
-// ===============================
 const Unauthorized = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
     <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
@@ -157,9 +178,6 @@ const Unauthorized = () => (
   </div>
 );
 
-// ===============================
-// PLACEHOLDER SOLO PARA LOGS
-// ===============================
 const AdminPlaceholder = ({ title, description, requiredPermission }) => (
   <div className="p-6">
     <div className="max-w-2xl mx-auto">
@@ -188,265 +206,337 @@ const AdminPlaceholder = ({ title, description, requiredPermission }) => (
   </div>
 );
 
+
 // ===============================
 // COMPONENTE DE RUTAS PRINCIPAL
 // ===============================
 const Routes = () => {
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null); // Para el PWA
+
+  // ===============================
+  // EFECTO 1: CARGA INICIAL Y PERSISTENCIA DE BRANDING
+  // ===============================
+  useEffect(() => {
+    const loadAndApplyBranding = async () => {
+      try {
+        console.log('🔍 Routes: Cargando branding inicial y aplicándolo al DOM...');
+        const { data, error: fetchError } = await supabase
+          .from('system_settings')
+          .select('setting_value')
+          .eq('setting_key', 'branding_config')
+          .single();
+
+        let brandingData = DEFAULT_BRANDING; // Usar el default global importado
+        
+        // PGRST116 significa "no rows found", que es esperado si no se ha guardado nada
+        if (!fetchError && data && data.setting_value) {
+           brandingData = typeof data.setting_value === 'string' 
+             ? JSON.parse(data.setting_value)
+             : data.setting_value;
+        } else if (fetchError && fetchError.code !== 'PGRST116') {
+             console.error('❌ Error fetching branding:', fetchError);
+        }
+
+        applyBrandingToDOM(brandingData); // ✅ APLICACIÓN GLOBAL (Favicon, Título, CSS Vars)
+        setBrandingLoaded(true);
+
+      } catch (err) {
+        console.error('❌ Routes: Error crítico al cargar branding, usando defaults.', err);
+        applyBrandingToDOM(DEFAULT_BRANDING);
+        setBrandingLoaded(true);
+      }
+    };
+    loadAndApplyBranding();
+  }, []);
+
+  // ===============================
+  // EFECTO 2: GESTIÓN DE PWA INSTALL PROMPT
+  // ===============================
+  useEffect(() => {
+    const handler = (e) => {
+        // Previene que el navegador muestre el banner automáticamente
+        e.preventDefault();
+        // Guarda el evento para poder dispararlo con un botón personalizado
+        console.log('🌐 PWA: beforeinstallprompt capturado. Botón de instalación disponible.');
+        setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+
+  // Mostrar loading mientras el branding es crítico para el render inicial
+  if (!brandingLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Preparando la App con tu Marca...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <PointsProvider>
-          <NotificationProvider>
-            {/* ✅ WRAPPER DE REGALOS */}
-            <GiftNotificationProvider> 
-              <ErrorBoundary>
-                <ScrollToTop />
-                <RouterRoutes>
-                  
-                  {/* =================== RUTAS PÚBLICAS =================== */}
-                  
-                  <Route 
-                    path="/" 
-                    element={
-                      <UniversalRoute>
-                        <LandingPage />
-                      </UniversalRoute>
-                    } 
-                  />
+    // ✅ WRAPPER DEL CONTEXTO PWA
+    <InstallPromptContext.Provider value={deferredPrompt}> 
+      <BrowserRouter>
+        <AuthProvider>
+          <PointsProvider>
+            <NotificationProvider>
+              {/* ✅ WRAPPER DE REGALOS */}
+              <GiftNotificationProvider> 
+                <ErrorBoundary>
+                  <ScrollToTop />
+                  <RouterRoutes>
+                    
+                    {/* =================== RUTAS PÚBLICAS =================== */}
+                    
+                    <Route 
+                      path="/" 
+                      element={
+                        <UniversalRoute>
+                          <LandingPage />
+                        </UniversalRoute>
+                      } 
+                    />
 
-                  <Route 
-                    path="/login" 
-                    element={
-                      <PublicRoute>
-                        <Login />
-                      </PublicRoute>
-                    } 
-                  />
+                    <Route 
+                      path="/login" 
+                      element={
+                        <PublicRoute>
+                          <Login />
+                        </PublicRoute>
+                      } 
+                    />
 
-                  <Route 
-                    path="/register" 
-                    element={
-                      <PublicRoute>
-                        <Register />
-                      </PublicRoute>
-                    } 
-                  />
+                    <Route 
+                      path="/register" 
+                      element={
+                        <PublicRoute>
+                          <Register />
+                        </PublicRoute>
+                      } 
+                    />
 
-                  <Route 
-                    path="/auth/callback" 
-                    element={
-                      <UniversalRoute>
-                        <AuthCallback />
-                      </UniversalRoute>
-                    } 
-                  />
+                    <Route 
+                      path="/auth/callback" 
+                      element={
+                        <UniversalRoute>
+                          <AuthCallback />
+                        </UniversalRoute>
+                      } 
+                    />
 
-                  {/* =================== RUTAS PROTEGIDAS PRINCIPALES =================== */}
+                    {/* =================== RUTAS PROTEGIDAS PRINCIPALES =================== */}
 
-                  {/* DASHBOARD (Feed Principal) - ✅ REAL */}
-                  <Route 
-                    path="/dashboard" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <VideoFeedDashboard />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* DASHBOARD (Feed Principal) - ✅ REAL */}
+                    <Route 
+                      path="/dashboard" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <VideoFeedDashboard />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* REELS - ✅ REAL */}
-                  <Route 
-                    path="/reels" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <ReelsPage />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* REELS - ✅ REAL */}
+                    <Route 
+                      path="/reels" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <ReelsPage />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* VIDEO PLAYER - ✅ REAL */}
-                  <Route 
-                    path="/video/:videoId" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <VideoPlayerPage />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* VIDEO PLAYER - ✅ REAL */}
+                    <Route 
+                      path="/video/:videoId" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <VideoPlayerPage />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* UPLOAD VIDEO - ✅ REAL */}
-                  <Route 
-                    path="/upload" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <VideoUploadStudio />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* UPLOAD VIDEO - ✅ REAL */}
+                    <Route 
+                      path="/upload" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <VideoUploadStudio />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* UPLOAD PHOTO - ✅ REAL */}
-                  <Route 
-                    path="/upload-photo" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PhotoUploadStudio />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* UPLOAD PHOTO - ✅ REAL */}
+                    <Route 
+                      path="/upload-photo" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <PhotoUploadStudio />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* EDIT VIDEO - ✅ REAL */}
-                  <Route 
-                    path="/edit/:videoId" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <VideoEditStudio />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* EDIT VIDEO - ✅ REAL */}
+                    <Route 
+                      path="/edit/:videoId" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <VideoEditStudio />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* PERFIL - ✅ REAL (PROPIO) */}
-                  <Route 
-                    path="/profile" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <UserProfileSettings />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* PERFIL - ✅ REAL (PROPIO) */}
+                    <Route 
+                      path="/profile" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <UserProfileSettings />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* PERFIL - ✅ REAL (PÚBLICO) */}
-                  <Route 
-                    path="/profile/:identifier" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PublicProfilePage />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* PERFIL - ✅ REAL (PÚBLICO) */}
+                    <Route 
+                      path="/profile/:identifier" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <PublicProfilePage />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* MARKETPLACE - ✅ REAL */}
-                  <Route 
-                    path="/marketplace" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <BusinessMarketplace />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* MARKETPLACE - ✅ REAL */}
+                    <Route 
+                      path="/marketplace" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <BusinessMarketplace />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* 🎁 TIENDA DE RECOMPENSAS - ✅ REAL */}
-                  <Route 
-                    path="/rewards" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PointsRewardsStore />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* 🎁 TIENDA DE RECOMPENSAS - ✅ REAL */}
+                    <Route 
+                      path="/rewards" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <PointsRewardsStore />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* 🛍️ NUEVA TIENDA DE PRODUCTOS FÍSICOS - ✅ NUEVO */}
-                  <Route 
-                    path="/shop" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <ProductStorePage />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* 🛍️ NUEVA TIENDA DE PRODUCTOS FÍSICOS - ✅ NUEVO */}
+                    <Route 
+                      path="/shop" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <ProductStorePage />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* 💎 COMPRA DE PUNTOS PREMIUM - ✅ REAL */}
-                  <Route 
-                    path="/purchase-points" 
-                    element={
-                      <ProtectedRoute>
-                        <MobileLayoutWrapper>
-                          <PurchasePointsPage />
-                        </MobileLayoutWrapper>
-                      </ProtectedRoute>
-                    } 
-                  />
+                    {/* 💎 COMPRA DE PUNTOS PREMIUM - ✅ REAL */}
+                    <Route 
+                      path="/purchase-points" 
+                      element={
+                        <ProtectedRoute>
+                          <MobileLayoutWrapper>
+                            <PurchasePointsPage />
+                          </MobileLayoutWrapper>
+                        </ProtectedRoute>
+                      } 
+                    />
 
-                  {/* Resultados de compra */}
-                  <Route path="/purchase/success" element={<ProtectedRoute><MobileLayoutWrapper><PurchaseSuccess /></MobileLayoutWrapper></ProtectedRoute>} />
-                  <Route path="/purchase/failure" element={<ProtectedRoute><MobileLayoutWrapper><PurchaseFailure /></MobileLayoutWrapper></ProtectedRoute>} />
-                  <Route path="/purchase/pending" element={<ProtectedRoute><MobileLayoutWrapper><PurchasePending /></MobileLayoutWrapper></ProtectedRoute>} />
+                    {/* Resultados de compra */}
+                    <Route path="/purchase/success" element={<ProtectedRoute><MobileLayoutWrapper><PurchaseSuccess /></MobileLayoutWrapper></ProtectedRoute>} />
+                    <Route path="/purchase/failure" element={<ProtectedRoute><MobileLayoutWrapper><PurchaseFailure /></MobileLayoutWrapper></ProtectedRoute>} />
+                    <Route path="/purchase/pending" element={<ProtectedRoute><MobileLayoutWrapper><PurchasePending /></MobileLayoutWrapper></ProtectedRoute>} />
 
-                  {/* =================== PLACEHOLDERS TEMPORALES =================== */}
+                    {/* =================== PLACEHOLDERS TEMPORALES =================== */}
 
-                  <Route path="/explore" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Explorar Contenido" description="Descubre nuevo contenido popular" /></MobileLayoutWrapper></ProtectedRoute>} />
-                  <Route path="/notifications" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Notificaciones" description="Mantente al día con tu actividad" /></MobileLayoutWrapper></ProtectedRoute>} />
-                  <Route path="/saved" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Contenido Guardado" description="Accede a todo el contenido que has guardado" /></MobileLayoutWrapper></ProtectedRoute>} />
-                  <Route path="/settings" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
+                    <Route path="/explore" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Explorar Contenido" description="Descubre nuevo contenido popular" /></MobileLayoutWrapper></ProtectedRoute>} />
+                    <Route path="/notifications" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Notificaciones" description="Mantente al día con tu actividad" /></MobileLayoutWrapper></ProtectedRoute>} />
+                    <Route path="/saved" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Contenido Guardado" description="Accede a todo el contenido que has guardado" /></MobileLayoutWrapper></ProtectedRoute>} />
+                    <Route path="/settings" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
 
-                  {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
-                  
-                  <Route path="/admin" element={<ProtectedAdminRoute><AdminLayout /></ProtectedAdminRoute>}>
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="users" element={<ProtectedAdminRoute requiredPermission="manage_users"><UserManagement /></ProtectedAdminRoute>} />
-                    <Route path="categories" element={<ProtectedAdminRoute requiredPermission="manage_categories"><CategoryManagement /></ProtectedAdminRoute>} />
-                    <Route path="points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PointsRulesEditor /></ProtectedAdminRoute>} />
-                    <Route path="premium-points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PremiumPointsConfig /></ProtectedAdminRoute>} />
-                    <Route path="transactions" element={<ProtectedAdminRoute requiredPermission="manage_transactions"><TransactionsManagement /></ProtectedAdminRoute>} />
-                    <Route path="shop-orders" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><OrdersManagement /></ProtectedAdminRoute>} />
-                    <Route path="shop-inventory" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><ShopInventory /></ProtectedAdminRoute>} />
-                    <Route path="missions" element={<ProtectedAdminRoute requiredPermission="manage_missions"><MissionsManagement /></ProtectedAdminRoute>} />
-                    <Route path="rewards" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><RewardsManagement /></ProtectedAdminRoute>} />
-                    <Route path="moderation" element={<ProtectedAdminRoute requiredPermission="moderate_content"><ContentModeration /></ProtectedAdminRoute>} />
-                    <Route path="analytics" element={<ProtectedAdminRoute requiredPermission="view_analytics"><AdvancedAnalytics /></ProtectedAdminRoute>} />
-                    <Route path="settings" element={<ProtectedAdminRoute requiredPermission="manage_settings"><BrandingSettings /></ProtectedAdminRoute>} />
-                    <Route path="logs" element={<ProtectedAdminRoute requiredPermission="view_logs"><AdminPlaceholder title="Logs de Administración" description="Auditoría de acciones administrativas" requiredPermission="view_logs" /></ProtectedAdminRoute>} />
-                  </Route>
+                    {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
+                    
+                    <Route path="/admin" element={<ProtectedAdminRoute><AdminLayout /></ProtectedAdminRoute>}>
+                      <Route index element={<AdminDashboard />} />
+                      <Route path="users" element={<ProtectedAdminRoute requiredPermission="manage_users"><UserManagement /></ProtectedAdminRoute>} />
+                      <Route path="categories" element={<ProtectedAdminRoute requiredPermission="manage_categories"><CategoryManagement /></ProtectedAdminRoute>} />
+                      <Route path="points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PointsRulesEditor /></ProtectedAdminRoute>} />
+                      <Route path="premium-points" element={<ProtectedAdminRoute requiredPermission="manage_points"><PremiumPointsConfig /></ProtectedAdminRoute>} />
+                      <Route path="transactions" element={<ProtectedAdminRoute requiredPermission="manage_transactions"><TransactionsManagement /></ProtectedAdminRoute>} />
+                      <Route path="shop-orders" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><OrdersManagement /></ProtectedAdminRoute>} />
+                      <Route path="shop-inventory" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><ShopInventory /></ProtectedAdminRoute>} />
+                      <Route path="missions" element={<ProtectedAdminRoute requiredPermission="manage_missions"><MissionsManagement /></ProtectedAdminRoute>} />
+                      <Route path="rewards" element={<ProtectedAdminRoute requiredPermission="manage_rewards"><RewardsManagement /></ProtectedAdminRoute>} />
+                      <Route path="moderation" element={<ProtectedAdminRoute requiredPermission="moderate_content"><ContentModeration /></ProtectedAdminRoute>} />
+                      <Route path="analytics" element={<ProtectedAdminRoute requiredPermission="view_analytics"><AdvancedAnalytics /></ProtectedAdminRoute>} />
+                      <Route path="settings" element={<ProtectedAdminRoute requiredPermission="manage_settings"><BrandingSettings /></ProtectedAdminRoute>} />
+                      <Route path="logs" element={<ProtectedAdminRoute requiredPermission="view_logs"><AdminPlaceholder title="Logs de Administración" description="Auditoría de acciones administrativas" requiredPermission="view_logs" /></ProtectedAdminRoute>} />
+                    </Route>
 
-                  {/* Acceso no autorizado */}
-                  <Route path="/unauthorized" element={<UniversalRoute><Unauthorized /></UniversalRoute>} />
+                    {/* Acceso no autorizado */}
+                    <Route path="/unauthorized" element={<UniversalRoute><Unauthorized /></UniversalRoute>} />
 
-                  {/* =================== REDIRECTS & 404 =================== */}
-                  
-                  <Route path="/create" element={<Navigate to="/upload" replace />} />
-                  <Route path="/home" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
-                  <Route path="/buy-points" element={<Navigate to="/purchase-points" replace />} />
-                  <Route path="*" element={<UniversalRoute><NotFound /></UniversalRoute>} />
-                  
-                </RouterRoutes>
-              </ErrorBoundary>
-              
-              <NotificationContainer /> 
-              
-              {/* ✅ RENDERIZADOR DE REGALOS (MODAL SORPRESA) */}
-              <GiftNotificationContainer />
+                    {/* =================== REDIRECTS & 404 =================== */}
+                    
+                    <Route path="/create" element={<Navigate to="/upload" replace />} />
+                    <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/feed" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/watch/:videoId" element={<Navigate to="/video/:videoId" replace />} />
+                    <Route path="/buy-points" element={<Navigate to="/purchase-points" replace />} />
+                    <Route path="*" element={<UniversalRoute><NotFound /></UniversalRoute>} />
+                    
+                  </RouterRoutes>
+                </ErrorBoundary>
+                
+                <NotificationContainer /> 
+                
+                {/* ✅ RENDERIZADOR DE REGALOS (MODAL SORPRESA) */}
+                <GiftNotificationContainer />
 
-              {/* ✅ NUEVO: RENDERIZADOR DE MISIONES (FLOTA SOBRE TODO) */}
-              {/* Esto asegura que el modal de 'Misión Cumplida' se vea sobre los videos */}
-              <MissionNotificationContainer /> 
-              
-            </GiftNotificationProvider>
-          </NotificationProvider>
-        </PointsProvider>
-      </AuthProvider>
-    </BrowserRouter>
+                {/* ✅ NUEVO: RENDERIZADOR DE MISIONES (FLOTA SOBRE TODO) */}
+                <MissionNotificationContainer /> 
+                
+              </GiftNotificationProvider>
+            </NotificationProvider>
+          </PointsProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </InstallPromptContext.Provider>
   );
 };
 
