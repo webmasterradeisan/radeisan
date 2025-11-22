@@ -101,7 +101,7 @@ export const getPointsHistory = async (userId, limit = 20) => {
 /**
  * ✅ CORREGIDO: Obtener historial PAGINADO
  * - Se corrigió la firma para ser compatible con el componente padre (index.jsx)
- * - Se añadió la capacidad de recibir opciones con rango de fechas (aunque no se usan directamente aquí, sí se necesitan)
+ * - Se añadió la capacidad de recibir opciones con rango de fechas.
  */
 export const getUserPointsHistory = async (userId, options = {}) => {
   // Destructuración con valores predeterminados
@@ -129,14 +129,13 @@ export const getUserPointsHistory = async (userId, options = {}) => {
 
     if (error) throw error;
     
-    // ⭐️ CAMBIO CLAVE: Devolvemos 'data' y 'hasMore' directamente para el componente padre (index.jsx)
+    // CAMBIO CLAVE: Devolvemos 'data' y 'hasMore' directamente para el componente padre (index.jsx)
     const hasMore = (count || 0) > to + 1;
 
     return { 
       success: true, 
-      data: data || [], // <-- Ahora devuelve 'data'
+      data: data || [], 
       hasMore: hasMore
-      // Nota: Eliminamos pagination: {...} para simplificar la compatibilidad
     };
   } catch (error) {
     console.error('Error fetching paginated history:', error);
@@ -153,7 +152,8 @@ export const getUserPointsHistory = async (userId, options = {}) => {
  * Inicializar puntos si no existen
  * ✅ ACTUALIZADO: Verifica e inicializa en 'user_profiles'
  */
-export export const initializeUserPoints = async (userId) => {
+// ⭐️ FIX DE SINTAXIS: Se eliminó el 'export' duplicado.
+export const initializeUserPoints = async (userId) => {
   try {
     const { data: profile, error } = await supabase
       .from('user_profiles')
@@ -205,7 +205,6 @@ export const getUserPurchaseHistory = async (userId) => {
 
 // ===========================================================
 // ✅ WRAPPERS Y FUNCIONES DE COMPATIBILIDAD
-// (Necesarios para componentes antiguos que usan nombres específicos)
 // ===========================================================
 
 /**
