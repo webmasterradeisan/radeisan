@@ -1,9 +1,7 @@
 // src/components/PhotoDetailModal.jsx
 // ============================================================================
-// PHOTO DETAIL MODAL - VERSION FINAL BLINDADA (ANTI-FARMING)
-// ✅ CORREGIDO: Lógica de Like (Bloqueo Auto-Like + Anti-Farming Informativo)
-// ✅ SINCRONIZADO: Sistema de puntos igual a ReelsContainer y VideoPlayer
-// ✅ REPARADO: Visualización de la imagen.
+// PHOTO DETAIL MODAL - VERSIÓN FINAL BLINDADA Y SINCRONIZADA
+// ✅ CORREGIDO: Lógica para asegurar la visualización del nombre de usuario del autor.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react'; 
@@ -31,9 +29,8 @@ const PhotoDetailModal = ({
         missions, 
         updateMissionOptimistic, 
         rollbackMission, 
-        addPoints, 
-        updateLocalBalance, // ✅ Aseguramos el uso del update local
-        notifyMissionComplete, // ✅ Aseguramos el uso del modal trigger
+        updateLocalBalance, 
+        notifyMissionComplete, 
         refreshPoints 
     } = usePoints();
     
@@ -42,6 +39,7 @@ const PhotoDetailModal = ({
     const [userHasLiked, setUserHasLiked] = useState(false);
     const [commentText, setCommentText] = useState('');
     const [comments, setComments] = useState([]);
+    const [authorProfile, setAuthorProfile] = useState(null); // ⬅️ ESTADO PARA EL AUTOR
     
     // ✅ NUEVO ESTADO: Anti-Farming (Recordar fotos pagadas en esta sesión)
     const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
@@ -71,26 +69,40 @@ const PhotoDetailModal = ({
     // LÓGICA DE SINCRONIZACIÓN (FETCH)
     // ===================================
     const fetchInteractions = useCallback(async () => {
-        if (!photoData?.id || !user?.id) {
-            setLikeCount(photoData?.likes_count || 0);
+        if (!photoData?.id) {
             setComments([]);
             setUserHasLiked(false);
             return;
         }
 
         try {
+            // 1. OBTENER PERFIL DEL AUTOR (CORRECCIÓN)
+            if (photoData.user_id) {
+                const { data: authorData, error: authorError } = await supabase
+                    .from('user_profiles')
+                    .select('full_name, username')
+                    .eq('id', photoData.user_id)
+                    .maybeSingle();
+
+                if (authorError) throw authorError;
+                setAuthorProfile(authorData);
+            }
+            // ----------------------------------------------------
+
             const { count: realLikeCount } = await supabase
                 .from('photo_likes') 
                 .select('*', { count: 'exact', head: true })
                 .eq('photo_id', photoData.id);
 
+            // 2. Comprobar si el usuario actual dio like
             const { data: userLike } = await supabase
                 .from('photo_likes') 
                 .select('id')
                 .eq('photo_id', photoData.id)
-                .eq('user_id', user.id)
+                .eq('user_id', user?.id)
                 .maybeSingle(); 
             
+            // 3. Obtener comentarios
             const { data: rawCommentsData, error: commentsError } = await supabase
                 .from('photo_comments') 
                 .select(`id, content, created_at, user_id`) 
@@ -236,9 +248,7 @@ const PhotoDetailModal = ({
                 // DAR LIKE
                 // ==============================
                 setUserHasLiked(true);
-                // ❌ Eliminamos el incremento optimista aquí para evitar el doble conteo
-                // El contador se actualizará después de la confirmación de la DB
-                // setLikeCount(likeCount + 1); 
+                // setLikeCount(likeCount + 1); // ❌ El incremento es después de la confirmación de la DB
 
                 // Insertar Like en BD (Acción Social)
                 const { error: insertError } = await supabase
@@ -432,7 +442,8 @@ const PhotoDetailModal = ({
 
     // ✅ CORRECCIÓN DE IMAGEN: Usamos image_url si es necesario
     const photoUrl = photoData.image_url || photoData.url; 
-    const userDisplayName = photoData.user?.full_name || `@${photoData.user?.username || 'Usuario'}`;
+    // ✅ CORRECCIÓN DEL NOMBRE DEL AUTOR: Usamos el estado recuperado o el nombre del perfil
+    const authorUsername = authorProfile?.username || `@${photoData.user?.username || 'Usuario'}`;
     const photoDate = new Date(photoData.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
     const photoCaption = photoData.caption;
     const photoDescription = photoData.description;
@@ -455,14 +466,14 @@ const PhotoDetailModal = ({
 
                 <div className="flex-1 flex items-center justify-center relative bg-black">
                     {/* ✅ REPARACIÓN DE LA IMAGEN: Usamos object-contain para asegurar que se vea completa */}
-                    <img src={photoUrl} alt={`Foto de ${userDisplayName}`} className="max-h-full max-w-full object-contain" />
+                    <img src={photoUrl} alt={`Foto de ${authorUsername}`} className="max-h-full max-w-full object-contain" />
                 </div>
                 
                 <div className="w-96 flex flex-col border-l border-border bg-background flex-shrink-0">
                     <div className="p-4 border-b border-border flex items-center space-x-3">
                         <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" /> 
                         <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground truncate">{userDisplayName}</h4>
+                            <h4 className="font-semibold text-foreground truncate">{authorUsername}</h4>
                             <p className="text-xs text-muted-foreground">{photoDate}</p>
                         </div>
                     </div>
@@ -550,7 +561,7 @@ const PhotoDetailModal = ({
                 </div>
             )}
             
-            <GiftPointsModal isOpen={showGiftModal} onClose={() => setShowGiftModal(false)} receiverId={photoData?.user_id} receiverUsername={userDisplayName} contentId={photoData?.id} contentType="photo" onSuccess={handleGiftSuccess} />
+            <GiftPointsModal isOpen={showGiftModal} onClose={() => setShowGiftModal(false)} receiverId={photoData?.user_id} receiverUsername={authorUsername} contentId={photoData?.id} contentType="photo" onSuccess={handleGiftSuccess} />
         </div>
     );
 };
