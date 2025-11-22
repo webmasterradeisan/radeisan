@@ -1,26 +1,36 @@
 // src/components/ui/MobileLayout.jsx
 // Layout wrapper que maneja la navegación móvil automáticamente
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, Navigate } from 'react-router-dom'; // ✅ Importamos Navigate
 import { useAuth } from '../../contexts/AuthContext';
 import BottomNavigation from './BottomNavigation';
-// ✅ IMPORTAR CONTEXTO PWA Y COMPONENTES NECESARIOS
-import { useInstallPrompt } from '../../Routes'; // Asume que Routes exporta useInstallPrompt
-import AppIcon from '../AppIcon'; // Asume que AppIcon está en components/AppIcon
+import AppIcon from '../AppIcon'; // Componente de icono
+// ✅ Importar el hook PWA desde Routes (asumimos la ruta)
+import { useInstallPrompt } from '../../Routes'; 
 
 
 // ============================================================================
 // SUB-COMPONENTE: PROMPT DE INSTALACIÓN PWA
 // ============================================================================
-const PWAInstallPrompt = ({ deferredPrompt, setDeferredPrompt }) => {
+/**
+ * Muestra el botón flotante para instalar la aplicación.
+ */
+const PWAInstallPrompt = () => {
+  // Obtenemos el evento deferredPrompt del contexto
+  const deferredPrompt = useInstallPrompt();
+  
+  // Si el evento ya se usó o el navegador no lo soporta, no mostrar nada
   if (!deferredPrompt) return null;
+
+  // Utilizamos el color primario de branding si está disponible
+  const accentColor = 'var(--color-accent, #10B981)';
 
   const handleInstallClick = async () => {
     // 1. Mostrar el prompt del navegador
     deferredPrompt.prompt();
 
-    // 2. Esperar la elección del usuario
+    // 2. Esperar la elección del usuario y loguear
     const { outcome } = await deferredPrompt.userChoice;
 
     if (outcome === 'accepted') {
@@ -29,13 +39,9 @@ const PWAInstallPrompt = ({ deferredPrompt, setDeferredPrompt }) => {
       console.log('PWA: Usuario rechazó la instalación.');
     }
     
-    // 3. Limpiar el prompt para que no se muestre de nuevo
-    setDeferredPrompt(null);
+    // NOTA: El contexto debe actualizarse a 'null' en Routes.jsx para ocultar el botón
+    // después de que el usuario interactúa.
   };
-  
-  // Puedes usar colores primarios de branding aquí si estuvieran disponibles
-  const primaryColor = 'var(--color-primary, #3B82F6)'; 
-  const accentColor = 'var(--color-accent, #10B981)';
 
   return (
     <div 
@@ -47,7 +53,7 @@ const PWAInstallPrompt = ({ deferredPrompt, setDeferredPrompt }) => {
         className="flex items-center gap-2 px-4 py-2 text-white font-semibold rounded-full focus:outline-none focus:ring-4 focus:ring-white/50"
       >
         <AppIcon name="Download" className="w-5 h-5" />
-        Instalar App (PWA)
+        Instalar App
       </button>
     </div>
   );
@@ -61,22 +67,7 @@ const PWAInstallPrompt = ({ deferredPrompt, setDeferredPrompt }) => {
 const MobileLayout = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
-  
-  // ✅ CONTEXTO PWA: Obtenemos el evento deferredPrompt y la función para limpiarlo si es necesario
-  // Nota: Dado que useInstallPrompt solo retorna el prompt, usaremos un estado local
-  // o modificaremos el contexto en Routes.jsx para retornar el setter. 
-  // Por ahora, asumiremos que useInstallPrompt devuelve el evento.
-  const deferredPrompt = useInstallPrompt(); 
-  
-  // Para simplificar, si Routes.jsx no retorna el setter, creamos un estado local aquí
-  // y lo inicializamos con el valor del contexto, para que el subcomponente pueda limpiarlo.
-  const [installPrompt, setInstallPrompt] = useState(deferredPrompt);
-
-  useEffect(() => {
-    // Sincronizar el estado local si el contexto cambia (aunque en teoría solo debería ser al inicio)
-    setInstallPrompt(deferredPrompt);
-  }, [deferredPrompt]);
-
+  const deferredPrompt = useInstallPrompt(); // Para el botón PWA
 
   // ===============================
   // DETECCIÓN DE DISPOSITIVO MÓVIL
@@ -90,7 +81,9 @@ const MobileLayout = ({ children }) => {
       );
       const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
       
-      setIsMobile(isMobileWidth || (isMobileUserAgent && isTouchDevice));
+      // ✅ Lógica de decisión mejorada
+      // Si la pantalla es estrecha, o si el UserAgent es móvil y soporta toque
+      setIsMobile(isMobileWidth || (isMobileUserAgent && isTouchDevice)); 
     };
 
     checkMobile();
@@ -112,38 +105,36 @@ const MobileLayout = ({ children }) => {
     '/features',
     '/terms',
     '/privacy',
-    '/admin' // ✅ Añadido para rutas de administración
+    '/admin' // ✅ Añadido para excluir las rutas de administración
   ];
 
   // Rutas fullscreen que necesitan tratamiento especial
   const fullscreenRoutes = [
     '/reels',
     '/reel',
-    '/video' // ✅ Añadido para el reproductor de video
+    '/video' // ✅ Añadido: Asumimos que el reproductor de video es fullscreen
   ];
+  
+  const isFullscreenRoute = useCallback(() => {
+    // Verifica rutas directas o rutas con parámetro (e.g., /video/123)
+    return fullscreenRoutes.some(route => 
+      location.pathname.startsWith(route) || (location.pathname.includes('/video/') && route === '/video')
+    );
+  }, [location.pathname]);
 
-  const shouldShowBottomNav = () => {
+
+  const shouldShowBottomNav = useCallback(() => {
     // No mostrar en desktop
     if (!isMobile) return false;
     
-    // No mostrar en rutas públicas y administración
-    if (routesWithoutBottomNav.some(route => location.pathname.startsWith(route))) return false;
-    
-    // No mostrar si la ruta comienza con alguna de las rutas sin nav
+    // No mostrar en rutas que comienzan con rutas sin nav (incluye /admin)
     if (routesWithoutBottomNav.some(route => location.pathname.startsWith(route))) return false;
     
     // No mostrar si es una ruta fullscreen
     if (isFullscreenRoute()) return false;
 
     return true;
-  };
-
-  const isFullscreenRoute = () => {
-    // Usa un método más robusto para verificar rutas con parámetros
-    return fullscreenRoutes.some(route => 
-      location.pathname.startsWith(route) || (location.pathname.includes('/video/') && route === '/video')
-    );
-  };
+  }, [isMobile, location.pathname, isFullscreenRoute]);
 
 
   // ===============================
@@ -154,23 +145,25 @@ const MobileLayout = ({ children }) => {
     let classes = '';
     
     if (isMobile) {
+      // ✅ FIX CRÍTICO: Aplicamos la restricción de ancho SOLO en móvil
+      classes += ' max-w-lg mx-auto shadow-lg bg-white'; 
+      
       if (isFullscreenRoute()) {
-        // Rutas fullscreen (reels, video) ocupan toda la pantalla
-        classes = 'min-h-screen';
+        classes += ' min-h-screen';
       } else if (shouldShowBottomNav()) {
         // Rutas normales con bottom navigation - agregar padding bottom
-        // Nota: pb-20 asume que BottomNavigation tiene unos 5rem de altura.
-        classes = 'min-h-screen pb-20'; 
+        classes += ' min-h-screen pb-20';
       } else {
-        // Rutas móviles sin bottom navigation (e.g., login, admin)
-        classes = 'min-h-screen';
+        // Rutas móviles sin bottom navigation (e.g., login, perfil propio)
+        classes += ' min-h-screen';
       }
     } else {
-      // Desktop - Contenido centrado o sin cambios estructurales
-      classes = 'min-h-screen';
+      // ✅ DESKTOP: Mantenemos el ancho completo para no romper el layout de 3 columnas
+      classes = 'min-h-screen w-full'; 
     }
     
-    return classes + ' max-w-lg mx-auto bg-white shadow-lg lg:min-h-screen'; 
+    // Clases base que aplican a ambos (desktop y móvil) si no están sobrescritas
+    return classes + ' relative';
   };
 
   // ===============================
@@ -180,19 +173,17 @@ const MobileLayout = ({ children }) => {
   return (
     <div className="relative">
       {/* CONTENIDO PRINCIPAL */}
+      {/* Nota: quitamos 'max-w-lg mx-auto' de aquí y lo pusimos en getContainerClasses condicionalmente */}
       <div className={getContainerClasses()}>
         {children}
       </div>
 
       {/* BOTTOM NAVIGATION - Solo en móvil y rutas apropiadas */}
       {shouldShowBottomNav() && <BottomNavigation />}
-      
+
       {/* ✅ NUEVO: PROMPT DE INSTALACIÓN PWA */}
-      {isMobile && !isFullscreenRoute() && deferredPrompt && (
-        <PWAInstallPrompt 
-          deferredPrompt={installPrompt} 
-          setDeferredPrompt={setInstallPrompt}
-        />
+      {isMobile && deferredPrompt && !isFullscreenRoute() && (
+        <PWAInstallPrompt />
       )}
     </div>
   );
@@ -215,7 +206,7 @@ export const withMobileLayout = (Component) => {
 };
 
 // ===============================
-// COMPONENTE PROTECTED ROUTE ACTUALIZADO
+// COMPONENTE PROTECTED ROUTE ACTUALIZADO (Usando Navigate)
 // ===============================
 
 export const MobileProtectedRoute = ({ children, requireAuth = true }) => {
@@ -233,7 +224,8 @@ export const MobileProtectedRoute = ({ children, requireAuth = true }) => {
   }
 
   if (requireAuth && !user) {
-    return <Navigate to="/login" replace />; // ✅ Usar Navigate de react-router
+    // ✅ CORREGIDO: Usar el componente Navigate de react-router-dom
+    return <Navigate to="/login" replace />;
   }
 
   return (
@@ -244,7 +236,7 @@ export const MobileProtectedRoute = ({ children, requireAuth = true }) => {
 };
 
 // ===============================
-// COMPONENTE PUBLIC ROUTE ACTUALIZADO  
+// COMPONENTE PUBLIC ROUTE ACTUALIZADO (Usando Navigate)
 // ===============================
 
 export const MobilePublicRoute = ({ children }) => {
@@ -262,7 +254,8 @@ export const MobilePublicRoute = ({ children }) => {
   }
 
   if (user) {
-    return <Navigate to="/dashboard" replace />; // ✅ Usar Navigate de react-router
+    // ✅ CORREGIDO: Usar el componente Navigate de react-router-dom
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
