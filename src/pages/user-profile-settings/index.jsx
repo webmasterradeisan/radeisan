@@ -1,19 +1,22 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS Y COMPRAS
-// ✅ CORREGIDO: Seguridad de lectura de .length en la pestaña de Puntos.
-// ✅ AÑADIDO: Pestaña 'Mis Compras' integrada.
+// UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
+// ✅ CORREGIDO: El historial de puntos ahora usa el componente 'TransactionHistory'
+//    de la página de recompensas, con filtros y paginación.
+// ✅ CORREGIDO: Añadido 'useEffect' para leer el hash de la URL (#historial-puntos)
+//    y activar la pestaña de Puntos automáticamente.
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
+// Importación corregida a la ruta original
 import { useAuth } from '../../contexts/AuthContext'; 
 import { usePoints } from '../../contexts/PointsContext'; 
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
-// 🚨 IMPORTACIÓN PENDIENTE DE CORRECCIÓN EN EL SISTEMA DE ARCHIVOS
-import { useUser } from '../../contexts/UserContext'; // Suponiendo que el path es ahora correcto
-// 🚨 Nota: La importación de ProfileTabs, SettingsPanel, PurchaseHistory, etc., debe existir.
 import ProfileTabs from './components/ProfileTabs';
+// ❌ Componente de historial simple eliminado
+// import PointsHistory from './components/PointsHistory'; 
+// ✅ Componente de historial avanzado (de /rewards) importado
 import TransactionHistory from '../points-rewards-store/components/TransactionHistory'; 
 import SettingsPanel from './components/SettingsPanel';
 import PurchaseHistory from './components/PurchaseHistory';
@@ -44,7 +47,7 @@ const VIDEO_ORIENTATIONS = {
 // HOOKS PERSONALIZADOS
 // ===============================
 
-// Hook para datos del perfil del usuario (Restaurado)
+// Hook para datos del perfil del usuario
 export const useUserProfile = () => { 
   const { user, updateProfile } = useAuth();
   const [profileData, setProfileData] = useState(null);
@@ -131,7 +134,7 @@ export const useUserProfile = () => {
   };
 };
 
-// Hook para videos horizontales (Restaurado)
+// Hook para videos horizontales
 export const useUserVideos = (userId) => { 
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -256,7 +259,7 @@ export const useUserVideos = (userId) => {
   };
 };
 
-// Hook para reels (videos verticales) (Restaurado)
+// Hook para reels (videos verticales)
 export const useUserReels = (userId) => { 
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -381,7 +384,7 @@ export const useUserReels = (userId) => {
   };
 };
 
-// Hook para fotos del usuario (Restaurado)
+// Hook para fotos del usuario
 export const useUserPhotos = (userId) => { 
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -450,7 +453,7 @@ export const useUserPhotos = (userId) => {
   };
 };
 
-// Hook para compras - MOCK (Mantengo la estructura del index(86) original)
+// Hook para compras - MOCK
 const usePurchaseHistory = () => {
   const [purchases] = useState([]);
   
@@ -462,7 +465,7 @@ const usePurchaseHistory = () => {
 };
 
 // ===============================
-// COMPONENTE DE GRID DE FOTOS (Restaurado)
+// COMPONENTE DE GRID DE FOTOS
 // ===============================
 
 export const PhotoGrid = ({ 
@@ -615,7 +618,7 @@ export const PhotoGrid = ({
 };
 
 // ===============================
-// COMPONENTE DE VIDEO GRID HORIZONTAL (Restaurado)
+// COMPONENTE DE VIDEO GRID HORIZONTAL
 // ===============================
 
 export const VideoGridComponent = ({ 
@@ -794,7 +797,7 @@ export const VideoGridComponent = ({
 };
 
 // ===============================
-// COMPONENTE DE REELS GRID (Restaurado)
+// COMPONENTE DE REELS GRID
 // ===============================
 
 export const ReelsGridComponent = ({ 
@@ -905,7 +908,7 @@ export const ReelsGridComponent = ({
               {reel.duration_seconds && reel.duration_seconds > 0 && (
                 <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded text-center">
                   {reel.duration_seconds < 60 ? `${reel.duration_seconds}s` : 
-                   `${Math.floor(reel.duration_seconds / 60)}:${String(Math.floor(reel.duration_seconds % 60)).padStart(2, '0')}`}
+                   `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}`}
                 </div>
               )}
 
@@ -993,10 +996,12 @@ const UserProfileSettings = () => {
   const [activeTab, setActiveTab] = useState('videos');
   const [editingProfile, setEditingProfile] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
+  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto
   const [showImageEditor, setShowImageEditor] = useState(false); 
 
   // 🚨 ESTADOS PARA EL MODAL DE DETALLE DE FOTO
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  // Usamos el índice para facilitar la navegación del carrusel
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
   
   // 🚨 ESTADOS PARA EL MODAL DE EDICIÓN
@@ -1045,12 +1050,27 @@ const UserProfileSettings = () => {
     error: photosError // Captura el error de fotos
   } = useUserPhotos(user?.id);
 
+  // ❌ Hook 'usePointsHistory' ELIMINADO
+  
   const { purchases } = usePurchaseHistory();
+
+  // =================================================================
+  // ✅ INICIO: Lógica para activar pestaña desde ancla (#)
+  // =================================================================
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash === '#historial-puntos') {
+      setActiveTab('points');
+    }
+  }, []); // Se ejecuta solo una vez al montar el componente
+  // =================================================================
+  // ✅ FIN: Lógica de ancla
+  // =================================================================
+
 
   // 🚨 OBTENER LOS DATOS COMPLETOS DE LA FOTO ACTUAL (PARA EL MODAL DE DETALLE)
   const currentPhotoData = useMemo(() => {
-    // ✅ Comprobaciones de seguridad para evitar el TypeError: Cannot read properties of undefined (reading 'length')
-    if (selectedPhotoIndex === null || !photos || selectedPhotoIndex >= photos.length || !photos[selectedPhotoIndex]) return null;
+    if (selectedPhotoIndex === null || !photos || selectedPhotoIndex >= photos.length) return null;
     return photos[selectedPhotoIndex];
   }, [selectedPhotoIndex, photos]);
 
@@ -1103,25 +1123,11 @@ const UserProfileSettings = () => {
     videos: videos.length,
     reels: reels.length,
     photos: photos.length,
-    purchases: purchases.length,
+    purchases: purchases.length, // Se mantiene el ID 'purchases'
     points: transactions.length, // ✅ Ahora usa el estado 'transactions' local
     liked: 0,
     playlists: 0
   }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
-
-  // =================================================================
-  // ✅ INICIO: Lógica para activar pestaña desde ancla (#)
-  // =================================================================
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash === '#historial-puntos') {
-      setActiveTab('points');
-    }
-  }, []); 
-  // =================================================================
-  // ✅ FIN: Lógica de ancla
-  // =================================================================
-
 
   // ===============================
   // ✅ INICIO: LÓGICA DE HISTORIAL DE PUNTOS
@@ -1159,9 +1165,9 @@ const UserProfileSettings = () => {
 
     if (result.success) {
       if (reset) {
-        setTransactions(result.data || []); // ✅ Seguridad: Usa array vacío si data es null
+        setTransactions(result.data);
       } else {
-        setTransactions(prev => [...prev, ...(result.data || [])]); // ✅ Seguridad: Usa array vacío
+        setTransactions(prev => [...prev, ...result.data]);
       }
       setHasMorePages(result.hasMore);
     } else {
@@ -1173,7 +1179,6 @@ const UserProfileSettings = () => {
 
   // EFECTO PARA CARGAR EL HISTORIAL (Solo cuando la tab esté activa)
   useEffect(() => {
-    // ✅ Seguridad: Si la pestaña no es 'points', no intentes cargar el historial.
     if (user?.id && activeTab === 'points') {
       setPage(1); 
       loadHistory(1, true);
@@ -1337,6 +1342,9 @@ const UserProfileSettings = () => {
     };
   }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
 
+  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto (mantener por compatibilidad)
+  // [Resto de event handlers sin cambios funcionales]
+  
   const handleEditProfile = useCallback(() => {
     setActiveTab('settings');
     setEditingProfile(true);
@@ -1357,7 +1365,7 @@ const UserProfileSettings = () => {
     }
   }, [updateProfile, refreshProfile]);
 
-
+  // 🚨 OPTIMIZACIÓN DE HANDLERS DE IMAGEN DE PERFIL/PORTADA
   const handleEditAvatar = useCallback(() => {
     // Abrir el editor de imágenes general
     setShowImageEditor(true);
@@ -1490,6 +1498,7 @@ const UserProfileSettings = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'videos':
+        // ... (omitted rendering logic)
         if (videosError) {
           return (
             <div className="text-center py-16">
@@ -1596,36 +1605,28 @@ const UserProfileSettings = () => {
           </div>
         );
 
-      case 'purchases':
+      case 'purchases': // Mantiene el ID 'purchases'
         return <PurchaseHistory purchases={purchases} />;
 
       // ==================================================
-      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA
+      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA (ya está corregida en este archivo)
       // ==================================================
       case 'points':
         return (
           // ✅ ID AÑADIDO PARA EL ANCLA DEL LINK
           <div id="historial-puntos" className="bg-card rounded-lg border p-4 sm:p-6"> 
-            {/* ✅ Seguridad: Aseguramos que transactions esté cargado y sea un array para evitar el error de .length */}
-            {transactionsLoading && transactions.length === 0 ? (
-              <div className="text-center py-16">
-                <Icon name="Loader2" size={48} className="text-primary mx-auto mb-4 animate-spin" />
-                <p className="text-muted-foreground">Cargando historial de puntos...</p>
-              </div>
-            ) : (
-              <TransactionHistory
-                transactions={transactions}
-                loading={transactionsLoading}
-                dateFilter={dateFilter}
-                onDateFilterChange={handleDateFilterChange}
-                hasMore={hasMorePages}
-                onLoadMore={handleLoadMore}
-                startDate={customStartDate}
-                endDate={customEndDate}
-                onStartDateChange={handleCustomStartDateChange}
-                onEndDateChange={handleCustomEndDateChange}
-              />
-            )}
+            <TransactionHistory
+              transactions={transactions}
+              loading={transactionsLoading}
+              dateFilter={dateFilter}
+              onDateFilterChange={handleDateFilterChange}
+              hasMore={hasMorePages}
+              onLoadMore={handleLoadMore}
+              startDate={customStartDate}
+              endDate={customEndDate}
+              onStartDateChange={handleCustomStartDateChange}
+              onEndDateChange={handleCustomEndDateChange}
+            />
           </div>
         );
 
@@ -1981,7 +1982,8 @@ const UserProfileSettings = () => {
                     { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
                     { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
                     { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
-                    { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' },
+                    // ✅ CAMBIO DE LABEL: De 'Compras' a 'Mis Compras' para coincidir con el index(90).jsx
+                    { id: 'purchases', label: 'Mis Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' }, 
                     { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
                     { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
                   ].map((tab) => (
