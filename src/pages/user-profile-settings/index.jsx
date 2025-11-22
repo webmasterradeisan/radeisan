@@ -1,2112 +1,711 @@
 // src/pages/user-profile-settings/index.jsx
-// UserProfileSettings - ✅ INTEGRADO CON SISTEMA DE PUNTOS
-// ✅ CORREGIDO: El historial de puntos ahora usa el componente 'TransactionHistory'
-//    de la página de recompensas, con filtros y paginación.
-// ✅ CORREGIDO: Añadido 'useEffect' para leer el hash de la URL (#historial-puntos)
-//    y activar la pestaña de Puntos automáticamente.
-
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-// Importación corregida a la ruta original
-import { useAuth } from '../../contexts/AuthContext'; 
-import { usePoints } from '../../contexts/PointsContext'; 
+import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import Header from '../../components/ui/Header';
-import ProfileTabs from './components/ProfileTabs';
-// ❌ Componente de historial simple eliminado
-// import PointsHistory from './components/PointsHistory'; 
-// ✅ Componente de historial avanzado (de /rewards) importado
-import TransactionHistory from '../points-rewards-store/components/TransactionHistory'; 
-import SettingsPanel from './components/SettingsPanel';
-import PurchaseHistory from './components/PurchaseHistory';
-import PhotoQuickUpload from '../../components/PhotoQuickUpload';
-import ProfileImageEditor from '../../components/ProfileImageEditor';
+import PrimaryNavigation from '../../components/ui/PrimaryNavigation';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import AvatarUpload from '../../components/ui/AvatarUpload'; // Re-añadido si no estaba
+import { useUser } from '../../contexts/UserContext'; // Asumiendo que UserContext maneja la información del perfil
+import { usePoints } from '../../contexts/PointsContext'; // Para obtener el historial de puntos
 
-// 🚨 IMPORTACIÓN DEL MODAL REAL
-import PhotoDetailModal from '../../components/PhotoDetailModal';
+// ===========================================
+// Sub-componentes (extraídos para claridad)
+// ===========================================
 
-// ⭐️ IMPORTACIÓN REQUERIDA PARA EL SISTEMA DE PUNTOS ⭐️
-import { trackUploadVideo } from '../../services/missionsService';
-// ✅ Importación del servicio de historial paginado
-import { getUserPointsHistory } from '../../services/pointsService'; 
-
-// ===============================
-// CONSTANTES
-// ===============================
-
-const VIDEO_ORIENTATIONS = {
-  VERTICAL: 'vertical',
-  HORIZONTAL: 'horizontal',
-  SQUARE: 'square'
-};
-
-// ===============================
-// HOOKS PERSONALIZADOS
-// ===============================
-
-// Hook para datos del perfil del usuario
-export const useUserProfile = () => { 
-  const { user, updateProfile } = useAuth();
-  const [profileData, setProfileData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const generateUsername = (email) => {
-    if (!email) return `user${Date.now()}`;
-    const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-    const random = Math.floor(Math.random() * 1000);
-    return `${base}${random}`;
-  };
-
-  const fetchProfile = useCallback(async () => {
-    if (!user?.id) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          const { data: newProfile, error: createError } = await supabase
-            .from('user_profiles')
-            .insert({
-              id: user.id,
-              full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario',
-              username: generateUsername(user.email),
-              email: user.email,
-              avatar_url: user.user_metadata?.avatar_url,
-              cover_image_url: null,
-              photos_count: 0,
-              videos_count: 0,
-              bio: '',
-              website: '',
-              location: '',
-              points: 0,
-              is_business_account: false,
-              is_verified: false,
-              followers_count: 0,
-              following_count: 0,
-              created_at: new Date().toISOString()
-            })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-          setProfileData(newProfile);
-        } else {
-          throw fetchError;
-        }
-      } else {
-        setProfileData(data);
-      }
-
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const refreshProfile = useCallback(() => {
-    return fetchProfile();
-  }, [fetchProfile]);
+// --- UserProfileForm ---
+const UserProfileForm = ({ userProfile, onUpdate, loading, user }) => {
+  const [formData, setFormData] = useState({
+    username: userProfile?.username || '',
+    full_name: userProfile?.full_name || '',
+    website: userProfile?.website || '',
+    bio: userProfile?.bio || '',
+  });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(userProfile?.avatar_url || '');
 
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    if (userProfile) {
+      setFormData({
+        username: userProfile.username || '',
+        full_name: userProfile.full_name || '',
+        website: userProfile.website || '',
+        bio: userProfile.bio || '',
+      });
+      setAvatarUrl(userProfile.avatar_url || '');
+    }
+  }, [userProfile]);
 
-  return {
-    profileData,
-    loading,
-    error,
-    refreshProfile,
-    updateProfile
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
+
+  const handleAvatarChange = (file, previewUrl) => {
+    setAvatarFile(file);
+    setAvatarUrl(previewUrl);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await onUpdate(formData, avatarFile);
+  };
+
+  return (
+    <div className="bg-card p-6 rounded-lg shadow-sm border">
+      <h2 className="text-2xl font-bold text-foreground mb-6">Mi Perfil</h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <AvatarUpload
+            currentAvatarUrl={avatarUrl}
+            onAvatarChange={handleAvatarChange}
+            userId={user?.id}
+            username={userProfile?.username}
+          />
+          <div className="flex-1 space-y-4 w-full">
+            <Input
+              label="Nombre de usuario"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              placeholder="Ej: juanito_perez"
+              required
+              disabled={loading}
+            />
+            <Input
+              label="Nombre completo"
+              name="full_name"
+              value={formData.full_name}
+              onChange={handleChange}
+              placeholder="Ej: Juan Pérez García"
+              disabled={loading}
+            />
+          </div>
+        </div>
+        <Input
+          label="Sitio web"
+          name="website"
+          value={formData.website}
+          onChange={handleChange}
+          placeholder="Ej: https://misitioweb.com"
+          disabled={loading}
+        />
+        <div>
+          <label htmlFor="bio" className="block text-sm font-medium text-foreground mb-2">
+            Biografía
+          </label>
+          <textarea
+            id="bio"
+            name="bio"
+            value={formData.bio}
+            onChange={handleChange}
+            rows="4"
+            placeholder="Cuéntanos algo sobre ti..."
+            className="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent bg-input text-foreground"
+            disabled={loading}
+          ></textarea>
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? (
+            <>
+              <Icon name="Loader2" className="animate-spin mr-2" />
+              Guardando...
+            </>
+          ) : (
+            'Guardar cambios'
+          )}
+        </Button>
+      </form>
+    </div>
+  );
 };
 
-// Hook para videos horizontales
-export const useUserVideos = (userId) => { 
-  const [videos, setVideos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    totalVideos: 0,
-    totalViews: 0,
-    totalLikes: 0,
-    totalComments: 0
+// --- UserSecuritySettings ---
+const UserSecuritySettings = ({ loading, onUpdatePassword }) => {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    try {
+      await onUpdatePassword(newPassword);
+      setSuccess('Contraseña actualizada exitosamente.');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setError(err.message || 'Error al actualizar la contraseña.');
+    }
+  };
+
+  return (
+    <div className="bg-card p-6 rounded-lg shadow-sm border">
+      <h2 className="text-2xl font-bold text-foreground mb-6">Seguridad</h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <Input
+          label="Nueva contraseña"
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="Ingresa tu nueva contraseña"
+          required
+          disabled={loading}
+        />
+        <Input
+          label="Confirmar nueva contraseña"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirma tu nueva contraseña"
+          required
+          disabled={loading}
+        />
+        {error && (
+          <p className="text-destructive text-sm flex items-center gap-1">
+            <Icon name="AlertCircle" size={16} /> {error}
+          </p>
+        )}
+        {success && (
+          <p className="text-success text-sm flex items-center gap-1">
+            <Icon name="CheckCircle" size={16} /> {success}
+          </p>
+        )}
+        <Button type="submit" className="w-full" disabled={loading || !newPassword || !confirmPassword}>
+          {loading ? (
+            <>
+              <Icon name="Loader2" className="animate-spin mr-2" />
+              Actualizando...
+            </>
+          ) : (
+            'Cambiar contraseña'
+          )}
+        </Button>
+      </form>
+    </div>
+  );
+};
+
+// --- UserNotificationsSettings ---
+const UserNotificationsSettings = ({ loading }) => {
+  const [notificationSettings, setNotificationSettings] = useState({
+    email_updates: true,
+    new_followers: true,
+    comment_mentions: false,
+    daily_digest: false,
   });
 
-  const fetchVideos = useCallback(async () => {
-    if (!userId) {
-      console.log('🎬 No userId provided, setting empty state');
-      setVideos([]);
-      setStats({ totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      console.log('🎬 Fetching HORIZONTAL videos for user ID:', userId);
-
-      // CORRECCIÓN: Eliminado 'likes_count' y 'comments_count'
-      const { data, error: fetchError } = await supabase
-        .from('videos')
-        .select(`
-          id,
-          user_id,
-          title,
-          description,
-          video_url,
-          thumbnail_url,
-          category,
-          tags,
-          duration_seconds,
-          file_size_bytes,
-          views_count,
-          points_earned,
-          is_published,
-          featured_until,
-          created_at,
-          updated_at,
-          orientation,
-          aspect_ratio,
-          video_width,
-          video_height
-        `)
-        .eq('user_id', userId)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (fetchError) {
-        console.error('❌ Error fetching videos:', fetchError);
-        throw fetchError;
-      }
-
-      console.log('🔍 Filtrando videos por orientación REAL de BD...');
-      
-      const allVideos = data || [];
-      const horizontalVideos = allVideos.filter(video => {
-        const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
-        const isHorizontal = realOrientation === VIDEO_ORIENTATIONS.HORIZONTAL;
-        
-        console.log(`📹 "${video.title}": orientación BD="${realOrientation}" → ${isHorizontal ? 'INCLUIR' : 'FILTRAR'}`);
-        
-        return isHorizontal;
-      });
-
-      console.log('✅ Filtrado de videos horizontales completado:', {
-        total: allVideos.length,
-        horizontal: horizontalVideos.length,
-        filtered_out: allVideos.length - horizontalVideos.length
-      });
-
-      setVideos(horizontalVideos);
-
-      const videoStats = horizontalVideos.reduce(
-        (acc, video) => ({
-          totalVideos: acc.totalVideos + 1,
-          totalViews: acc.totalViews + (video.views_count || 0),
-          // CORRECCIÓN: Usar 0 ya que estas columnas no existen en BD
-          totalLikes: acc.totalLikes + 0, 
-          totalComments: acc.totalComments + 0
-        }),
-        { totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
-      );
-
-      setStats(videoStats);
-      console.log('📊 Video stats calculated:', videoStats);
-
-    } catch (err) {
-      console.error('💥 Error in fetchVideos:', {
-        message: err.message,
-        details: err.details,
-        hint: err.hint,
-        code: err.code
-      });
-      setError(err.message);
-      setVideos([]);
-      setStats({ totalVideos: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
+  // Placeholder para cargar y guardar configuraciones
   useEffect(() => {
-    fetchVideos();
-  }, [fetchVideos]);
+    // Aquí cargarías las configuraciones actuales del usuario
+    // setNotificationSettings(fetchedSettings);
+  }, []);
 
-  return {
-    videos,
-    stats,
-    loading,
-    error,
-    totalCount: videos.length,
-    refresh: fetchVideos
+  const handleChange = (e) => {
+    const { name, checked } = e.target;
+    setNotificationSettings(prev => ({ ...prev, [name]: checked }));
   };
-};
 
-// Hook para reels (videos verticales)
-export const useUserReels = (userId) => { 
-  const [reels, setReels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    totalReels: 0,
-    totalViews: 0,
-    totalLikes: 0,
-    totalComments: 0
-  });
-
-  const fetchReels = useCallback(async () => {
-    if (!userId) {
-      console.log('📱 No userId provided, setting empty state');
-      setReels([]);
-      setStats({ totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      console.log('📱 Fetching VERTICAL videos (reels) for user ID:', userId);
-
-      // CORRECCIÓN: Eliminado 'likes_count' y 'comments_count'
-      const { data, error: fetchError } = await supabase
-        .from('videos')
-        .select(`
-          id,
-          user_id,
-          title,
-          description,
-          video_url,
-          thumbnail_url,
-          category,
-          tags,
-          duration_seconds,
-          file_size_bytes,
-          views_count,
-          points_earned,
-          is_published,
-          featured_until,
-          created_at,
-          updated_at,
-          orientation,
-          aspect_ratio,
-          video_width,
-          video_height
-        `)
-        .eq('user_id', userId)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (fetchError) {
-        console.error('❌ Error fetching reels:', fetchError);
-        throw fetchError;
-      }
-
-      console.log('🔍 Filtrando reels por orientación REAL de BD...');
-
-      const allVideos = data || [];
-      const verticalVideos = allVideos.filter(video => {
-        const realOrientation = video.orientation || VIDEO_ORIENTATIONS.HORIZONTAL;
-        const isVertical = realOrientation === VIDEO_ORIENTATIONS.VERTICAL;
-        
-        console.log(`📱 "${video.title}": orientación BD="${realOrientation}" → ${isVertical ? 'INCLUIR' : 'FILTRAR'}`);
-        
-        return isVertical;
-      });
-
-      console.log('✅ Filtrado de reels completado:', {
-        total: allVideos.length,
-        vertical: verticalVideos.length,
-        filtered_out: allVideos.length - verticalVideos.length
-      });
-
-      setReels(verticalVideos);
-
-      const reelStats = verticalVideos.reduce(
-        (acc, reel) => ({
-          totalReels: acc.totalReels + 1,
-          totalViews: acc.totalViews + (reel.views_count || 0),
-          // CORRECCIÓN: Usar 0 ya que estas columnas no existen en BD
-          totalLikes: acc.totalLikes + 0, 
-          totalComments: acc.totalComments + 0
-        }),
-        { totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 }
-      );
-
-      setStats(reelStats);
-      console.log('📊 Reel stats calculated:', reelStats);
-
-    } catch (err) {
-      console.error('💥 Error in fetchReels:', {
-        message: err.message,
-        details: err.details,
-        hint: err.hint,
-        code: err.code
-      });
-      setError(err.message);
-      setReels([]);
-      setStats({ totalReels: 0, totalViews: 0, totalLikes: 0, totalComments: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    fetchReels();
-  }, [fetchReels]);
-
-  return {
-    reels,
-    stats,
-    loading,
-    error,
-    totalCount: reels.length,
-    refresh: fetchReels
+  const handleSave = () => {
+    // Aquí guardarías las configuraciones actualizadas
+    console.log('Guardando configuraciones de notificación:', notificationSettings);
+    // Simula una acción de guardado
+    alert('Configuraciones guardadas (simulado)');
   };
-};
 
-// Hook para fotos del usuario
-export const useUserPhotos = (userId) => { 
-  const [photos, setPhotos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const fetchPhotos = useCallback(async () => {
-    if (!userId) {
-      console.log('📸 DIAGNÓSTICO FOTOS: No userId provided, skipping photos fetch');
-      setPhotos([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      console.log('📸 Fetching photos for user:', userId);
-
-      const { data, error: fetchError } = await supabase
-        .from('photos')
-        .select(`
-          id,
-          image_url,
-          thumbnail_url,
-          caption,
-          category,
-          tags,
-          aspect_ratio,
-          created_at,
-          user_id,
-          description 
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (fetchError) {
-        console.error('❌ Error fetching photos:', fetchError);
-        setError(`Error de Supabase: ${fetchError.message}`);
-        setPhotos([]);
-      } else {
-        console.log(`✅ DIAGNÓSTICO FOTOS: Fotos obtenidas exitosamente. Cantidad: ${data?.length || 0}`);
-        setPhotos(data || []);
-      }
-
-    } catch (err) {
-      console.error('💥 Error in fetchPhotos:', err);
-      setError(err.message);
-      setPhotos([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    fetchPhotos();
-  }, [fetchPhotos]);
-
-  return {
-    photos,
-    loading,
-    error,
-    totalCount: photos.length,
-    refresh: fetchPhotos
-  };
-};
-
-// Hook para compras - MOCK
-const usePurchaseHistory = () => {
-  const [purchases] = useState([]);
-  
-  return {
-    purchases,
-    loading: false,
-    error: null
-  };
-};
-
-// ===============================
-// COMPONENTE DE GRID DE FOTOS
-// ===============================
-
-export const PhotoGrid = ({ 
-  photos = [], 
-  loading = false, 
-  onQuickUpload,
-  onPhotoAction, // Nuevo prop para acciones (Editar/Eliminar)
-  isOwner = false,
-  showUploadButton = true,
-  fetchError = null, // Se añade el error del fetcher para mostrarlo
-  onPhotoClick // Nuevo prop para manejar el click
-}) => {
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  // Nuevo bloque para mostrar error si existe
-  if (fetchError) {
-    return (
-      <div className="text-center py-16">
-        <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar las fotos</h3>
-        <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded max-w-lg mx-auto">
-          {fetchError}
-        </p>
-        <Button onClick={() => window.location.reload()}>
-          <Icon name="RefreshCw" size={16} className="mr-2" />
-          Reintentar Carga
+  return (
+    <div className="bg-card p-6 rounded-lg shadow-sm border">
+      <h2 className="text-2xl font-bold text-foreground mb-6">Notificaciones</h2>
+      <div className="space-y-4">
+        <div>
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="email_updates"
+              checked={notificationSettings.email_updates}
+              onChange={handleChange}
+              className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary bg-input border-border"
+              disabled={loading}
+            />
+            <span className="text-foreground text-sm font-medium">Actualizaciones por correo</span>
+          </label>
+          <p className="text-muted-foreground text-xs ml-8">Recibe noticias importantes y actualizaciones del sistema.</p>
+        </div>
+        <div>
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="new_followers"
+              checked={notificationSettings.new_followers}
+              onChange={handleChange}
+              className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary bg-input border-border"
+              disabled={loading}
+            />
+            <span className="text-foreground text-sm font-medium">Nuevos seguidores</span>
+          </label>
+          <p className="text-muted-foreground text-xs ml-8">Notificación cuando alguien te sigue.</p>
+        </div>
+        <div>
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="comment_mentions"
+              checked={notificationSettings.comment_mentions}
+              onChange={handleChange}
+              className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary bg-input border-border"
+              disabled={loading}
+            />
+            <span className="text-foreground text-sm font-medium">Menciones y comentarios</span>
+          </label>
+          <p className="text-muted-foreground text-xs ml-8">Recibe notificaciones sobre actividad en tus posts.</p>
+        </div>
+        <div>
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="daily_digest"
+              checked={notificationSettings.daily_digest}
+              onChange={handleChange}
+              className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary bg-input border-border"
+              disabled={loading}
+            />
+            <span className="text-foreground text-sm font-medium">Resumen diario</span>
+          </label>
+          <p className="text-muted-foreground text-xs ml-8">Un resumen diario de lo más destacado.</p>
+        </div>
+        <Button onClick={handleSave} className="w-full mt-4" disabled={loading}>
+          Guardar configuraciones
         </Button>
       </div>
-    );
-  }
-  
-  if (photos.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Icon name="ImagePlus" size={32} className="text-primary" />
-        </div>
-        <h3 className="text-xl font-semibold text-foreground mb-3">
-          {isOwner ? 'Comparte tus primeras fotos' : 'No hay fotos publicadas'}
-        </h3>
-        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-          {isOwner 
-            ? 'Sube fotos rápidamente y comparte tus mejores momentos con la comunidad'
-            : 'Este usuario no ha compartido fotos aún'
-          }
-        </p>
-        {isOwner && showUploadButton && (
-          <div className="flex justify-center gap-4">
-            <Button 
-              onClick={() => window.location.href = '/photo-upload'} 
-              size="lg"
-            >
-              <Icon name="Settings" size={20} className="mr-2" />
-              Studio Avanzado
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
+    </div>
+  );
+};
+
+// --- UserPointsHistory (Reparado) ---
+const UserPointsHistory = () => {
+  const { pointsHistory, missions } = usePoints(); // Asumiendo que usePoints devuelve también las misiones
+
+  // console.log("pointsHistory:", pointsHistory); // Debugging
+  // console.log("missions:", missions); // Debugging
+
+  const getMissionName = useCallback((missionId) => {
+    // ✅ Comprobación de seguridad para evitar errores si `missions` es undefined o no es un array
+    if (!missions || !Array.isArray(missions)) return missionId;
+    const mission = missions.find(m => m.id === missionId);
+    return mission ? mission.name : missionId;
+  }, [missions]);
 
   return (
-    <div className="space-y-6">
-      {isOwner && showUploadButton && (
-        <div className="flex justify-end gap-3">
-          {/* Único botón de subida, con estilo principal y texto "Subir Fotos" */}
-          <Button 
-            onClick={() => window.location.href = '/photo-upload'} 
-            size="sm" 
-          >
-            <Icon name="Plus" size={16} className="mr-2" />
-            Subir Fotos
-          </Button>
-        </div>
-      )}
+    <div className="bg-card p-6 rounded-lg shadow-sm border">
+      <h2 className="text-2xl font-bold text-foreground mb-6">Historial de Puntos</h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {photos.map((photo) => (
-          <div 
-            key={photo.id} 
-            className="group relative aspect-square cursor-pointer" // Añadir cursor-pointer
-            onClick={() => onPhotoClick(photo.id)} // Añadir manejador de clic
-          >
-            <div className="w-full h-full bg-muted rounded-lg overflow-hidden">
-              <img
-                src={photo.thumbnail_url || photo.image_url}
-                alt={photo.caption || 'Foto'}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                loading="lazy"
-              />
-            </div>
-            
-            {/* Overlay de Interacciones y Edición */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex flex-col justify-end p-4">
-              <div className="text-white">
-                {photo.caption && (
-                  <p className="text-sm font-medium mb-1 truncate">{photo.caption}</p>
-                )}
-                <div className="flex items-center justify-between text-xs opacity-90">
-                  <span>{new Date(photo.created_at).toLocaleDateString()}</span>
-                  {photo.category && photo.category !== 'general' && (
-                    <span className="bg-black/50 px-2 py-1 rounded-full capitalize">
-                      {photo.category}
+      {(!pointsHistory || pointsHistory.length === 0) ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Icon name="Star" size={48} className="mx-auto mb-4" />
+          <p>Aún no tienes movimientos de puntos.</p>
+          <p className="text-sm">¡Completa misiones para empezar a ganar!</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-border">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Fecha
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Actividad
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Puntos
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-card divide-y divide-border">
+              {pointsHistory.map((entry, index) => (
+                <tr key={index}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                    {entry.type === 'mission_reward' ? getMissionName(entry.mission_id) : entry.description}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <span className={entry.points > 0 ? 'text-success' : 'text-destructive'}>
+                      {entry.points > 0 ? `+${entry.points}` : entry.points}
                     </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Botones de Editar/Eliminar */}
-              {isOwner && onPhotoAction && (
-                <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-white bg-black/50 hover:bg-black/70"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPhotoAction('edit', photo);
-                    }}
-                  >
-                    <Icon name="Edit" size={16} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-red-400 bg-black/50 hover:bg-black/70 hover:text-red-500"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPhotoAction('delete', photo);
-                    }}
-                  >
-                    <Icon name="Trash2" size={16} />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ===============================
-// COMPONENTE DE VIDEO GRID HORIZONTAL
-// ===============================
-
-export const VideoGridComponent = ({ 
-  videos = [], 
-  loading = false,
-  onVideoAction,
-  showActions = true,
-  isOwner = false,
-  onUploadClick,
-  emptyMessage = "No hay videos",
-  emptyDescription = "Los videos que subas aparecerán aquí"
-}) => {
-  console.log('🎬 VideoGridComponent render:', { 
-    videosCount: videos.length, 
-    loading,
-    hasVideos: videos.length > 0,
-    firstVideoSample: videos[0] ? {
-      id: videos[0].id,
-      title: videos[0].title,
-      views: videos[0].views_count,
-      duration: videos[0].duration_seconds,
-      orientation: videos[0].orientation,
-      aspect_ratio: videos[0].aspect_ratio,
-      classified_as: 'HORIZONTAL VIDEO'
-    } : null
-  });
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="space-y-3">
-            <div className="aspect-video bg-muted rounded-lg animate-pulse" />
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded animate-pulse" />
-              <div className="h-3 bg-muted rounded w-3/4 animate-pulse" />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (videos.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Icon name="Monitor" size={32} className="text-blue-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
-        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
-        {isOwner && onUploadClick && (
-          <Button onClick={onUploadClick} size="lg">
-            <Icon name="Plus" size={20} className="mr-2" />
-            Subir video horizontal
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {isOwner && onUploadClick && (
-        <div className="flex justify-end">
-          <Button onClick={onUploadClick}>
-            <Icon name="Plus" size={16} className="mr-2" />
-            Subir video
-          </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {videos.map((video) => (
-          <div 
-            key={video.id} 
-            className="group cursor-pointer"
-            onClick={() => console.log('Click en video horizontal:', video.id)}
-          >
-            <div className="relative">
-              {/* Thumbnail */}
-              <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                {video.thumbnail_url ? (
-                  <img
-                    src={video.thumbnail_url}
-                    alt={video.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={(e) => {
-                      console.log('Error loading thumbnail for video:', video.id);
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
-                    <Icon name="Play" size={48} className="text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-
-              {/* Play Button Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="w-16 h-16 bg-black/70 rounded-full flex items-center justify-center">
-                  <Icon name="Play" size={24} className="text-white ml-1" />
-                </div>
-              </div>
-
-              {/* Duration */}
-              {video.duration_seconds && video.duration_seconds > 0 && (
-                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                  {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}
-                </div>
-              )}
-
-              {/* Horizontal Badge */}
-              <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium">
-                VIDEO
-              </div>
-
-              {/* Debug Info - Solo en development */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-1 py-0.5 rounded">
-                  {video.orientation || 'no-orient'}
-                </div>
-              )}
-            </div>
-
-            {/* Video Info */}
-            <div className="mt-3 space-y-2">
-              <h4 className="font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                {video.title || 'Video sin título'}
-              </h4>
-              
-              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                {video.views_count !== null && video.views_count !== undefined && (
-                  <div className="flex items-center space-x-1">
-                    <Icon name="Eye" size={14} />
-                    <span>{video.views_count}</span>
-                  </div>
-                )}
-                {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
-                <span>{new Date(video.created_at).toLocaleDateString()}</span>
-              </div>
-
-              {/* Actions */}
-              {showActions && isOwner && onVideoAction && (
-                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onVideoAction('edit', video);
-                    }}
-                  >
-                    <Icon name="Edit" size={14} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onVideoAction('delete', video);
-                    }}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Icon name="Trash2" size={14} />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
 
-// ===============================
-// COMPONENTE DE REELS GRID
-// ===============================
 
-export const ReelsGridComponent = ({ 
-  reels = [], 
-  loading = false,
-  onReelAction,
-  showActions = true,
-  isOwner = false,
-  onUploadClick,
-  emptyMessage = "No hay reels",
-  emptyDescription = "Los reels que subas aparecerán aquí"
-}) => {
-  console.log('📱 ReelsGridComponent render:', { 
-    reelsCount: reels.length, 
-    loading,
-    hasReels: reels.length > 0,
-    firstReelSample: reels[0] ? {
-      id: reels[0].id,
-      title: reels[0].title,
-      views: reels[0].views_count,
-      duration: reels[0].duration_seconds,
-      orientation: reels[0].orientation,
-      aspect_ratio: reels[0].aspect_ratio,
-      classified_as: 'VERTICAL REEL'
-    } : null
-  });
+// --- UserPurchases (NUEVO - Integrado desde index (90).jsx) ---
+const UserPurchases = () => {
+    const [purchases, setPurchases] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const { user } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="space-y-3">
-            <div className="aspect-[9/16] bg-muted rounded-lg animate-pulse" />
-            <div className="space-y-2">
-              <div className="h-3 bg-muted rounded animate-pulse" />
-              <div className="h-2 bg-muted rounded w-3/4 animate-pulse" />
+    const fetchPurchases = useCallback(async () => {
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            const { data, error } = await supabase
+                .from('user_purchases') // Asume que tienes una tabla llamada 'user_purchases'
+                .select(`
+                    id,
+                    created_at,
+                    item_name,
+                    item_type,
+                    price_points,
+                    status
+                `)
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setPurchases(data || []);
+        } catch (err) {
+            console.error("Error fetching purchases:", err);
+            setError("No se pudieron cargar tus compras. Intenta de nuevo más tarde.");
+        } finally {
+            setLoading(false);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        fetchPurchases();
+    }, [fetchPurchases]);
+
+    if (!user) {
+        return (
+            <div className="bg-card p-6 rounded-lg shadow-sm border text-center text-muted-foreground">
+                <Icon name="Lock" size={48} className="mx-auto mb-4" />
+                <p>Inicia sesión para ver tus compras.</p>
             </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
+        );
+    }
 
-  if (reels.length === 0) {
+    if (loading) {
+        return (
+            <div className="bg-card p-6 rounded-lg shadow-sm border text-center text-muted-foreground">
+                <Icon name="Loader2" size={48} className="mx-auto mb-4 animate-spin" />
+                <p>Cargando tus compras...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="bg-card p-6 rounded-lg shadow-sm border text-center text-destructive">
+                <Icon name="AlertCircle" size={48} className="mx-auto mb-4" />
+                <p>{error}</p>
+            </div>
+        );
+    }
+
     return (
-      <div className="text-center py-16">
-        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Icon name="Smartphone" size={32} className="text-pink-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-foreground mb-3">{emptyMessage}</h3>
-        <p className="text-muted-foreground mb-8 max-w-md mx-auto">{emptyDescription}</p>
-        {isOwner && onUploadClick && (
-          <Button onClick={onUploadClick} size="lg">
-            <Icon name="Plus" size={20} className="mr-2" />
-            Crear reel vertical
-          </Button>
-        )}
-      </div>
-    );
-  }
+        <div className="bg-card p-6 rounded-lg shadow-sm border">
+            <h2 className="text-2xl font-bold text-foreground mb-6">Mis Compras</h2>
 
+            {purchases.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                    <Icon name="ShoppingCart" size={48} className="mx-auto mb-4" />
+                    <p>Aún no has realizado ninguna compra.</p>
+                    <p className="text-sm">Explora nuestra tienda para empezar.</p>
+                </div>
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-border">
+                        <thead>
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    Fecha
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    Artículo
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    Tipo
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    Costo (Puntos)
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                    Estado
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-card divide-y divide-border">
+                            {purchases.map((purchase) => (
+                                <tr key={purchase.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                                        {new Date(purchase.created_at).toLocaleDateString()}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                                        {purchase.item_name}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                                        {purchase.item_type}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-destructive">
+                                        -{purchase.price_points}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                            purchase.status === 'completed' ? 'bg-success/10 text-success' :
+                                            purchase.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500' :
+                                            'bg-destructive/10 text-destructive'
+                                        }`}>
+                                            {purchase.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+// --- SettingsSidebar ---
+const SettingsSidebar = ({ activeTab, onTabChange }) => {
   return (
-    <div className="space-y-6">
-      {isOwner && onUploadClick && (
-        <div className="flex justify-end">
-          <Button onClick={onUploadClick}>
-            <Icon name="Plus" size={16} className="mr-2" />
-            Crear reel
-          </Button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {reels.map((reel) => (
-          <div 
-            key={reel.id} 
-            className="group cursor-pointer"
-            onClick={() => console.log('Click en reel vertical:', reel.id)}
-          >
-            <div className="relative">
-              {/* Thumbnail - Aspecto vertical 9:16 */}
-              <div className="aspect-[9/16] bg-muted rounded-lg overflow-hidden">
-                {reel.thumbnail_url ? (
-                  <img
-                    src={reel.thumbnail_url}
-                    alt={reel.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={(e) => {
-                      console.log('Error loading thumbnail for reel:', reel.id);
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
-                    <Icon name="Play" size={24} className="text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-
-              {/* Play Button Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="w-12 h-12 bg-black/70 rounded-full flex items-center justify-center">
-                  <Icon name="Play" size={16} className="text-white ml-1" />
-                </div>
-              </div>
-
-              {/* Duration */}
-              {reel.duration_seconds && reel.duration_seconds > 0 && (
-                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded text-center">
-                  {reel.duration_seconds < 60 ? `${reel.duration_seconds}s` : 
-                   `${Math.floor(reel.duration_seconds / 60)}:${String(reel.duration_seconds % 60).padStart(2, '0')}`}
-                </div>
-              )}
-
-              {/* Reel Badge */}
-              <div className="absolute top-2 left-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs px-2 py-1 rounded-full font-medium">
-                REEL
-              </div>
-
-              {/* Debug Info - Solo en development */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="absolute top-2 right-2 bg-pink-600 text-white text-xs px-1 py-0.5 rounded">
-                  {reel.orientation || 'no-orient'}
-                </div>
-              )}
-            </div>
-
-            {/* Reel Info */}
-            <div className="mt-2 space-y-1">
-              <h4 className="font-medium text-foreground text-sm line-clamp-2 group-hover:text-primary transition-colors">
-                {reel.title || 'Reel sin título'}
-              </h4>
-              
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center space-x-2">
-                  {reel.views_count !== null && reel.views_count !== undefined && (
-                    <div className="flex items-center space-x-1">
-                      <Icon name="Eye" size={12} />
-                      <span>{reel.views_count}</span>
-                    </div>
-                  )}
-                  {/* Nota: Se han eliminado las referencias a likes_count y comments_count */}
-                </div>
-              </div>
-
-              {/* Actions */}
-              {showActions && isOwner && onReelAction && (
-                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onReelAction('edit', reel);
-                    }}
-                  >
-                    <Icon name="Edit" size={12} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-destructive hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onReelAction('delete', reel);
-                    }}
-                  >
-                    <Icon name="Trash2" size={12} />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="bg-card p-4 rounded-lg shadow-sm border h-full">
+      <nav className="space-y-2">
+        <button
+          onClick={() => onTabChange('profile')}
+          className={`w-full flex items-center p-3 rounded-md transition-colors text-left ${
+            activeTab === 'profile'
+              ? 'bg-primary/10 text-primary font-medium'
+              : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Icon name="User" size={20} className="mr-3" />
+          Perfil
+        </button>
+        <button
+          onClick={() => onTabChange('security')}
+          className={`w-full flex items-center p-3 rounded-md transition-colors text-left ${
+            activeTab === 'security'
+              ? 'bg-primary/10 text-primary font-medium'
+              : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Icon name="Lock" size={20} className="mr-3" />
+          Seguridad
+        </button>
+        <button
+          onClick={() => onTabChange('notifications')}
+          className={`w-full flex items-center p-3 rounded-md transition-colors text-left ${
+            activeTab === 'notifications'
+              ? 'bg-primary/10 text-primary font-medium'
+              : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Icon name="Bell" size={20} className="mr-3" />
+          Notificaciones
+        </button>
+        <button
+          onClick={() => onTabChange('points')}
+          className={`w-full flex items-center p-3 rounded-md transition-colors text-left ${
+            activeTab === 'points'
+              ? 'bg-primary/10 text-primary font-medium'
+              : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Icon name="Star" size={20} className="mr-3" />
+          Puntos
+        </button>
+        {/* ✅ NUEVO: Pestaña Mis Compras */}
+        <button
+          onClick={() => onTabChange('purchases')}
+          className={`w-full flex items-center p-3 rounded-md transition-colors text-left ${
+            activeTab === 'purchases'
+              ? 'bg-primary/10 text-primary font-medium'
+              : 'text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          <Icon name="ShoppingCart" size={20} className="mr-3" />
+          Mis Compras
+        </button>
+      </nav>
     </div>
   );
 };
 
-// ===============================
+
+// ===========================================
 // COMPONENTE PRINCIPAL
-// ===============================
+// ===========================================
 
 const UserProfileSettings = () => {
-  const { user, isAuthenticated, signOut } = useAuth();
+  const { user, signOut, refreshUserSession } = useAuth();
+  const { userProfile, loading: profileLoading, fetchUserProfile, updateProfile } = useUser();
   const navigate = useNavigate();
-  
-  const { 
-    totalPoints, 
-    freePoints, 
-    premiumPoints, 
-    loading: pointsLoading 
-  } = usePoints();
-  
-  const [activeTab, setActiveTab] = useState('videos');
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [showQuickUpload, setShowQuickUpload] = useState(false);
-  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto
-  const [showImageEditor, setShowImageEditor] = useState(false); 
+  const location = useLocation();
 
-  // 🚨 ESTADOS PARA EL MODAL DE DETALLE DE FOTO
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
-  // Usamos el índice para facilitar la navegación del carrusel
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null); 
-  
-  // 🚨 ESTADOS PARA EL MODAL DE EDICIÓN
-  const [showPhotoEditModal, setShowPhotoEditModal] = useState(false);
-  const [photoToEditData, setPhotoToEditData] = useState(null); 
-  
-  // ✅ INICIO: Estados y lógica del Historial de Puntos (movido de /rewards)
-  const [transactions, setTransactions] = useState([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(true);
-  const [dateFilter, setDateFilter] = useState('all');
-  const [page, setPage] = useState(1);
-  const [hasMorePages, setHasMorePages] = useState(false);
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  // ✅ FIN: Estados del Historial
+  const [activeTab, setActiveTab] = useState('profile');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
 
-  // Hooks de datos
-  const {
-    profileData,
-    loading: profileLoading,
-    error: profileError,
-    refreshProfile,
-    updateProfile
-  } = useUserProfile();
-
-  const {
-    videos,
-    stats: videoStats,
-    loading: videosLoading,
-    error: videosError,
-    refresh: refreshVideos
-  } = useUserVideos(user?.id);
-
-  const {
-    reels,
-    stats: reelStats,
-    loading: reelsLoading,
-    error: reelsError,
-    refresh: refreshReels
-  } = useUserReels(user?.id);
-
-  const {
-    photos,
-    loading: photosLoading,
-    refresh: refreshPhotos,
-    error: photosError // Captura el error de fotos
-  } = useUserPhotos(user?.id);
-
-  // ❌ Hook 'usePointsHistory' ELIMINADO
-  
-  const { purchases } = usePurchaseHistory();
-
-  // =================================================================
-  // ✅ INICIO: Lógica para activar pestaña desde ancla (#)
-  // =================================================================
+  // Redirigir si no hay usuario
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash === '#historial-puntos') {
-      setActiveTab('points');
-    }
-  }, []); // Se ejecuta solo una vez al montar el componente
-  // =================================================================
-  // ✅ FIN: Lógica de ancla
-  // =================================================================
-
-
-  // 🚨 OBTENER LOS DATOS COMPLETOS DE LA FOTO ACTUAL (PARA EL MODAL DE DETALLE)
-  const currentPhotoData = useMemo(() => {
-    if (selectedPhotoIndex === null || !photos || selectedPhotoIndex >= photos.length) return null;
-    return photos[selectedPhotoIndex];
-  }, [selectedPhotoIndex, photos]);
-
-  // Formatear datos del usuario
-  const userData = useMemo(() => {
-    if (!profileData) return null;
-
-    const totalViews = (videoStats.totalViews || 0) + (reelStats.totalViews || 0);
-    // Asignamos 0 a likes/comments de fotos ya que no tienen columna en la tabla `photos`
-    const totalLikes = 0; 
-    const totalComments = 0;
-
-    return {
-      id: profileData.id,
-      name: profileData.full_name || 'Usuario',
-      username: profileData.username || '',
-      email: profileData.email || '',
-      bio: profileData.bio || '',
-      avatar: profileData.avatar_url,
-      coverImage: profileData.cover_image_url,
-      website: profileData.website || '',
-      location: profileData.location || '',
-      
-      points: totalPoints,
-      freePoints: freePoints,
-      premiumPoints: premiumPoints,
-      
-      isBusinessAccount: profileData.is_business_account || false,
-      isVerified: profileData.is_verified || false,
-      joinedAt: profileData.created_at,
-      
-      // Contadores
-      videosCount: videos.length,
-      reelsCount: reels.length,
-      photosCount: photos.length,
-      followersCount: profileData.followers_count || 0,
-      followingCount: profileData.following_count || 0,
-      
-      // Stats calculadas
-      totalViews,
-      totalLikes,
-      totalComments,
-      
-      achievements: []
-    };
-  }, [profileData, videos, reels, photos, videoStats, reelStats, totalPoints, freePoints, premiumPoints]);
-
-  // Calcular contadores para tabs
-  const tabCounts = useMemo(() => ({
-    videos: videos.length,
-    reels: reels.length,
-    photos: photos.length,
-    purchases: purchases.length,
-    points: transactions.length, // ✅ Ahora usa el estado 'transactions' local
-    liked: 0,
-    playlists: 0
-  }), [videos.length, reels.length, photos.length, purchases.length, transactions.length]);
-
-  // ===============================
-  // ✅ INICIO: LÓGICA DE HISTORIAL DE PUNTOS
-  // ===============================
-  
-  // FUNCIÓN PARA CARGAR EL HISTORIAL (PAGINADO)
-  const loadHistory = useCallback(async (pageNum, reset = false) => {
-    if (!user?.id) return;
-    setTransactionsLoading(true);
-
-    let startDate = null;
-    let endDate = null;
-    const now = new Date();
-    
-    if (dateFilter === 'today') {
-      startDate = new Date(now.setHours(0, 0, 0, 0));
-    } else if (dateFilter === 'week') {
-      const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-      startDate = new Date(firstDayOfWeek.setHours(0, 0, 0, 0));
-    } else if (dateFilter === 'month') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (dateFilter === 'custom') {
-        if (customStartDate) startDate = new Date(customStartDate);
-        if (customEndDate) {
-            endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-        }
-    }
-
-    const result = await getUserPointsHistory(user.id, {
-      startDate,
-      endDate,
-      page: pageNum
-    });
-
-    if (result.success) {
-      if (reset) {
-        setTransactions(result.data);
-      } else {
-        setTransactions(prev => [...prev, ...result.data]);
-      }
-      setHasMorePages(result.hasMore);
+    if (!user) {
+      navigate('/login');
     } else {
-      console.error("Error al cargar historial:", result.error);
+      fetchUserProfile(user.id);
     }
-    
-    setTransactionsLoading(false);
-  }, [user, dateFilter, customStartDate, customEndDate]);
+  }, [user, navigate, fetchUserProfile]);
 
-  // EFECTO PARA CARGAR EL HISTORIAL (Solo cuando la tab esté activa)
+  // Manejar el activeTab desde la URL (si se envía)
   useEffect(() => {
-    if (user?.id && activeTab === 'points') {
-      setPage(1); 
-      loadHistory(1, true);
+    const params = new URLSearchParams(location.search);
+    const tabFromUrl = params.get('tab');
+    if (tabFromUrl && ['profile', 'security', 'notifications', 'points', 'purchases'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
     }
-  }, [user, activeTab, dateFilter, customStartDate, customEndDate, loadHistory]); 
+  }, [location.search]);
 
-  // HANDLERS PARA FILTROS Y PAGINACIÓN
-  const handleLoadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    loadHistory(nextPage, false);
-  };
-  
-  const handleDateFilterChange = (newDateFilter) => {
-    setPage(1); 
-    setDateFilter(newDateFilter);
-    setCustomStartDate('');
-    setCustomEndDate('');
-  };
-
-  const handleCustomStartDateChange = (date) => {
-    setPage(1);
-    setCustomStartDate(date);
-    setDateFilter('custom');
-  };
-
-  const handleCustomEndDateChange = (date) => {
-    setPage(1);
-    setCustomEndDate(date);
-    setDateFilter('custom');
-  };
-  
-  // ===============================
-  // ✅ FIN: LÓGICA DE HISTORIAL DE PUNTOS
-  // ===============================
-
-  // ===============================
-  // EVENT HANDLERS
-  // ===============================
-
-  // MANEJADOR DE CLIC DE FOTO (ABRIR DETALLE)
-  const handlePhotoClick = useCallback((photoId) => {
-    // Busca el índice de la foto seleccionada
-    const index = photos.findIndex(p => p.id === photoId);
-    if (index !== -1) {
-        setSelectedPhotoIndex(index);
-        setShowPhotoModal(true);
-    }
-  }, [photos]);
-  
-  const handleClosePhotoModal = useCallback(() => {
-    setShowPhotoModal(false);
-    setSelectedPhotoIndex(null);
-    refreshProfile(); 
-  }, [refreshProfile]);
-
-  // CIERRE DEL MODAL DE EDICIÓN
-  const handleClosePhotoEditModal = useCallback(() => {
-    setShowPhotoEditModal(false);
-    setPhotoToEditData(null);
-    refreshPhotos(); // Refrescar la lista si se hizo una edición
-  }, [refreshPhotos]);
-
-  // 🚨 LÓGICA DE GUARDADO DE EDICIÓN DE FOTO 
-  const handleSaveChanges = useCallback(async (photoId, newCaption, newDescription) => {
+  const handleUpdateProfile = async (formData, avatarFile) => {
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
     try {
-      // 🚨 CORRECCIÓN: Si la columna 'description' existe, se guarda.
-      const updates = {
-        caption: newCaption,
-        description: newDescription, 
-        updated_at: new Date().toISOString()
-      };
-      
-      const validUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, v]) => v !== null && v !== undefined)
-      );
+      await updateProfile(user.id, formData, avatarFile);
+      setSuccess('Perfil actualizado exitosamente.');
+      await refreshUserSession(); // Asegura que el estado del usuario esté actualizado
+    } catch (err) {
+      setError(err.message || 'Error al actualizar el perfil.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const { error } = await supabase
-        .from('photos')
-        .update(validUpdates)
-        .eq('id', photoId);
-
+  const handleUpdatePassword = async (newPassword) => {
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-
-      console.log(`✅ Metadatos de foto ${photoId} guardados exitosamente.`);
-      handleClosePhotoEditModal(); // Cerrar y refrescar lista
-    } catch (error) {
-      console.error('❌ Error al guardar cambios de foto:', error);
-      alert(`Error al guardar cambios: ${error.message}. Si el error indica "column description does not exist", es necesario eliminar el campo 'description' en el modal.`);
-    }
-  }, [handleClosePhotoEditModal]);
-
-
-  // NUEVO HANDLER DE ACCIONES (EDITAR/ELIMINAR)
-  const handlePhotoAction = useCallback(async (action, photo) => {
-    try {
-      switch (action) {
-        case 'edit':
-          console.log('Abriendo edición de foto:', photo.id);
-          setPhotoToEditData(photo); // Carga los datos de la foto en el estado
-          setShowPhotoEditModal(true); // Abre el modal de edición
-          break;
-        case 'delete':
-          if (window.confirm('¿Estás seguro de que quieres eliminar esta foto?')) {
-            const { error } = await supabase
-              .from('photos')
-              .delete()
-              .eq('id', photo.id);
-            
-            if (!error) {
-              await refreshPhotos();
-              await refreshProfile();
-              console.log('✅ Foto eliminada exitosamente:', photo.id);
-            } else {
-              console.error('❌ Error eliminando foto:', error);
-              alert(`Error al eliminar la foto: ${error.message}`);
-            }
-          }
-          break;
-        default:
-          break;
-      }
-    } catch (error) {
-      console.error('Error con la acción de foto:', error);
-    }
-  }, [refreshPhotos, refreshProfile]);
-
-  // MANEJADOR DE NAVEGACIÓN ENTRE FOTOS
-  const handleNavigatePhoto = useCallback((direction) => {
-    if (photos.length === 0 || selectedPhotoIndex === null) return;
-
-    let newIndex = selectedPhotoIndex;
-    if (direction === 'next' && newIndex < photos.length - 1) {
-        newIndex += 1;
-    } else if (direction === 'prev' && newIndex > 0) {
-        newIndex -= 1;
-    } else {
-        return; // No hay más fotos
-    }
-    setSelectedPhotoIndex(newIndex);
-  }, [photos, selectedPhotoIndex]);
-
-  // ⭐️ INTEGRACIÓN DE TECLADO ⭐️
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (showPhotoModal) {
-        if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') {
-          handleNavigatePhoto('next');
-        } else if (event.key === 'ArrowLeft') {
-          handleNavigatePhoto('prev');
-        } else if (event.key === 'Escape') {
-          handleClosePhotoModal();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [showPhotoModal, handleNavigatePhoto, handleClosePhotoModal]);
-
-  // 🚨 OPTIMIZACIÓN: Solo necesitamos un estado para saber si el editor está abierto (mantener por compatibilidad)
-  // [Resto de event handlers sin cambios funcionales]
-  
-  const handleEditProfile = useCallback(() => {
-    setActiveTab('settings');
-    setEditingProfile(true);
-  }, []);
-
-  const handleUpdateSettings = useCallback(async (newSettings) => {
-    try {
-      const result = await updateProfile(newSettings);
-      if (result?.success) {
-        setEditingProfile(false);
-        await refreshProfile();
-        console.log('✅ Profile updated successfully');
-      } else {
-        console.error('❌ Failed to update profile:', result?.error);
-      }
-    } catch (error) {
-      console.error('Error updating settings:', error);
-    }
-  }, [updateProfile, refreshProfile]);
-
-  // 🚨 OPTIMIZACIÓN DE HANDLERS DE IMAGEN DE PERFIL/PORTADA
-  const handleEditAvatar = useCallback(() => {
-    // Abrir el editor de imágenes general
-    setShowImageEditor(true);
-  }, []);
-
-  const handleEditCover = useCallback(() => {
-    // Abrir el editor de imágenes general
-    setShowImageEditor(true);
-  }, []);
-
-  const handleAvatarUpload = useCallback(async (url) => {
-    console.log('✅ Avatar updated to:', url);
-    await refreshProfile();
-    setShowImageEditor(false);
-  }, [refreshProfile]);
-
-  const handleCoverUpload = useCallback(async (url) => {
-    console.log('✅ Cover updated to:', url);
-    await refreshProfile();
-    setShowImageEditor(false);
-  }, [refreshProfile]);
-
-  const handleQuickUploadOpen = useCallback(() => {
-    setShowQuickUpload(true);
-  }, []);
-
-  // ⭐️ LÓGICA DE TRACKING DE PUNTOS POR SUBIDA DE FOTOS (IMPLEMENTACIÓN) ⭐️
-  const handleQuickUploadSuccess = useCallback(async (uploadedPhotoData) => {
-    const photoId = uploadedPhotoData?.id; // Asumimos que el componente de subida devuelve el ID
-
-    // 1. Refrescar datos del perfil y fotos (Esto soluciona la no visibilidad de la foto)
-    await Promise.all([refreshPhotos(), refreshProfile()]); 
-    console.log('✅ Photos uploaded successfully and profile/photos refreshed');
-    
-    if (photoId) {
-      try {
-        // 2. LLAMADA AL SISTEMA DE PUNTOS
-        const trackingResult = await trackUploadVideo(photoId); 
-
-        // 3. Manejo de la Respuesta y Notificación
-        if (trackingResult.result === 'success') {
-          console.log(`¡Foto subida! Puntos ganados: ${trackingResult.points_earned}`);
-          // Aquí se podría añadir la notificación al usuario
-        } else if (trackingResult.result === 'already_paid') {
-          console.log('Ya ganaste puntos por subir este contenido o la misión no estaba activa.');
-        } else {
-          console.error('Tracking de puntos fallido o inesperado:', trackingResult);
-        }
-      } catch (error) {
-        console.error('Error en el tracking de puntos durante la subida de foto:', error);
-      }
-    }
-  }, [refreshPhotos, refreshProfile]);
-
-
-  const handleVideoAction = useCallback(async (action, video) => {
-    try {
-      switch (action) {
-        case 'like':
-          console.log('Like video:', video.id);
-          break;
-        case 'edit':
-          navigate(`/video-edit/${video.id}`);
-          break;
-        case 'delete':
-          if (window.confirm('¿Estás seguro de que quieres eliminar este video?')) {
-            const { error } = await supabase
-              .from('videos')
-              .delete()
-              .eq('id', video.id);
-            
-            if (!error) {
-              await Promise.all([refreshVideos(), refreshReels()]);
-            }
-          }
-          break;
-        default:
-          break;
-      }
-    } catch (error) {
-      console.error('Error with video action:', error);
-    }
-  }, [navigate, refreshVideos, refreshReels]);
-
-  const handleReelAction = useCallback(async (action, reel) => {
-    try {
-      switch (action) {
-        case 'like':
-          console.log('Like reel:', reel.id);
-          break;
-        case 'edit':
-          navigate(`/video-edit/${reel.id}`);
-          break;
-        case 'delete':
-          if (window.confirm('¿Estás seguro de que quieres eliminar este reel?')) {
-            const { error } = await supabase
-              .from('videos')
-              .delete()
-              .eq('id', reel.id);
-            
-            if (!error) {
-              await Promise.all([refreshVideos(), refreshReels()]);
-            }
-          }
-          break;
-        default:
-          break;
-      }
-    } catch (error) {
-      console.error('Error with reel action:', error);
-    }
-  }, [navigate, refreshVideos, refreshReels]);
-
-  const handleSignOut = useCallback(async () => {
-    await signOut();
-    window.location.href = '/';
-  }, [signOut]);
-
-  // Verificar autenticación
-  useEffect(() => {
-    if (!isAuthenticated) {
-      window.location.href = '/login';
-    }
-  }, [isAuthenticated]);
-
-  // ===============================
-  // RENDER FUNCTIONS
-  // ===============================
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'videos':
-        // ... (omitted rendering logic)
-        if (videosError) {
-          return (
-            <div className="text-center py-16">
-              <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar videos</h3>
-              <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded">
-                {videosError}
-              </p>
-              <Button onClick={refreshVideos}>
-                <Icon name="RefreshCw" size={16} className="mr-2" />
-                Reintentar
-              </Button>
-            </div>
-          );
-        }
-        
-        return (
-          <VideoGridComponent
-            videos={videos} 
-            loading={videosLoading}
-            onVideoAction={handleVideoAction}
-            showActions={true}
-            isOwner={true}
-            onUploadClick={() => window.location.href = '/upload'}
-            emptyMessage="No tienes videos horizontales aún"
-            emptyDescription="Los videos en formato horizontal (16:9) que subas aparecerán aquí. Ideal para tutoriales, vlogs y contenido de escritorio."
-          />
-        );
-
-      case 'reels':
-        // 🚨 MANEJO DE ERRORES ROBUSTO PARA REELS
-        if (reelsError) {
-          return (
-            <div className="text-center py-16">
-              <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar reels</h3>
-              <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded">
-                {reelsError}
-              </p>
-              <Button onClick={refreshReels}>
-                <Icon name="RefreshCw" size={16} className="mr-2" />
-                Reintentar
-              </Button>
-            </div>
-          );
-        }
-        
-        return (
-          <ReelsGridComponent
-            reels={reels} 
-            loading={reelsLoading}
-            onReelAction={handleReelAction}
-            showActions={true}
-            isOwner={true}
-            onUploadClick={() => window.location.href = '/upload'}
-            emptyMessage="No tienes reels aún"
-            emptyDescription="Los videos en formato vertical (9:16) que subas aparecerán aquí. Ideal para contenido móvil, stories y videos virales."
-          />
-        );
-      
-      case 'photos':
-        return (
-          <PhotoGrid
-            photos={photos}
-            loading={photosLoading}
-            onQuickUpload={handleQuickUploadOpen}
-            onPhotoAction={handlePhotoAction} // PASAMOS EL HANDLER DE ACCIONES
-            isOwner={true}
-            fetchError={photosError} // Pasa el error para visualización
-            onPhotoClick={handlePhotoClick} // Pasa el manejador de clic
-          />
-        );
-
-      case 'liked':
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Videos que te gustaron</h3>
-              <div className="text-center py-8">
-                <Icon name="Heart" size={48} className="text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No has dado like a ningún video aún</p>
-              </div>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Fotos que te gustaron</h3>
-              <div className="text-center py-8">
-                <Icon name="Heart" size={48} className="text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No has dado like a ninguna foto aún</p>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'playlists':
-        return (
-          <div className="text-center py-16">
-            <Icon name="List" size={48} className="text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-foreground mb-3">No has creado listas aún</h3>
-            <p className="text-muted-foreground mb-6">Organiza tus videos favoritos en listas de reproducción</p>
-            <Button variant="outline">
-              <Icon name="Plus" size={16} className="mr-2" />
-              Crear primera lista
-            </Button>
-          </div>
-        );
-
-      case 'purchases':
-        return <PurchaseHistory purchases={purchases} />;
-
-      // ==================================================
-      // ✅ SECCIÓN DE PUNTOS ACTUALIZADA
-      // ==================================================
-      case 'points':
-        return (
-          // ✅ ID AÑADIDO PARA EL ANCLA DEL LINK
-          <div id="historial-puntos" className="bg-card rounded-lg border p-4 sm:p-6"> 
-            <TransactionHistory
-              transactions={transactions}
-              loading={transactionsLoading}
-              dateFilter={dateFilter}
-              onDateFilterChange={handleDateFilterChange}
-              hasMore={hasMorePages}
-              onLoadMore={handleLoadMore}
-              startDate={customStartDate}
-              endDate={customEndDate}
-              onStartDateChange={handleCustomStartDateChange}
-              onEndDateChange={handleCustomEndDateChange}
-            />
-          </div>
-        );
-
-      case 'settings':
-        return (
-          <SettingsPanel
-            user={userData}
-            loading={profileLoading}
-            onUpdateSettings={handleUpdateSettings}
-            onUploadAvatar={handleAvatarUpload}
-            onUploadCover={handleCoverUpload}
-            onSignOut={handleSignOut}
-            editing={editingProfile}
-            onCancelEdit={() => setEditingProfile(false)}
-          />
-        );
-
-      default:
-        return null;
+      setSuccess('Contraseña actualizada con éxito. Por favor, inicia sesión de nuevo.');
+      await signOut(); // Forzar re-login por seguridad
+      navigate('/login');
+    } catch (err) {
+      setError(err.message || 'Error al actualizar la contraseña.');
+      throw err; // Re-lanza para que el componente de seguridad lo capture
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ===============================
-  // RENDER PRINCIPAL
-  // ===============================
-
-  // Loading state
-  if (!isAuthenticated || profileLoading) {
+  if (profileLoading || !userProfile) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Cargando perfil...</p>
-        </div>
+        <Icon name="Loader2" size={48} className="animate-spin text-primary" />
+        <p className="ml-4 text-foreground">Cargando ajustes del perfil...</p>
       </div>
     );
   }
-
-  // Error state
-  if (profileError) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-foreground mb-2">Error al cargar perfil</h2>
-          <p className="text-muted-foreground mb-6">{profileError}</p>
-          <Button onClick={refreshProfile}>
-            <Icon name="RefreshCw" size={16} className="mr-2" />
-            Reintentar
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // 🚨 COMPONENTE DE EDICIÓN DE FOTO (Inline para simplicidad)
-  const PhotoEditModal = ({ photo, onClose, onSave }) => {
-    // 🚨 CORRECCIÓN 1: Usar valores iniciales de la foto
-    const [caption, setCaption] = useState(photo.caption || '');
-    // 🚨 CORRECCIÓN 2: Usamos el valor real de la columna 'description'
-    const [description, setDescription] = useState(photo.description || ''); 
-    const [isSaving, setIsSaving] = useState(false);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      
-      // Validar si los datos realmente cambiaron antes de guardar (Opcional)
-      if (caption === (photo.caption || '') && description === (photo.description || '')) {
-        onClose();
-        return;
-      }
-      
-      setIsSaving(true);
-      // Llamamos a la función de guardado con los estados actuales
-      await onSave(photo.id, caption, description);
-      // La función onSave se encarga de cerrar el modal y refrescar la lista.
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-card rounded-lg border max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold">Editar Metadatos de Foto</h2>
-            <Button variant="ghost" size="sm" onClick={onClose} disabled={isSaving}>
-              <Icon name="X" size={20} />
-            </Button>
-          </div>
-          
-          <p className="text-sm text-muted-foreground mb-4">
-            {`Editando foto ID: ${photo.id.slice(0, 8)}...`}
-          </p>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Campo Título/Caption */}
-            <input
-              type="text"
-              placeholder="Título/Caption"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              className="w-full border p-2 rounded bg-input text-foreground"
-              maxLength={150}
-            />
-            {/* Campo Descripción */}
-            <textarea
-              placeholder="Descripción (Opcional)"
-              rows="3"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border p-2 rounded bg-input text-foreground"
-              maxLength={500}
-            />
-            <Button type="submit" className="w-full" disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                'Guardar Cambios'
-              )}
-            </Button>
-          </form>
-          
-        </div>
-      </div>
-    );
-  };
-
 
   return (
     <>
       <Helmet>
-        <title>Mi Perfil - {userData?.name || 'Usuario'} | RADEISAN</title>
-        <meta name="description" content={`Perfil de ${userData?.name || 'Usuario'}${userData?.bio ? ` - ${userData.bio}` : ''}. ${userData?.videosCount || 0} videos, ${userData?.reelsCount || 0} reels, ${userData?.photosCount || 0} fotos.`} />
-        <meta name="keywords" content="perfil, usuario, configuración, contenido, videos, reels, fotos, RADEISAN" />
+        <title>Ajustes de Perfil - {userProfile?.username || 'Usuario'} | RADEISAN</title>
+        <meta name="description" content="Gestiona la configuración de tu perfil, seguridad, notificaciones y más." />
       </Helmet>
 
       <div className="min-h-screen bg-background">
         <Header />
+        <PrimaryNavigation />
         
         <main className="pt-32 pb-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            
-            {/* Profile Header (omitido) */}
-            <div className="bg-card border border-border rounded-lg overflow-hidden mb-8 shadow-sm">
-              {/* Cover Image Container */}
-              <div className="relative">
-                {/* Cover Image */}
-                <div className="h-60 sm:h-72 md:h-80 bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 overflow-hidden">
-                  {userData?.coverImage ? (
-                    <img 
-                      src={userData.coverImage} 
-                      alt="Portada del perfil"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400" />
-                  )}
-                  
-                  {/* Botón cambiar cover */}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute top-4 right-4 bg-white/90 hover:bg-white text-gray-800 border-0 shadow-md"
-                    onClick={handleEditCover}
-                  >
-                    <Icon name="Camera" size={16} className="mr-2" />
-                    Cambiar portada
-                  </Button>
-                </div>
+            <h1 className="text-4xl font-extrabold text-foreground mb-10">Ajustes</h1>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              {/* Sidebar de Navegación */}
+              <div className="lg:col-span-1">
+                <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
               </div>
 
-              {/* Profile Info Section */}
-              <div className="px-6 py-6">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:space-x-6">
-                  
-                  {/* Avatar */}
-                  <div className="relative flex-shrink-0 -mt-20 mb-4 sm:mb-0">
-                    <div className="w-40 h-40 rounded-full border-4 border-card bg-background overflow-hidden shadow-lg">
-                      {userData?.avatar ? (
-                        <img 
-                          src={userData.avatar} 
-                          alt={userData?.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-muted">
-                          <Icon name="User" size={60} className="text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Botón cambiar avatar */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-white hover:bg-gray-50 text-gray-800 border-0 shadow-md p-0"
-                      onClick={handleEditAvatar}
-                    >
-                      <Icon name="Camera" size={20} />
-                    </Button>
+              {/* Contenido Principal de la Pestaña */}
+              <div className="lg:col-span-3">
+                {error && (
+                  <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center space-x-3">
+                    <Icon name="AlertCircle" size={20} className="text-destructive flex-shrink-0" />
+                    <p className="text-destructive text-sm">{error}</p>
                   </div>
-
-                  {/* User Info */}
-                  <div className="flex-1 min-w-0 pt-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-                      <div className="flex-1 min-w-0">
-                        {/* Nombre y username */}
-                        <h1 className="text-3xl font-bold text-foreground mb-2 break-words">
-                          {userData?.name}
-                        </h1>
-                        <div className="flex items-center space-x-3 mb-3">
-                          <p className="text-muted-foreground">@{userData?.username}</p>
-                          {userData?.isVerified && (
-                            <Icon name="BadgeCheck" size={18} className="text-primary" />
-                          )}
-                          {userData?.isBusinessAccount && (
-                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                              Negocio
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Bio */}
-                        {userData?.bio && (
-                          <p className="text-foreground mb-4 max-w-2xl">
-                            {userData.bio}
-                          </p>
-                        )}
-
-                        {/* Información adicional */}
-                        {(userData?.location || userData?.website) && (
-                          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
-                            {userData?.location && (
-                              <div className="flex items-center space-x-1">
-                                <Icon name="MapPin" size={14} />
-                                <span>{userData.location}</span>
-                              </div>
-                            )}
-                            {userData?.website && (
-                              <div className="flex items-center space-x-1">
-                                <Icon name="Link" size={14} />
-                                <a 
-                                  href={userData.website} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-primary hover:underline"
-                                >
-                                  {userData.website.replace(/^https?:\/\//, '')}
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Stats */}
-                        <div className="flex flex-wrap gap-6 text-sm mb-4">
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Monitor" size={16} className="text-blue-600" />
-                            <span className="font-semibold">{userData?.videosCount || 0}</span>
-                            <span className="text-muted-foreground">videos</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Smartphone" size={16} className="text-pink-600" />
-                            <span className="font-semibold">{userData?.reelsCount || 0}</span>
-                            <span className="text-muted-foreground">reels</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Image" size={16} className="text-green-600" />
-                            <span className="font-semibold">{userData?.photosCount || 0}</span>
-                            <span className="text-muted-foreground">fotos</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Eye" size={16} className="text-muted-foreground" />
-                            <span className="font-semibold">{userData?.totalViews || 0}</span>
-                            <span className="text-muted-foreground">views</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <Icon name="Heart" size={16} className="text-red-500" />
-                            <span className="font-semibold">{userData?.totalLikes || 0}</span>
-                            <span className="text-muted-foreground">likes</span>
-                          </div>
-                        </div>
-
-                        {/* Tarjeta de Balance de Puntos */}
-                        <div className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg p-4 max-w-md">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium mb-1">
-                                Balance de Puntos
-                              </p>
-                              {pointsLoading ? (
-                                <div className="h-8 w-32 bg-yellow-200/50 dark:bg-yellow-800/50 animate-pulse rounded" />
-                              ) : (
-                                <>
-                                  <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                                    {totalPoints.toLocaleString()}
-                                  </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                    <span className="text-green-600 dark:text-green-600 font-medium">
-                                      {freePoints.toLocaleString()} gratis
-                                    </span>
-                                    {' + '}
-                                    <span className="text-purple-600 dark:text-purple-400 font-medium">
-                                      {premiumPoints.toLocaleString()} premium
-                                    </span>
-                                  </p>
-                                </>
-                              )}
-                            </div>
-                            <div className="flex-shrink-0">
-                              <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center shadow-lg">
-                                <Icon name="Star" size={32} className="text-white" />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Link a tab de puntos */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full mt-3 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
-                            onClick={() => setActiveTab('points')}
-                          >
-                            <Icon name="TrendingUp" size={14} className="mr-2" />
-                            Ver historial de puntos
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Botones de acción */}
-                      <div className="flex items-center space-x-3 mt-6 sm:mt-0 flex-shrink-0">
-                        <Button onClick={handleEditProfile}>
-                          <Icon name="Edit" size={16} className="mr-2" />
-                          Editar Perfil
-                        </Button>
-                        <Button variant="outline">
-                          <Icon name="Crown" size={16} className="mr-2" />
-                          Upgrade
-                        </Button>
-                      </div>
-                    </div>
+                )}
+                {success && (
+                  <div className="mb-6 p-4 bg-success/10 border border-success/20 rounded-lg flex items-center space-x-3">
+                    <Icon name="CheckCircle" size={20} className="text-success flex-shrink-0" />
+                    <p className="text-success text-sm">{success}</p>
                   </div>
-                </div>
-              </div>
-            </div>
+                )}
 
-            {/* Profile Tabs */}
-            <div className="mb-8">
-              <div className="border-b border-border">
-                <nav className="flex space-x-8 overflow-x-auto">
-                  {[
-                    { id: 'videos', label: 'Videos', icon: 'Monitor', count: tabCounts.videos, color: 'text-blue-600' },
-                    { id: 'reels', label: 'Reels', icon: 'Smartphone', count: tabCounts.reels, color: 'text-pink-600' },
-                    { id: 'photos', label: 'Fotos', icon: 'Image', count: tabCounts.photos, color: 'text-green-600' },
-                    { id: 'purchases', label: 'Compras', icon: 'ShoppingBag', count: tabCounts.purchases, color: 'text-orange-600' },
-                    { id: 'points', label: 'Puntos', icon: 'Star', count: null, color: 'text-yellow-600' },
-                    { id: 'settings', label: 'Configuración', icon: 'Settings', count: null, color: 'text-gray-600' }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`
-                        group relative flex items-center space-x-2 px-1 py-4 text-sm font-medium
-                        border-b-2 transition-all duration-200 whitespace-nowrap
-                        ${activeTab === tab.id
-                          ? 'border-primary text-primary'
-                          : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50'
-                        }
-                      `}
-                    >
-                      <Icon 
-                        name={tab.icon} 
-                        size={16} 
-                        className={activeTab === tab.id ? 'text-primary' : tab.color}
-                      />
-                      <span>{tab.label}</span>
-                      {tab.count !== null && (
-                        <span className={`
-                          px-2 py-1 rounded-full text-xs
-                          ${activeTab === tab.id 
-                            ? 'bg-primary/10 text-primary' 
-                            : 'bg-muted text-muted-foreground'
-                          }
-                        `}>
-                          {tab.count}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </nav>
+                {activeTab === 'profile' && (
+                  <UserProfileForm
+                    userProfile={userProfile}
+                    onUpdate={handleUpdateProfile}
+                    loading={loading}
+                    user={user}
+                  />
+                )}
+                {activeTab === 'security' && (
+                  <UserSecuritySettings
+                    loading={loading}
+                    onUpdatePassword={handleUpdatePassword}
+                  />
+                )}
+                {activeTab === 'notifications' && (
+                  <UserNotificationsSettings loading={loading} />
+                )}
+                {activeTab === 'points' && (
+                  <UserPointsHistory />
+                )}
+                {/* ✅ NUEVO: Renderizado de Mis Compras */}
+                {activeTab === 'purchases' && (
+                    <UserPurchases />
+                )}
               </div>
-            </div>
-
-            {/* Tab Content */}
-            <div className="min-h-[500px]">
-              {renderTabContent()}
             </div>
           </div>
         </main>
       </div>
-
-      {/* Photo Quick Upload Modal */}
-      <PhotoQuickUpload
-        isOpen={showQuickUpload}
-        onClose={() => setShowQuickUpload(false)}
-        onSuccess={handleQuickUploadSuccess}
-      />
-
-      {/* Profile Image Editor Modal */}
-      {showImageEditor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-lg border max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-            <div className="p-6">
-              {/* Header del Modal */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground">
-                    Editar Imágenes de Perfil
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Cambia tu imagen de perfil o portada
-                  </p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => setShowImageEditor(false)}
-                >
-                  <Icon name="X" size={20} />
-                </Button>
-              </div>
-
-              {/* Profile Image Editor dentro del Modal */}
-              <ProfileImageEditor
-                currentAvatar={userData?.avatar}
-                currentCover={userData?.coverImage}
-                onAvatarChange={handleAvatarUpload}
-                onCoverChange={handleCoverUpload}
-                onClose={() => setShowImageEditor(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚨 MODAL DE DETALLE DE FOTO */}
-      {showPhotoModal && currentPhotoData && (
-          <PhotoDetailModal
-              photos={photos} // Array completo para navegación
-              currentPhotoIndex={selectedPhotoIndex} // Índice actual
-              photoData={currentPhotoData} // Objeto de datos de la foto actual
-              onClose={handleClosePhotoModal}
-              onNavigate={handleNavigatePhoto} // Manjeador de navegación
-              refreshParentData={refreshProfile}
-              totalPhotos={photos.length}
-          />
-      )}
-      
-      {/* 🚨 MODAL DE EDICIÓN DE FOTO (Implementación Funcional) */}
-      {showPhotoEditModal && photoToEditData && (
-          <PhotoEditModal
-              photo={photoToEditData}
-              onClose={handleClosePhotoEditModal}
-              onSave={handleSaveChanges}
-          />
-      )}
-
-      {/* Debug Info (omitido) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs font-mono max-w-xs z-50">
-          <div className="space-y-1">
-            <div>Videos H: {videos.length}</div>
-            <div>Reels V: {reels.length}</div>
-            <div>Fotos: {photos.length}</div>
-            <div>Puntos: {totalPoints}</div>
-            <div>Tab: {activeTab}</div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
