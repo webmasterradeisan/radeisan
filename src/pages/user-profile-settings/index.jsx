@@ -4,8 +4,8 @@
 //    de la página de recompensas, con filtros y paginación.
 // ✅ CORREGIDO: Añadido 'useEffect' para leer el hash de la URL (#historial-puntos)
 //    y activar la pestaña de Puntos automáticamente.
-// ⭐️ FIX CRÍTICO: Se añade validación a loadHistory para evitar llamadas a la API
-//    con fechas nulas cuando el filtro es 'custom', previniendo el error de la pantalla blanca.
+// ⭐️ FIX CRÍTICO: Añadido y usado el estado 'pointsError' explícitamente para evitar
+//    ReferenceError al intentar acceder a una variable 'error' no definida.
 // ⭐️ AJUSTADO: La pestaña 'Mis Compras' ahora usa UserOrdersTab como se especificó.
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -1002,6 +1002,9 @@ const UserProfileSettings = () => {
   const [hasMorePages, setHasMorePages] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  
+  // ⭐️ FIX CRÍTICO 1: Estado para manejar errores específicos de Puntos
+  const [pointsError, setPointsError] = useState(null); 
   // ✅ FIN: Estados del Historial
 
   // Hooks de datos
@@ -1124,13 +1127,13 @@ const UserProfileSettings = () => {
   const loadHistory = useCallback(async (pageNum, reset = false) => {
     if (!user?.id) return;
     setTransactionsLoading(true);
-    setError(null); // Limpiar errores en cada intento de carga
+    setPointsError(null); // ⭐️ FIX CRÍTICO 2: Limpiar errores al iniciar la carga
 
     let startDate = null;
     let endDate = null;
     const now = new Date();
     
-    // ⭐️ FIX CRÍTICO: Validar fechas para evitar error en la API
+    // ⭐️ FIX CRÍTICO 3: Validar fechas para evitar error en la API
     if (dateFilter === 'custom') {
         // Si es filtro custom pero ninguna fecha se ha seleccionado, NO LLAMAR A LA API
         if (!customStartDate && !customEndDate) {
@@ -1163,8 +1166,6 @@ const UserProfileSettings = () => {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
     
-    // Si reset es true, pero no hay datos de fechas para custom, mantenemos los estados limpios
-
     try {
         const result = await getUserPointsHistory(user.id, {
           startDate,
@@ -1184,14 +1185,14 @@ const UserProfileSettings = () => {
           console.error("Error al cargar historial:", result.error);
           setTransactions([]); 
           setHasMorePages(false);
-          setError(result.error?.message || "Error desconocido al cargar historial.");
+          setPointsError(result.error?.message || "Error desconocido al cargar historial.");
         }
     } catch (e) {
         // Manejo de errores de red o fallo general
         console.error("Fallo general en loadHistory:", e);
         setTransactions([]);
         setHasMorePages(false);
-        setError(e.message || "Fallo de conexión al cargar historial.");
+        setPointsError(e.message || "Fallo de conexión al cargar historial.");
     } finally {
         setTransactionsLoading(false);
     }
@@ -1206,6 +1207,7 @@ const UserProfileSettings = () => {
         setTransactions([]);
         setHasMorePages(false);
         setTransactionsLoading(false);
+        setPointsError(null); // Limpiar error si el usuario deselecciona fechas custom
         return; 
       }
       loadHistory(1, true);
@@ -1529,13 +1531,14 @@ const UserProfileSettings = () => {
     switch (activeTab) {
       case 'videos':
         // ... (omitted rendering logic)
+        // La línea 1647 está por aquí, y usa videosError, que sí está definido
         if (videosError) {
           return (
             <div className="text-center py-16">
               <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar videos</h3>
               <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded">
-                {videosError}
+                {videosError} 
               </p>
               <Button onClick={refreshVideos}>
                 <Icon name="RefreshCw" size={16} className="mr-2" />
@@ -1644,13 +1647,13 @@ const UserProfileSettings = () => {
       case 'points':
         
         // Muestra el error de la API si ocurrió
-        if (error) {
+        if (pointsError) { // ⭐️ FIX CRÍTICO 4: Usar pointsError en lugar de 'error'
             return (
                 <div className="text-center py-16">
                     <Icon name="AlertCircle" size={48} className="text-destructive mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-foreground mb-3">Error al cargar el historial</h3>
                     <p className="text-muted-foreground mb-4 text-sm font-mono bg-muted/50 px-4 py-2 rounded max-w-lg mx-auto">
-                        {error}
+                        {pointsError}
                     </p>
                     <Button onClick={() => loadHistory(1, true)}>
                         <Icon name="RefreshCw" size={16} className="mr-2" />
