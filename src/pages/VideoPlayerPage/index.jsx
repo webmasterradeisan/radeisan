@@ -1,8 +1,8 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA
+// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOUBLE LIKE)
 // ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
-// ✅ MANTIENE: Autoplay, Anti-farming blindado, Regalos, Comentarios.
+// ✅ FIX: Doble incremento de contador de likes corregido.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -47,7 +47,8 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addPoints: updatePointsContext, missions, updateMissionOptimistic, rollbackMission, refreshPoints } = usePoints(); 
+  // Nota: Si el sync de puntos sigue fallando, es porque refreshPoints() está leyendo data antigua de la DB
+  const { addPoints: updatePointsContext, missions, updateMissionOptimistic, rollbackMission, refreshPoints, updateLocalBalance, notifyMissionComplete } = usePoints(); 
   const isMobile = useIsMobile();
 
   const [video, setVideo] = useState(null);
@@ -445,7 +446,7 @@ const VideoPlayerPage = () => {
       const result = await trackWatchVideo(contentType, videoId, currentTime);
 
       if (result.result === 'success' && result.points_earned > 0) {
-        updatePointsContext(result.points_earned);
+        updateLocalBalance(result.points_earned); // Usamos updateLocalBalance para sync del header
         showUserFeedback(`+${result.points_earned} PUNTOS por ver ${contentType} 🎉`, 'success');
       } else if (result.result === 'progress_updated') {
         showUserFeedback(`Progreso registrado. ¡Sigue viendo!`, 'success');
@@ -455,7 +456,7 @@ const VideoPlayerPage = () => {
     } catch (err) { console.error('❌ Error view points:', err); }
   };
 
-  // ✅✅✅ ACCIÓN DE LIKE (LÓGICA EXACTA A REELS CONTAINER)
+  // ✅✅✅ ACCIÓN DE LIKE (LÓGICA CORREGIDA PARA NO DOBLE-CONTAR)
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
 
@@ -473,14 +474,14 @@ const VideoPlayerPage = () => {
         // DAR LIKE
         // ==============================
         if (disliked) await handleDislike();
-        setLiked(true);
-        setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+        setLiked(true); // Estilo de botón inmediato
 
         // 1. Bloqueo de Auto-Like
         if (video.user_id === user.id) {
              showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
              // Insertamos el like en BD (social) pero no procesamos puntos
              await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 })); // Incrementamos solo el contador social
              return;
         }
 
@@ -488,8 +489,13 @@ const VideoPlayerPage = () => {
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         if (likeError && likeError.code !== '23505') {
             console.error('Error like:', likeError);
-            setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+            setLiked(false); // Revertir estilo
             return;
+        }
+        
+        // ✅ INCREMENTO ÚNICO Y OFICIAL: Solo si la inserción en DB es exitosa
+        if (!likeError) {
+             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
         }
 
         // ================================================================
@@ -515,15 +521,15 @@ const VideoPlayerPage = () => {
               const result = await trackGiveLike(contentType, videoId);
               
               if (result.result === 'success' && result.points_earned > 0) { 
-                updatePointsContext(result.points_earned); 
-                await refreshPoints();
+                // Usamos updateLocalBalance y notifyMissionComplete para el Header y el Modal
+                if (updateLocalBalance) updateLocalBalance(result.points_earned);
+                if (notifyMissionComplete) notifyMissionComplete(result.points_earned); 
                 showLikeNotification(`Misión Completa: +${result.points_earned} puntos 🎉`, 'success');
               } else if (result.result === 'already_completed') {
                 showLikeNotification('Like registrado (Misión diaria completa)', 'info');
                 rollbackMission(missionSnapshot);
               } else {
                 showLikeNotification('✓ Like registrado', 'info');
-                await refreshPoints();
               }
             } catch (pointsError) {
               console.error('❌ Error puntos:', pointsError);
@@ -572,7 +578,8 @@ const VideoPlayerPage = () => {
         const contentType = isReel ? 'reel' : 'video';
         const result = await trackShareContent(contentType, videoId, 1, { platform: 'link' });
         if (result.result === 'success' && result.points_earned > 0) {
-          updatePointsContext(result.points_earned); showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
+          if (updateLocalBalance) updateLocalBalance(result.points_earned);
+          showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
         } else if (result.result === 'progress_updated') {
           showUserFeedback(`Progreso registrado.`, 'success');
         } else if (result.result === 'already_completed') {
@@ -604,7 +611,8 @@ const VideoPlayerPage = () => {
         try {
           const result = await trackFollowUser(video.user_id);
           if (result.result === 'success' && result.points_earned > 0) {
-            updatePointsContext(result.points_earned); showUserFeedback(`+${result.points_earned} PUNTOS por Seguir 👥`, 'success');
+            if (updateLocalBalance) updateLocalBalance(result.points_earned);
+            showUserFeedback(`+${result.points_earned} PUNTOS por Seguir 👥`, 'success');
           } else { showUserFeedback('Ahora sigues a este creador', 'success', 1500); }
         } catch (missionError) { showUserFeedback('Ahora sigues a este creador', 'success', 1500); }
       }
@@ -627,7 +635,8 @@ const VideoPlayerPage = () => {
           const isReel = video?.orientation === 'vertical'; const contentType = isReel ? 'reel' : 'video';
           const result = await trackComment(contentType, videoId);
           if (result.result === 'success' && result.points_earned > 0) {
-            updatePointsContext(result.points_earned); showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
+            if (updateLocalBalance) updateLocalBalance(result.points_earned);
+            showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
           } else if (result.result === 'error') { setHasEarnedCommentPoints(false); }
         } catch (pointsError) { setHasEarnedCommentPoints(false); }
       }
@@ -657,11 +666,8 @@ const VideoPlayerPage = () => {
   const handleVideoEnded = () => {
       setIsPlaying(false);
       if (relatedVideos.length > 0) {
-          // Obtener el primer video de la lista de relacionados
           const nextVideo = relatedVideos[0];
           console.log('🎬 Video terminado. Reproduciendo siguiente:', nextVideo.title);
-          
-          // Navegar al siguiente video
           navigate(`/video/${nextVideo.id}`);
           window.scrollTo(0, 0);
       }
@@ -697,7 +703,6 @@ const VideoPlayerPage = () => {
   // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA
   const getDisplayedDescription = () => {
     if (!video.description) return '';
-    // Asegura que no haya caracteres extraños si la DB tiene basura
     try {
         if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
           return video.description;
