@@ -26,7 +26,8 @@ import MobileLayout from "components/ui/MobileLayout";
 // ==================================================================
 // Asegúrate de que esta ruta sea correcta para tu proyecto
 import { supabase } from './lib/supabase'; 
-import { applyBrandingToDOM, DEFAULT_BRANDING } from './utils/branding';
+// ✅ CORRECCIÓN: Importamos DEFAULT_BRANDING_FALLBACK y lo renombramos a DEFAULT_BRANDING
+import { applyBrandingToDOM, DEFAULT_BRANDING_FALLBACK as DEFAULT_BRANDING } from './utils/branding';
 // ==================================================================
 
 // ===============================
@@ -34,7 +35,6 @@ import { applyBrandingToDOM, DEFAULT_BRANDING } from './utils/branding';
 // ===============================
 /**
  * Proporciona el objeto de evento PWA diferido para disparar la instalación.
- * Será 'null' si la instalación ya ocurrió o el navegador no lo soporta.
  */
 const InstallPromptContext = createContext(null);
 export const useInstallPrompt = () => useContext(InstallPromptContext);
@@ -63,13 +63,8 @@ import ProductStorePage from './pages/product-store';
 // ✅ NUEVO - PERFIL PÚBLICO
 import PublicProfilePage from './pages/PublicProfilePage';
 
-// ==================================================================
 // ✅ CORRECCIÓN 1: Importar componente de subida de fotos
-// ==================================================================
 import PhotoUploadStudio from './pages/photo-upload-studio'; 
-// ==================================================================
-// ✅ FIN DE LA CORRECCIÓN 1
-// ==================================================================
 
 // ✅ NUEVO - SISTEMA DE COMPRA DE PUNTOS PREMIUM
 import PurchasePointsPage from './pages/PurchasePointsPage';
@@ -111,8 +106,7 @@ import ShopInventory from './pages/admin-shop/ShopInventory';
 // WRAPPER PARA MOBILELAYOUT
 // ===============================
 /**
- * Wrapper que envuelve el MobileLayout y pasa el deferredPrompt a través de props
- * o un contexto si es necesario, pero aquí lo haremos a través de Context.
+ * Wrapper que envuelve el MobileLayout y permite al componente acceder al contexto PWA.
  */
 const MobileLayoutWrapper = ({ children }) => (
   // MobileLayout puede usar useInstallPrompt() para el botón de instalación
@@ -120,8 +114,8 @@ const MobileLayoutWrapper = ({ children }) => (
 );
 
 // ===============================
-// COMPONENTES AUXILIARES
-// ... (Componentes AuthCallback, PlaceholderPage, Unauthorized, AdminPlaceholder se mantienen igual)
+// COMPONENTES AUXILIARES (Mantenidos)
+// ===============================
 const AuthCallback = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
     <div className="text-center">
@@ -227,7 +221,7 @@ const Routes = () => {
           .eq('setting_key', 'branding_config')
           .single();
 
-        let brandingData = DEFAULT_BRANDING; // Usar el default global importado
+        let brandingData = DEFAULT_BRANDING; // Usar el default renombrado
         
         // PGRST116 significa "no rows found", que es esperado si no se ha guardado nada
         if (!fetchError && data && data.setting_value) {
