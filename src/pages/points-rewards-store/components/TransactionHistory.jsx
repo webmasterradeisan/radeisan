@@ -1,7 +1,8 @@
 // src/pages/points-rewards-store/components/TransactionHistory.jsx
 // ============================================================================
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
-// ⭐️ FIX FINAL: Títulos amigables para 'upload_reel' y 'upload_video'
+// ⭐️ FIX FINAL: Títulos amigables para TODAS las misiones de contenido:
+//    upload_reel, upload_video, give_like, like_videos.
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -42,13 +43,13 @@ const TransactionHistory = ({
 
   // Función para 'traducir' el título de la transacción
   const getTransactionTitle = (transaction) => {
-    const type = transaction?.transaction_type; // e.g., 'video_like', 'other'
-    const desc = transaction?.description;     // A menudo contiene la mission_key (e.g., 'give_like')
+    const type = transaction?.transaction_type; 
+    const desc = transaction?.description;     
     const points = transaction?.points_change;
 
-    // 1. Manejo de Descripciones Explícitas (e.g., Regalo de otro usuario)
+    // 1. Manejo de Descripciones Explícitas (e.g., Regalo, Compras Admin)
     if (desc && desc !== 'other' && desc !== type) {
-      // Si la descripción no es genérica, la usamos (e.g., "Envío regalo: Flor a @pedromolina2023")
+      // Si la descripción no es genérica, la usamos (e.g., "Envío regalo: Flor a @pedromolina2023", "Compra de Puntos Premium (Admin)")
       return desc;
     }
     
@@ -56,6 +57,7 @@ const TransactionHistory = ({
     const key = desc || type;
     
     switch (key) {
+      // ⭐️ FIX: Unificamos todas las acciones de 'Me Gusta'
       case 'give_like':
       case 'like_videos':
       case 'video_like':
@@ -69,10 +71,10 @@ const TransactionHistory = ({
       case 'share_content':
         return 'Puntos por Compartir';
         
-      // ⭐️ FIX APLICADO AQUÍ
-      case 'video_upload': // Cubre el caso 'upload_video'
+      // ⭐️ FIX: Unificamos todas las acciones de 'Subir Contenido'
+      case 'video_upload':
       case 'upload_video': 
-      case 'upload_reel':  // Cubre el caso 'upload_reel'
+      case 'upload_reel':  
       case 'photo_upload':
       case 'content_upload':
         return 'Puntos por Subir Contenido';
@@ -81,7 +83,7 @@ const TransactionHistory = ({
         return 'Puntos por Vista';
         
       case 'purchase':
-        return 'Compra de Paquete de Puntos Premium (Admin)'; // Ajustado para ser más descriptivo
+        return 'Compra de Paquete de Puntos Premium (Admin)';
         
       case 'admin_adjustment':
         return 'Ajuste de Administrador';
@@ -107,14 +109,14 @@ const TransactionHistory = ({
     if (type === 'other' && points < 0) return 'Gift'; // Canje
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
     if (type === 'video_like' || type === 'give_like' || type === 'like_videos') return 'Heart';
-    if (type === 'admin_adjustment') return 'Shield'; // Cambio a Shield para ajuste
+    if (type === 'admin_adjustment') return 'Shield'; 
     if (type === 'video_view') return 'Play';
     if (type === 'comment' || type === 'comment_videos') return 'MessageCircle';
     if (type === 'share' || type === 'share_content') return 'Share2';
-    // ⭐️ FIX APLICADO AQUÍ
+    // ⭐️ FIX: Incluimos todos los uploads
     if (type === 'video_upload' || type === 'upload_video' || type === 'upload_reel' || type === 'photo_upload') return 'Upload';
     
-    return (points > 0) ? 'TrendingUp' : 'TrendingDown'; // Usamos Trending en fallback
+    return (points > 0) ? 'TrendingUp' : 'TrendingDown';
   };
 
   // Color basado en 'points_change'
