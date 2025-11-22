@@ -5,6 +5,7 @@
 // ✅ NUEVO: Añadidos filtros de fecha ('dateFilter', 'onDateFilterChange')
 // ✅ NUEVO: Añadidos campos de calendario 'Desde'/'Hasta'
 // ✅ NUEVO: Añadido botón 'Cargar Más' ('hasMore', 'onLoadMore')
+// ⭐️ ROBUSTEZ: Añadidas comprobaciones de nulidad más estrictas para evitar errores de renderizado.
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -27,10 +28,16 @@ const TransactionHistory = ({
 }) => {
   const [filter, setFilter] = useState('all'); // all, earned, spent
 
+  // Aseguramos que 'transactions' sea un array iterable
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+
   // Filtrar usando 'points_change'
-  const filteredTransactions = transactions?.filter(transaction => {
-    if (filter === 'earned') return transaction?.points_change > 0;
-    if (filter === 'spent') return transaction?.points_change < 0;
+  const filteredTransactions = safeTransactions.filter(transaction => {
+    // Usamos ?. para safe access y asumimos 0 si points_change es null/undefined
+    const pointsChange = transaction?.points_change || 0; 
+    
+    if (filter === 'earned') return pointsChange > 0;
+    if (filter === 'spent') return pointsChange < 0;
     return true;
   });
 
@@ -50,75 +57,95 @@ const TransactionHistory = ({
       if (points < 0) return 'Canje de Recompensa';
       if (points > 0) return 'Puntos Devueltos';
     }
-    if (type === 'video_like') return 'Like en video';
+    if (type === 'video_like') return 'Puntos por Like';
     if (type === 'admin_adjustment') return 'Ajuste de Administrador';
-    if (type === 'video_view') return 'Vista en video';
-    if (type === 'comment') return 'Comentario';
-    if (type === 'share') return 'Compartir contenido';
+    if (type === 'video_view') return 'Puntos por Vista';
+    if (type === 'comment') return 'Puntos por Comentario';
+    if (type === 'share') return 'Puntos por Compartir';
     
-    return type || 'Transacción';
+    // Nueva línea para manejar tipos que faltan o son null
+    if (points > 0) return 'Puntos Ganados';
+    if (points < 0) return 'Puntos Utilizados';
+
+    return type || 'Transacción Desconocida';
   };
 
   // Icono basado en 'transaction_type' y 'points_change'
   const getTransactionIcon = (transaction) => {
     const type = transaction?.transaction_type;
-    const points = transaction?.points_change;
+    const points = transaction?.points_change || 0; // Usamos 0 si es nulo
 
     if (type === 'other' && points < 0) return 'Gift'; // Canje
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
     if (type === 'video_like') return 'Heart';
-    if (type === 'admin_adjustment') return 'User';
+    if (type === 'admin_adjustment') return 'Shield'; // Cambio a Shield para ajuste
     if (type === 'video_view') return 'Play';
     if (type === 'comment') return 'MessageCircle';
     if (type === 'share') return 'Share2';
     
-    return (points > 0) ? 'Plus' : 'Minus';
+    return (points > 0) ? 'TrendingUp' : 'TrendingDown'; // Usamos Trending en fallback
   };
 
   // Color basado en 'points_change'
   const getTransactionColor = (transaction) => {
-    return transaction?.points_change > 0 ? 'var(--color-success)' : 'var(--color-error)';
+    // Usamos 0 si es nulo
+    return (transaction?.points_change || 0) > 0 ? 'var(--color-success)' : 'var(--color-error)';
   };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Fecha inválida';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Fecha inválida';
-    
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Intentamos parsear la fecha de forma segura
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Fecha inválida';
+      
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays <= 1) return 'Hoy';
-    if (diffDays === 2) return 'Ayer';
-    if (diffDays <= 7) return `Hace ${diffDays - 1} días`;
-    
-    return date?.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: date?.getFullYear() !== now?.getFullYear() ? 'numeric' : undefined
-    });
+      if (diffDays <= 1) return 'Hoy';
+      if (diffDays === 2) return 'Ayer';
+      if (diffDays <= 7) return `Hace ${diffDays - 1} días`;
+      
+      return date?.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'short',
+        year: date?.getFullYear() !== now?.getFullYear() ? 'numeric' : undefined
+      });
+    } catch (e) {
+      return 'Fecha inválida';
+    }
   };
 
   // Totales basados en 'points_change' (ahora usa la lista COMPLETA de transacciones)
-  const totalEarned = transactions
-    ?.filter(t => t?.points_change > 0)
-    ?.reduce((sum, t) => sum + (t?.points_change || 0), 0);
+  const totalEarned = safeTransactions
+    .filter(t => (t?.points_change || 0) > 0)
+    .reduce((sum, t) => sum + (t?.points_change || 0), 0);
 
-  const totalSpent = transactions
-    ?.filter(t => t?.points_change < 0)
-    ?.reduce((sum, t) => sum + Math.abs(t?.points_change || 0), 0);
+  const totalSpent = safeTransactions
+    .filter(t => (t?.points_change || 0) < 0)
+    .reduce((sum, t) => sum + Math.abs(t?.points_change || 0), 0);
   
   // Helper para convertir fechas para el input
   const formatDateForInput = (dateString) => {
     if (!dateString) return '';
     try {
+      // Si ya es un formato YYYY-MM-DD (como viene de los estados), devolverlo
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) return dateString;
+      
       const date = new Date(dateString);
-      return date.toISOString().split('T')[0];
+      // Solo si es una fecha válida, la formateamos
+      if (!isNaN(date.getTime())) {
+         return date.toISOString().split('T')[0];
+      }
+      return '';
     } catch (e) {
       return '';
     }
   };
+  
+  // Condición de carga para el botón "Cargar más"
+  const isLoadingMore = loading && displayedTransactions.length > 0;
 
   return (
     <div className={`bg-card ${className}`} id="transaction-history">
@@ -128,7 +155,7 @@ const TransactionHistory = ({
           <h2 className="text-lg font-heading font-bold text-foreground">
             Historial de Puntos
           </h2>
-          <Button variant="ghost" size="icon" className="text-muted-foreground">
+          <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={onLoadMore}>
              <Icon name="RefreshCw" size={16} />
           </Button>
         </div>
@@ -179,7 +206,8 @@ const TransactionHistory = ({
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Desde</label>
                 <input
                     type="date"
-                    value={formatDateForInput(startDate)}
+                    // Si el filtro no es 'custom', limpiamos el input visualmente
+                    value={dateFilter === 'custom' ? formatDateForInput(startDate) : ''}
                     onChange={(e) => onStartDateChange(e.target.value)}
                     className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground text-sm"
                     max={formatDateForInput(new Date().toISOString())} // No se puede seleccionar fecha futura
@@ -189,7 +217,8 @@ const TransactionHistory = ({
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Hasta</label>
                 <input
                     type="date"
-                    value={formatDateForInput(endDate)}
+                     // Si el filtro no es 'custom', limpiamos el input visualmente
+                    value={dateFilter === 'custom' ? formatDateForInput(endDate) : ''}
                     onChange={(e) => onEndDateChange(e.target.value)}
                     className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground text-sm"
                     max={formatDateForInput(new Date().toISOString())}
@@ -255,11 +284,12 @@ const TransactionHistory = ({
           // Lista
           <div className="space-y-4">
             {displayedTransactions?.map((transaction, index) => (
-              <div key={transaction.id || index} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+              // Garantizamos que transaction.id exista o usamos el índice como fallback
+              <div key={transaction?.id || index} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
                 {/* Icon */}
                 <div className={`
                   w-10 h-10 rounded-full flex items-center justify-center
-                  ${transaction?.points_change > 0 ? 'bg-success/10' : 'bg-error/10'}
+                  ${(transaction?.points_change || 0) > 0 ? 'bg-success/10' : 'bg-error/10'}
                 `}>
                   <Icon 
                     name={getTransactionIcon(transaction)} 
@@ -284,9 +314,10 @@ const TransactionHistory = ({
                 <div className="text-right">
                   <span className={`
                     font-mono font-bold
-                    ${transaction?.points_change > 0 ? 'text-success' : 'text-error'}
+                    ${(transaction?.points_change || 0) > 0 ? 'text-success' : 'text-error'}
                   `}>
-                    {transaction?.points_change > 0 ? '+' : ''}{transaction?.points_change?.toLocaleString()}
+                    {(transaction?.points_change || 0) > 0 ? '+' : ''}
+                    {(transaction?.points_change || 0)?.toLocaleString()}
                   </span>
                   <p className="text-xs text-muted-foreground">puntos</p>
                 </div>
@@ -301,7 +332,7 @@ const TransactionHistory = ({
             <Button
               variant="outline"
               onClick={onLoadMore}
-              loading={loading && displayedTransactions.length > 0} // Muestra 'loading' solo si ya hay items
+              loading={isLoadingMore} // Muestra 'loading' solo si ya hay items
             >
               Cargar más
             </Button>
