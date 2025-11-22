@@ -1,8 +1,7 @@
 // src/pages/points-rewards-store/components/TransactionHistory.jsx
 // ============================================================================
 // ✅ FIX: Sincronizado con la tabla 'points_transactions'
-// ⭐️ FIX FINAL: Títulos amigables para TODAS las misiones de contenido:
-//    upload_reel, upload_video, give_like, like_videos.
+// ⭐️ FIX FINAL: Títulos amigables con Detección de Patrones para evitar nombres técnicos
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -49,7 +48,6 @@ const TransactionHistory = ({
 
     // 1. Manejo de Descripciones Explícitas (e.g., Regalo, Compras Admin)
     if (desc && desc !== 'other' && desc !== type) {
-      // Si la descripción no es genérica, la usamos (e.g., "Envío regalo: Flor a @pedromolina2023", "Compra de Puntos Premium (Admin)")
       return desc;
     }
     
@@ -57,7 +55,6 @@ const TransactionHistory = ({
     const key = desc || type;
     
     switch (key) {
-      // ⭐️ FIX: Unificamos todas las acciones de 'Me Gusta'
       case 'give_like':
       case 'like_videos':
       case 'video_like':
@@ -71,7 +68,6 @@ const TransactionHistory = ({
       case 'share_content':
         return 'Puntos por Compartir';
         
-      // ⭐️ FIX: Unificamos todas las acciones de 'Subir Contenido'
       case 'video_upload':
       case 'upload_video': 
       case 'upload_reel':  
@@ -92,14 +88,33 @@ const TransactionHistory = ({
         if ((points || 0) < 0) return 'Canje de Recompensa (Gasto)';
         if ((points || 0) > 0) return 'Devolución/Reembolso de Puntos';
         break;
-
+      
       default:
-        // Fallback si no se reconoce el tipo
-        return (points > 0) ? `Ganancia: ${type}` : `Transacción: ${type}`;
+        // Si no hay match en el switch, pasamos al fallback de detección de patrones
+        break; 
     }
     
-    return type || 'Transacción Desconocida';
-  };
+    // 3. ⭐️ NUEVO FALLBACK: Detección de patrones genéricos (Cubre nombres técnicos no mapeados)
+    if (key && typeof key === 'string') {
+        const lowerKey = key.toLowerCase();
+        
+        if (lowerKey.includes('upload') || lowerKey.includes('_reel') || lowerKey.includes('_video')) {
+            return 'Puntos por Subir Contenido';
+        }
+        if (lowerKey.includes('like')) {
+            return 'Puntos por Me Gusta';
+        }
+        if (lowerKey.includes('comment')) {
+            return 'Puntos por Comentar';
+        }
+        // Si es una transacción que no se reconoció y tiene puntos, al menos decimos si fue ganancia o gasto
+        if ((points || 0) > 0) return `Ganancia: ${type}`; 
+    }
+
+
+    // Fallback final
+    return (points > 0) ? `Ganancia: ${type}` : `Transacción: ${type}` || 'Transacción Desconocida';
+};
 
   // Icono basado en 'transaction_type' y 'points_change'
   const getTransactionIcon = (transaction) => {
@@ -108,13 +123,13 @@ const TransactionHistory = ({
 
     if (type === 'other' && points < 0) return 'Gift'; // Canje
     if (type === 'other' && points > 0) return 'RefreshCw'; // Reversión
-    if (type === 'video_like' || type === 'give_like' || type === 'like_videos') return 'Heart';
+    if (type === 'video_like' || type === 'give_like' || type === 'like_videos' || type.includes('like')) return 'Heart';
     if (type === 'admin_adjustment') return 'Shield'; 
     if (type === 'video_view') return 'Play';
-    if (type === 'comment' || type === 'comment_videos') return 'MessageCircle';
+    if (type === 'comment' || type === 'comment_videos' || type.includes('comment')) return 'MessageCircle';
     if (type === 'share' || type === 'share_content') return 'Share2';
-    // ⭐️ FIX: Incluimos todos los uploads
-    if (type === 'video_upload' || type === 'upload_video' || type === 'upload_reel' || type === 'photo_upload') return 'Upload';
+    // ⭐️ FIX: Incluimos todos los uploads por patrón
+    if (type.includes('upload') || type.includes('_reel') || type.includes('_video')) return 'Upload';
     
     return (points > 0) ? 'TrendingUp' : 'TrendingDown';
   };
