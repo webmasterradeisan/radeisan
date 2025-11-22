@@ -174,8 +174,7 @@ const useVideoUpload = () => {
 
       setUploadProgress(75);
 
-      // 🛑 PASO 9: ELIMINADO
-      // El cálculo de puntos ahora lo hace el sistema de misiones.
+      // 🛑 PASO 9: ELIMINADO (Puntos)
       console.log('💰 Cálculo de puntos transferido al servicio de misiones.');
 
       setUploadProgress(80);
@@ -200,7 +199,7 @@ const useVideoUpload = () => {
           video_width: orientationData.width,
           video_height: orientationData.height,
           
-          // ✅ CORRECCIÓN: Los puntos se manejan por misiones, no en la tabla de video.
+          // ✅ Los puntos se manejan por misiones, no en la tabla de video.
           points_earned: 0 
         })
         .select()
@@ -211,7 +210,6 @@ const useVideoUpload = () => {
       setUploadProgress(85);
 
       // 🆕 PASO 11: REPORTAR ACCIÓN AL SISTEMA DE MISIONES
-      // ✅ CORRECCIÓN: Distinguir entre VIDEO y REEL basándose en orientación
       console.log('🔔 Reportando subida al sistema de misiones...');
       let pointsEarnedToday = 0;
       let missionResult = null;
@@ -220,16 +218,16 @@ const useVideoUpload = () => {
         // ✅ Determinar el tipo de misión según la orientación
         const isReel = orientationData.orientation === 'vertical';
         const missionType = isReel 
-          ? missionsService.MISSION_TYPES.UPLOAD_REEL   // Vertical = Reel
-          : missionsService.MISSION_TYPES.UPLOAD_VIDEO; // Horizontal = Video
+          ? missionsService.MISSION_TYPES.UPLOAD_REEL   // Vertical = Reel (Paquete Creador)
+          : missionsService.MISSION_TYPES.UPLOAD_VIDEO; // Horizontal = Video (Paquete Creador)
         
         const referenceType = isReel ? 'reel' : 'video';
 
         console.log(`📹 Detectado como: ${isReel ? 'REEL' : 'VIDEO'} (orientación: ${orientationData.orientation})`);
 
         missionResult = await missionsService.trackMissionProgress(
-            missionType,      // ✅ UPLOAD_REEL o UPLOAD_VIDEO según orientación
-            referenceType,    // ✅ 'reel' o 'video'
+            missionType,      // ✅ UPLOAD_REEL o UPLOAD_VIDEO
+            referenceType,    
             videoData.id
         );
 
@@ -264,7 +262,6 @@ const useVideoUpload = () => {
 
       setUploadProgress(95);
 
-      // 🛑 Lógica duplicada/anterior eliminada
       setUploadProgress(100);
 
       return {
@@ -299,14 +296,7 @@ const useVideoUpload = () => {
   };
 };
 
-// ... (Resto de Hooks y Utilidades: useUserVideos, getVideoDuration, etc.)
-// ... (Se asume que las funciones 'calculateUploadPoints' y 'addPointsTransaction'
-// ...  ya no son necesarias, pero se dejan para no romper el archivo si son
-// ...  usadas en otra parte que no vimos)
-
-// ===============================
-// UTILIDADES
-// ===============================
+// ... (Resto de Hooks y Utilidades)
 
 const getVideoDuration = (file) => {
   return new Promise((resolve) => {
@@ -320,8 +310,6 @@ const getVideoDuration = (file) => {
   });
 };
 
-// 🛑 ESTA LÓGICA ESTÁ OBSOLETA (AHORA SE MANEJA POR MISIONES)
-// PERO SE MANTIENE POR INTEGRIDAD DEL ARCHIVO ORIGINAL
 const calculateUploadPoints = (durationSeconds, category) => {
   let basePoints = 30;
   let durationPoints = Math.floor(durationSeconds / 60) * 10;
@@ -342,7 +330,6 @@ const calculateUploadPoints = (durationSeconds, category) => {
   return Math.round((basePoints + durationPoints) * multiplier);
 };
 
-// 🛑 ESTA LÓGICA ESTÁ OBSOLETA
 const addPointsTransaction = async (points, type, description) => {
   console.log(`Points transaction: +${points} for ${type}: ${description}`);
 };
@@ -369,7 +356,6 @@ const formatTime = (seconds) => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-// Hook para obtener videos recientes
 const useUserVideos = () => {
   const { user } = useAuth();
   const [recentVideos, setRecentVideos] = useState([]);
@@ -430,8 +416,8 @@ const useUserVideos = () => {
 const VideoUploadStudio = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  // ✅ NUEVO: Obtener 'triggerAnimation' de 'usePoints'
-  const { triggerAnimation } = usePoints();
+  // ✅ NUEVO: Obtener 'triggerAnimation' de 'usePoints', Y notifyMissionComplete + updateLocalBalance
+  const { triggerAnimation, notifyMissionComplete, updateLocalBalance } = usePoints();
   const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime, detectionResult } = useVideoUpload();
   const { recentVideos, loading: recentLoading } = useUserVideos();
 
@@ -651,20 +637,28 @@ const VideoUploadStudio = () => {
         setCurrentStep(3);
 
         // ============================================================
-        // ✅ NUEVO: LÓGICA DE NOTIFICACIÓN GLOBAL
+        // ✅ CORRECCIÓN 1: LÓGICA DE NOTIFICACIÓN GLOBAL
         // ============================================================
         const { missionResult } = result;
-        if (missionResult) {
-          if (missionResult.result === 'success' && missionResult.points_earned > 0) {
-            // 1. MISIÓN COMPLETA (Dispara la notificación global de puntos)
-            // (La función 'addPoints' en 'PointsContext' ya dispara la animación)
-            console.log('Notificación de Misión Completa (manejada por addPoints)');
-          } else if (missionResult.result === 'progress_updated') {
-            // 2. PROGRESO REGISTRADO (Dispara una notificación genérica)
-            triggerAnimation(0, 'earn', 'free'); // 0 puntos, pero activa la UI
-            console.log('Notificación de Progreso de Misión');
-          }
-          // 'already_completed' no se maneja aquí, ya que 'Revisando...' es suficiente.
+        if (missionResult && missionResult.points_earned > 0) {
+            const earned = Number(missionResult.points_earned);
+            
+            // 1. Actualización inmediata del Header
+            updateLocalBalance(earned);
+
+            // 2. Disparar Modal si es misión completa ('success')
+            if (missionResult.result === 'success') {
+                notifyMissionComplete(earned); 
+            } else {
+                // 3. Notificación de progreso
+                triggerAnimation(earned, 'earn', 'free'); 
+            }
+            
+            console.log(`Puntos obtenidos: +${earned}`);
+        } else if (missionResult && missionResult.result === 'progress_updated') {
+             // Notificación sin puntos ganados, solo progreso
+             triggerAnimation(0, 'earn', 'free');
+             console.log('Notificación de Progreso de Misión (sin puntos inmediatos)');
         }
         // ============================================================
         // ✅ FIN DE LA LÓGICA DE NOTIFICACIÓN
