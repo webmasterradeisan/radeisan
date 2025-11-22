@@ -2,10 +2,8 @@
 // ============================================================================
 // MISSIONS SERVICE - VERSIÓN MAESTRA SINCRONIZADA 🔗
 // ✅ FIX CRÍTICO: Claves alineadas con la Base de Datos (points_rules).
-//    - 'give_comment' (Antes comment_videos/comment)
-//    - 'share_content' (Antes share_video)
-//    - 'profile_complete' (Antes complete_profile)
 // ✅ Incluye exportación de getMissionStats para evitar error de compilación.
+// ✅ AÑADIDO: Función resetDailyMissions para solucionar el error de compilación.
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -396,6 +394,28 @@ export async function deleteMission(id) { const { error } = await supabase.from(
 export async function toggleMissionActive(id, a) { return updateMission(id, { is_active: a }); }
 export async function reorderMissions(orders) { await Promise.all(orders.map(({id, o}) => supabase.from('daily_missions').update({display_order: o}).eq('id', id))); return { success: true }; }
 
+// ✅ NUEVO: FUNCIÓN PARA SOLUCIONAR EL ERROR DE COMPILACIÓN
+/**
+ * Función administrativa para reiniciar el estado de las misiones diarias para todos los usuarios.
+ * Asume que existe un RPC o una función de base de datos para manejar la lógica de reinicio.
+ */
+export async function resetDailyMissions() {
+  try {
+    // ⚠️ ATENCIÓN: Esta función puede tomar tiempo y potencialmente requerir permisos elevados.
+    // Asumimos que existe un RPC en Supabase llamado 'reset_all_daily_missions'.
+    const { data, error } = await supabase.rpc('reset_all_daily_missions');
+
+    if (error) {
+      console.error('❌ Error al reiniciar misiones:', error);
+      throw error;
+    }
+
+    return { success: true, message: data?.message || 'Misiones diarias reiniciadas exitosamente.' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
 // ============================================================================
 // UTILS
 // ============================================================================
@@ -437,6 +457,8 @@ export default {
   deleteMission,
   toggleMissionActive,
   reorderMissions,
+  // ✅ EXPORTACIÓN DE LA FUNCIÓN AÑADIDA
+  resetDailyMissions,
   getAvailableMissionIcons,
   getTimeUntilReset,
   calculateMissionProgress
