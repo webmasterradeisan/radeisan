@@ -8,12 +8,11 @@
   "background_color": "#FFFFFF",
   "theme_color": "#3B82F6",
   "icons": [
-    // 72px y 192px están funcionando, les añadimos 'purpose'
     {
       "src": "/assets/images/radeisan-icon-72.png",
       "sizes": "72x72",
       "type": "image/png",
-      "purpose": "any" 
+      "purpose": "any"
     },
     {
       "src": "/assets/images/radeisan-icon-192.png",
@@ -21,12 +20,11 @@
       "type": "image/png",
       "purpose": "any"
     },
-    // 512px: CRÍTICO AÑADIR PURPOSE y 'maskable' si tienes margen de seguridad
     {
-      "src": "/assets/images/radeisan-icon-512.png", 
+      "src": "/assets/images/radeisan-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable" // ✅ Añadir 'maskable' si el ícono es seguro para marcos adaptables
+      "purpose": "any maskable"
     }
   ]
 }
