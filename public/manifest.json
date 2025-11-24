@@ -1,15 +1,39 @@
 {
-  "short_name": "Radeisan",
   "name": "Radeisan",
+  "short_name": "Radeisan",
+  "description": "Conecta, Comparte, Gana",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  
+  "background_color": "#FFFFFF",      
+  "theme_color": "#3B82F6",           
+  
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/assets/images/radeisan-icon-72.png", 
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/images/radeisan-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/images/radeisan-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    // Opcional: Icono más grande para asegurar compatibilidad en alta densidad
+    {
+      "src": "/assets/images/radeisan-icon-512.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  ]
 }
