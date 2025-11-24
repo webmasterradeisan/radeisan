@@ -3,6 +3,7 @@
 // VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOBLE LIKE & VISIBILITY)
 // ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
 // ✅ FIX DOBLE CONTEO: Eliminado el incremento local del contador de likes. 
+// ✅ FIX CRASH: Corregida la lógica de getDisplayedDescription para evitar errores de referencia.
 // ⭐️ FIX CONTINUIDAD: Añadida lógica para reanudar el video al cambiar de pestaña (Page Visibility API).
 // ============================================================================
 
@@ -735,9 +736,9 @@ const VideoPlayerPage = () => {
     if (num === null || num === undefined) return '0'; if (num >= 1000000) { return (num / 1000000).toFixed(1) + 'M'; } if (num >= 1000) { return (num / 1000).toFixed(1) + 'K'; } return num?.toString() || '0';
   };
 
-  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA
+  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA ⭐️ FIX APLICADO AQUÍ
   const getDisplayedDescription = () => {
-    if (video.description) return '';
+    if (!video?.description) return ''; // Asegura que video y description existan
     try {
         if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
           return video.description;
