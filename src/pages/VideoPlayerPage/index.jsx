@@ -1,8 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOUBLE LIKE)
+// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOBLE LIKE & VISIBILITY)
 // ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
-// ✅ FIX: Doble incremento de contador de likes corregido.
+// ✅ FIX DOBLE CONTEO: Eliminado el incremento local del contador de likes. 
+// ⭐️ FIX CONTINUIDAD: Añadida lógica para reanudar el video al cambiar de pestaña (Page Visibility API).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -258,6 +259,39 @@ const VideoPlayerPage = () => {
   }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); 
 
   // ===============================
+  // LÓGICA DE CONTINUIDAD (PAGE VISIBILITY) ⭐️ FIX APLICADO AQUÍ
+  // ===============================
+  useEffect(() => {
+    let wasPlayingBeforeHidden = false;
+
+    const handleVisibilityChange = () => {
+        const currentVideo = videoRef.current;
+        if (!currentVideo) return;
+
+        if (document.visibilityState === 'hidden') {
+            // 1. La pestaña se ocultó: Guardar el estado de reproducción
+            wasPlayingBeforeHidden = !currentVideo.paused;
+        } else if (document.visibilityState === 'visible') {
+            // 2. La pestaña volvió a ser visible: Forzar la reproducción si estaba activo
+            if (wasPlayingBeforeHidden) {
+                currentVideo.play().catch(e => {
+                    // Si falla el autoplay (común si no está muted), solo logueamos
+                    console.warn("Autoplay falló al cambiar de pestaña, puede requerir interacción o mute.", e);
+                });
+                setIsPlaying(true);
+            }
+            wasPlayingBeforeHidden = false; // Resetear bandera
+        }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+}, [videoRef, setIsPlaying]); 
+
+  // ===============================
   // FUNCIONES DE DRAG & DROP
   // ===============================
   const handleMouseDown = (e) => {
@@ -342,6 +376,7 @@ const VideoPlayerPage = () => {
     } catch (err) { console.error('❌ Error al cargar perfil:', err); }
   }, [user]);
 
+  // ⭐️ FUNCIÓN CENTRAL DE CARGA DE VIDEO Y CONTADORES
   const fetchVideoData = useCallback(async () => {
     if (!videoId) return;
     try {
@@ -359,6 +394,7 @@ const VideoPlayerPage = () => {
       }
       setVideo(videoData);
 
+      // Leemos los contadores de la DB
       const { count: likesCount } = await supabase.from('video_likes').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
       const { count: dislikesCount } = await supabase.from('video_dislikes').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
       const { count: commentsCount } = await supabase.from('video_comments').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
@@ -463,7 +499,7 @@ const VideoPlayerPage = () => {
     try {
       if (liked) {
         // ==============================
-        // QUITAR LIKE
+        // QUITAR LIKE (siempre se revierte el estado local y el contador)
         // ==============================
         setLiked(false);
         setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
@@ -479,9 +515,9 @@ const VideoPlayerPage = () => {
         // 1. Bloqueo de Auto-Like
         if (video.user_id === user.id) {
              showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
-             // Insertamos el like en BD (social) pero no procesamos puntos
+             // Solo insertamos el like en BD (social) y luego forzamos la recarga de contadores
              await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
-             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 })); // Incrementamos solo el contador social
+             fetchVideoData(); // Recarga los contadores oficiales
              return;
         }
 
@@ -493,10 +529,9 @@ const VideoPlayerPage = () => {
             return;
         }
         
-        // ✅ INCREMENTO ÚNICO Y OFICIAL: Solo si la inserción en DB es exitosa
-        if (!likeError) {
-             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
-        }
+        // 🛑 FIX: FUERZA RECARGA DE CONTADORES OFICIALES.
+        // Esto elimina cualquier incremento local que pueda duplicarse por triggers/listeners.
+        fetchVideoData(); 
 
         // ================================================================
         // 🛑 ANTI-FARMING & PUNTOS
@@ -702,7 +737,7 @@ const VideoPlayerPage = () => {
 
   // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA
   const getDisplayedDescription = () => {
-    if (!video.description) return '';
+    if (video.description) return '';
     try {
         if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
           return video.description;
