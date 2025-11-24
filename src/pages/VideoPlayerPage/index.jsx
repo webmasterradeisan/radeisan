@@ -1,11 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOBLE LIKE & VISIBILITY)
-// ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
-// ✅ FIX DOBLE CONTEO: Eliminado el incremento local del contador de likes. 
-// ✅ FIX CRASH: Corregida la lógica de getDisplayedDescription.
-// ⭐️ FIX CRASH REINICIO: Manejo explícito de errores de duplicidad (23505) en auto-like 
-//    y en el proceso normal para evitar el reinicio de la página al dar like repetido.
+// ✅ FIX: Crash de Reinicio/Pantalla blanca al dar like repetido, por errores internos de misión.
+// ⭐️ FIX ROBUSTEZ: Se aísla la lógica de puntos (trackGiveLike) en un try/catch 
+//    para evitar que el fallo de la misión cause un crash de la página.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -494,7 +492,7 @@ const VideoPlayerPage = () => {
     } catch (err) { console.error('❌ Error view points:', err); }
   };
 
-  // ✅✅✅ ACCIÓN DE LIKE (LÓGICA CORREGIDA PARA NO DOBLE-CONTAR)
+  // ✅✅✅ ACCIÓN DE LIKE (LÓGICA CORREGIDA PARA NO DOBLE-CONTAR Y NO HACER CRASH)
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
 
@@ -508,7 +506,7 @@ const VideoPlayerPage = () => {
         
         const { error: deleteError } = await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
         if (deleteError) {
-             // ⭐️ FIX: Si falla la eliminación (ej. por RLS), no hacemos crash, solo logueamos.
+             // ⭐️ FIX: Si falla la eliminación, NO hacemos crash, solo logueamos.
              console.error('❌ Error deleting like:', deleteError);
         }
         
@@ -533,7 +531,7 @@ const VideoPlayerPage = () => {
              return;
         }
 
-        // Insertar Like en BD (Acción Social)
+        // 2. Insertar Like en BD (Acción Social)
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         if (likeError && likeError.code !== '23505') {
             console.error('Error like insert:', likeError);
@@ -541,34 +539,25 @@ const VideoPlayerPage = () => {
             return;
         }
         
-        // 🛑 FIX: FUERZA RECARGA DE CONTADORES OFICIALES.
-        // Esto elimina cualquier incremento local que pueda duplicarse por triggers/listeners.
+        // 3. FUERZA RECARGA DE CONTADORES OFICIALES.
         fetchVideoData(); 
 
         // ================================================================
-        // 🛑 ANTI-FARMING & PUNTOS
+        // 4. 🛑 ANTI-FARMING & PUNTOS (AISLADO PARA EVITAR CRASH)
         // ================================================================
         const alreadyRewarded = pointsRewardedIds.has(videoId);
 
-        if (alreadyRewarded) {
-            // CASO RE-LIKE (Informativo)
-            console.log('ℹ️ Re-like detectado: Sin puntos extra');
-            showLikeNotification('Like restaurado (Sin puntos extra)', 'info');
-        } else {
-            // CASO NUEVO LIKE
+        if (!alreadyRewarded) {
             setPointsRewardedIds(prev => new Set([...prev, videoId]));
-            
-            // Actualización Optimista de la Misión
             const missionSnapshot = [...missions];
             updateMissionOptimistic('give_like', 1);
             
-            try {
+            try { // ⭐️ FIX: Try/Catch anidado para aislar el fallo del servicio de puntos
               const isReel = video?.orientation === 'vertical';
               const contentType = isReel ? 'reel' : 'video';
               const result = await trackGiveLike(contentType, videoId);
               
               if (result.result === 'success' && result.points_earned > 0) { 
-                // Usamos updateLocalBalance y notifyMissionComplete para el Header y el Modal
                 if (updateLocalBalance) updateLocalBalance(result.points_earned);
                 if (notifyMissionComplete) notifyMissionComplete(result.points_earned); 
                 showLikeNotification(`Misión Completa: +${result.points_earned} puntos 🎉`, 'success');
@@ -579,14 +568,17 @@ const VideoPlayerPage = () => {
                 showLikeNotification('✓ Like registrado', 'info');
               }
             } catch (pointsError) {
-              console.error('❌ Error puntos:', pointsError);
+              console.error('❌ Error puntos (aislado):', pointsError);
               rollbackMission(missionSnapshot);
             }
+        } else {
+             // CASO RE-LIKE (Informativo)
+            showLikeNotification('Like restaurado (Sin puntos extra)', 'info');
         }
       }
     } catch (err) {
-      // ✅ Si hay un error de conexión o un fallo general, lo manejamos aquí sin forzar recarga.
-      console.error('Error general en like:', err);
+      // ✅ Capturamos cualquier error de conexión o fallo general sin forzar recarga.
+      console.error('Error general en handleLike:', err);
       // Revertir estado del botón si el like era nuevo y falló
       if (!liked) setLiked(false); 
       showLikeNotification('Error de conexión o fallo interno', 'error');
@@ -611,7 +603,7 @@ const VideoPlayerPage = () => {
     if (!user) { navigate('/login'); return; }
     try {
       if (saved) {
-        setSaved(false); await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id);
+        setSaved(false); await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user.id', user.id);
       } else {
         setSaved(true); await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
         showUserFeedback('Video guardado en favoritos', 'success', 1500);
@@ -751,9 +743,9 @@ const VideoPlayerPage = () => {
     if (num === null || num === undefined) return '0'; if (num >= 1000000) { return (num / 1000000).toFixed(1) + 'M'; } if (num >= 1000) { return (num / 1000).toFixed(1) + 'K'; } return num?.toString() || '0';
   };
 
-  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA ⭐️ FIX APLICADO AQUÍ
+  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA 
   const getDisplayedDescription = () => {
-    if (!video?.description) return ''; // Asegura que video y description existan
+    if (!video?.description) return ''; 
     try {
         if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
           return video.description;
