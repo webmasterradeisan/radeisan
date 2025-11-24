@@ -3,8 +3,8 @@
 // REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ⭐️ FIX DOBLE CONTEO: Eliminado el incremento optimista de 'likes' en el frontend,
-//    para evitar un doble conteo cuando el backend/listener también actualiza.
+// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
+//    inserción exitosa en la DB para evitar el doble conteo visual.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -47,12 +47,12 @@ const ReelsContainer = ({
   // 2. DECLARACIÓN DE ESTADOS
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [mutedVideos, setMutedVideos] = new Set();
-  const [likedVideos, setLikedVideos] = new Set();
+  const [mutedVideos, setMutedVideos] = useState(new Set());
+  const [likedVideos, setLikedVideos] = useState(new Set());
   
-  const [dislikedVideos, setDislikedVideos] = new Set();
-  const [savedVideos, setSavedVideos] = new Set();
-  const [followedCreators, setFollowedCreators] = new Set();
+  const [dislikedVideos, setDislikedVideos] = useState(new Set());
+  const [savedVideos, setSavedVideos] = useState(new Set());
+  const [followedCreators, setFollowedCreators] = useState(new Set());
   
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
@@ -68,8 +68,8 @@ const ReelsContainer = ({
   const [currentUser, setCurrentUser] = useState(null);
   
   const [showGiftModal, setShowGiftModal] = useState(false); 
-  const [videoWatchedIds, setVideoWatchedIds] = new Set();
-  const [pointsRewardedIds, setPointsRewardedIds] = new Set();
+  const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
+  const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
   
   // Refs
   const containerRef = useRef(null);
@@ -314,7 +314,6 @@ const ReelsContainer = ({
       if (isLiked) {
           // UNLIKE
           newLiked.delete(videoId);
-          // ✅ Mantenemos la disminución optimista
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
@@ -323,23 +322,21 @@ const ReelsContainer = ({
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // ❌ FIX DOBLE CONTEO: ELIMINAMOS EL INCREMENTO OPTIMISTA.
+          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
           // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
-             // Ya no necesitamos disminuir el contador porque no lo incrementamos.
+             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
           }
           
-          // ✅ Si la inserción es exitosa, incrementamos visualmente AQUÍ (solución alternativa y más segura)
-          // Esto asegura que el contador se actualice si la DB no tiene listeners o si el listener es lento.
+          // ✅ MOVEMOS el incremento local para después de la inserción exitosa
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
-
 
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado', videoId, 'info');
@@ -383,10 +380,6 @@ const ReelsContainer = ({
     } catch (err) { 
         console.error('Error like:', err);
         rollbackMission(snapshot); 
-        // Si hay un error, revertimos la adición optimista que acabamos de hacer si existe.
-        if (!isLiked) {
-             setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes || 0) - 1) } }));
-        }
         showPointsNotification('Error de conexión', videoId, 'error');
     }
   };
