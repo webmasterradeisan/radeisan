@@ -1,9 +1,11 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
 // VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOBLE LIKE & VISIBILITY)
-// ✅ FIX: Crash de Reinicio/Pantalla blanca al dar like repetido, por errores internos de misión.
-// ⭐️ FIX ROBUSTEZ: Se aísla la lógica de puntos (trackGiveLike) en un try/catch 
-//    para evitar que el fallo de la misión cause un crash de la página.
+// ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
+// ✅ FIX DOBLE CONTEO: Eliminado el incremento local del contador de likes. 
+// ✅ FIX CRASH: Lógica de puntos y auto-like aislada para evitar reinicio por errores.
+// ⭐️ FIX ROBUSTEZ FINAL: Asegurada la consistencia del objeto 'video' y corregida 
+//    una inconsistencia en handleSave.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -506,8 +508,8 @@ const VideoPlayerPage = () => {
         
         const { error: deleteError } = await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
         if (deleteError) {
-             // ⭐️ FIX: Si falla la eliminación, NO hacemos crash, solo logueamos.
              console.error('❌ Error deleting like:', deleteError);
+             // Permitimos que el error de DB se maneje silenciosamente en el unlike.
         }
         
       } else {
@@ -518,16 +520,16 @@ const VideoPlayerPage = () => {
         setLiked(true); // Estilo de botón inmediato
 
         // 1. Bloqueo de Auto-Like
-        if (video.user_id === user.id) {
+        if (video?.user_id === user.id) {
              showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
-             // Solo insertamos el like en BD (social) y luego forzamos la recarga de contadores
+             // Insertar like en BD (social)
              const { error: autoLikeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
              
-             // ⭐️ FIX: Capturamos el error de clave duplicada (23505) en auto-like
+             // Capturamos el error de clave duplicada (23505) en auto-like
              if (autoLikeError && autoLikeError.code !== '23505') { 
                 console.error('Error auto-like insert:', autoLikeError);
              }
-             fetchVideoData(); // Recarga los contadores oficiales
+             fetchVideoData(); 
              return;
         }
 
@@ -603,9 +605,12 @@ const VideoPlayerPage = () => {
     if (!user) { navigate('/login'); return; }
     try {
       if (saved) {
-        setSaved(false); await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user.id', user.id);
+        setSaved(false); 
+        // ⭐️ FIX: Corregido el campo 'user.id' a 'user_id'
+        await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id);
       } else {
-        setSaved(true); await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
+        setSaved(true); 
+        await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
         showUserFeedback('Video guardado en favoritos', 'success', 1500);
       }
     } catch (err) { console.error('Error al guardar:', err); }
