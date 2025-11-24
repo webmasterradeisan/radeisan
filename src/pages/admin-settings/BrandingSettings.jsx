@@ -1,28 +1,25 @@
 // ============================================================================
 // BRANDING SETTINGS - Configuración de Marca
-// ============================================================================
-// Componente de administración para personalizar el branding de la plataforma:
-// - Logo y favicon
-// - Esquema de colores
-// - Tipografía
-// - Textos y mensajes personalizados
-// - Preview en tiempo real
-// - Aplicación global de cambios
+// ⭐️ FIX: Añadidos y expuestos los campos de colores neutrales (Card, Background, Muted, Border)
+//    para que el esquema de color se aplique correctamente a los elementos grises.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import AppIcon from '../../components/AppIcon';
-// ✅ CORRECCIÓN DE IMPORTACIÓN: Importamos el nombre correcto (DEFAULT_BRANDING_FALLBACK)
-// y lo renombramos a DEFAULT_BRANDING para compatibilidad interna si es necesario, 
-// o lo usamos directamente. Aquí optamos por usarlo directamente.
 import { applyBrandingToDOM, DEFAULT_BRANDING_FALLBACK } from '../../utils/branding'; 
 
 
 // ============================================================================
-// CONFIGURACIÓN POR DEFECTO (REEMPLAZADA)
+// CONFIGURACIÓN POR DEFECTO (Asumimos estos valores neutrales por defecto)
 // ============================================================================
-// El código original de DEFAULT_BRANDING ha sido eliminado aquí.
+const DEFAULT_NEUTRALS = {
+  background: '#FFFFFF', // Blanco
+  foreground: '#1F2937', // Gris oscuro/negro texto
+  card: '#F9FAFB',       // Gris claro para tarjetas/bloques
+  muted: '#E5E7EB',      // Gris para fondos de botones/elementos secundarios
+  border: '#D1D5DB'       // Gris para bordes
+};
 
 const PRESET_COLORS = [
   { name: 'Azul Océano', primary: '#3B82F6', secondary: '#0EA5E9' },
@@ -56,8 +53,13 @@ export default function BrandingSettings() {
   // ============================================================================
 
   const [activeTab, setActiveTab] = useState('logos');
-  // ✅ CORREGIDO: Usamos DEFAULT_BRANDING_FALLBACK
-  const [branding, setBranding] = useState(DEFAULT_BRANDING_FALLBACK);
+  const [branding, setBranding] = useState({
+    ...DEFAULT_BRANDING_FALLBACK,
+    colors: { // Añadimos los colores neutrales al estado inicial
+      ...DEFAULT_BRANDING_FALLBACK.colors,
+      ...DEFAULT_NEUTRALS,
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -79,6 +81,7 @@ export default function BrandingSettings() {
     if (previewMode) {
       applyBrandingToDOM(branding);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branding, previewMode]);
 
   // ============================================================================
@@ -105,15 +108,21 @@ export default function BrandingSettings() {
 
       if (data) {
         console.log('✅ Data recibida:', data);
-        console.log('📦 Tipo de setting_value:', typeof data.setting_value);
         
-        // ✅ CORRECCIÓN: Supabase ya devuelve JSONB como objeto, no necesita parse
         const brandingData = typeof data.setting_value === 'string' 
           ? JSON.parse(data.setting_value)
           : data.setting_value;
         
-        console.log('✅ Branding cargado:', brandingData);
-        setBranding(brandingData);
+        // ⭐️ FIX: Aseguramos que los nuevos colores neutrales se carguen o se usen los defaults
+        setBranding(prev => ({
+            ...prev,
+            ...brandingData,
+            colors: {
+                ...prev.colors,
+                ...DEFAULT_NEUTRALS, // Garantiza que siempre existan las claves neutrales
+                ...brandingData.colors
+            }
+        }));
       } else {
         console.log('⚠️ No hay data, usando defaults');
       }
@@ -193,8 +202,14 @@ export default function BrandingSettings() {
 
   const resetToDefaults = () => {
     if (window.confirm('¿Estás seguro de restaurar el branding por defecto?')) {
-      // ✅ Usa el DEFAULT_BRANDING_FALLBACK importado
-      setBranding(DEFAULT_BRANDING_FALLBACK);
+      // ✅ Usa el DEFAULT_BRANDING_FALLBACK importado, asegurando los neutrales
+      setBranding({
+          ...DEFAULT_BRANDING_FALLBACK,
+          colors: {
+              ...DEFAULT_BRANDING_FALLBACK.colors,
+              ...DEFAULT_NEUTRALS,
+          }
+      });
       setHasChanges(true);
     }
   };
@@ -202,7 +217,6 @@ export default function BrandingSettings() {
   // ============================================================================
   // FUNCIONES DE ACTUALIZACIÓN
   // ============================================================================
-  // ... (funciones updateLogo, updateColor, etc. se mantienen igual)
   
   const updateLogo = (key, value) => {
     setBranding(prev => ({
@@ -517,8 +531,9 @@ export default function BrandingSettings() {
                       </div>
                     </div>
 
-                    {/* Colores individuales */}
+                    {/* Colores principales y neutrales */}
                     <div className="space-y-4">
+                      <h4 className="text-base font-semibold mt-6 mb-3 border-b pb-1 text-gray-800">Colores Principales</h4>
                       <ColorInput
                         label="Primary"
                         value={branding.colors.primary}
@@ -549,6 +564,41 @@ export default function BrandingSettings() {
                         value={branding.colors.error}
                         onChange={(value) => updateColor('error', value)}
                       />
+
+                      <h4 className="text-base font-semibold mt-6 mb-3 border-b pb-1 text-gray-800">Colores de Interfaz (Grises)</h4>
+                      
+                      {/* ⭐️ Nuevos campos para colores neutrales ⭐️ */}
+                      <ColorInput
+                        label="Background"
+                        value={branding.colors.background}
+                        onChange={(value) => updateColor('background', value)}
+                        description="Fondo principal de la aplicación"
+                      />
+                      <ColorInput
+                        label="Foreground"
+                        value={branding.colors.foreground}
+                        onChange={(value) => updateColor('foreground', value)}
+                        description="Color del texto principal"
+                      />
+                      <ColorInput
+                        label="Card (Fondo Bloques)"
+                        value={branding.colors.card}
+                        onChange={(value) => updateColor('card', value)}
+                        description="Fondo de tarjetas y bloques de contenido"
+                      />
+                      <ColorInput
+                        label="Muted (Fondos sutiles)"
+                        value={branding.colors.muted}
+                        onChange={(value) => updateColor('muted', value)}
+                        description="Fondos de botones, barras de progreso y elementos sutiles"
+                      />
+                      <ColorInput
+                        label="Border"
+                        value={branding.colors.border}
+                        onChange={(value) => updateColor('border', value)}
+                        description="Color de bordes y separadores"
+                      />
+                      
                     </div>
                   </div>
                 </div>
@@ -834,10 +884,10 @@ export default function BrandingSettings() {
               </h3>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4" style={{ backgroundColor: branding.colors.background }}>
               {/* Preview de logo */}
               {branding.logo.primary && (
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 rounded-lg" style={{ backgroundColor: branding.colors.card }}>
                   <img
                     src={branding.logo.primary}
                     alt="Logo"
@@ -851,40 +901,40 @@ export default function BrandingSettings() {
 
               {/* Preview de colores */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Colores</h4>
+                <h4 className="text-sm font-medium mb-2" style={{ color: branding.colors.foreground }}>Colores</h4>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="text-center">
                     <div
                       className="w-full h-12 rounded mb-1"
                       style={{ backgroundColor: branding.colors.primary }}
                     ></div>
-                    <span className="text-xs text-gray-600">Primary</span>
+                    <span className="text-xs" style={{ color: branding.colors.foreground }}>Primary</span>
                   </div>
                   <div className="text-center">
                     <div
                       className="w-full h-12 rounded mb-1"
                       style={{ backgroundColor: branding.colors.secondary }}
                     ></div>
-                    <span className="text-xs text-gray-600">Secondary</span>
+                    <span className="text-xs" style={{ color: branding.colors.foreground }}>Secondary</span>
                   </div>
                   <div className="text-center">
                     <div
                       className="w-full h-12 rounded mb-1"
                       style={{ backgroundColor: branding.colors.accent }}
                     ></div>
-                    <span className="text-xs text-gray-600">Accent</span>
+                    <span className="text-xs" style={{ color: branding.colors.foreground }}>Accent</span>
                   </div>
                 </div>
               </div>
 
               {/* Preview de botón */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Botón</h4>
+                <h4 className="text-sm font-medium mb-2" style={{ color: branding.colors.foreground }}>Botón</h4>
                 <button
                   className="w-full px-4 py-2 rounded-lg font-medium"
                   style={{
                     backgroundColor: branding.colors.primary,
-                    color: 'white',
+                    color: branding.colors.background, // Usa background para texto de botón sólido
                     fontFamily: branding.typography.fontFamily
                   }}
                 >
@@ -894,15 +944,15 @@ export default function BrandingSettings() {
 
               {/* Preview de tipografía */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Tipografía</h4>
+                <h4 className="text-sm font-medium mb-2" style={{ color: branding.colors.foreground }}>Tipografía</h4>
                 <div style={{ fontFamily: branding.typography.fontFamily }}>
                   <h2
                     className="text-xl font-bold mb-2"
-                    style={{ fontFamily: branding.typography.headingFont }}
+                    style={{ fontFamily: branding.typography.headingFont, color: branding.colors.foreground }}
                   >
                     {branding.texts.appName}
                   </h2>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm" style={{ color: branding.colors.muted }}>
                     {branding.texts.tagline}
                   </p>
                 </div>
@@ -912,11 +962,12 @@ export default function BrandingSettings() {
               <div
                 className="p-4 border rounded-lg"
                 style={{
+                  backgroundColor: branding.colors.card,
                   borderColor: branding.colors.border,
                   fontFamily: branding.typography.fontFamily
                 }}
               >
-                <h3 className="font-semibold mb-2" style={{ fontFamily: branding.typography.headingFont }}>
+                <h3 className="font-semibold mb-2" style={{ fontFamily: branding.typography.headingFont, color: branding.colors.foreground }}>
                   Card de Ejemplo
                 </h3>
                 <p className="text-sm" style={{ color: branding.colors.muted }}>
@@ -938,30 +989,33 @@ export default function BrandingSettings() {
 /**
  * Input de color con picker
  */
-function ColorInput({ label, value, onChange }) {
+function ColorInput({ label, value, onChange, description }) {
   return (
-    <div className="flex items-center gap-4">
-      <label className="w-32 text-sm font-medium text-gray-700">
-        {label}
-      </label>
-      <div className="flex-1 flex items-center gap-3">
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
-        />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-        />
-      </div>
-      <div
-        className="w-10 h-10 rounded border border-gray-300"
-        style={{ backgroundColor: value }}
-      ></div>
+    <div className="space-y-1">
+        <div className="flex items-center gap-4">
+          <label className="w-32 text-sm font-medium text-gray-700 flex-shrink-0">
+            {label}
+          </label>
+          <div className="flex-1 flex items-center gap-3">
+            <input
+              type="color"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-10 h-10 border border-gray-300 rounded cursor-pointer"
+            />
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+            />
+          </div>
+          <div
+            className="w-10 h-10 rounded border border-gray-300 flex-shrink-0"
+            style={{ backgroundColor: value }}
+          ></div>
+        </div>
+        {description && <p className="text-xs text-gray-500 ml-36 italic">{description}</p>}
     </div>
   );
 }
