@@ -3,8 +3,9 @@
 // VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOBLE LIKE & VISIBILITY)
 // ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
 // ✅ FIX DOBLE CONTEO: Eliminado el incremento local del contador de likes. 
-// ✅ FIX CRASH: Corregida la lógica de getDisplayedDescription para evitar errores de referencia.
-// ⭐️ FIX CONTINUIDAD: Añadida lógica para reanudar el video al cambiar de pestaña (Page Visibility API).
+// ✅ FIX CRASH: Corregida la lógica de getDisplayedDescription.
+// ⭐️ FIX CRASH REINICIO: Manejo explícito de errores de duplicidad (23505) en auto-like 
+//    y en el proceso normal para evitar el reinicio de la página al dar like repetido.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -260,7 +261,7 @@ const VideoPlayerPage = () => {
   }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); 
 
   // ===============================
-  // LÓGICA DE CONTINUIDAD (PAGE VISIBILITY) ⭐️ FIX APLICADO AQUÍ
+  // LÓGICA DE CONTINUIDAD (PAGE VISIBILITY) 
   // ===============================
   useEffect(() => {
     let wasPlayingBeforeHidden = false;
@@ -500,11 +501,16 @@ const VideoPlayerPage = () => {
     try {
       if (liked) {
         // ==============================
-        // QUITAR LIKE (siempre se revierte el estado local y el contador)
+        // QUITAR LIKE
         // ==============================
         setLiked(false);
         setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
-        await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+        
+        const { error: deleteError } = await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+        if (deleteError) {
+             // ⭐️ FIX: Si falla la eliminación (ej. por RLS), no hacemos crash, solo logueamos.
+             console.error('❌ Error deleting like:', deleteError);
+        }
         
       } else {
         // ==============================
@@ -517,7 +523,12 @@ const VideoPlayerPage = () => {
         if (video.user_id === user.id) {
              showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
              // Solo insertamos el like en BD (social) y luego forzamos la recarga de contadores
-             await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+             const { error: autoLikeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+             
+             // ⭐️ FIX: Capturamos el error de clave duplicada (23505) en auto-like
+             if (autoLikeError && autoLikeError.code !== '23505') { 
+                console.error('Error auto-like insert:', autoLikeError);
+             }
              fetchVideoData(); // Recarga los contadores oficiales
              return;
         }
@@ -525,7 +536,7 @@ const VideoPlayerPage = () => {
         // Insertar Like en BD (Acción Social)
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         if (likeError && likeError.code !== '23505') {
-            console.error('Error like:', likeError);
+            console.error('Error like insert:', likeError);
             setLiked(false); // Revertir estilo
             return;
         }
@@ -574,7 +585,11 @@ const VideoPlayerPage = () => {
         }
       }
     } catch (err) {
-      console.error('Error en like:', err);
+      // ✅ Si hay un error de conexión o un fallo general, lo manejamos aquí sin forzar recarga.
+      console.error('Error general en like:', err);
+      // Revertir estado del botón si el like era nuevo y falló
+      if (!liked) setLiked(false); 
+      showLikeNotification('Error de conexión o fallo interno', 'error');
     }
   };
 
