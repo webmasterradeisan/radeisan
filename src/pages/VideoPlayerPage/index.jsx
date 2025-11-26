@@ -1,11 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX DOBLE LIKE & VISIBILITY)
+// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX CRASH ON LIKE)
 // ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
-// ✅ FIX DOBLE CONTEO: Eliminado el incremento local del contador de likes. 
-// ✅ FIX CRASH: Lógica de puntos y auto-like aislada para evitar reinicio por errores.
-// ⭐️ FIX ROBUSTEZ FINAL: Asegurada la consistencia del objeto 'video' y corregida 
-//    una inconsistencia en handleSave.
+// ✅ FIX: Doble incremento de contador de likes corregido.
+// ✅ FIX CRÍTICO: Pantalla en blanco al dar like (protección null check en missions).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -261,39 +259,6 @@ const VideoPlayerPage = () => {
   }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); 
 
   // ===============================
-  // LÓGICA DE CONTINUIDAD (PAGE VISIBILITY) 
-  // ===============================
-  useEffect(() => {
-    let wasPlayingBeforeHidden = false;
-
-    const handleVisibilityChange = () => {
-        const currentVideo = videoRef.current;
-        if (!currentVideo) return;
-
-        if (document.visibilityState === 'hidden') {
-            // 1. La pestaña se ocultó: Guardar el estado de reproducción
-            wasPlayingBeforeHidden = !currentVideo.paused;
-        } else if (document.visibilityState === 'visible') {
-            // 2. La pestaña volvió a ser visible: Forzar la reproducción si estaba activo
-            if (wasPlayingBeforeHidden) {
-                currentVideo.play().catch(e => {
-                    // Si falla el autoplay (común si no está muted), solo logueamos
-                    console.warn("Autoplay falló al cambiar de pestaña, puede requerir interacción o mute.", e);
-                });
-                setIsPlaying(true);
-            }
-            wasPlayingBeforeHidden = false; // Resetear bandera
-        }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-}, [videoRef, setIsPlaying]); 
-
-  // ===============================
   // FUNCIONES DE DRAG & DROP
   // ===============================
   const handleMouseDown = (e) => {
@@ -378,7 +343,6 @@ const VideoPlayerPage = () => {
     } catch (err) { console.error('❌ Error al cargar perfil:', err); }
   }, [user]);
 
-  // ⭐️ FUNCIÓN CENTRAL DE CARGA DE VIDEO Y CONTADORES
   const fetchVideoData = useCallback(async () => {
     if (!videoId) return;
     try {
@@ -396,7 +360,6 @@ const VideoPlayerPage = () => {
       }
       setVideo(videoData);
 
-      // Leemos los contadores de la DB
       const { count: likesCount } = await supabase.from('video_likes').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
       const { count: dislikesCount } = await supabase.from('video_dislikes').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
       const { count: commentsCount } = await supabase.from('video_comments').select('*', { count: 'exact', head: true }).eq('video_id', videoId);
@@ -483,18 +446,18 @@ const VideoPlayerPage = () => {
       const contentType = isReel ? 'reel' : 'video';
       const result = await trackWatchVideo(contentType, videoId, currentTime);
 
-      if (result.result === 'success' && result.points_earned > 0) {
-        updateLocalBalance(result.points_earned); // Usamos updateLocalBalance para sync del header
+      if (result && result.result === 'success' && result.points_earned > 0) {
+        if (updateLocalBalance) updateLocalBalance(result.points_earned); 
         showUserFeedback(`+${result.points_earned} PUNTOS por ver ${contentType} 🎉`, 'success');
-      } else if (result.result === 'progress_updated') {
+      } else if (result && result.result === 'progress_updated') {
         showUserFeedback(`Progreso registrado. ¡Sigue viendo!`, 'success');
-      } else if (result.result === 'already_completed') {
+      } else if (result && result.result === 'already_completed') {
         showUserFeedback(`Ya completaste la misión de ver hoy.`, 'restriction');
       }
     } catch (err) { console.error('❌ Error view points:', err); }
   };
 
-  // ✅✅✅ ACCIÓN DE LIKE (LÓGICA CORREGIDA PARA NO DOBLE-CONTAR Y NO HACER CRASH)
+  // ✅✅✅ ACCIÓN DE LIKE (CORREGIDA: ANTI-CRASH)
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
 
@@ -505,12 +468,7 @@ const VideoPlayerPage = () => {
         // ==============================
         setLiked(false);
         setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
-        
-        const { error: deleteError } = await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
-        if (deleteError) {
-             console.error('❌ Error deleting like:', deleteError);
-             // Permitimos que el error de DB se maneje silenciosamente en el unlike.
-        }
+        await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
         
       } else {
         // ==============================
@@ -520,70 +478,72 @@ const VideoPlayerPage = () => {
         setLiked(true); // Estilo de botón inmediato
 
         // 1. Bloqueo de Auto-Like
-        if (video?.user_id === user.id) {
+        if (video.user_id === user.id) {
              showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
-             // Insertar like en BD (social)
-             const { error: autoLikeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
-             
-             // Capturamos el error de clave duplicada (23505) en auto-like
-             if (autoLikeError && autoLikeError.code !== '23505') { 
-                console.error('Error auto-like insert:', autoLikeError);
-             }
-             fetchVideoData(); 
+             // Insertamos el like en BD (social) pero no procesamos puntos
+             await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 })); 
              return;
         }
 
-        // 2. Insertar Like en BD (Acción Social)
+        // Insertar Like en BD (Acción Social)
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
         if (likeError && likeError.code !== '23505') {
-            console.error('Error like insert:', likeError);
+            console.error('Error like:', likeError);
             setLiked(false); // Revertir estilo
             return;
         }
         
-        // 3. FUERZA RECARGA DE CONTADORES OFICIALES.
-        fetchVideoData(); 
+        // ✅ INCREMENTO ÚNICO Y OFICIAL
+        if (!likeError) {
+             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+        }
 
         // ================================================================
-        // 4. 🛑 ANTI-FARMING & PUNTOS (AISLADO PARA EVITAR CRASH)
+        // 🛑 ANTI-FARMING & PUNTOS (CRASH SAFEGUARD ADDED)
         // ================================================================
         const alreadyRewarded = pointsRewardedIds.has(videoId);
 
-        if (!alreadyRewarded) {
+        if (alreadyRewarded) {
+            console.log('ℹ️ Re-like detectado: Sin puntos extra');
+            showLikeNotification('Like restaurado (Sin puntos extra)', 'info');
+        } else {
+            // CASO NUEVO LIKE
             setPointsRewardedIds(prev => new Set([...prev, videoId]));
-            const missionSnapshot = [...missions];
-            updateMissionOptimistic('give_like', 1);
             
-            try { // ⭐️ FIX: Try/Catch anidado para aislar el fallo del servicio de puntos
+            // 🔥 CORRECCIÓN AQUÍ: Validamos que 'missions' sea un array antes de copiarlo
+            // Esto evita el error "object null is not iterable" que causaba la pantalla blanca
+            const missionSnapshot = Array.isArray(missions) ? [...missions] : [];
+            
+            if (updateMissionOptimistic) {
+                updateMissionOptimistic('give_like', 1);
+            }
+            
+            try {
               const isReel = video?.orientation === 'vertical';
               const contentType = isReel ? 'reel' : 'video';
               const result = await trackGiveLike(contentType, videoId);
               
-              if (result.result === 'success' && result.points_earned > 0) { 
+              if (result && result.result === 'success' && result.points_earned > 0) { 
                 if (updateLocalBalance) updateLocalBalance(result.points_earned);
                 if (notifyMissionComplete) notifyMissionComplete(result.points_earned); 
                 showLikeNotification(`Misión Completa: +${result.points_earned} puntos 🎉`, 'success');
-              } else if (result.result === 'already_completed') {
+              } else if (result && result.result === 'already_completed') {
                 showLikeNotification('Like registrado (Misión diaria completa)', 'info');
-                rollbackMission(missionSnapshot);
+                if (rollbackMission) rollbackMission(missionSnapshot);
               } else {
                 showLikeNotification('✓ Like registrado', 'info');
               }
             } catch (pointsError) {
-              console.error('❌ Error puntos (aislado):', pointsError);
-              rollbackMission(missionSnapshot);
+              console.error('❌ Error puntos:', pointsError);
+              if (rollbackMission) rollbackMission(missionSnapshot);
             }
-        } else {
-             // CASO RE-LIKE (Informativo)
-            showLikeNotification('Like restaurado (Sin puntos extra)', 'info');
         }
       }
     } catch (err) {
-      // ✅ Capturamos cualquier error de conexión o fallo general sin forzar recarga.
-      console.error('Error general en handleLike:', err);
-      // Revertir estado del botón si el like era nuevo y falló
-      if (!liked) setLiked(false); 
-      showLikeNotification('Error de conexión o fallo interno', 'error');
+      console.error('Error general en like:', err);
+      // Fallback visual
+      setLiked(false);
     }
   };
 
@@ -605,12 +565,9 @@ const VideoPlayerPage = () => {
     if (!user) { navigate('/login'); return; }
     try {
       if (saved) {
-        setSaved(false); 
-        // ⭐️ FIX: Corregido el campo 'user.id' a 'user_id'
-        await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id);
+        setSaved(false); await supabase.from('saved_videos').delete().eq('video_id', videoId).eq('user_id', user.id);
       } else {
-        setSaved(true); 
-        await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
+        setSaved(true); await supabase.from('saved_videos').insert({ video_id: videoId, user_id: user.id });
         showUserFeedback('Video guardado en favoritos', 'success', 1500);
       }
     } catch (err) { console.error('Error al guardar:', err); }
@@ -625,14 +582,14 @@ const VideoPlayerPage = () => {
         const isReel = video?.orientation === 'vertical';
         const contentType = isReel ? 'reel' : 'video';
         const result = await trackShareContent(contentType, videoId, 1, { platform: 'link' });
-        if (result.result === 'success' && result.points_earned > 0) {
+        if (result && result.result === 'success' && result.points_earned > 0) {
           if (updateLocalBalance) updateLocalBalance(result.points_earned);
           showUserFeedback(`+${result.points_earned} PUNTOS por Compartir 📢`, 'success');
-        } else if (result.result === 'progress_updated') {
+        } else if (result && result.result === 'progress_updated') {
           showUserFeedback(`Progreso registrado.`, 'success');
-        } else if (result.result === 'already_completed') {
+        } else if (result && result.result === 'already_completed') {
           showUserFeedback(`Misión de compartir completada hoy.`, 'restriction');
-        } else if (result.result === 'error') { setHasEarnedSharePoints(false); }
+        } else if (result && result.result === 'error') { setHasEarnedSharePoints(false); }
       } catch (pointsError) { console.error('❌ Error share:', pointsError); setHasEarnedSharePoints(false); }
     }
   };
@@ -658,7 +615,7 @@ const VideoPlayerPage = () => {
         setFollowing(true); await supabase.from('user_follows').insert({ follower_id: user.id, following_id: video.user_id });
         try {
           const result = await trackFollowUser(video.user_id);
-          if (result.result === 'success' && result.points_earned > 0) {
+          if (result && result.result === 'success' && result.points_earned > 0) {
             if (updateLocalBalance) updateLocalBalance(result.points_earned);
             showUserFeedback(`+${result.points_earned} PUNTOS por Seguir 👥`, 'success');
           } else { showUserFeedback('Ahora sigues a este creador', 'success', 1500); }
@@ -682,10 +639,10 @@ const VideoPlayerPage = () => {
         try {
           const isReel = video?.orientation === 'vertical'; const contentType = isReel ? 'reel' : 'video';
           const result = await trackComment(contentType, videoId);
-          if (result.result === 'success' && result.points_earned > 0) {
+          if (result && result.result === 'success' && result.points_earned > 0) {
             if (updateLocalBalance) updateLocalBalance(result.points_earned);
             showUserFeedback(`+${result.points_earned} PUNTOS por Comentar 💬`, 'success');
-          } else if (result.result === 'error') { setHasEarnedCommentPoints(false); }
+          } else if (result && result.result === 'error') { setHasEarnedCommentPoints(false); }
         } catch (pointsError) { setHasEarnedCommentPoints(false); }
       }
 
@@ -748,9 +705,9 @@ const VideoPlayerPage = () => {
     if (num === null || num === undefined) return '0'; if (num >= 1000000) { return (num / 1000000).toFixed(1) + 'M'; } if (num >= 1000) { return (num / 1000).toFixed(1) + 'K'; } return num?.toString() || '0';
   };
 
-  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA 
+  // ✅ FUNCIÓN PARA MOSTRAR DESCRIPCIÓN SEGURA
   const getDisplayedDescription = () => {
-    if (!video?.description) return ''; 
+    if (!video.description) return '';
     try {
         if (showFullDescription || video.description.length <= DESCRIPTION_MAX_LENGTH) {
           return video.description;
