@@ -4,6 +4,7 @@
 // ✅ Fix: Debounce en Realtime (Espera 1.5s).
 // ✅ Fix: updateLocalBalance activo.
 // ✅ Fix: EXPORTA los datos del modal pero NO LO RENDERIZA (Lo hace Routes.jsx).
+// ✅ NUEVO: Función refetchMissionsInstant para la sincronización inmediata.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -76,6 +77,13 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
+  // ✅ NUEVA FUNCIÓN: Revalida misiones y puntos inmediatamente
+  const refetchMissionsInstant = useCallback(() => {
+    console.log("⚡ Forzando sincronización instantánea de misiones...");
+    loadAllData(false); 
+  }, [loadAllData]);
+  
+
   // --- RADAR REAL-TIME CON FRENO (DEBOUNCE) ---
   useEffect(() => {
     if (!user) return;
@@ -83,6 +91,7 @@ export const PointsProvider = ({ children }) => {
     let timeoutId;
 
     const handleRealtimeUpdate = () => {
+      // ✅ Si la actualización viene del Realtime, aplicamos el debounce
       if (timeoutId) clearTimeout(timeoutId);
       
       timeoutId = setTimeout(() => {
@@ -116,14 +125,17 @@ export const PointsProvider = ({ children }) => {
   }, []);
 
   // --- CONTROL DEL MODAL ---
-  const notifyMissionComplete = (earnedPoints) => {
+  const notifyMissionComplete = (earnedPoints, missionMessage) => {
     console.log("🚀 Orden recibida: Mostrar Modal (+ " + earnedPoints + ")");
-    setMissionSuccessData({ show: true, points: earnedPoints });
+    setMissionSuccessData({ show: true, points: earnedPoints, message: missionMessage });
+    
+    // ✅ CORRECCIÓN: Al completar la misión, disparamos la revalidación instantánea
+    refetchMissionsInstant(); 
   };
 
   const handleCloseMissionModal = () => {
     setMissionSuccessData({ show: false, points: 0 });
-    loadAllData(true); 
+    // Ya disparamos la revalidación en notifyMissionComplete, no es necesario aquí
   };
 
   // --- WRAPPERS ---
@@ -186,6 +198,9 @@ export const PointsProvider = ({ children }) => {
     rollbackMission,
     updateLocalBalance,
     notifyMissionComplete,
+    
+    // ✅ EXPORTAR LA FUNCIÓN DE REVALIDACIÓN INSTANTÁNEA
+    refetchMissionsInstant, 
 
     // ✅ EXPORTAMOS ESTO PARA MissionNotificationContainer.jsx
     missionSuccessData,      
