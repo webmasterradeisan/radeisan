@@ -1,9 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSION STRICT PRO (TOTAL SECURITY)
-// ✅ FIX: Bloqueo de puntos persistente.
-// ✅ LÓGICA: Si el usuario entra y ya tiene like, se marca como "Recompensado" 
-//    inmediatamente para evitar el truco de "quitar like y volver a dar".
+// VIDEO PLAYER PAGE - VERSION BLINDADA (CRASH PROOF & UNIFIED NOTIFICATIONS)
+// ✅ FIX: Crash "Pantalla Blanca" solucionado aislando la lógica del Contexto.
+// ✅ UI: Todas las notificaciones ahora usan el diseño central grande.
+// ✅ SECURITY: Bloqueo de auto-like y re-like farming.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,8 +17,7 @@ import {
   trackGiveLike, 
   trackShareContent, 
   trackComment, 
-  trackFollowUser,
-  trackMissionProgress 
+  trackFollowUser
 } from 'services/missionsService'; 
 import Header from 'components/ui/Header';
 import Icon from 'components/AppIcon';
@@ -49,7 +48,15 @@ const VideoPlayerPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  const { addPoints: updatePointsContext, missions, updateMissionOptimistic, rollbackMission, refreshPoints, updateLocalBalance, notifyMissionComplete } = usePoints(); 
+  // Extraemos funciones del contexto con valores por defecto para evitar crashes si el contexto falla
+  const { 
+    missions = [], 
+    updateMissionOptimistic = () => {}, 
+    rollbackMission = () => {}, 
+    updateLocalBalance = () => {}, 
+    notifyMissionComplete = () => {} 
+  } = usePoints() || {}; // <-- El "|| {}" evita el crash si usePoints devuelve null
+
   const isMobile = useIsMobile();
 
   const [video, setVideo] = useState(null);
@@ -88,7 +95,7 @@ const VideoPlayerPage = () => {
 
   const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
   
-  // ✅ ANTI-FARMING GLOBAL: Set para recordar qué videos NO deben dar puntos
+  // ✅ ANTI-FARMING GLOBAL
   const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
   
   const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
@@ -98,20 +105,13 @@ const VideoPlayerPage = () => {
   const [shareLink, setShareLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Estado para notificaciones
+  // ✅ SISTEMA UNIFICADO DE NOTIFICACIONES (SOLO GRANDE)
   const [userFeedback, setUserFeedback] = useState({
     show: false,
     message: '',
     type: 'success', 
   });
   
-  // Notificación específica para 'Like'
-  const [likeNotification, setLikeNotification] = useState({
-    show: false,
-    message: '',
-    type: 'success' 
-  });
-
   const [showFullDescription, setShowFullDescription] = useState(false);
 
   const [isMinimized, setIsMinimized] = useState(false);
@@ -131,20 +131,14 @@ const VideoPlayerPage = () => {
   const DESCRIPTION_MAX_LENGTH = 150;
 
   // ===============================
-  // FUNCIONES DE FEEDBACK
+  // FUNCIONES DE FEEDBACK (UNIFICADAS)
   // ===============================
 
-  const showUserFeedback = useCallback((message, type = 'success', duration = 2500) => {
+  const showUserFeedback = useCallback((message, type = 'success', duration = 2000) => {
     setUserFeedback({ show: true, message, type });
+    // Limpiamos timeout anterior si existe para evitar parpadeos
     setTimeout(() => {
       setUserFeedback({ show: false, message: '', type: 'success' });
-    }, duration);
-  }, []);
-  
-  const showLikeNotification = useCallback((message, type = 'success', duration = 2000) => {
-    setLikeNotification({ show: true, message, type });
-    setTimeout(() => {
-      setLikeNotification({ show: false, message: '', type: 'success' });
     }, duration);
   }, []);
   
@@ -354,15 +348,12 @@ const VideoPlayerPage = () => {
       });
 
       if (user) {
-        // Carga de estado inicial del usuario
         const { data: likeData } = await supabase.from('video_likes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
         setLiked(!!likeData);
         
-        // 🔒✅ FIX CRÍTICO: Si al entrar ya tenía like, lo agregamos a la lista negra inmediatamente.
-        // Esto previene que si quita el like y lo vuelve a poner, intente ganar puntos.
+        // 🔒 FIX: Bloqueo de puntos si ya existe el like al cargar la página
         if (likeData) {
             setPointsRewardedIds(prev => new Set([...prev, videoId]));
-            console.log("🔒 Video cargado con like existente. Bloqueando puntos para esta sesión.");
         }
 
         const { data: dislikeData } = await supabase.from('video_dislikes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
@@ -451,7 +442,7 @@ const VideoPlayerPage = () => {
     } catch (err) { console.error('❌ Error view points:', err); }
   };
 
-  // ✅✅✅ ACCIÓN DE LIKE SEGURA (ANTI-FARMING CROSS-SESSION)
+  // ✅✅✅ ACCIÓN DE LIKE BLINDADA (ANTI-CRASH + ANTI-FARMING + UI UNIFICADA)
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
 
@@ -482,7 +473,7 @@ const VideoPlayerPage = () => {
         // ==============================
         if (disliked) await handleDislike();
         
-        // Optimistic UI
+        // UI Optimista
         setLiked(true); 
         setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
 
@@ -499,46 +490,58 @@ const VideoPlayerPage = () => {
         }
 
         // ================================================================
-        // ⛔️ REGLA 2: "LIKE ÚNICO PERMANENTE"
+        // GESTIÓN DE PUNTOS BLINDADA (TRY-CATCH INDEPENDIENTE)
         // ================================================================
-        // Verificamos si este video ya está en la lista negra (ya sea de esta sesión o cargado al inicio)
+        // 1. Verificación local
         const isAlreadyRewarded = pointsRewardedIds.has(videoId);
-
         if (isAlreadyRewarded) {
-            console.log('ℹ️ Like repetido detectado (Lista Negra Local). No se procesan puntos.');
+            console.log('ℹ️ Like repetido (Lista Negra Local). No se procesan puntos.');
             return; 
         }
 
-        // Agregamos a la lista negra inmediatamente
+        // 2. Bloqueo inmediato
         setPointsRewardedIds(prev => new Set([...prev, videoId]));
         
-        const missionSnapshot = Array.isArray(missions) ? [...missions] : [];
-        
-        if (updateMissionOptimistic) {
-            updateMissionOptimistic('give_like', 1);
+        // 3. Preparación de Snapshot (Blindada)
+        let missionSnapshot = [];
+        try {
+            missionSnapshot = Array.isArray(missions) ? [...missions] : [];
+        } catch (e) {
+            console.warn("⚠️ Error creando snapshot de misiones (no crítico)", e);
         }
         
+        // 4. Update Optimista (Blindado)
+        try {
+            if (typeof updateMissionOptimistic === 'function') {
+                updateMissionOptimistic('give_like', 1);
+            }
+        } catch (e) {
+            console.warn("⚠️ Error en update optimista (no crítico)", e);
+        }
+        
+        // 5. Llamada al Servicio
         try {
             const isReel = video?.orientation === 'vertical';
             const contentType = isReel ? 'reel' : 'video';
             
-            // NOTA PARA EL DESARROLLADOR: La función trackGiveLike (backend) TAMBIÉN debe 
-            // verificar en la tabla de transacciones si este usuario ya recibió puntos por 
-            // este video específico en el pasado para garantizar seguridad total (Cross-Session).
             const result = await trackGiveLike(contentType, videoId);
             
             if (result && result.result === 'success' && result.points_earned > 0) { 
                 if (updateLocalBalance) updateLocalBalance(result.points_earned);
                 if (notifyMissionComplete) notifyMissionComplete(result.points_earned); 
-                showLikeNotification(`Like válido: +${result.points_earned} puntos 🎉`, 'success');
+                // ✅ NOTIFICACIÓN GRANDE SOLICITADA
+                showUserFeedback(`¡Misión! +${result.points_earned} puntos 🎉`, 'success');
             } else if (result && result.result === 'already_completed') {
-                if (rollbackMission) rollbackMission(missionSnapshot);
+                if (rollbackMission && missionSnapshot.length > 0) rollbackMission(missionSnapshot);
+                showUserFeedback('Like registrado', 'success', 1000); // Feedback corto
             } else {
-                showLikeNotification('✓ Like registrado', 'info');
+                showUserFeedback('Like registrado', 'success', 1000); // Feedback corto
             }
         } catch (pointsError) {
-            console.error('❌ Error puntos:', pointsError);
-            if (rollbackMission) rollbackMission(missionSnapshot);
+            console.error('❌ Error puntos (Crash prevenido):', pointsError);
+            if (rollbackMission && missionSnapshot.length > 0) {
+                try { rollbackMission(missionSnapshot); } catch(e) {}
+            }
         }
       }
     } catch (err) {
@@ -797,7 +800,6 @@ const VideoPlayerPage = () => {
                     <div className="relative flex items-center bg-muted rounded-full overflow-hidden">
                       <button onClick={handleLike} className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors border-r border-border ${liked ? 'text-primary' : ''}`}> <Icon name="ThumbsUp" size={18} className={liked ? 'fill-current' : ''} /> <span className="font-medium text-sm">{formatNumber(videoCounters.likes)}</span> </button>
                       <button onClick={handleDislike} className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 hover:bg-muted-foreground/10 transition-colors ${disliked ? 'text-primary' : ''}`}> <Icon name="ThumbsDown" size={18} className={disliked ? 'fill-current' : ''} /> <span className="font-medium text-sm">{formatNumber(videoCounters.dislikes)}</span> </button>
-                      {likeNotification.show && ( <div className={`absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg shadow-lg text-white font-bold text-xs whitespace-nowrap animate-bounce z-20 ${likeNotification.type === 'success' ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'}`}> {likeNotification.message} </div> )}
                     </div>
                     {user?.id !== video.user_id && ( <button onClick={handleGift} className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap" title="Regalar Puntos al Creador"> <span className="text-lg font-extrabold text-yellow-600 mr-0.5 leading-none">R</span> <Icon name="Gift" size={18} className="fill-current text-yellow-600" /> <span className="font-medium text-sm hidden sm:inline">Regalar</span> </button> )}
                     <button onClick={handleShare} className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-muted rounded-full hover:bg-muted-foreground/10 transition-colors whitespace-nowrap"> <Icon name="Share2" size={18} /> <span className="font-medium text-sm">Compartir</span> </button>
