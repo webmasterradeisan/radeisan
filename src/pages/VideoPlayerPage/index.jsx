@@ -1,9 +1,9 @@
 // src/pages/VideoPlayerPage/index.jsx
 // ============================================================================
-// VIDEO PLAYER PAGE - VERSION FINAL CORREGIDA (FIX CRASH ON LIKE)
-// ✅ FIX: "Infinity:NaN" corregido en el tiempo del reproductor.
-// ✅ FIX: Doble incremento de contador de likes corregido.
-// ✅ FIX CRÍTICO: Pantalla en blanco al dar like (protección null check en missions).
+// VIDEO PLAYER PAGE - VERSION STRICT PRO (TOTAL SECURITY)
+// ✅ FIX: Bloqueo de puntos persistente.
+// ✅ LÓGICA: Si el usuario entra y ya tiene like, se marca como "Recompensado" 
+//    inmediatamente para evitar el truco de "quitar like y volver a dar".
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -48,7 +48,7 @@ const VideoPlayerPage = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // Nota: Si el sync de puntos sigue fallando, es porque refreshPoints() está leyendo data antigua de la DB
+  
   const { addPoints: updatePointsContext, missions, updateMissionOptimistic, rollbackMission, refreshPoints, updateLocalBalance, notifyMissionComplete } = usePoints(); 
   const isMobile = useIsMobile();
 
@@ -87,7 +87,8 @@ const VideoPlayerPage = () => {
   const [showReplies, setShowReplies] = useState({});
 
   const [hasEarnedViewPoints, setHasEarnedViewPoints] = useState(false);
-  // ✅ ANTI-FARMING: Set para recordar qué videos ya procesaron puntos en esta sesión
+  
+  // ✅ ANTI-FARMING GLOBAL: Set para recordar qué videos NO deben dar puntos
   const [pointsRewardedIds, setPointsRewardedIds] = useState(new Set());
   
   const [hasEarnedCommentPoints, setHasEarnedCommentPoints] = useState(false);
@@ -97,7 +98,7 @@ const VideoPlayerPage = () => {
   const [shareLink, setShareLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Estado para notificaciones grandes (centro de pantalla)
+  // Estado para notificaciones
   const [userFeedback, setUserFeedback] = useState({
     show: false,
     message: '',
@@ -191,7 +192,6 @@ const VideoPlayerPage = () => {
   
   const toggleFullscreen = useCallback(async () => { 
     if (!containerRef.current) return;
-
     try {
       if (!document.fullscreenElement) {
         await containerRef.current.requestFullscreen();
@@ -213,13 +213,11 @@ const VideoPlayerPage = () => {
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
       const currentVideo = isMinimized ? miniVideoRef.current : videoRef.current;
       if (!currentVideo) return;
 
       switch (e.key) {
-        case ' ':
-        case 'k':
+        case ' ': case 'k':
           e.preventDefault();
           if (isMinimized) {
             if (currentVideo.paused) { currentVideo.play(); setIsPlaying(true); } 
@@ -227,33 +225,20 @@ const VideoPlayerPage = () => {
           } else { togglePlayPause(); }
           break;
         case 'f':
-          e.preventDefault();
-          if (!isMinimized) toggleFullscreen();
-          break;
+          e.preventDefault(); if (!isMinimized) toggleFullscreen(); break;
         case 'm':
-          e.preventDefault();
-          toggleMute();
-          break;
+          e.preventDefault(); toggleMute(); break;
         case 'ArrowLeft':
-          e.preventDefault();
-          currentVideo.currentTime = Math.max(0, currentVideo.currentTime - 5);
-          break;
+          e.preventDefault(); currentVideo.currentTime = Math.max(0, currentVideo.currentTime - 5); break;
         case 'ArrowRight':
-          e.preventDefault();
-          currentVideo.currentTime = Math.min(currentVideo.duration, currentVideo.currentTime + 5);
-          break;
+          e.preventDefault(); currentVideo.currentTime = Math.min(currentVideo.duration, currentVideo.currentTime + 5); break;
         case 'ArrowUp':
-          e.preventDefault();
-          handleVolumeChange({ target: { value: Math.min(1, volume + 0.1) } });
-          break;
+          e.preventDefault(); handleVolumeChange({ target: { value: Math.min(1, volume + 0.1) } }); break;
         case 'ArrowDown':
-          e.preventDefault();
-          handleVolumeChange({ target: { value: Math.max(0, volume - 0.1) } });
-          break;
+          e.preventDefault(); handleVolumeChange({ target: { value: Math.max(0, volume - 0.1) } }); break;
         default: break;
       }
     };
-
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [volume, isMinimized, togglePlayPause, toggleFullscreen, toggleMute, handleVolumeChange]); 
@@ -369,8 +354,17 @@ const VideoPlayerPage = () => {
       });
 
       if (user) {
+        // Carga de estado inicial del usuario
         const { data: likeData } = await supabase.from('video_likes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
         setLiked(!!likeData);
+        
+        // 🔒✅ FIX CRÍTICO: Si al entrar ya tenía like, lo agregamos a la lista negra inmediatamente.
+        // Esto previene que si quita el like y lo vuelve a poner, intente ganar puntos.
+        if (likeData) {
+            setPointsRewardedIds(prev => new Set([...prev, videoId]));
+            console.log("🔒 Video cargado con like existente. Bloqueando puntos para esta sesión.");
+        }
+
         const { data: dislikeData } = await supabase.from('video_dislikes').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
         setDisliked(!!dislikeData);
         const { data: savedData } = await supabase.from('saved_videos').select('*').eq('video_id', videoId).eq('user_id', user.id).maybeSingle();
@@ -457,9 +451,15 @@ const VideoPlayerPage = () => {
     } catch (err) { console.error('❌ Error view points:', err); }
   };
 
-  // ✅✅✅ ACCIÓN DE LIKE (CORREGIDA: ANTI-CRASH)
+  // ✅✅✅ ACCIÓN DE LIKE SEGURA (ANTI-FARMING CROSS-SESSION)
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
+
+    // ⛔️ REGLA 1: Dueño del video no puede dar like
+    if (video.user_id === user.id) {
+         showUserFeedback('No puedes dar like a tu propio contenido.', 'restriction');
+         return; 
+    }
 
     try {
       if (liked) {
@@ -468,81 +468,81 @@ const VideoPlayerPage = () => {
         // ==============================
         setLiked(false);
         setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
-        await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+        const { error } = await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id);
+        
+        if (error) {
+            console.error('Error removing like:', error);
+            setLiked(true); // Revertir
+            setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+        }
         
       } else {
         // ==============================
         // DAR LIKE
         // ==============================
         if (disliked) await handleDislike();
-        setLiked(true); // Estilo de botón inmediato
+        
+        // Optimistic UI
+        setLiked(true); 
+        setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
 
-        // 1. Bloqueo de Auto-Like
-        if (video.user_id === user.id) {
-             showLikeNotification('No puedes dar like a tus propios videos', 'restriction');
-             // Insertamos el like en BD (social) pero no procesamos puntos
-             await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
-             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 })); 
-             return;
-        }
-
-        // Insertar Like en BD (Acción Social)
+        // Insertar en BD
         const { error: likeError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
-        if (likeError && likeError.code !== '23505') {
-            console.error('Error like:', likeError);
-            setLiked(false); // Revertir estilo
+        
+        if (likeError) {
+            if (likeError.code !== '23505') {
+                console.error('Error like DB:', likeError);
+                setLiked(false);
+                setVideoCounters(prev => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
+            }
             return;
         }
-        
-        // ✅ INCREMENTO ÚNICO Y OFICIAL
-        if (!likeError) {
-             setVideoCounters(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+
+        // ================================================================
+        // ⛔️ REGLA 2: "LIKE ÚNICO PERMANENTE"
+        // ================================================================
+        // Verificamos si este video ya está en la lista negra (ya sea de esta sesión o cargado al inicio)
+        const isAlreadyRewarded = pointsRewardedIds.has(videoId);
+
+        if (isAlreadyRewarded) {
+            console.log('ℹ️ Like repetido detectado (Lista Negra Local). No se procesan puntos.');
+            return; 
         }
 
-        // ================================================================
-        // 🛑 ANTI-FARMING & PUNTOS (CRASH SAFEGUARD ADDED)
-        // ================================================================
-        const alreadyRewarded = pointsRewardedIds.has(videoId);
-
-        if (alreadyRewarded) {
-            console.log('ℹ️ Re-like detectado: Sin puntos extra');
-            showLikeNotification('Like restaurado (Sin puntos extra)', 'info');
-        } else {
-            // CASO NUEVO LIKE
-            setPointsRewardedIds(prev => new Set([...prev, videoId]));
+        // Agregamos a la lista negra inmediatamente
+        setPointsRewardedIds(prev => new Set([...prev, videoId]));
+        
+        const missionSnapshot = Array.isArray(missions) ? [...missions] : [];
+        
+        if (updateMissionOptimistic) {
+            updateMissionOptimistic('give_like', 1);
+        }
+        
+        try {
+            const isReel = video?.orientation === 'vertical';
+            const contentType = isReel ? 'reel' : 'video';
             
-            // 🔥 CORRECCIÓN AQUÍ: Validamos que 'missions' sea un array antes de copiarlo
-            // Esto evita el error "object null is not iterable" que causaba la pantalla blanca
-            const missionSnapshot = Array.isArray(missions) ? [...missions] : [];
+            // NOTA PARA EL DESARROLLADOR: La función trackGiveLike (backend) TAMBIÉN debe 
+            // verificar en la tabla de transacciones si este usuario ya recibió puntos por 
+            // este video específico en el pasado para garantizar seguridad total (Cross-Session).
+            const result = await trackGiveLike(contentType, videoId);
             
-            if (updateMissionOptimistic) {
-                updateMissionOptimistic('give_like', 1);
-            }
-            
-            try {
-              const isReel = video?.orientation === 'vertical';
-              const contentType = isReel ? 'reel' : 'video';
-              const result = await trackGiveLike(contentType, videoId);
-              
-              if (result && result.result === 'success' && result.points_earned > 0) { 
+            if (result && result.result === 'success' && result.points_earned > 0) { 
                 if (updateLocalBalance) updateLocalBalance(result.points_earned);
                 if (notifyMissionComplete) notifyMissionComplete(result.points_earned); 
-                showLikeNotification(`Misión Completa: +${result.points_earned} puntos 🎉`, 'success');
-              } else if (result && result.result === 'already_completed') {
-                showLikeNotification('Like registrado (Misión diaria completa)', 'info');
+                showLikeNotification(`Like válido: +${result.points_earned} puntos 🎉`, 'success');
+            } else if (result && result.result === 'already_completed') {
                 if (rollbackMission) rollbackMission(missionSnapshot);
-              } else {
+            } else {
                 showLikeNotification('✓ Like registrado', 'info');
-              }
-            } catch (pointsError) {
-              console.error('❌ Error puntos:', pointsError);
-              if (rollbackMission) rollbackMission(missionSnapshot);
             }
+        } catch (pointsError) {
+            console.error('❌ Error puntos:', pointsError);
+            if (rollbackMission) rollbackMission(missionSnapshot);
         }
       }
     } catch (err) {
       console.error('Error general en like:', err);
-      // Fallback visual
       setLiked(false);
     }
   };
