@@ -1,10 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN CON REFRESH MISSIONS ✅
-// ✅ Fix: refreshMissions para sincronización en tiempo real
+// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ✅ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
+// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
 //    inserción exitosa en la DB para evitar el doble conteo visual.
 // ============================================================================
 
@@ -38,9 +37,9 @@ const ReelsContainer = ({
     missions, 
     updateMissionOptimistic, 
     rollbackMission, 
+    // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
-    updateLocalBalance,
-    refreshMissions  // 🔥 AGREGADO: Para sincronización real
+    updateLocalBalance 
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -148,38 +147,55 @@ const ReelsContainer = ({
   useEffect(() => {
       setVideoCounters(prev => {
           const newCounters = { ...prev };
-          videos.forEach(v => { if (!newCounters[v.id]) newCounters[v.id] = { likes: v.likes_count || 0, comments: v.comments_count || 0, views: v.views_count || 0 }; });
-          return newCounters;
+          let changed = false;
+          videos.forEach(v => {
+              if (!newCounters[v.id]) {
+                  newCounters[v.id] = { 
+                      likes: v.likes || v.likes_count || 0, 
+                      comments: v.comments || v.comments_count || 0, 
+                      views: v.views || v.views_count || 0 
+                  };
+                  changed = true;
+              }
+          });
+          return changed ? newCounters : prev;
       });
   }, [videos]);
 
-  // Formatear números
-  const formatCount = (count) => {
-      if (!count || count === 0) return '0';
-      if (count < 1000) return count.toString();
-      if (count < 1000000) return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-      return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-  };
-
-  const formatTimeAgo = (date) => {
-      if (!date) return '';
-      const now = new Date();
-      const past = new Date(date);
-      const diff = Math.floor((now - past) / 1000);
-      if (diff < 60) return 'ahora';
-      if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-      if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
-      return `${Math.floor(diff / 604800)}sem`;
-  };
-
-  // Auto-play del primer video
+  // Contadores Real-Time
   useEffect(() => {
-    if (videos.length === 0 || hasPlayedInitial.current) return;
+    const loadRealTimeCounters = async () => {
+      if (videos.length === 0) return;
+      const currentVideo = videos[currentIndex];
+      if (!currentVideo) return;
+
+      try {
+        const { count: likesCount } = await supabase.from('video_likes').select('*', { count: 'exact', head: true }).eq('video_id', currentVideo.id);
+        const { count: commentsCount } = await supabase.from('video_comments').select('*', { count: 'exact', head: true }).eq('video_id', currentVideo.id);
+        
+        setVideoCounters(prev => ({
+          ...prev,
+          [currentVideo.id]: { 
+            ...prev[currentVideo.id], 
+            likes: likesCount || 0, 
+            comments: commentsCount || 0 
+          }
+        }));
+      } catch (error) { console.error('Error counters:', error); }
+    };
+    loadRealTimeCounters();
+  }, [currentIndex, videos]);
+
+  // ===============================
+  // LÓGICA DEL REPRODUCTOR
+  // ===============================
+  useEffect(() => {
+    if (hasPlayedInitial.current || videos.length === 0) return;
     const attemptPlay = () => {
       const v = videoRefs.current[currentIndex];
-      if (!v) return;
-      v.muted = mutedVideos.has(videos[currentIndex]?.id) || !mutedVideos.size;
+      if (!v) { setTimeout(attemptPlay, 100); return; }
+      videoRefs.current.forEach((vid, i) => { if (vid && i !== currentIndex) vid.pause(); });
+      v.muted = mutedVideos.has(videos[currentIndex]?.id);
       v.play()
         .then(() => { hasPlayedInitial.current = true; lastNavigationIndex.current = currentIndex; })
         .catch(() => { v.muted=true; v.play(); hasPlayedInitial.current=true; });
@@ -239,6 +255,7 @@ const ReelsContainer = ({
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
                       const earned = Number(res.points_earned);
+                      // 🔥 ACTUALIZACIÓN VISUAL FORZADA
                       if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
                   }
@@ -275,7 +292,7 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
-  // 🔥 LÓGICA ACTUALIZADA: COBERTURA TOTAL DE PUNTOS + REFRESH MISSIONS
+  // 🔥 LÓGICA ACTUALIZADA: COBERTURA TOTAL DE PUNTOS
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
@@ -305,16 +322,20 @@ const ReelsContainer = ({
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
+          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
+          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
+          
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
+             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
           }
           
-          // ✅ Incremento local después de la inserción exitosa
+          // ✅ MOVEMOS el incremento local para después de la inserción exitosa
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
 
           if (pointsRewardedIds.has(videoId)) {
@@ -322,11 +343,6 @@ const ReelsContainer = ({
           } else {
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
-              
-              // 🔥 REFRESCAR PROGRESO DESDE SERVIDOR
-              if (refreshMissions) {
-                await refreshMissions();
-              }
               
               // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
               if (res.points_earned > 0) {
@@ -350,14 +366,7 @@ const ReelsContainer = ({
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
-                  
-                  // 🔥 MOSTRAR PROGRESO EXPLÍCITO
-                  const match = res.message?.match(/(\d+)\/(\d+)/);
-                  if (match) {
-                    showPointsNotification(`✓ Progreso: ${match[1]}/${match[2]}`, videoId, 'success');
-                  } else {
-                    showPointsNotification('✓ Like registrado', videoId, 'info');
-                  }
+                  showPointsNotification('✓ Like registrado', videoId, 'info');
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
                   rollbackMission(snapshot); 
@@ -392,116 +401,178 @@ const ReelsContainer = ({
       setSavedVideos(newS);
   };
 
-  const handleShare = async (videoId, e) => {
-      if (e) { e.stopPropagation(); e.preventDefault(); }
-      const url = `${window.location.origin}/reel/${videoId}`;
-      if (navigator.share) await navigator.share({ title: 'Mira este reel', url }).catch(()=>{});
-      else { navigator.clipboard.writeText(url); success('Enlace copiado', {duration: 2000}); }
-  };
-
-  const handleMuteToggle = (videoId, e) => {
-      if (e) { e.stopPropagation(); e.preventDefault(); }
-      const newM = new Set(mutedVideos);
-      if (newM.has(videoId)) newM.delete(videoId); else newM.add(videoId);
-      setMutedVideos(newM);
-      const v = videoRefs.current[currentIndex];
-      if (v && videos[currentIndex]?.id === videoId) v.muted = newM.has(videoId);
-  };
-
   const handleFollow = async (creatorId, e) => {
-      if (e) { e.stopPropagation(); e.preventDefault(); }
+      if(e) {e.stopPropagation(); e.preventDefault();}
       const { data: { user } } = await supabase.auth.getUser();
+      if(user.id === creatorId) return;
       const newF = new Set(followedCreators);
-      if (newF.has(creatorId)) {
-          newF.delete(creatorId);
-          await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
+      if(newF.has(creatorId)) {
+          newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
+          showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
       } else {
-          newF.add(creatorId);
-          await supabase.from('follows').insert({ follower_id: user.id, following_id: creatorId });
+          newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
+          missionsService.trackFollowUser(creatorId).then(r => {
+             if(r.result==='success') { 
+                 const earned = Number(r.points_earned);
+                 if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
+                 showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
+             }
+          });
       }
       setFollowedCreators(newF);
   };
+  
+  const handleMuteToggle = (videoId, e) => {
+      if(e) {e.stopPropagation(); e.preventDefault();}
+      const v = videoRefs.current[currentIndex];
+      const newM = new Set(mutedVideos);
+      if(newM.has(videoId)) { newM.delete(videoId); if(v) v.muted=false; } else { newM.add(videoId); if(v) v.muted=true; }
+      setMutedVideos(newM);
+  };
 
-  const handleGiftClick = (e) => {
-      if (e) { e.stopPropagation(); e.preventDefault(); }
+  const handleShare = async (video, e) => {
+     if(e) {e.stopPropagation(); e.preventDefault();}
+     if (navigator.share) await navigator.share({title: video.title, url: window.location.href});
+     else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
+     
+     missionsService.trackShareContent('reel', video.id).then(r => {
+         // También podríamos añadir updateLocalBalance aquí si compartir da puntos inmediatos
+         if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
+            updateLocalBalance(Number(r.points_earned));
+         }
+     });
+  };
+
+  const handleGiftClick = (video, e) => {
+      if(e) {e.stopPropagation(); e.preventDefault();}
       setShowGiftModal(true);
   };
 
-  // Comentarios
-  const handleOpenComments = async (videoId, e) => {
-      if (e) { e.stopPropagation(); e.preventDefault(); }
-      setShowCommentsModal(true);
-      if (!comments[videoId]) {
-          const { data } = await supabase.from('comments').select('*, user:user_profiles(id, full_name, avatar_url, username), replies:comments(*, user:user_profiles(id, full_name, avatar_url, username))').eq('video_id', videoId).is('parent_id', null).order('created_at', { ascending: false });
-          setComments(prev => ({ ...prev, [videoId]: data?.map(c => ({ ...c, user: { id: c.user.id, name: c.user.full_name || 'Usuario', avatar: c.user.avatar_url, username: c.user.username }, replies: c.replies?.map(r => ({ ...r, user: { id: r.user.id, name: r.user.full_name || 'Usuario', avatar: r.user.avatar_url, username: r.user.username }})) || [] })) || [] }));
+  // ===============================
+  // LÓGICA DE COMENTARIOS
+  // ===============================
+  const loadComments = async (videoId, retryCount = 0) => {
+    try {
+      let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
+      if (error) { if (retryCount < 2) { await new Promise(resolve => setTimeout(resolve, 1000)); return loadComments(videoId, retryCount + 1); } throw error; }
+      if (data && data.length > 0) {
+        const userIds = [...new Set(data.map(comment => comment.user_id))];
+        const { data: usersData } = await supabase.from('user_profiles').select('id, full_name, avatar_url, username').in('id', userIds);
+        if (usersData) {
+          const usersMap = {}; usersData.forEach(user => { usersMap[user.id] = user; });
+          data = data.map(comment => {
+            const userProfile = usersMap[comment.user_id];
+            return { ...comment, user: userProfile ? { id: userProfile.id, name: userProfile.full_name || userProfile.username || 'Usuario', avatar: userProfile.avatar_url, username: userProfile.username || userProfile.full_name || 'usuario' } : { id: comment.user_id, name: 'Usuario', avatar: null, username: 'usuario' }, replies: [] };
+          });
+          const topLevelComments = []; const repliesMap = {};
+          data.forEach(comment => { if (comment.parent_comment_id) { if (!repliesMap[comment.parent_comment_id]) repliesMap[comment.parent_comment_id] = []; repliesMap[comment.parent_comment_id].push(comment); } else { topLevelComments.push(comment); } });
+          topLevelComments.forEach(comment => { comment.replies = repliesMap[comment.id] || []; comment.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); });
+          data = topLevelComments;
+        }
       }
+      setComments(prev => ({ ...prev, [videoId]: data || [] }));
+    } catch (error) { setComments(prev => ({ ...prev, [videoId]: [] })); }
   };
 
-  const handleCloseComments = (e) => {
-      if (e) { e.stopPropagation(); e.preventDefault(); }
-      setShowCommentsModal(false);
+  const handleOpenComments = async (videoId, e) => { 
+      if(e) {e.stopPropagation(); e.preventDefault();} 
+      setShowCommentsModal(true); 
+      setReplyingTo(null); 
+      setNewComment(''); 
+      await loadComments(videoId); 
   };
-
+  
+  const handleCloseComments = () => { setShowCommentsModal(false); setReplyingTo(null); setNewComment(''); };
+  
   const handleAddComment = async (videoId) => {
-      if (!newComment.trim()) return;
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: newC } = await supabase.from('comments').insert({ video_id: videoId, user_id: user.id, content: newComment.trim(), parent_id: replyingTo }).select('*, user:user_profiles(id, full_name, avatar_url, username)').single();
-      if (newC) {
-          const formattedComment = { ...newC, user: { id: newC.user.id, name: newC.user.full_name || 'Usuario', avatar: newC.user.avatar_url, username: newC.user.username }, replies: [] };
-          setComments(prev => ({ ...prev, [videoId]: replyingTo ? prev[videoId].map(c => c.id === replyingTo ? { ...c, replies: [...c.replies, formattedComment] } : c) : [formattedComment, ...prev[videoId]] }));
-          setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments||0)+1 }}));
-      }
-      setNewComment('');
-      setReplyingTo(null);
+    if (!newComment.trim()) { showPointsNotification('⚠️ Escribe algo antes de comentar', videoId, 'warning'); return; }
+    try {
+      const { data: { user } } = await supabase.auth.getUser(); if (!user) { navigate('/login'); return; }
+      const commentData = { video_id: videoId, user_id: user.id, content: newComment.trim(), parent_comment_id: replyingTo };
+      const { error } = await supabase.from('video_comments').insert(commentData).single(); if (error) throw error;
+      
+      if (!replyingTo) {
+        try {
+          const result = await missionsService.trackComment('reel', videoId);
+          
+          // 🔥 FIX: Actualización visual inmediata para comentarios también
+          if (result.points_earned > 0 && updateLocalBalance) {
+             updateLocalBalance(Number(result.points_earned));
+          }
+
+          if (result.result === 'success' && result.points_earned > 0) { 
+              const earned = Number(result.points_earned);
+              showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
+          } 
+          else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
+          setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
+        } catch (err) { console.error(err); }
+      } else { showPointsNotification('✓ Respuesta agregada', videoId, 'info'); }
+      
+      setNewComment(''); setReplyingTo(null); await loadComments(videoId);
+    } catch (error) { showPointsNotification('Error al comentar', videoId, 'error'); }
   };
 
-  const handleReply = (commentId, username) => { setReplyingTo(commentId); };
-  const handleCancelReply = () => { setReplyingTo(null); };
+  const handleReply = (commentId, username) => { setReplyingTo(commentId); setNewComment(`@${username || 'Usuario'} `); setTimeout(() => { const input = document.querySelector('textarea[placeholder*="comentario"]'); if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } }, 100); };
+  const handleCancelReply = () => { setReplyingTo(null); setNewComment(''); };
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
+  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/3600)}h`; return `${Math.floor(diff/86400)}d`; };
 
+
+  // ==========================================================================
+  // RENDER PRINCIPAL
+  // ==========================================================================
   const currentVideo = videos[currentIndex];
+  const formatCount = (n) => n >= 1000 ? (n/1000).toFixed(1)+'K' : (n || 0);
+
+  if (videos.length === 0 && !loading) return <div className="flex flex-col items-center justify-center h-screen text-white"><Icon name="Video" size={48} className="mb-4"/><p>No hay videos disponibles</p></div>;
 
   return (
-    <div ref={containerRef} className={`relative h-screen overflow-hidden ${isMobile ? 'w-full' : 'flex items-center justify-center'} bg-black`} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-      <div className={`${isMobile ? 'w-full h-full' : 'flex'} relative`}>
-        {/* CONTENEDOR DE VIDEOS */}
-        <div className={`${isMobile ? 'w-full h-full' : 'w-[45%] h-[90vh] max-w-lg'} relative overflow-hidden bg-black rounded-xl shadow-2xl`}>
-          <div className="relative w-full h-full" style={{transition: enableTransition ? 'transform 0.3s ease' : 'none', transform: `translateY(-${currentIndex * 100}%)`}}>
+    <div className="relative w-full h-full bg-white overflow-hidden">
+      <div className="flex h-full w-full items-center justify-center">
+        {/* CONTENEDOR DE VIDEO */}
+        <div className={`relative overflow-hidden flex-shrink-0 ${isDesktop ? showCommentsModal ? 'w-[55%]' : 'w-full max-w-[500px]' : 'w-full'} ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}`}>
+          
+          <div ref={containerRef} className="w-full h-full relative transition-transform duration-500" 
+               style={{ transform: `translateY(${-currentIndex * 100}%)`, transition: enableTransition ? 'transform 0.5s' : 'none' }}
+               onClick={handlePlayPause}
+               onTouchStart={isMobile ? handleTouchStart : undefined}
+               onTouchMove={isMobile ? handleTouchMove : undefined}
+               onTouchEnd={isMobile ? handleTouchEnd : undefined}>
+               
             {videos.map((video, index) => (
-              <div key={video.id} className="absolute inset-0 w-full h-full flex items-center justify-center bg-black" style={{top: `${index * 100}%`}}>
-                <video ref={el => videoRefs.current[index] = el} src={video.video_url} className="w-full h-full object-contain" playsInline loop onClick={handlePlayPause} onLoadedData={()=>setLoadingVideo(false)} />
+              <div key={video.id} className="w-full h-full flex-shrink-0 relative bg-black snap-start">
+                <video ref={el => videoRefs.current[index] = el} className="absolute w-full h-full object-cover" src={video.video_url || video.videoUrl} loop playsInline preload="auto" onLoadedData={()=>setLoadingVideo(false)} />
                 
-                {loadingVideo && index === currentIndex && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
+                {/* Loading Spinner específico */}
+                {loadingVideo && index===currentIndex && <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10"><div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div></div>}
 
+                {/* Info Overlay */}
+                <div className={`absolute z-10 ${isMobile ? 'bottom-8 left-4 right-24' : 'bottom-4 left-4 right-4'}`} onClick={(e) => e.stopPropagation()}>
+                   <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
+                      <Link to={`/profile/${video.creator?.id}`} className="font-bold text-white hover:underline text-base shadow-black drop-shadow-md">@{video.creator?.username || video.creator?.name}</Link>
+                      <p className="text-sm text-white mt-2 line-clamp-2 drop-shadow-md">{video.description}</p>
+                      {video.tags && <div className="flex flex-wrap gap-2 mt-2">{video.tags.slice(0,3).map((tag,i)=><span key={i} className="text-xs font-bold text-white">#{tag}</span>)}</div>}
+                   </div>
+                </div>
+                
+                {/* Botón Play Central */}
                 {!isAutoPlaying && index === currentIndex && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-20 h-20 bg-black/50 rounded-full flex items-center justify-center">
-                      <Icon name="Play" size={40} className="text-white ml-1" />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center"><Icon name="Play" size={32} color="white"/></div>
                     </div>
-                  </div>
                 )}
-
-                <div className="absolute bottom-4 left-4 right-20 text-white z-10">
-                  <Link to={`/profile/${video.creator?.id}`} className="flex items-center space-x-2 mb-2">
-                    <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden">
-                      {video.creator?.avatar ? <img src={video.creator.avatar} alt={video.creator.name} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-purple-500 flex items-center justify-center text-white font-bold">{video.creator?.name?.charAt(0)}</div>}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">{video.creator?.name || 'Usuario'}</p>
-                      <p className="text-xs text-gray-300">@{video.creator?.username || 'usuario'}</p>
-                    </div>
-                  </Link>
-                  <p className="text-sm line-clamp-2">{video.title || video.description}</p>
+                
+                {/* Barra Progreso */}
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
+                   <div className="h-full bg-red-500 transition-all" style={{ width: index===currentIndex ? '100%' : '0%', transitionDuration: index===currentIndex ? `${video.duration||30}s` : '0s', transitionTimingFunction:'linear' }} />
                 </div>
               </div>
             ))}
-            
-            {hasMore && currentIndex >= videos.length - 2 && (
-                <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent p-8 text-white text-center">
+
+            {/* INDICADOR DE CARGA FINAL (INFINITE SCROLL) */}
+            {loading && hasMore && (
+                <div className="w-full h-full flex-shrink-0 flex items-center justify-center bg-black text-white snap-start">
                     <div className="text-center">
                         <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                         <p>Cargando más reels...</p>
