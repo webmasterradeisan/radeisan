@@ -1,9 +1,9 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - VERSIÓN CON REFRESH MISSIONS ✅
-// ✅ Fix: refreshMissions añadido para sincronización real
+// POINTS CONTEXT - VERSIÓN SIN DOBLE CONTEO ✅
 // ✅ Fix: El Realtime NO suma, solo refresca desde la DB (fuente única de verdad)
 // ✅ Fix: updateLocalBalance activo para feedback inmediato
+// ✅ Fix: Al recargar página, siempre se obtiene el valor real de la DB
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -42,7 +42,7 @@ export const PointsProvider = ({ children }) => {
 
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
-  const isUpdatingLocally = useRef(false);
+  const isUpdatingLocally = useRef(false); // 🔥 NUEVO: Flag para evitar conflictos
   
   // --- CARGA DE DATOS ---
   const loadAllData = useCallback(async (forceLoadingSpinner = false) => {
@@ -58,6 +58,7 @@ export const PointsProvider = ({ children }) => {
       ]);
 
       if (mountedRef.current) {
+        // 🔥 CRÍTICO: Solo actualizar si NO estamos en medio de una actualización local
         if (!isUpdatingLocally.current) {
           setPoints({
             total: pointsData?.total || 0,
@@ -77,24 +78,6 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // 🔥 NUEVA FUNCIÓN: Refrescar SOLO misiones desde el servidor
-  const refreshMissions = useCallback(async () => {
-    if (!mountedRef.current || !user) return;
-
-    try {
-      console.log('🔄 Refrescando misiones desde servidor...');
-      
-      const missionsData = await getMissionsForProgressPanel();
-      
-      if (mountedRef.current && missionsData.success) {
-        setMissions(missionsData.missions);
-        console.log('✅ Misiones actualizadas:', missionsData.missions);
-      }
-    } catch (error) {
-      console.error('❌ Error refrescando misiones:', error);
-    }
-  }, [user]);
-
   // --- RADAR REAL-TIME CON PROTECCIÓN ANTI-CONFLICTO ---
   useEffect(() => {
     if (!user) return;
@@ -102,6 +85,7 @@ export const PointsProvider = ({ children }) => {
     let timeoutId;
 
     const handleRealtimeUpdate = () => {
+      // 🔥 Si estamos actualizando localmente, ignorar el evento de Realtime
       if (isUpdatingLocally.current) {
         console.log("⚠️ Ignorando actualización Realtime (hay actualización local en progreso)");
         return;
@@ -174,10 +158,29 @@ export const PointsProvider = ({ children }) => {
     }));
   }, []);
 
+  // 🔥 NUEVO: Refrescar misiones desde el servidor
+  const refreshMissions = useCallback(async () => {
+    if (!mountedRef.current || !user) return;
+
+    try {
+      console.log('🔄 Refrescando misiones desde servidor...');
+      
+      const missionsData = await getMissionsForProgressPanel();
+      
+      if (mountedRef.current && missionsData.success) {
+        setMissions(missionsData.missions);
+        console.log('✅ Misiones actualizadas:', missionsData.missions);
+      }
+    } catch (error) {
+      console.error('❌ Error refrescando misiones:', error);
+    }
+  }, [user]);
+
   // --- ACTUALIZACIÓN VISUAL INMEDIATA (CON PROTECCIÓN) ---
   const updateLocalBalance = useCallback((amount) => {
     console.log(`💰 Balance local actualizado: +${amount}`);
     
+    // 🔥 ACTIVAR FLAG: Estamos actualizando localmente
     isUpdatingLocally.current = true;
     
     setPoints(prev => ({
@@ -188,6 +191,7 @@ export const PointsProvider = ({ children }) => {
     setPointsEarnedToday(prev => (prev || 0) + amount);
     triggerAnimation(amount, 'earn', 'free');
     
+    // 🔥 DESACTIVAR FLAG después de 3 segundos (suficiente para que Realtime no interfiera)
     setTimeout(() => {
       isUpdatingLocally.current = false;
       console.log("✅ Flag de actualización local desactivado");
@@ -217,7 +221,7 @@ export const PointsProvider = ({ children }) => {
     rollbackMission,
     updateLocalBalance,
     notifyMissionComplete,
-    refreshMissions,         // 🔥 NUEVO: Exportar refreshMissions
+    refreshMissions,  // 🔥 NUEVO: Exportar función
     
     // EXPORTAMOS ESTO PARA MissionNotificationContainer.jsx
     missionSuccessData,      
