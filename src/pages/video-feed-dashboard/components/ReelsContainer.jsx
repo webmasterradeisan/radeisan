@@ -1,9 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
 // REELS CONTAINER - VERSIÓN "SIN DOBLE CONTEO" ✅
-// ✅ Sincronización Inmediata Implementada y Forzada (refetchMissionsInstant).
 // 🛑 FIX CRÍTICO: Se ELIMINA updateMissionOptimistic en handleLike para evitar DOBLE CONTEO.
-// ✅ La actualización de puntos y misiones se basa en la respuesta del servidor (res.result).
+// ✅ Sincronización Inmediata Implementada (refetchMissionsInstant) en todos los handlers.
+// ✅ Flujo de Like simplificado y seguro.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,7 +39,7 @@ const ReelsContainer = ({
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
     updateLocalBalance,
-    refetchMissionsInstant // <-- AGREGADO: Función clave para sincronización inmediata
+    refetchMissionsInstant // <-- Función clave para sincronización inmediata
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -296,7 +296,8 @@ const ReelsContainer = ({
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
-    const snapshot = missions.map(m => ({ ...m })); 
+    // Eliminamos el snapshot de misiones que solo usamos para rollback en caso de error
+    // const snapshot = missions.map(m => ({ ...m })); 
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -318,7 +319,7 @@ const ReelsContainer = ({
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
           
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA (para registrar el cambio)
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA (Refresca el progreso y limpia la caché de misiones)
           if (typeof refetchMissionsInstant === 'function') {
               refetchMissionsInstant();
           }
@@ -356,18 +357,18 @@ const ReelsContainer = ({
                   // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
                   if (notifyMissionComplete) {
-                      notifyMissionComplete(earned); // Modal y refetch se activan en PointsContext
+                      // notifyMissionComplete llama internamente a refetchMissionsInstant
+                      notifyMissionComplete(earned); 
                   } else {
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
+                      // Si notifyMissionComplete no está disponible, aún debemos refrescar:
+                      if (typeof refetchMissionsInstant === 'function') {
+                          refetchMissionsInstant(); 
+                      }
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   // updateMissionOptimistic('give_like', 1); <-- ELIMINADO para evitar DOBLE CONTEO
-
-                  // ✅ SINCRONIZACIÓN INSTANTÁNEA (Refresca el progreso)
-                  if (typeof refetchMissionsInstant === 'function') {
-                      refetchMissionsInstant(); 
-                  }
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
@@ -381,17 +382,17 @@ const ReelsContainer = ({
                   }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
-                  rollbackMission(snapshot); 
+                  // rollbackMission(snapshot); // ELIMINADO por simplificación
                   showPointsNotification('Ya sumaste puntos por esto hoy', videoId, 'warning'); 
               } else {
-                  rollbackMission(snapshot); 
+                  // rollbackMission(snapshot); // ELIMINADO por simplificación
               }
           }
           setLikedVideos(newLiked);
       }
     } catch (err) { 
         console.error('Error like:', err);
-        rollbackMission(snapshot); 
+        // rollbackMission(snapshot); // ELIMINADO por simplificación
         showPointsNotification('Error de conexión', videoId, 'error');
     }
   };
