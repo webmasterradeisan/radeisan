@@ -79,7 +79,29 @@ const ReelsContainer = ({
   const isInitialMount = useRef(true);
   const hasPlayedInitial = useRef(false);
   const lastNavigationIndex = useRef(-1);
-  const processingLikes = useRef(new Set()); // 🔥 Protección anti-duplicación
+  const processingLikes = useRef(new Set()); // 🔥 Anti-duplicación
+
+  // 🔥 PERSISTENCIA: Cargar likes procesados de localStorage
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const stored = localStorage.getItem(`radeisan_likes_${today}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setPointsRewardedIds(new Set(parsed));
+      } catch (e) {
+        console.error('Error loading processed likes:', e);
+      }
+    }
+  }, []);
+
+  // 🔥 PERSISTENCIA: Guardar en localStorage cuando cambia
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    if (pointsRewardedIds.size > 0) {
+      localStorage.setItem(`radeisan_likes_${today}`, JSON.stringify([...pointsRewardedIds]));
+    }
+  }, [pointsRewardedIds]);
 
   // Helper de notificación
   const showPointsNotification = (message, videoId, type = 'success') => {
@@ -293,11 +315,11 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
-  // 🔥 LÓGICA ACTUALIZADA: COBERTURA TOTAL DE PUNTOS
+  // 🔥 HANDLE LIKE - CON PROTECCIÓN ANTI-DUPLICACIÓN
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
-    // 🔥 PROTECCIÓN ANTI-DUPLICACIÓN
+    // 🔥 PROTECCIÓN: Evitar doble click
     if (processingLikes.current.has(videoId)) {
       console.log('⚠️ Like ya en proceso para:', videoId);
       return;
@@ -337,63 +359,72 @@ const ReelsContainer = ({
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+          const { error: likeInsertError } = await supabase.from('video_likes').insert({ 
+            video_id: videoId, 
+            user_id: user.id 
+          });
           
           if (likeInsertError) {
-             showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
+             showPointsNotification(`❌ Error: ${likeInsertError.message}`, videoId, 'error');
              newLiked.delete(videoId); 
              setLikedVideos(newLiked);
              processingLikes.current.delete(videoId); 
              return;
           }
           
-          // ✅ Incremento local DESPUÉS de inserción exitosa
+          // ✅ Incremento visual DESPUÉS de inserción exitosa
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           setLikedVideos(newLiked);
 
+          // 🔥 VERIFICAR SI YA SE PROCESÓ PARA PUNTOS
           if (pointsRewardedIds.has(videoId)) {
-              showPointsNotification('Like registrado', videoId, 'info');
+              showPointsNotification('✓ Like registrado', videoId, 'info');
               processingLikes.current.delete(videoId);
           } else {
-              // Llamada al servidor (Paga en DB)
+              // Llamada al servidor
               const res = await missionsService.trackGiveLike('reel', videoId);
               console.log('📊 Respuesta track_mission:', res);
               
-              // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
+              // 🔥 ACTUALIZAR BALANCE SI HAY PUNTOS
               if (res.points_earned > 0) {
                   const earned = Number(res.points_earned);
                   if (updateLocalBalance) updateLocalBalance(earned);
               }
 
               if (res.result === 'success' && res.points_earned > 0) {
-                  // CASO: MISIÓN CUMPLIDA
+                  // MISIÓN COMPLETADA
                   const earned = Number(res.points_earned);
                   if (notifyMissionComplete) {
-                      notifyMissionComplete(earned); // Modal
+                      notifyMissionComplete(earned);
                   } else {
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
-
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // CASO: SOLO REGISTRO (Puntos normales)
+                  // PROGRESO ACTUALIZADO
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
-                  rollbackMission(snapshot); 
-                  showPointsNotification('Ya sumaste puntos por esto hoy', videoId, 'warning'); 
+                  // 🔥 YA PROCESADO - Marcar para no volver a intentar
+                  setPointsRewardedIds(p => new Set([...p, videoId]));
+                  rollbackMission(snapshot);
+                  // Solo mostrar warning si el usuario está dando like activamente (no es un refresh)
+                  if (likedVideos.has(videoId)) {
+                      showPointsNotification('Ya sumaste puntos por este like', videoId, 'info');
+                  }
               } else {
                   rollbackMission(snapshot); 
               }
+              
               processingLikes.current.delete(videoId);
           }
       }
     } catch (err) { 
-        console.error('Error like:', err);
+        console.error('❌ Error en handleLike:', err);
         rollbackMission(snapshot); 
         showPointsNotification('Error de conexión', videoId, 'error');
         processingLikes.current.delete(videoId);
