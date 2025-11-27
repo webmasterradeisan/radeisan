@@ -39,8 +39,8 @@ const ReelsContainer = ({
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
     updateLocalBalance,
-    refetchMissionsInstant // ✅ AGREGAMOS FUNCIÓN DE SINCRONIZACIÓN INSTANTÁNEA
-  } = usePoints(); // CRÍTICO: Debe estar correctamente en PointsContext
+    refetchMissionsInstant // ✅ CRÍTICO: Debe estar aquí para evitar el TypeError
+  } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
 
@@ -258,7 +258,7 @@ const ReelsContainer = ({
                       // 🔥 ACTUALIZACIÓN VISUAL FORZADA
                       if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
-                      // ✅ REVALIDACIÓN DESPUÉS DE VER VIDEO
+                      // ✅ AÑADIR REVALIDACIÓN AQUÍ
                       if (typeof refetchMissionsInstant === 'function') {
                           refetchMissionsInstant();
                       }
@@ -332,12 +332,14 @@ const ReelsContainer = ({
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // LÓGICA DE INSERCIÓN Y PAGO (MOVIDA Y CORREGIDA EN ARCHIVO ORIGINAL)
+          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
+          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
+             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
@@ -359,7 +361,7 @@ const ReelsContainer = ({
               }
 
               if (res.result === 'success' && res.points_earned > 0) {
-                  // CASO: MISIÓN CUMPLIDA (Dar 10 Likes o Paquete Creador)
+                  // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
                   if (notifyMissionComplete) {
                       notifyMissionComplete(earned, res.message); // ✅ Pasar mensaje para Paquete Creador
@@ -376,7 +378,7 @@ const ReelsContainer = ({
                   }
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // CASO: SOLO REGISTRO (Puntos normales, como 1 de 10 likes)
+                  // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
