@@ -318,10 +318,11 @@ const ReelsContainer = ({
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
           
-          if (typeof refetchMissionsInstant === 'function') {
-              console.log('🔵 [LIKE] Llamando refetchMissionsInstant (UNLIKE)');
-              refetchMissionsInstant();
-          }
+          // ❌ NO REFRESCAR MISIONES en UNLIKE (no hay cambio de puntos)
+          // if (typeof refetchMissionsInstant === 'function') {
+          //     console.log('🔵 [LIKE] Llamando refetchMissionsInstant (UNLIKE)');
+          //     refetchMissionsInstant();
+          // }
 
       } else {
           // LIKE
@@ -365,6 +366,7 @@ const ReelsContainer = ({
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
 
+                  // ✅ FIX CRÍTICO: Solo refrescar misiones cuando HAY puntos ganados
                   if (typeof refetchMissionsInstant === 'function') {
                       console.log('🔵 [LIKE] Llamando refetchMissionsInstant (SUCCESS)');
                       refetchMissionsInstant(); 
@@ -375,10 +377,11 @@ const ReelsContainer = ({
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
-                  if (typeof refetchMissionsInstant === 'function') {
-                      console.log('🔵 [LIKE] Llamando refetchMissionsInstant (PROGRESS)');
-                      refetchMissionsInstant();
-                  }
+                  // ❌ NO REFRESCAR MISIONES cuando solo es registro sin puntos
+                  // if (typeof refetchMissionsInstant === 'function') {
+                  //     console.log('🔵 [LIKE] Llamando refetchMissionsInstant (PROGRESS)');
+                  //     refetchMissionsInstant();
+                  // }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
                   console.log('🟡 [LIKE] Ya pagado o completado anteriormente');
@@ -417,25 +420,26 @@ const ReelsContainer = ({
       if(user.id === creatorId) return;
       const newF = new Set(followedCreators);
       if(newF.has(creatorId)) {
-          newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
+          newF.delete(creatorId); 
+          await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
 
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA
-          if (typeof refetchMissionsInstant === 'function') {
-              refetchMissionsInstant();
-          }
+          // ❌ NO REFRESCAR MISIONES en UNFOLLOW (no hay cambio de puntos)
 
       } else {
-          newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
+          newF.add(creatorId); 
+          await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
+          
           missionsService.trackFollowUser(creatorId).then(r => {
-             if(r.result==='success') { 
+             if(r.result==='success' && r.points_earned > 0) { 
                  const earned = Number(r.points_earned);
-                 if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
-                 showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
-             }
-             // ✅ SINCRONIZACIÓN INSTANTÁNEA
-             if (typeof refetchMissionsInstant === 'function') {
-                 refetchMissionsInstant();
+                 if (updateLocalBalance) updateLocalBalance(earned);
+                 showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success');
+                 
+                 // ✅ Solo refrescar cuando HAY puntos ganados
+                 if (typeof refetchMissionsInstant === 'function') {
+                     refetchMissionsInstant();
+                 }
              }
           });
       }
@@ -456,13 +460,15 @@ const ReelsContainer = ({
      else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
      
      missionsService.trackShareContent('reel', video.id).then(r => {
-         // También podríamos añadir updateLocalBalance aquí si compartir da puntos inmediatos
-         if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
-            updateLocalBalance(Number(r.points_earned));
-         }
-         // ✅ SINCRONIZACIÓN INSTANTÁNEA
-         if (typeof refetchMissionsInstant === 'function') {
-             refetchMissionsInstant();
+         if(r.result==='success' && r.points_earned > 0) {
+            const earned = Number(r.points_earned);
+            if (updateLocalBalance) updateLocalBalance(earned);
+            showPointsNotification(`+${earned} por compartir`, video.id, 'success');
+            
+            // ✅ Solo refrescar cuando HAY puntos ganados
+            if (typeof refetchMissionsInstant === 'function') {
+                refetchMissionsInstant();
+            }
          }
      });
   };
@@ -523,23 +529,23 @@ const ReelsContainer = ({
               const earned = Number(result.points_earned);
               // ✅ ÚNICA actualización del balance
               if (updateLocalBalance) updateLocalBalance(earned);
-              showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
+              showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success');
+              
+              // ✅ Solo refrescar cuando HAY puntos ganados
+              if (typeof refetchMissionsInstant === 'function') {
+                 refetchMissionsInstant();
+              }
           } 
-          else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
-          setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
-          
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA
-          if (typeof refetchMissionsInstant === 'function') {
-             refetchMissionsInstant();
+          else { 
+              showPointsNotification('✓ Comentario agregado', videoId, 'info'); 
           }
+          
+          setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
 
         } catch (err) { console.error(err); }
       } else { 
           showPointsNotification('✓ Respuesta agregada', videoId, 'info'); 
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA
-          if (typeof refetchMissionsInstant === 'function') {
-             refetchMissionsInstant();
-          }
+          // ❌ NO refrescar en respuestas (no dan puntos de misión)
       }
       
       setNewComment(''); setReplyingTo(null); await loadComments(videoId);
