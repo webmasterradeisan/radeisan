@@ -1,10 +1,7 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - VERSIÓN FINAL "ANTI-DOBLE REFRESCO" 🛑
-// ✅ Fix: Evita que el debounce de Realtime cause doble actualización de misión/puntos.
-// ✅ Fix: updateLocalBalance activo.
-// ✅ Fix: EXPORTA los datos del modal pero NO LO RENDERIZA (Lo hace Routes.jsx).
-// ✅ NUEVO: Función refetchMissionsInstant para la sincronización inmediata.
+// POINTS CONTEXT - VERSIÓN FINAL "ANTI-DOBLE REFRESCO V2" 🛑
+// ✅ Fix: Aumenta el tiempo de ignorado de Realtime (anti-doble refresco)
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -86,7 +83,6 @@ export const PointsProvider = ({ children }) => {
     // 🛑 Establece la bandera para ignorar la próxima llamada de Realtime
     ignoreNextRealtimeRef.current = true;
     loadAllData(false); 
-    // La bandera se resetea dentro del handler de Realtime después del debounce
   }, [loadAllData]);
   
 
@@ -95,7 +91,7 @@ export const PointsProvider = ({ children }) => {
     if (!user) return;
 
     let timeoutId;
-    let resetFlagTimeoutId; // Para resetear la bandera de forma segura
+    let resetFlagTimeoutId; 
 
     const handleRealtimeUpdate = () => {
       // 1. Aplicamos el debounce (1.5s)
@@ -108,11 +104,13 @@ export const PointsProvider = ({ children }) => {
           
           // Resetea la bandera después de ignorar la llamada (limpia el camino)
           if (resetFlagTimeoutId) clearTimeout(resetFlagTimeoutId);
-          // Usamos un timeout corto para asegurar que no se ignore una actualización genuina
+          
+          // AJUSTE CLAVE: Esperamos más que el debounce (ej. 2000ms) para asegurarnos 
+          // que la bandera se limpie DESPUÉS de que haya pasado el ciclo de Realtime.
           resetFlagTimeoutId = setTimeout(() => {
               ignoreNextRealtimeRef.current = false; 
               console.log("▶️ Realtime listo para recibir nuevas actualizaciones.");
-          }, 500); // 500ms es suficiente para limpiar el camino después del debounce
+          }, 2000); 
 
           return;
         }
@@ -158,7 +156,6 @@ export const PointsProvider = ({ children }) => {
 
   const handleCloseMissionModal = () => {
     setMissionSuccessData({ show: false, points: 0 });
-    // Ya disparamos la revalidación en notifyMissionComplete, no es necesario aquí
   };
 
   // --- WRAPPERS ---
