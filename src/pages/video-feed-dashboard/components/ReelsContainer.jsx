@@ -1,6 +1,6 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
+// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆 (DOBLE CONTEO DE LIKE ELIMINADO)
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
 // ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
@@ -331,14 +331,10 @@ const ReelsContainer = ({
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
-          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
-          
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
-             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
@@ -369,7 +365,7 @@ const ReelsContainer = ({
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO: Previene el doble conteo
+                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO para evitar DOBLE CONTEO
 
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA
                   if (typeof refetchMissionsInstant === 'function') {
@@ -379,7 +375,7 @@ const ReelsContainer = ({
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO: Previene el doble conteo
+                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO para evitar DOBLE CONTEO
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA
@@ -428,7 +424,7 @@ const ReelsContainer = ({
       if(newF.has(creatorId)) {
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
-          
+
           // ✅ SINCRONIZACIÓN INSTANTÁNEA
           if (typeof refetchMissionsInstant === 'function') {
               refetchMissionsInstant();
