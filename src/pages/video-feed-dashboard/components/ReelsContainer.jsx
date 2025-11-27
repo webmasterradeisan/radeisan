@@ -40,19 +40,19 @@ const ReelsContainer = ({
     notifyMissionComplete,
     updateLocalBalance,
     refetchMissionsInstant // ✅ AGREGAMOS FUNCIÓN DE SINCRONIZACIÓN INSTANTÁNEA
-  } = usePoints();
+  } = usePoints(); // CRÍTICO: Debe estar correctamente en PointsContext
 
   const { success, error: notifyError, warning, info } = useNotification();
 
   // 2. DECLARACIÓN DE ESTADOS
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [mutedVideos, setMutedVideos] = new Set();
-  const [likedVideos, setLikedVideos] = new Set();
+  const [mutedVideos, setMutedVideos] = useState(new Set());
+  const [likedVideos, setLikedVideos] = useState(new Set());
   
-  const [dislikedVideos, setDislikedVideos] = new Set();
+  const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = new Set();
-  const [followedCreators, setFollowedCreators] = new Set();
+  const [followedCreators, setFollowedCreators] = useState(new Set());
   
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
@@ -258,13 +258,17 @@ const ReelsContainer = ({
                       // 🔥 ACTUALIZACIÓN VISUAL FORZADA
                       if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
+                      // ✅ REVALIDACIÓN DESPUÉS DE VER VIDEO
+                      if (typeof refetchMissionsInstant === 'function') {
+                          refetchMissionsInstant();
+                      }
                   }
               });
           }
       };
       v.addEventListener('timeupdate', handleTime);
       return () => v.removeEventListener('timeupdate', handleTime);
-  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance]);
+  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance, refetchMissionsInstant]);
 
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
@@ -551,7 +555,7 @@ const ReelsContainer = ({
   const handleReply = (commentId, username) => { setReplyingTo(commentId); setNewComment(`@${username || 'Usuario'} `); setTimeout(() => { const input = document.querySelector('textarea[placeholder*="comentario"]'); if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } }, 100); };
   const handleCancelReply = () => { setReplyingTo(null); setNewComment(''); };
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
-  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/86400)}d`; return `${Math.floor(diff/86400)}d`; };
+  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/3600)}h`; return `${Math.floor(diff/86400)}d`; };
 
 
   // ==========================================================================
