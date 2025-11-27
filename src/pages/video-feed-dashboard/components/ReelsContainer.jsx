@@ -368,7 +368,7 @@ const ReelsContainer = ({
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- SE ELIMINA LA LLAMADA OPTIMISTA MANUAL 1/2
+                  // updateMissionOptimistic('give_like', 1); <-- ¡ELIMINADO! Previene doble conteo
                   
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA
                   if (typeof refetchMissionsInstant === 'function') {
@@ -378,7 +378,7 @@ const ReelsContainer = ({
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- SE ELIMINA LA LLAMADA OPTIMISTA MANUAL 2/2
+                  // updateMissionOptimistic('give_like', 1); <-- ¡ELIMINADO! Previene doble conteo
                   showPointsNotification('✓ Like registrado', videoId, 'info');
                   
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA
