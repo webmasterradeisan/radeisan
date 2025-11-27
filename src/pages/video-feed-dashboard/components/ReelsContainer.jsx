@@ -1,10 +1,10 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN CORREGIDA Y OPTIMIZADA 🚀
-// ✅ FIX CRÍTICO: Manejo silencioso de errores de duplicado (23505)
-// ✅ FIX CRÍTICO: Eliminación de "Error de conexión" falso
+// REELS CONTAINER - VERSIÓN FINAL CORREGIDA 🚀
+// ✅ FIX CRÍTICO: Progreso se actualiza en tiempo real (1/10 → 2/10 → 3/10)
+// ✅ FIX CRÍTICO: Manejo silencioso de duplicados sin notificaciones confusas
 // ✅ UI OPTIMISTA: Cambios visuales instantáneos
-// ✅ SINCRONIZACIÓN: Actualización automática del dashboard
+// ✅ SINCRONIZACIÓN: Dashboard se actualiza automáticamente
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -287,7 +287,7 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // 🔥 MANEJADOR DE LIKES - VERSIÓN CORREGIDA Y BLINDADA
+  // 🔥 MANEJADOR DE LIKES - VERSIÓN FINAL CON PROGRESO EN TIEMPO REAL
   // ==========================================================================
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
@@ -309,7 +309,7 @@ const ReelsContainer = ({
       if (isLiked) {
           // ========== UNLIKE ==========
           newLiked.delete(videoId);
-          setLikedVideos(newLiked); // ⚡ UPDATE VISUAL INMEDIATO
+          setLikedVideos(newLiked);
           setVideoCounters(p => ({ 
               ...p, 
               [videoId]: { 
@@ -318,18 +318,13 @@ const ReelsContainer = ({
               }
           }));
           
-          // Llamada DB
           const { error: unlikeError } = await supabase
               .from('video_likes')
               .delete()
               .eq('video_id', videoId)
               .eq('user_id', user.id); 
           
-          if (unlikeError) {
-              console.error("Error unlike:", unlikeError);
-              // En unlike, generalmente no revertimos la UI
-          } else {
-              showPointsNotification('Like removido', videoId, 'info'); 
+          if (!unlikeError) {
               if (typeof refetchMissionsInstant === 'function') {
                   refetchMissionsInstant();
               }
@@ -338,9 +333,9 @@ const ReelsContainer = ({
       } else {
           // ========== LIKE ==========
           newLiked.add(videoId);
-          setLikedVideos(newLiked); // ⚡ UPDATE VISUAL INMEDIATO (Botón rojo YA)
+          setLikedVideos(newLiked); // ⚡ Botón rojo inmediatamente
           
-          // Optimistic UI: Incrementar contador inmediatamente
+          // Incrementar contador visual
           setVideoCounters(p => ({ 
               ...p, 
               [videoId]: { 
@@ -349,12 +344,17 @@ const ReelsContainer = ({
               }
           }));
           
-          // Remover dislike si existe
           setDislikedVideos(p => { 
               const n = new Set(p); 
               n.delete(videoId); 
               return n; 
           });
+          
+          // 🔥 ACTUALIZACIÓN OPTIMISTA DEL PROGRESO (1/10 → 2/10 en tiempo real)
+          const giveLikeMission = missions.find(m => m.mission_type === 'give_like' && m.is_active);
+          if (giveLikeMission && updateMissionOptimistic) {
+              updateMissionOptimistic('give_like');
+          }
           
           // ========== INSERCIÓN EN BASE DE DATOS ==========
           const { error: likeInsertError } = await supabase
@@ -366,29 +366,23 @@ const ReelsContainer = ({
           
           // ========== MANEJO INTELIGENTE DE ERRORES ==========
           if (likeInsertError) {
-             // 🔥 CASO 1: Error de Duplicado (23505 o 'unique')
-             // Este es el caso donde el usuario dio doble clic o refrescó
-             // NO es un error real - simplemente ya existe el like
+             // 🔥 CASO 1: Error de Duplicado (el usuario dio doble clic)
              if (likeInsertError.code === '23505' || 
                  likeInsertError.message?.toLowerCase().includes('duplicate') ||
                  likeInsertError.message?.toLowerCase().includes('unique')) {
                  
-                 // ✅ Ignoramos el error silenciosamente
-                 // El botón ya está rojo, el contador ya subió
-                 // Todo está bien desde la perspectiva del usuario
-                 console.log('[INFO] Like ya existía, operación idempotente');
+                 // ✅ Ignoramos COMPLETAMENTE - no mostramos nada al usuario
+                 // El botón está rojo, el contador subió, todo está bien
+                 console.log('[INFO] Like duplicado detectado - operación idempotente');
                  
-                 // Sincronizamos el dashboard por si acaso
+                 // Sincronizamos sin notificar
                  if (typeof refetchMissionsInstant === 'function') {
                      refetchMissionsInstant();
                  }
-                 
-                 // Salimos sin mostrar error
-                 return;
+                 return; // ← SALIDA SILENCIOSA
              }
              
-             // 🔥 CASO 2: Error Real (red caída, permisos, etc)
-             // Solo en este caso revertimos la UI y mostramos error
+             // 🔥 CASO 2: Error Real (red caída, permisos)
              console.error('[ERROR] Like insert failed:', likeInsertError);
              
              // Revertir UI
@@ -402,59 +396,61 @@ const ReelsContainer = ({
                  }
              }));
              
-             // Mostrar error al usuario
+             // Revertir progreso optimista
+             if (giveLikeMission && rollbackMission) {
+                 rollbackMission('give_like');
+             }
+             
              showPointsNotification('Error al dar like. Intenta de nuevo', videoId, 'error');
              return;
           }
 
-          // ========== LIKE EXITOSO - PROCESAR MISIÓN ==========
-          // Solo intentamos procesar puntos si NO hemos recompensado este video antes
+          // ========== LIKE EXITOSO - PROCESAR PUNTOS ==========
           if (!pointsRewardedIds.has(videoId)) {
               try {
                   const res = await missionsService.trackGiveLike('reel', videoId);
                   
                   if (res.result === 'success' && res.points_earned > 0) {
+                      // 🎉 MISIÓN COMPLETADA
                       const earned = Number(res.points_earned);
                       
-                      // Actualizar balance local
                       if (updateLocalBalance) {
                           updateLocalBalance(earned);
                       }
                       
-                      // Notificar al usuario
                       if (notifyMissionComplete) {
-                          notifyMissionComplete(earned, res.message); 
+                          notifyMissionComplete(earned, res.message || '¡Misión Completada!'); 
                       } else {
-                          showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
+                          showPointsNotification(`🎉 +${earned} puntos - ¡Misión Completada!`, videoId, 'success');
                       }
                       
-                      // Marcar como recompensado
                       setPointsRewardedIds(p => new Set([...p, videoId]));
-
-                      // Sincronizar dashboard
+                      
+                      // Sincronizar para mostrar la misión como completada
                       if (typeof refetchMissionsInstant === 'function') {
                           refetchMissionsInstant();
                       }
 
                   } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                      // Like registrado pero sin completar misión aún
+                      // ✅ Progreso registrado (la UI ya se actualizó con updateMissionOptimistic)
                       setPointsRewardedIds(p => new Set([...p, videoId]));
-                      showPointsNotification('✓ Like registrado', videoId, 'info');
-
-                      // Sincronizar para actualizar progreso
+                      
+                      // NO mostramos notificación - el progreso visible es suficiente
+                      // El usuario verá 1/10 → 2/10 → 3/10 en tiempo real
+                      
+                      // Sincronizar para asegurar consistencia
                       if (typeof refetchMissionsInstant === 'function') {
                           refetchMissionsInstant();
                       }
 
                   } else if (res.result === 'already_paid') {
-                       // Ya se pagó antes, silencioso
-                       console.log('[INFO] Puntos ya pagados para este video');
+                       // Silencioso - ya se procesó antes
+                       console.log('[INFO] Puntos ya pagados');
                   }
               } catch (missionError) {
-                  // Error al procesar misión (pero el like SÍ se guardó)
-                  console.error('[ERROR] Mission processing failed:', missionError);
-                  // No revertimos el like, solo notificamos
-                  showPointsNotification('Like guardado (error al procesar puntos)', videoId, 'info');
+                  // Error procesando misión (pero el like SÍ se guardó)
+                  console.error('[ERROR] Mission processing:', missionError);
+                  // NO mostramos error - el like está guardado correctamente
               }
           }
       }
@@ -462,19 +458,18 @@ const ReelsContainer = ({
         // ========== CATCH DE SEGURIDAD FINAL ==========
         console.error('[CRITICAL] handleLike error:', err);
         
-        // Solo mostramos error si NO es un duplicado que se coló
+        // Solo actuamos si NO es un duplicado
         if (!err.message?.toLowerCase().includes('unique') && 
             !err.message?.toLowerCase().includes('duplicate') &&
             err.code !== '23505') {
             
-            // Revertimos UI solo en caso de error fatal desconocido
             const rbLiked = new Set(likedVideos);
             if (likedVideos.has(videoId)) {
                 rbLiked.delete(videoId);
             }
             setLikedVideos(rbLiked);
             
-            showPointsNotification('Error inesperado. Intenta de nuevo', videoId, 'error');
+            showPointsNotification('Error inesperado', videoId, 'error');
         }
     }
   };
@@ -637,10 +632,8 @@ const ReelsContainer = ({
               <div key={video.id} className="w-full h-full flex-shrink-0 relative bg-black snap-start">
                 <video ref={el => videoRefs.current[index] = el} className="absolute w-full h-full object-cover" src={video.video_url || video.videoUrl} loop playsInline preload="auto" onLoadedData={()=>setLoadingVideo(false)} />
                 
-                {/* Loading Spinner específico */}
                 {loadingVideo && index===currentIndex && <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10"><div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div></div>}
 
-                {/* Info Overlay */}
                 <div className={`absolute z-10 ${isMobile ? 'bottom-8 left-4 right-24' : 'bottom-4 left-4 right-4'}`} onClick={(e) => e.stopPropagation()}>
                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
                       <Link to={`/profile/${video.creator?.id}`} className="font-bold text-white hover:underline text-base shadow-black drop-shadow-md">@{video.creator?.username || video.creator?.name}</Link>
@@ -649,21 +642,18 @@ const ReelsContainer = ({
                    </div>
                 </div>
                 
-                {/* Botón Play Central */}
                 {!isAutoPlaying && index === currentIndex && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center"><Icon name="Play" size={32} color="white"/></div>
                     </div>
                 )}
                 
-                {/* Barra Progreso */}
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
                    <div className="h-full bg-red-500 transition-all" style={{ width: index===currentIndex ? '100%' : '0%', transitionDuration: index===currentIndex ? `${video.duration||30}s` : '0s', transitionTimingFunction:'linear' }} />
                 </div>
               </div>
             ))}
 
-            {/* INDICADOR DE CARGA FINAL (INFINITE SCROLL) */}
             {loading && hasMore && (
                 <div className="w-full h-full flex-shrink-0 flex items-center justify-center bg-black text-white snap-start">
                     <div className="text-center">
@@ -675,7 +665,6 @@ const ReelsContainer = ({
           </div>
         </div>
 
-        {/* BOTONES DE ACCIÓN */}
         {currentVideo && (
             <VideoActionButtons 
                 video={currentVideo}
@@ -699,7 +688,6 @@ const ReelsContainer = ({
             />
         )}
 
-        {/* MODAL DE COMENTARIOS - DESKTOP */}
         {showCommentsModal && currentVideo && isDesktop && (
           <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b">
@@ -759,7 +747,6 @@ const ReelsContainer = ({
         )}
       </div>
       
-      {/* MODAL DE COMENTARIOS - MOBILE */}
       {showCommentsModal && currentVideo && isMobile && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={handleCloseComments}>
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -805,7 +792,6 @@ const ReelsContainer = ({
         </div>
       )}
 
-      {/* Modal Regalo */}
       {showGiftModal && currentVideo && (
         <GiftPointsModal isOpen={showGiftModal} onClose={()=>setShowGiftModal(false)} receiverId={currentVideo.creator?.id} contentId={currentVideo.id} contentType="reel" onSuccess={()=>{}} />
       )}
