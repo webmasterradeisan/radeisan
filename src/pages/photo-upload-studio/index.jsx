@@ -19,7 +19,8 @@ import PhotoMetadataForm from './components/PhotoMetadataForm';
 // Importar servicio de misiones en lugar de 'pointsService'
 import * as missionsService from '../../services/missionsService';
 // Importar 'usePoints' para las notificaciones globales
-import { usePoints } from '../../contexts/PointsContext';
+// ✅ CORRECCIÓN 1: Añadir refetchMissionsInstant a la desestructuración
+import { usePoints } from '../../contexts/PointsContext'; 
 // ==================================================================
 // ✅ FIN DE LA CORRECCIÓN
 // ==================================================================
@@ -308,8 +309,8 @@ const PhotoUploadStudio = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
-  // ✅ Obtener funciones de notificación y balance
-  const { triggerAnimation, updateLocalBalance, notifyMissionComplete } = usePoints();
+  // ✅ CORRECCIÓN 1: Desestructurar la función de revalidación instantánea
+  const { triggerAnimation, updateLocalBalance, notifyMissionComplete, refetchMissionsInstant } = usePoints();
 
   const {
     uploadMultiplePhotos,
@@ -367,6 +368,7 @@ const PhotoUploadStudio = () => {
     if (results.length > 0) {
         setSuccessfulUploads(results.length); 
         let totalEarned = 0;
+        let missionCompleted = false;
 
         // Recorrer los resultados para sumar puntos y notificar
         results.forEach(r => {
@@ -375,7 +377,8 @@ const PhotoUploadStudio = () => {
 
                 // Disparar Modal si es una misión completa (ej. Paquete Creador)
                 if (r.missionResult.result === 'success') {
-                    notifyMissionComplete(Number(r.missionResult.points_earned));
+                    notifyMissionComplete(Number(r.missionResult.points_earned), r.missionResult.message); // Pasar puntos y mensaje
+                    missionCompleted = true;
                 }
             }
         });
@@ -385,7 +388,7 @@ const PhotoUploadStudio = () => {
             updateLocalBalance(totalEarned);
             setPhotosPointsEarned(totalEarned);
             // 2. Disparar la animación de progreso si no se disparó el modal
-            if (!results.some(r => r.missionResult && r.missionResult.result === 'success')) {
+            if (!missionCompleted) {
                  triggerAnimation(totalEarned, 'earn', 'free');
             }
         } else {
@@ -393,6 +396,11 @@ const PhotoUploadStudio = () => {
              triggerAnimation(0, 'earn', 'free');
         }
 
+        // ✅ CORRECCIÓN 2: FORZAR RECARGA DEL DASHBOARD
+        // Esto soluciona la necesidad de refrescar la página.
+        if (typeof refetchMissionsInstant === 'function') {
+            refetchMissionsInstant();
+        }
 
         setTimeout(() => {
             setShowUploadModal(false);
