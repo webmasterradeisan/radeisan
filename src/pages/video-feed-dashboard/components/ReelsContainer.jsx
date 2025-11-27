@@ -1,10 +1,11 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
+// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆 (SINCRONIZACIÓN INSTANTÁNEA IMPLEMENTADA)
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
 // ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
 //    inserción exitosa en la DB para evitar el doble conteo visual.
+// 🚀 FIX SINCRONIZACIÓN: Llamada a refetchMissionsInstant() tras acciones de misión.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,7 +40,8 @@ const ReelsContainer = ({
     rollbackMission, 
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
-    updateLocalBalance 
+    updateLocalBalance,
+    refetchMissionsInstant // <--- AGREGADO: Función para forzar la sincronización
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -48,7 +50,7 @@ const ReelsContainer = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
-  const [likedVideos, setLikedVideos] = useState(new Set());
+  const [likedVideos, setLikedVideos] = new Set();
   
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
@@ -316,7 +318,13 @@ const ReelsContainer = ({
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
-          showPointsNotification('Like removido', videoId, 'info'); 
+          showPointsNotification('Like removido', videoId, 'info');
+          
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de quitar el like
+          if (typeof refetchMissionsInstant === 'function') {
+              refetchMissionsInstant();
+          }
+
       } else {
           // LIKE
           newLiked.add(videoId);
@@ -361,12 +369,22 @@ const ReelsContainer = ({
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
+                  
+                  // ✅ SINCRONIZACIÓN INSTANTÁNEA
+                  if (typeof refetchMissionsInstant === 'function') {
+                      refetchMissionsInstant(); 
+                  }
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
+                  
+                  // ✅ SINCRONIZACIÓN INSTANTÁNEA
+                  if (typeof refetchMissionsInstant === 'function') {
+                      refetchMissionsInstant();
+                  }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
                   rollbackMission(snapshot); 
@@ -409,6 +427,12 @@ const ReelsContainer = ({
       if(newF.has(creatorId)) {
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
+          
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de dejar de seguir
+          if (typeof refetchMissionsInstant === 'function') {
+              refetchMissionsInstant();
+          }
+
       } else {
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
@@ -416,6 +440,10 @@ const ReelsContainer = ({
                  const earned = Number(r.points_earned);
                  if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
+             }
+             // ✅ SINCRONIZACIÓN INSTANTÁNEA después de seguir
+             if (typeof refetchMissionsInstant === 'function') {
+                 refetchMissionsInstant();
              }
           });
       }
@@ -439,6 +467,10 @@ const ReelsContainer = ({
          // También podríamos añadir updateLocalBalance aquí si compartir da puntos inmediatos
          if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
             updateLocalBalance(Number(r.points_earned));
+         }
+         // ✅ SINCRONIZACIÓN INSTANTÁNEA después de compartir
+         if (typeof refetchMissionsInstant === 'function') {
+             refetchMissionsInstant();
          }
      });
   };
@@ -506,8 +538,20 @@ const ReelsContainer = ({
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
+          
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de comentar
+          if (typeof refetchMissionsInstant === 'function') {
+             refetchMissionsInstant();
+          }
+
         } catch (err) { console.error(err); }
-      } else { showPointsNotification('✓ Respuesta agregada', videoId, 'info'); }
+      } else { 
+          showPointsNotification('✓ Respuesta agregada', videoId, 'info'); 
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de responder
+          if (typeof refetchMissionsInstant === 'function') {
+             refetchMissionsInstant();
+          }
+      }
       
       setNewComment(''); setReplyingTo(null); await loadComments(videoId);
     } catch (error) { showPointsNotification('Error al comentar', videoId, 'error'); }
