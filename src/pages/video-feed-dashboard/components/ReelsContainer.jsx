@@ -1,13 +1,12 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆 (SINCRONIZACIÓN INSTANTÁNEA IMPLEMENTADA)
+// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
 // ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
 //    inserción exitosa en la DB para evitar el doble conteo visual.
 // 🚀 FIX SINCRONIZACIÓN: Llamada a refetchMissionsInstant() tras acciones de misión.
-// 🐞 FIX CRÍTICO: likedVideos debe inicializarse con useState(new Set()).
-// 🛑 FIX LÓGICA: Se elimina llamada optimista duplicada en handleLike.
+// 🛑 FIX LÓGICA CRÍTICA: Se ELIMINA updateMissionOptimistic en handleLike para evitar DOBLE CONTEO.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -43,7 +42,7 @@ const ReelsContainer = ({
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
     updateLocalBalance,
-    refetchMissionsInstant 
+    refetchMissionsInstant // <-- AGREGADO: Función clave para sincronización inmediata
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -52,7 +51,7 @@ const ReelsContainer = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
-  const [likedVideos, setLikedVideos] = useState(new Set()); 
+  const [likedVideos, setLikedVideos] = useState(new Set());
   
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
@@ -300,8 +299,6 @@ const ReelsContainer = ({
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
-    // NOTA: El snapshot ya no es necesario aquí si confiamos 100% en el refetch instantáneo. 
-    // Lo mantenemos por si el refetch falla, aunque lo ideal sería usar un contador de likes de misión local.
     const snapshot = missions.map(m => ({ ...m })); 
     
     try {
@@ -324,7 +321,7 @@ const ReelsContainer = ({
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
           
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de quitar el like
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA (para registrar el cambio)
           if (typeof refetchMissionsInstant === 'function') {
               refetchMissionsInstant();
           }
@@ -334,10 +331,14 @@ const ReelsContainer = ({
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
+          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
+          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
+          
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
+             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
@@ -368,8 +369,8 @@ const ReelsContainer = ({
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- ¡ELIMINADO! Previene doble conteo
-                  
+                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO: Previene el doble conteo
+
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA
                   if (typeof refetchMissionsInstant === 'function') {
                       refetchMissionsInstant(); 
@@ -378,9 +379,9 @@ const ReelsContainer = ({
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- ¡ELIMINADO! Previene doble conteo
+                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO: Previene el doble conteo
                   showPointsNotification('✓ Like registrado', videoId, 'info');
-                  
+
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA
                   if (typeof refetchMissionsInstant === 'function') {
                       refetchMissionsInstant();
@@ -428,7 +429,7 @@ const ReelsContainer = ({
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
           
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de dejar de seguir
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA
           if (typeof refetchMissionsInstant === 'function') {
               refetchMissionsInstant();
           }
@@ -441,7 +442,7 @@ const ReelsContainer = ({
                  if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
              }
-             // ✅ SINCRONIZACIÓN INSTANTÁNEA después de seguir
+             // ✅ SINCRONIZACIÓN INSTANTÁNEA
              if (typeof refetchMissionsInstant === 'function') {
                  refetchMissionsInstant();
              }
@@ -468,7 +469,7 @@ const ReelsContainer = ({
          if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
             updateLocalBalance(Number(r.points_earned));
          }
-         // ✅ SINCRONIZACIÓN INSTANTÁNEA después de compartir
+         // ✅ SINCRONIZACIÓN INSTANTÁNEA
          if (typeof refetchMissionsInstant === 'function') {
              refetchMissionsInstant();
          }
@@ -539,7 +540,7 @@ const ReelsContainer = ({
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
           
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de comentar
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA
           if (typeof refetchMissionsInstant === 'function') {
              refetchMissionsInstant();
           }
@@ -547,7 +548,7 @@ const ReelsContainer = ({
         } catch (err) { console.error(err); }
       } else { 
           showPointsNotification('✓ Respuesta agregada', videoId, 'info'); 
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA después de responder
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA
           if (typeof refetchMissionsInstant === 'function') {
              refetchMissionsInstant();
           }
