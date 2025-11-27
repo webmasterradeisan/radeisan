@@ -79,6 +79,7 @@ const ReelsContainer = ({
   const isInitialMount = useRef(true);
   const hasPlayedInitial = useRef(false);
   const lastNavigationIndex = useRef(-1);
+  const processingLikes = useRef(new Set()); // 🔥 Protección anti-duplicación
 
   // Helper de notificación
   const showPointsNotification = (message, videoId, type = 'success') => {
@@ -296,14 +297,26 @@ const ReelsContainer = ({
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
+    // 🔥 PROTECCIÓN ANTI-DUPLICACIÓN
+    if (processingLikes.current.has(videoId)) {
+      console.log('⚠️ Like ya en proceso para:', videoId);
+      return;
+    }
+    
+    processingLikes.current.add(videoId);
     const snapshot = missions.map(m => ({ ...m })); 
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { navigate('/login'); return; }
+      if (!user) { 
+        processingLikes.current.delete(videoId);
+        navigate('/login'); 
+        return; 
+      }
       
       const targetVideo = videos.find(v => v.id === videoId);
       if (targetVideo && targetVideo.creator?.id === user.id) {
+          processingLikes.current.delete(videoId);
           showPointsNotification('No puedes dar like a tus propios videos', videoId, 'restriction');
           return;
       }
@@ -316,33 +329,35 @@ const ReelsContainer = ({
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
-          showPointsNotification('Like removido', videoId, 'info'); 
+          showPointsNotification('Like removido', videoId, 'info');
+          setLikedVideos(newLiked);
+          processingLikes.current.delete(videoId);
       } else {
           // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
-          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
-          
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
-             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
-             setLikedVideos(newLiked); 
+             setLikedVideos(newLiked);
+             processingLikes.current.delete(videoId); 
              return;
           }
           
-          // ✅ MOVEMOS el incremento local para después de la inserción exitosa
+          // ✅ Incremento local DESPUÉS de inserción exitosa
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
+          setLikedVideos(newLiked);
 
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado', videoId, 'info');
+              processingLikes.current.delete(videoId);
           } else {
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
+              console.log('📊 Respuesta track_mission:', res);
               
               // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
               if (res.points_earned > 0) {
@@ -374,13 +389,14 @@ const ReelsContainer = ({
               } else {
                   rollbackMission(snapshot); 
               }
+              processingLikes.current.delete(videoId);
           }
-          setLikedVideos(newLiked);
       }
     } catch (err) { 
         console.error('Error like:', err);
         rollbackMission(snapshot); 
         showPointsNotification('Error de conexión', videoId, 'error');
+        processingLikes.current.delete(videoId);
     }
   };
 
