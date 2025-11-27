@@ -1,7 +1,7 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - VERSIÓN FINAL "ARQUITECTURA LIMPIA" 💎
-// ✅ Fix: Debounce en Realtime (Espera 1.5s).
+// POINTS CONTEXT - VERSIÓN FINAL "ANTI-DOBLE REFRESCO" 🛑
+// ✅ Fix: Evita que el debounce de Realtime cause doble actualización de misión/puntos.
 // ✅ Fix: updateLocalBalance activo.
 // ✅ Fix: EXPORTA los datos del modal pero NO LO RENDERIZA (Lo hace Routes.jsx).
 // ✅ NUEVO: Función refetchMissionsInstant para la sincronización inmediata.
@@ -46,6 +46,9 @@ export const PointsProvider = ({ children }) => {
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
   
+  // 🛑 NUEVO: Bandera para ignorar la siguiente actualización de Realtime (anti-doble refresco)
+  const ignoreNextRealtimeRef = useRef(false);
+  
   // --- CARGA DE DATOS ---
   const loadAllData = useCallback(async (forceLoadingSpinner = false) => {
     if (!mountedRef.current || !user) return;
@@ -77,10 +80,13 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // ✅ NUEVA FUNCIÓN: Revalida misiones y puntos inmediatamente
+  // ✅ NUEVA FUNCIÓN: Revalida misiones y puntos inmediatamente, silenciando el Realtime
   const refetchMissionsInstant = useCallback(() => {
     console.log("⚡ Forzando sincronización instantánea de misiones...");
+    // 🛑 Establece la bandera para ignorar la próxima llamada de Realtime
+    ignoreNextRealtimeRef.current = true;
     loadAllData(false); 
+    // La bandera se resetea dentro del handler de Realtime después del debounce
   }, [loadAllData]);
   
 
@@ -89,15 +95,31 @@ export const PointsProvider = ({ children }) => {
     if (!user) return;
 
     let timeoutId;
+    let resetFlagTimeoutId; // Para resetear la bandera de forma segura
 
     const handleRealtimeUpdate = () => {
-      // ✅ Si la actualización viene del Realtime, aplicamos el debounce
+      // 1. Aplicamos el debounce (1.5s)
       if (timeoutId) clearTimeout(timeoutId);
       
       timeoutId = setTimeout(() => {
-        console.log("🔄 Sincronizando datos con la Base de Datos...");
+        // 2. Comprobación Anti-Doble Refresco 🛑
+        if (ignoreNextRealtimeRef.current) {
+          console.log("⏸️ Realtime ignorado, la actualización ya fue forzada.");
+          
+          // Resetea la bandera después de ignorar la llamada (limpia el camino)
+          if (resetFlagTimeoutId) clearTimeout(resetFlagTimeoutId);
+          // Usamos un timeout corto para asegurar que no se ignore una actualización genuina
+          resetFlagTimeoutId = setTimeout(() => {
+              ignoreNextRealtimeRef.current = false; 
+              console.log("▶️ Realtime listo para recibir nuevas actualizaciones.");
+          }, 500); // 500ms es suficiente para limpiar el camino después del debounce
+
+          return;
+        }
+
+        console.log("🔄 Sincronizando datos con la Base de Datos (Realtime)...");
         loadAllData(false);
-      }, 1500); 
+      }, 1500); // Debounce time
     };
 
     const channel = supabase.channel('points_ecosystem_updates')
@@ -112,6 +134,7 @@ export const PointsProvider = ({ children }) => {
     return () => { 
       supabase.removeChannel(channel);
       if (timeoutId) clearTimeout(timeoutId);
+      if (resetFlagTimeoutId) clearTimeout(resetFlagTimeoutId);
     };
   }, [user, loadAllData]);
 
