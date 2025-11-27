@@ -3,8 +3,8 @@
 // REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ✅ FIX SINCRONIZACIÓN: Llama a refetchMissionsInstant() para actualizar Dashboard al instante.
-// ⭐️ FIX DOBLE CONTEO: Se eliminó updateMissionOptimistic para evitar race condition.
+// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
+//    inserción exitosa en la DB para evitar el doble conteo visual.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,8 +39,7 @@ const ReelsContainer = ({
     rollbackMission, 
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
-    updateLocalBalance,
-    refetchMissionsInstant // ✅ AGREGADO PARA SINCRONIZACIÓN
+    updateLocalBalance 
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -259,18 +258,13 @@ const ReelsContainer = ({
                       // 🔥 ACTUALIZACIÓN VISUAL FORZADA
                       if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
-                      
-                      // ✅ SINCRONIZACIÓN INSTANTÁNEA
-                      if (typeof refetchMissionsInstant === 'function') {
-                          refetchMissionsInstant();
-                      }
                   }
               });
           }
       };
       v.addEventListener('timeupdate', handleTime);
       return () => v.removeEventListener('timeupdate', handleTime);
-  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance, refetchMissionsInstant]);
+  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance]);
 
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
@@ -323,23 +317,19 @@ const ReelsContainer = ({
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
-          
-          // ✅ FIX SINCRONIZACIÓN LIKES:
-          if (typeof refetchMissionsInstant === 'function') {
-              refetchMissionsInstant();
-          }
-
       } else {
           // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // LÓGICA DE INSERCIÓN Y PAGO 
+          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
+          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
+             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
@@ -354,42 +344,29 @@ const ReelsContainer = ({
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
               
+              // ✅ SOLO UNA ACTUALIZACIÓN: Dentro del if de success
+
               if (res.result === 'success' && res.points_earned > 0) {
-                  // CASO: MISIÓN CUMPLIDA (Dar 10 Likes o Paquete Creador)
+                  // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
                   
-                  // Actualizar Balance
+                  // ✅ ACTUALIZAR BALANCE UNA SOLA VEZ
                   if (updateLocalBalance) updateLocalBalance(earned);
                   
                   if (notifyMissionComplete) {
-                      notifyMissionComplete(earned, res.message); // Modal con mensaje
+                      notifyMissionComplete(earned); // Modal
                   } else {
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  
-                  // ⭐️ ELIMINADO EL DOBLE CONTEO: Ya no llamamos a updateMissionOptimistic
-                  // updateMissionOptimistic('give_like', 1); 
-                  
-                  // ✅ REVALIDACIÓN INSTANTÁNEA (La DB es la fuente de verdad)
-                  if (typeof refetchMissionsInstant === 'function') {
-                      refetchMissionsInstant();
-                  }
+                  updateMissionOptimistic('give_like', 1); 
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  
-                  // ⭐️ ELIMINADO EL DOBLE CONTEO
-                  // updateMissionOptimistic('give_like', 1); 
-                  
+                  updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
-
-                  // ✅ REVALIDACIÓN INSTANTÁNEA
-                  if (typeof refetchMissionsInstant === 'function') {
-                      refetchMissionsInstant();
-                  }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
                   rollbackMission(snapshot); 
@@ -432,11 +409,6 @@ const ReelsContainer = ({
       if(newF.has(creatorId)) {
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
-          
-          if (typeof refetchMissionsInstant === 'function') {
-              refetchMissionsInstant();
-          }
-          
       } else {
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
@@ -444,11 +416,6 @@ const ReelsContainer = ({
                  const earned = Number(r.points_earned);
                  if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
-                 
-                 // ✅ REVALIDACIÓN INSTANTÁNEA
-                 if (typeof refetchMissionsInstant === 'function') {
-                    refetchMissionsInstant();
-                 }
              }
           });
       }
@@ -469,12 +436,9 @@ const ReelsContainer = ({
      else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
      
      missionsService.trackShareContent('reel', video.id).then(r => {
+         // También podríamos añadir updateLocalBalance aquí si compartir da puntos inmediatos
          if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
             updateLocalBalance(Number(r.points_earned));
-            
-            if (typeof refetchMissionsInstant === 'function') {
-                refetchMissionsInstant();
-            }
          }
      });
   };
@@ -531,6 +495,7 @@ const ReelsContainer = ({
         try {
           const result = await missionsService.trackComment('reel', videoId);
           
+          // 🔥 FIX: Actualización visual inmediata para comentarios también
           if (result.points_earned > 0 && updateLocalBalance) {
              updateLocalBalance(Number(result.points_earned));
           }
@@ -538,10 +503,6 @@ const ReelsContainer = ({
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
-              
-              if (typeof refetchMissionsInstant === 'function') {
-                  refetchMissionsInstant();
-              }
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
@@ -555,7 +516,7 @@ const ReelsContainer = ({
   const handleReply = (commentId, username) => { setReplyingTo(commentId); setNewComment(`@${username || 'Usuario'} `); setTimeout(() => { const input = document.querySelector('textarea[placeholder*="comentario"]'); if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } }, 100); };
   const handleCancelReply = () => { setReplyingTo(null); setNewComment(''); };
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
-  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/86400)}d`; return `${Math.floor(diff/86400)}d`; };
+  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/3600)}h`; return `${Math.floor(diff/86400)}d`; };
 
 
   // ==========================================================================
