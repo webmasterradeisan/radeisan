@@ -1,12 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆 (DOBLE CONTEO DE LIKE ELIMINADO)
-// ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
-// ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
-//    inserción exitosa en la DB para evitar el doble conteo visual.
-// 🚀 FIX SINCRONIZACIÓN: Llamada a refetchMissionsInstant() tras acciones de misión.
-// 🛑 FIX LÓGICA CRÍTICA: Se ELIMINA updateMissionOptimistic en handleLike para evitar DOBLE CONTEO.
+// REELS CONTAINER - VERSIÓN "SIN DOBLE CONTEO" ✅
+// ✅ Sincronización Inmediata Implementada y Forzada (refetchMissionsInstant).
+// 🛑 FIX CRÍTICO: Se ELIMINA updateMissionOptimistic en handleLike para evitar DOBLE CONTEO.
+// ✅ La actualización de puntos y misiones se basa en la respuesta del servidor (res.result).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -359,7 +356,7 @@ const ReelsContainer = ({
                   // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
                   if (notifyMissionComplete) {
-                      notifyMissionComplete(earned); // Modal
+                      notifyMissionComplete(earned); // Modal y refetch se activan en PointsContext
                   } else {
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
@@ -367,7 +364,7 @@ const ReelsContainer = ({
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   // updateMissionOptimistic('give_like', 1); <-- ELIMINADO para evitar DOBLE CONTEO
 
-                  // ✅ SINCRONIZACIÓN INSTANTÁNEA
+                  // ✅ SINCRONIZACIÓN INSTANTÁNEA (Refresca el progreso)
                   if (typeof refetchMissionsInstant === 'function') {
                       refetchMissionsInstant(); 
                   }
@@ -378,7 +375,7 @@ const ReelsContainer = ({
                   // updateMissionOptimistic('give_like', 1); <-- ELIMINADO para evitar DOBLE CONTEO
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
-                  // ✅ SINCRONIZACIÓN INSTANTÁNEA
+                  // ✅ SINCRONIZACIÓN INSTANTÁNEA (Refresca el progreso)
                   if (typeof refetchMissionsInstant === 'function') {
                       refetchMissionsInstant();
                   }
