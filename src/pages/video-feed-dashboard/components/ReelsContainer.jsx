@@ -350,12 +350,12 @@ const ReelsContainer = ({
                   // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
                   
-                  // ✅ ÚNICA actualización del balance visual
-                  if (updateLocalBalance) updateLocalBalance(earned);
-                  
+                  // ✅ SOLUCIÓN: notifyMissionComplete ya actualiza el balance internamente
                   if (notifyMissionComplete) {
                       notifyMissionComplete(earned); 
                   } else {
+                      // Solo actualizar manualmente si notifyMissionComplete no existe
+                      if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
 
@@ -512,14 +512,11 @@ const ReelsContainer = ({
       if (!replyingTo) {
         try {
           const result = await missionsService.trackComment('reel', videoId);
-          
-          // 🔥 FIX: Actualización visual inmediata para comentarios también
-          if (result.points_earned > 0 && updateLocalBalance) {
-             updateLocalBalance(Number(result.points_earned));
-          }
 
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
+              // ✅ ÚNICA actualización del balance
+              if (updateLocalBalance) updateLocalBalance(earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
