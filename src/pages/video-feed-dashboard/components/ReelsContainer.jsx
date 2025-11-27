@@ -78,6 +78,7 @@ const ReelsContainer = ({
   const isInitialMount = useRef(true);
   const hasPlayedInitial = useRef(false);
   const lastNavigationIndex = useRef(-1);
+  const likingInProgress = useRef(new Set()); // 🔥 NUEVO: Protección contra doble like
 
   // Helper de notificación
   const showPointsNotification = (message, videoId, type = 'success') => {
@@ -254,7 +255,6 @@ const ReelsContainer = ({
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
                       const earned = Number(res.points_earned);
-                      // 🔥 ACTUALIZACIÓN VISUAL FORZADA
                       if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
                   }
@@ -291,11 +291,20 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
-  // 🔥 LÓGICA ACTUALIZADA: CON DEBUG LOGGING
+  // 🔥 LÓGICA ACTUALIZADA: CON PROTECCIÓN ANTI-DUPLICADO
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
+    // 🔥 PROTECCIÓN: Si ya hay un like en progreso para este video, ignorar
+    if (likingInProgress.current.has(videoId)) {
+        console.log('⚠️ [LIKE] Ya hay un like en progreso para:', videoId);
+        return;
+    }
+    
     console.log('🔵 [LIKE] Iniciando handleLike para video:', videoId);
+    
+    // Marcar como "en progreso"
+    likingInProgress.current.add(videoId);
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -355,22 +364,14 @@ const ReelsContainer = ({
                   const earned = Number(res.points_earned);
                   console.log('🟢 [LIKE] ¡MISIÓN CUMPLIDA! Puntos ganados:', earned);
                   
-                  // ✅ SOLUCIÓN: Solo notifyMissionComplete (ya actualiza el balance internamente)
-                  if (notifyMissionComplete) {
-                      console.log('🟢 [LIKE] Llamando notifyMissionComplete con:', earned);
-                      notifyMissionComplete(earned); 
-                  } else {
-                      console.log('🟡 [LIKE] notifyMissionComplete no disponible, solo mostrando notificación');
-                      showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
+                  // ✅ ACTUALIZAR BALANCE (ya que el problema NO es PointsContext)
+                  console.log('🟢 [LIKE] Actualizando balance con updateLocalBalance:', earned);
+                  if (updateLocalBalance) {
+                      updateLocalBalance(earned);
                   }
-
+                  
+                  showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-
-                  // ✅ FIX CRÍTICO: Solo refrescar misiones cuando HAY puntos ganados
-                  if (typeof refetchMissionsInstant === 'function') {
-                      console.log('🔵 [LIKE] Llamando refetchMissionsInstant (SUCCESS)');
-                      refetchMissionsInstant(); 
-                  }
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   console.log('🟡 [LIKE] Progreso actualizado (sin recompensa de misión)');
@@ -394,6 +395,11 @@ const ReelsContainer = ({
     } catch (err) { 
         console.error('🔴 [LIKE] Error en handleLike:', err);
         showPointsNotification('Error de conexión', videoId, 'error');
+    } finally {
+        // 🔥 IMPORTANTE: Remover de "en progreso" después de 1 segundo
+        setTimeout(() => {
+            likingInProgress.current.delete(videoId);
+        }, 1000);
     }
   };
 
@@ -435,11 +441,6 @@ const ReelsContainer = ({
                  const earned = Number(r.points_earned);
                  if (updateLocalBalance) updateLocalBalance(earned);
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success');
-                 
-                 // ✅ Solo refrescar cuando HAY puntos ganados
-                 if (typeof refetchMissionsInstant === 'function') {
-                     refetchMissionsInstant();
-                 }
              }
           });
       }
@@ -464,11 +465,6 @@ const ReelsContainer = ({
             const earned = Number(r.points_earned);
             if (updateLocalBalance) updateLocalBalance(earned);
             showPointsNotification(`+${earned} por compartir`, video.id, 'success');
-            
-            // ✅ Solo refrescar cuando HAY puntos ganados
-            if (typeof refetchMissionsInstant === 'function') {
-                refetchMissionsInstant();
-            }
          }
      });
   };
@@ -527,14 +523,8 @@ const ReelsContainer = ({
 
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
-              // ✅ ÚNICA actualización del balance
               if (updateLocalBalance) updateLocalBalance(earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success');
-              
-              // ✅ Solo refrescar cuando HAY puntos ganados
-              if (typeof refetchMissionsInstant === 'function') {
-                 refetchMissionsInstant();
-              }
           } 
           else { 
               showPointsNotification('✓ Comentario agregado', videoId, 'info'); 
