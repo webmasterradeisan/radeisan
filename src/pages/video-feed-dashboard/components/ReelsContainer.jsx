@@ -3,6 +3,8 @@
 // REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
+// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
+//    inserción exitosa en la DB para evitar el doble conteo visual.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -319,17 +321,22 @@ const ReelsContainer = ({
           // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
-          setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
+          
+          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
+          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
-             setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes || 0) - 1) } }));
+             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
           }
+          
+          // ✅ MOVEMOS el incremento local para después de la inserción exitosa
+          setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
 
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado', videoId, 'info');
