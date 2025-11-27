@@ -1,9 +1,19 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL SIN DOBLE CONTEO ✅
-// ✅ Fix: Solo UNA actualización de balance por acción
-// ✅ Fix: Incremento de likes DESPUÉS de inserción exitosa
-// ✅ Integración de Modal de Celebración (notifyMissionComplete)
+// REELS CONTAINER - VERSIÓN DE DIAGNÓSTICO 🔍
+// 🧪 PRUEBA: updateLocalBalance COMENTADO en TODAS las funciones
+// 
+// INSTRUCCIONES:
+// 1. Usa este archivo
+// 2. Da like a un reel
+// 3. Anota cuántos puntos tienes ANTES de recargar
+// 4. Recarga la página (F5)
+// 5. Compara los puntos DESPUÉS de recargar
+// 
+// RESULTADO ESPERADO:
+// - Si NO hay doble conteo → El problema estaba en el frontend (ya resuelto)
+// - Si SÍ hay doble conteo → El problema está en el BACKEND
+// 
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -253,7 +263,8 @@ const ReelsContainer = ({
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
                       const earned = Number(res.points_earned);
-                      if (updateLocalBalance) updateLocalBalance(earned);
+                      // 🧪 COMENTADO PARA DIAGNÓSTICO
+                      // if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
                   }
               });
@@ -343,8 +354,8 @@ const ReelsContainer = ({
                   // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
                   
-                  // ✅ Actualizar balance UNA sola vez
-                  if (updateLocalBalance) updateLocalBalance(earned);
+                  // 🧪 PRUEBA DE DIAGNÓSTICO: Comentada temporalmente para verificar si el problema está en el backend
+                  // if (updateLocalBalance) updateLocalBalance(earned);
                   
                   if (notifyMissionComplete) {
                       notifyMissionComplete(earned);
@@ -409,7 +420,8 @@ const ReelsContainer = ({
           missionsService.trackFollowUser(creatorId).then(r => {
              if(r.result==='success' && r.points_earned > 0) { 
                  const earned = Number(r.points_earned);
-                 if (updateLocalBalance) updateLocalBalance(earned);
+                 // 🧪 COMENTADO PARA DIAGNÓSTICO
+                 // if (updateLocalBalance) updateLocalBalance(earned);
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
              }
           });
@@ -433,7 +445,8 @@ const ReelsContainer = ({
      missionsService.trackShareContent('reel', video.id).then(r => {
          if(r.result==='success' && r.points_earned > 0) {
             const earned = Number(r.points_earned);
-            if (updateLocalBalance) updateLocalBalance(earned);
+            // 🧪 COMENTADO PARA DIAGNÓSTICO
+            // if (updateLocalBalance) updateLocalBalance(earned);
             showPointsNotification(`+${earned} por compartir`, video.id, 'success');
          }
      });
@@ -493,7 +506,8 @@ const ReelsContainer = ({
           
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
-              if (updateLocalBalance) updateLocalBalance(earned);
+              // 🧪 COMENTADO PARA DIAGNÓSTICO
+              // if (updateLocalBalance) updateLocalBalance(earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
