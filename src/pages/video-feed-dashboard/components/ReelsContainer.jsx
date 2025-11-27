@@ -344,15 +344,15 @@ const ReelsContainer = ({
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
               
-              // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
-              if (res.points_earned > 0) {
-                  const earned = Number(res.points_earned);
-                  if (updateLocalBalance) updateLocalBalance(earned);
-              }
+              // ✅ SOLO UNA ACTUALIZACIÓN: Dentro del if de success
 
               if (res.result === 'success' && res.points_earned > 0) {
                   // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
+                  
+                  // ✅ ACTUALIZAR BALANCE UNA SOLA VEZ
+                  if (updateLocalBalance) updateLocalBalance(earned);
+                  
                   if (notifyMissionComplete) {
                       notifyMissionComplete(earned); // Modal
                   } else {
