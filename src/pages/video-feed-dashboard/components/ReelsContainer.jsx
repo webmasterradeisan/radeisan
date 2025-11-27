@@ -1,10 +1,9 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
-// ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
-// ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
-//    inserción exitosa en la DB para evitar el doble conteo visual.
+// REELS CONTAINER - VERSIÓN FINAL "MANEJO DE ERRORES SUAVE" 🛡️
+// ✅ FIX ERROR UI: Ignora errores de "duplicate key" (23505) en likes.
+// ✅ FIX DOBLE CONTEO: Sin actualizaciones optimistas conflictivas.
+// ✅ SINCRONIZACIÓN: Usa refetchMissionsInstant().
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,7 +38,8 @@ const ReelsContainer = ({
     rollbackMission, 
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
-    updateLocalBalance 
+    updateLocalBalance,
+    refetchMissionsInstant 
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -92,8 +92,6 @@ const ReelsContainer = ({
   // ===============================
   useEffect(() => {
     if (!onLoadMore || !hasMore || loading) return;
-
-    // Si estamos viendo uno de los últimos 2 videos, cargamos más
     if (currentIndex >= videos.length - 2) {
         onLoadMore();
     }
@@ -255,16 +253,16 @@ const ReelsContainer = ({
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
                       const earned = Number(res.points_earned);
-                      // 🔥 ACTUALIZACIÓN VISUAL FORZADA
                       if (updateLocalBalance) updateLocalBalance(earned);
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
+                      if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
                   }
               });
           }
       };
       v.addEventListener('timeupdate', handleTime);
       return () => v.removeEventListener('timeupdate', handleTime);
-  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance]);
+  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance, refetchMissionsInstant]);
 
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
@@ -292,7 +290,7 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
-  // 🔥 LÓGICA ACTUALIZADA: COBERTURA TOTAL DE PUNTOS
+  // 🔥 LÓGICA ACTUALIZADA: COBERTURA TOTAL DE PUNTOS & MANEJO DE ERRORES SUAVE
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
@@ -317,60 +315,58 @@ const ReelsContainer = ({
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
+          
+          if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
+
       } else {
           // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
-          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
-          
+          // ✅ INSERCIÓN EN TABLA DE LIKES (CON MANEJO DE DUPLICADOS SUAVE)
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
-             showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
-             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
-             newLiked.delete(videoId); 
-             setLikedVideos(newLiked); 
-             return;
+             // 🛑 SI ES ERROR DE DUPLICADO (23505), LO IGNORAMOS Y SEGUIMOS (Ya tiene like)
+             // Esto evita el mensaje rojo y permite que la lógica continúe.
+             if (likeInsertError.code === '23505' || likeInsertError.message.includes('unique')) {
+                 // Opcional: console.log("Like ya existe, continuando...");
+             } else {
+                 // Error real (ej. red, permisos)
+                 showPointsNotification(`Error: ${likeInsertError.message}`, videoId, 'error');
+                 newLiked.delete(videoId); 
+                 setLikedVideos(newLiked); 
+                 return; 
+             }
           }
           
-          // ✅ MOVEMOS el incremento local para después de la inserción exitosa
+          // INCREMENTO LOCAL DE CONTADOR DE VIDEO (Solo si pasamos la inserción o era duplicado inofensivo)
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
 
           if (pointsRewardedIds.has(videoId)) {
-              showPointsNotification('Like registrado', videoId, 'info');
+              // showPointsNotification('Like registrado', videoId, 'info'); // Opcional: Silenciar para no spammear
           } else {
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
               
-              // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
-              if (res.points_earned > 0) {
+              if (res.result === 'success' && res.points_earned > 0) {
                   const earned = Number(res.points_earned);
                   if (updateLocalBalance) updateLocalBalance(earned);
-              }
-
-              if (res.result === 'success' && res.points_earned > 0) {
-                  // CASO: MISIÓN CUMPLIDA
-                  const earned = Number(res.points_earned);
-                  if (notifyMissionComplete) {
-                      notifyMissionComplete(earned); // Modal
-                  } else {
-                      showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
-                  }
+                  if (notifyMissionComplete) notifyMissionComplete(earned, res.message); 
+                  else showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  updateMissionOptimistic('give_like', 1); 
+                  
+                  // ✅ SINCRONIZACIÓN INSTANTÁNEA (Sin doble conteo optimista)
+                  if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
+                  if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
-                  rollbackMission(snapshot); 
-                  showPointsNotification('Ya sumaste puntos por esto hoy', videoId, 'warning'); 
+                  // Si la DB dice que ya pagó, no hacemos nada (evita avisos molestos)
               } else {
                   rollbackMission(snapshot); 
               }
@@ -378,6 +374,11 @@ const ReelsContainer = ({
           setLikedVideos(newLiked);
       }
     } catch (err) { 
+        // ✅ MANEJO DE ERROR GENÉRICO "Error de conexión"
+        // Si el error es de duplicado que se escapó, lo ignoramos
+        if (err.message && (err.message.includes('unique') || err.code === '23505')) {
+             return; 
+        }
         console.error('Error like:', err);
         rollbackMission(snapshot); 
         showPointsNotification('Error de conexión', videoId, 'error');
@@ -409,13 +410,15 @@ const ReelsContainer = ({
       if(newF.has(creatorId)) {
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
+          if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
       } else {
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
              if(r.result==='success') { 
                  const earned = Number(r.points_earned);
-                 if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
+                 if (updateLocalBalance) updateLocalBalance(earned); 
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
+                 if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
              }
           });
       }
@@ -436,9 +439,9 @@ const ReelsContainer = ({
      else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
      
      missionsService.trackShareContent('reel', video.id).then(r => {
-         // También podríamos añadir updateLocalBalance aquí si compartir da puntos inmediatos
          if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
             updateLocalBalance(Number(r.points_earned));
+            if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
          }
      });
   };
@@ -448,9 +451,7 @@ const ReelsContainer = ({
       setShowGiftModal(true);
   };
 
-  // ===============================
-  // LÓGICA DE COMENTARIOS
-  // ===============================
+  // ... (LÓGICA DE COMENTARIOS SE MANTIENE IGUAL)
   const loadComments = async (videoId, retryCount = 0) => {
     try {
       let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
@@ -494,21 +495,18 @@ const ReelsContainer = ({
       if (!replyingTo) {
         try {
           const result = await missionsService.trackComment('reel', videoId);
-          
-          // 🔥 FIX: Actualización visual inmediata para comentarios también
           if (result.points_earned > 0 && updateLocalBalance) {
              updateLocalBalance(Number(result.points_earned));
           }
-
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
+              if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
         } catch (err) { console.error(err); }
       } else { showPointsNotification('✓ Respuesta agregada', videoId, 'info'); }
-      
       setNewComment(''); setReplyingTo(null); await loadComments(videoId);
     } catch (error) { showPointsNotification('Error al comentar', videoId, 'error'); }
   };
@@ -517,7 +515,6 @@ const ReelsContainer = ({
   const handleCancelReply = () => { setReplyingTo(null); setNewComment(''); };
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
   const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/3600)}h`; return `${Math.floor(diff/86400)}d`; };
-
 
   // ==========================================================================
   // RENDER PRINCIPAL
@@ -532,7 +529,6 @@ const ReelsContainer = ({
       <div className="flex h-full w-full items-center justify-center">
         {/* CONTENEDOR DE VIDEO */}
         <div className={`relative overflow-hidden flex-shrink-0 ${isDesktop ? showCommentsModal ? 'w-[55%]' : 'w-full max-w-[500px]' : 'w-full'} ${isDesktop ? 'h-[80vh] rounded-xl shadow-2xl' : 'h-full'}`}>
-          
           <div ref={containerRef} className="w-full h-full relative transition-transform duration-500" 
                style={{ transform: `translateY(${-currentIndex * 100}%)`, transition: enableTransition ? 'transform 0.5s' : 'none' }}
                onClick={handlePlayPause}
@@ -543,11 +539,8 @@ const ReelsContainer = ({
             {videos.map((video, index) => (
               <div key={video.id} className="w-full h-full flex-shrink-0 relative bg-black snap-start">
                 <video ref={el => videoRefs.current[index] = el} className="absolute w-full h-full object-cover" src={video.video_url || video.videoUrl} loop playsInline preload="auto" onLoadedData={()=>setLoadingVideo(false)} />
-                
-                {/* Loading Spinner específico */}
                 {loadingVideo && index===currentIndex && <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10"><div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div></div>}
-
-                {/* Info Overlay */}
+                
                 <div className={`absolute z-10 ${isMobile ? 'bottom-8 left-4 right-24' : 'bottom-4 left-4 right-4'}`} onClick={(e) => e.stopPropagation()}>
                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
                       <Link to={`/profile/${video.creator?.id}`} className="font-bold text-white hover:underline text-base shadow-black drop-shadow-md">@{video.creator?.username || video.creator?.name}</Link>
@@ -556,27 +549,21 @@ const ReelsContainer = ({
                    </div>
                 </div>
                 
-                {/* Botón Play Central */}
                 {!isAutoPlaying && index === currentIndex && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center"><Icon name="Play" size={32} color="white"/></div>
                     </div>
                 )}
                 
-                {/* Barra Progreso */}
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
                    <div className="h-full bg-red-500 transition-all" style={{ width: index===currentIndex ? '100%' : '0%', transitionDuration: index===currentIndex ? `${video.duration||30}s` : '0s', transitionTimingFunction:'linear' }} />
                 </div>
               </div>
             ))}
-
-            {/* INDICADOR DE CARGA FINAL (INFINITE SCROLL) */}
+            
             {loading && hasMore && (
                 <div className="w-full h-full flex-shrink-0 flex items-center justify-center bg-black text-white snap-start">
-                    <div className="text-center">
-                        <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                        <p>Cargando más reels...</p>
-                    </div>
+                    <div className="text-center"><div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div><p>Cargando más reels...</p></div>
                 </div>
             )}
           </div>
@@ -606,111 +593,42 @@ const ReelsContainer = ({
             />
         )}
 
-        {/* MODAL DE COMENTARIOS - DESKTOP */}
-        {showCommentsModal && currentVideo && isDesktop && (
-          <div className="w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4" onClick={e=>e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Comentarios ({formatCount(videoCounters[currentVideo.id]?.comments)})</h3>
-              <button onClick={handleCloseComments} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Icon name="X" size={20} /></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {comments[currentVideo.id]?.length > 0 ? (
-                comments[currentVideo.id].map((comment) => (
-                  <div key={comment.id} className="space-y-2">
-                    <div className="flex space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
-                        {comment.user?.avatar ? <img src={comment.user.avatar} alt="Avatar" className="w-full h-full object-cover"/> : <div className="w-full h-full bg-purple-500 flex items-center justify-center text-white text-xs">{comment.user?.name?.charAt(0)}</div>}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2"><span className="font-semibold text-sm">{comment.user?.name}</span><span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span></div>
-                        <p className="text-sm mt-1">{comment.content}</p>
-                        <button onClick={() => handleReply(comment.id, comment.user?.username)} className="text-xs text-gray-500 hover:text-gray-700 mt-1">Responder</button>
-                        
-                        {comment.replies?.length > 0 && (
-                          <div className="mt-2">
-                            <button onClick={() => toggleReplies(comment.id)} className="text-xs text-blue-600 hover:text-blue-700">
-                              {showReplies[comment.id] ? 'Ocultar respuestas' : `Ver ${comment.replies.length} respuestas`}
-                            </button>
-                            {showReplies[comment.id] && (
-                              <div className="space-y-2 pl-4 border-l-2 border-gray-200 mt-2">
-                                {comment.replies.map((reply) => (
-                                  <div key={reply.id} className="flex space-x-2">
-                                    <div className="w-6 h-6 rounded-full bg-gray-300 flex-shrink-0 overflow-hidden">
-                                       {reply.user?.avatar ? <img src={reply.user.avatar} alt="Av" className="w-full h-full object-cover"/> : <div className="w-full h-full bg-purple-400 flex items-center justify-center text-white text-[10px]">{reply.user?.name?.charAt(0)}</div>}
-                                    </div>
-                                    <div className="flex-1"><span className="font-semibold text-xs">{reply.user?.name}</span><p className="text-xs">{reply.content}</p></div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+        {/* MODAL DE COMENTARIOS (Desktop & Mobile) */}
+        {showCommentsModal && currentVideo && (isDesktop || isMobile) && (
+          <div className={isMobile ? "fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" : "w-[45%] h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col ml-4"} onClick={e=> {if(isMobile) handleCloseComments(); else e.stopPropagation();}}>
+            <div className={`bg-white ${isMobile ? 'rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col' : 'flex flex-col h-full'}`} onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="text-lg font-semibold">Comentarios ({formatCount(videoCounters[currentVideo.id]?.comments)})</h3>
+                <button onClick={handleCloseComments} className="p-2 hover:bg-gray-100 rounded-full"><Icon name="X" size={20} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {comments[currentVideo.id]?.length > 0 ? comments[currentVideo.id].map(comment => (
+                    <div key={comment.id} className="space-y-2">
+                        <div className="flex space-x-3">
+                            <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden">
+                               {comment.user?.avatar ? <img src={comment.user.avatar} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center bg-purple-500 text-white text-xs">{comment.user?.name?.charAt(0)}</div>}
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2"><span className="font-bold text-sm">{comment.user?.name}</span><span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span></div>
+                                <p className="text-sm">{comment.content}</p>
+                                <button onClick={()=>handleReply(comment.id, comment.user?.username)} className="text-xs text-gray-500 mt-1">Responder</button>
+                                {comment.replies?.length > 0 && (<div className="mt-2 pl-4 border-l-2"><button onClick={()=>toggleReplies(comment.id)} className="text-xs text-blue-500">Ver respuestas</button>{showReplies[comment.id] && comment.replies.map(r => (<div key={r.id} className="flex gap-2 mt-2"><span className="font-bold text-xs">{r.user?.name}</span><p className="text-xs">{r.content}</p></div>))}</div>)}
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-500"><Icon name="MessageCircle" size={48} className="mx-auto mb-2 text-gray-300"/><p>No hay comentarios aún. ¡Sé el primero!</p></div>
-              )}
-            </div>
-
-            <div className="p-4 border-t">
-              {replyingTo && (<div className="flex items-center justify-between mb-2 p-2 bg-blue-50 rounded"><span className="text-sm text-blue-700">Respondiendo a @{videos.find(v=>v.id===currentVideo.id)?.creator?.username}...</span><button onClick={handleCancelReply} className="text-blue-600"><Icon name="X" size={16} /></button></div>)}
-              <div className="flex space-x-2">
-                <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Escribe un comentario..." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500" rows={1} />
-                <button onClick={() => handleAddComment(currentVideo.id)} disabled={!newComment.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"><Icon name="Send" size={20} /></button>
+                )) : <div className="text-center text-gray-500 py-10">No hay comentarios aún</div>}
+              </div>
+              <div className="p-4 border-t">
+                {replyingTo && <div className="text-xs text-blue-500 mb-1 flex justify-between"><span>Respondiendo...</span><button onClick={handleCancelReply}>X</button></div>}
+                <div className="flex gap-2">
+                    <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comenta..." className="flex-1 border rounded px-3 py-2"/>
+                    <button onClick={()=>handleAddComment(currentVideo.id)} className="bg-blue-600 text-white p-2 rounded"><Icon name="Send" size={18}/></button>
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
-      
-      {/* MODAL DE COMENTARIOS - MOBILE */}
-      {showCommentsModal && currentVideo && isMobile && (
-        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onClick={handleCloseComments}>
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Comentarios ({formatCount(videoCounters[currentVideo.id]?.comments)})</h3>
-              <button onClick={handleCloseComments} className="p-2 hover:bg-gray-100 rounded-full"><Icon name="X" size={20} /></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-               {comments[currentVideo.id]?.length > 0 ? comments[currentVideo.id].map(comment => (
-                  <div key={comment.id} className="space-y-2">
-                      <div className="flex space-x-3">
-                          <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden">
-                             {comment.user?.avatar ? <img src={comment.user.avatar} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center bg-purple-500 text-white text-xs">{comment.user?.name?.charAt(0)}</div>}
-                          </div>
-                          <div className="flex-1">
-                              <div className="flex items-center gap-2"><span className="font-bold text-sm">{comment.user?.name}</span><span className="text-xs text-gray-500">{formatTimeAgo(comment.created_at)}</span></div>
-                              <p className="text-sm">{comment.content}</p>
-                              <button onClick={()=>handleReply(comment.id, comment.user?.username)} className="text-xs text-gray-500 mt-1">Responder</button>
-                              
-                              {comment.replies?.length > 0 && (
-                                <div className="mt-2 pl-4 border-l-2">
-                                   <button onClick={()=>toggleReplies(comment.id)} className="text-xs text-blue-500">Ver respuestas</button>
-                                   {showReplies[comment.id] && comment.replies.map(r => (
-                                       <div key={r.id} className="flex gap-2 mt-2"><span className="font-bold text-xs">{r.user?.name}</span><p className="text-xs">{r.content}</p></div>
-                                   ))}
-                                </div>
-                              )}
-                          </div>
-                      </div>
-                  </div>
-               )) : <div className="text-center text-gray-500 py-10">No hay comentarios aún</div>}
-            </div>
-
-            <div className="p-4 border-t">
-              {replyingTo && <div className="text-xs text-blue-500 mb-1 flex justify-between"><span>Respondiendo...</span><button onClick={handleCancelReply}>X</button></div>}
-              <div className="flex gap-2">
-                  <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comenta..." className="flex-1 border rounded px-3 py-2"/>
-                  <button onClick={()=>handleAddComment(currentVideo.id)} className="bg-blue-600 text-white p-2 rounded"><Icon name="Send" size={18}/></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal Regalo */}
       {showGiftModal && currentVideo && (
