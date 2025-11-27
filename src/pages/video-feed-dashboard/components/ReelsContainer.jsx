@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN DE EMERGENCIA ✅ (Doble Conteo ELIMINADO)
+// REELS CONTAINER - VERSIÓN SIN DOBLE CONTEO ✅
 // 🛑 FIX CRÍTICO: Se ELIMINA updateMissionOptimistic en handleLike.
-// ✅ Sincronización implementada y flujo de Like simplificado para evitar fallos.
+// ✅ Sincronización implementada y flujo de Like simplificado.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -38,7 +38,7 @@ const ReelsContainer = ({
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
     updateLocalBalance,
-    refetchMissionsInstant // <-- Aseguramos que se extraiga para evitar errores
+    refetchMissionsInstant // <-- Aseguramos que se extraiga
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -64,7 +64,7 @@ const ReelsContainer = ({
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [showReplies, setShowReplies] = useState({});
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = null; // No need for useState for currentUser if loading data globally
   
   const [showGiftModal, setShowGiftModal] = useState(false); 
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
@@ -126,7 +126,8 @@ const ReelsContainer = ({
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { data: p } = await supabase.from('user_profiles').select('id, full_name, avatar_url, username').eq('id', user.id).single();
-            setCurrentUser(p || { id: user.id, name: 'Usuario', avatar: null, username: 'usuario' });
+            // Usamos useState para currentUser, restaurando la definición original si es necesario:
+            // setCurrentUser(p || { id: user.id, name: 'Usuario', avatar: null, username: 'usuario' });
             
             const { data: l } = await supabase.from('video_likes').select('video_id').eq('user_id', user.id);
             if (l) setLikedVideos(new Set(l.map(x => x.video_id)));
@@ -318,7 +319,7 @@ const ReelsContainer = ({
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
           
-          // ✅ SINCRONIZACIÓN INSTANTÁNEA (para registrar el cambio)
+          // ✅ SINCRONIZACIÓN INSTANTÁNEA
           if (typeof refetchMissionsInstant === 'function') {
               refetchMissionsInstant();
           }
