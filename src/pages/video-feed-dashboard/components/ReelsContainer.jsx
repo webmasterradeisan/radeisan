@@ -1,9 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN FINAL SIN DOBLE CONTEO 🛡️
-// ✅ FIX DOBLE CONTEO: Se eliminó 'updateMissionOptimistic'. La UI ahora espera
-//    a la DB para actualizarse, garantizando que 1 like sea siempre 1 punto.
-// ✅ SINCRONIZACIÓN: Usa refetchMissionsInstant para actualizarse al instante.
+// REELS CONTAINER - VERSIÓN "GAMIFICADA" 🏆
+// ✅ Integración de Modal de Celebración (notifyMissionComplete).
+// ✅ Flujo: Like -> DB -> Éxito -> Modal "Misión Cumplida" -> Recarga al cerrar.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -34,11 +33,10 @@ const ReelsContainer = ({
   // 1. LLAMADA A HOOKS Y CONTEXTOS
   const { 
     missions, 
-    // updateMissionOptimistic, // ❌ ELIMINADO para evitar doble conteo
+    updateMissionOptimistic, 
     rollbackMission, 
-    notifyMissionComplete,
-    updateLocalBalance,
-    refetchMissionsInstant // ✅ AGREGADO para sincronización real
+    // 🔥 EXTRAEMOS LA FUNCIÓN PARA ABRIR EL MODAL DE CELEBRACIÓN
+    notifyMissionComplete
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -91,6 +89,8 @@ const ReelsContainer = ({
   // ===============================
   useEffect(() => {
     if (!onLoadMore || !hasMore || loading) return;
+
+    // Si estamos viendo uno de los últimos 2 videos, cargamos más
     if (currentIndex >= videos.length - 2) {
         onLoadMore();
     }
@@ -252,20 +252,15 @@ const ReelsContainer = ({
               missionsService.trackWatchVideo('reel', d.id, v.currentTime).then(res => {
                   if (res.result === 'success' && res.points_earned > 0) {
                       const earned = Number(res.points_earned);
-                      if (updateLocalBalance) updateLocalBalance(earned);
+                      // Usamos el modal si completa misión por ver (opcional, aquí dejamos el toast)
                       showPointsNotification(`+${earned} PUNTOS por ver`, d.id, 'success');
-                      
-                      // ✅ SINCRONIZACIÓN REAL
-                      if (typeof refetchMissionsInstant === 'function') {
-                          refetchMissionsInstant();
-                      }
                   }
               });
           }
       };
       v.addEventListener('timeupdate', handleTime);
       return () => v.removeEventListener('timeupdate', handleTime);
-  }, [currentIndex, videos, videoWatchedIds, updateLocalBalance, refetchMissionsInstant]);
+  }, [currentIndex, videos, videoWatchedIds]);
 
   const handlePlayPause = useCallback((e) => {
       if (e && e.target.tagName !== 'VIDEO') return;
@@ -293,6 +288,7 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
+  // 🔥 LÓGICA ACTUALIZADA CON MODAL DE CELEBRACIÓN
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     
@@ -317,30 +313,22 @@ const ReelsContainer = ({
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
-          
-          if (typeof refetchMissionsInstant === 'function') {
-              refetchMissionsInstant();
-          }
-
       } else {
           // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
+          setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
           
-          // 1. INSERCIÓN DE LIKE
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
+             setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes || 0) - 1) } }));
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
           }
-          
-          // 2. INCREMENTO LOCAL DE CONTADOR (Visual)
-          setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
 
-          // 3. LÓGICA DE PUNTOS Y MISIONES
           if (pointsRewardedIds.has(videoId)) {
               showPointsNotification('Like registrado', videoId, 'info');
           } else {
@@ -348,39 +336,29 @@ const ReelsContainer = ({
               const res = await missionsService.trackGiveLike('reel', videoId);
               
               if (res.result === 'success' && res.points_earned > 0) {
-                  // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
-                  if (updateLocalBalance) updateLocalBalance(earned);
-                  
+
+                  // 🚀 ¡MISIÓN CUMPLIDA! -> ABRIR MODAL
                   if (notifyMissionComplete) {
-                      notifyMissionComplete(earned, res.message); 
+                      notifyMissionComplete(earned);
                   } else {
+                      // Fallback si notifyMissionComplete no existe
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
 
+                  // Marcamos el video como recompensado localmente
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   
-                  // 🚫 ELIMINADO: updateMissionOptimistic (Causa del doble conteo)
-                  
-                  // ✅ REVALIDACIÓN INSTANTÁNEA (ÚNICA FUENTE DE VERDAD)
-                  if (typeof refetchMissionsInstant === 'function') {
-                      refetchMissionsInstant();
-                  }
+                  // Actualizamos la barra de misión visualmente
+                  updateMissionOptimistic('give_like', 1); 
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // CASO: SOLO REGISTRO
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  
-                  // 🚫 ELIMINADO: updateMissionOptimistic
-                  
+                  updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
-                  // ✅ REVALIDACIÓN INSTANTÁNEA
-                  if (typeof refetchMissionsInstant === 'function') {
-                      refetchMissionsInstant();
-                  }
-
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
+                  rollbackMission(snapshot); 
                   showPointsNotification('Ya sumaste puntos por esto hoy', videoId, 'warning'); 
               } else {
                   rollbackMission(snapshot); 
@@ -420,23 +398,12 @@ const ReelsContainer = ({
       if(newF.has(creatorId)) {
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
-          
-          if (typeof refetchMissionsInstant === 'function') {
-              refetchMissionsInstant();
-          }
-          
       } else {
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
              if(r.result==='success') { 
                  const earned = Number(r.points_earned);
-                 if (updateLocalBalance) updateLocalBalance(earned);
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
-                 
-                 // ✅ REVALIDACIÓN INSTANTÁNEA
-                 if (typeof refetchMissionsInstant === 'function') {
-                    refetchMissionsInstant();
-                 }
              }
           });
       }
@@ -457,12 +424,8 @@ const ReelsContainer = ({
      else { await navigator.clipboard.writeText(window.location.href); showPointsNotification('Link copiado', video.id, 'info'); }
      
      missionsService.trackShareContent('reel', video.id).then(r => {
-         if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
-            updateLocalBalance(Number(r.points_earned));
-            
-            if (typeof refetchMissionsInstant === 'function') {
-                refetchMissionsInstant();
-            }
+         if(r.result==='success') {
+             // Dejamos que el websocket maneje el saldo
          }
      });
   };
@@ -518,19 +481,9 @@ const ReelsContainer = ({
       if (!replyingTo) {
         try {
           const result = await missionsService.trackComment('reel', videoId);
-          
-          if (result.points_earned > 0 && updateLocalBalance) {
-             updateLocalBalance(Number(result.points_earned));
-          }
-
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
-              
-              // ✅ REVALIDACIÓN INSTANTÁNEA
-              if (typeof refetchMissionsInstant === 'function') {
-                  refetchMissionsInstant();
-              }
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
