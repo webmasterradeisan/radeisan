@@ -1,7 +1,7 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - VERSIÓN FINAL "ANTI-DOBLE REFRESCO V2" 🛑
-// ✅ Fix: Aumenta el tiempo de ignorado de Realtime (anti-doble refresco)
+// POINTS CONTEXT - SOLUCIÓN FINAL ANTI-DOBLE REFRESCO 🛑
+// ✅ Lógica de bandera de silenciamiento de Realtime simplificada y más estricta.
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -12,8 +12,6 @@ import {
   getMissionStats
 } from '../services/missionsService';
 import { supabase } from '../lib/supabase';
-
-// ⚠️ NOTA: Ya no importamos MissionCompletedModal aquí para evitar duplicados.
 
 const PointsContext = createContext();
 
@@ -43,8 +41,8 @@ export const PointsProvider = ({ children }) => {
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
   
-  // 🛑 NUEVO: Bandera para ignorar la siguiente actualización de Realtime (anti-doble refresco)
-  const ignoreNextRealtimeRef = useRef(false);
+  // 🛑 Bandera para ignorar la siguiente actualización de Realtime
+  const ignoreRealtimeTimeoutRef = useRef(null); 
   
   // --- CARGA DE DATOS ---
   const loadAllData = useCallback(async (forceLoadingSpinner = false) => {
@@ -77,11 +75,20 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // ✅ NUEVA FUNCIÓN: Revalida misiones y puntos inmediatamente, silenciando el Realtime
+  // ✅ FUNCIÓN: Revalida misiones y puntos inmediatamente, silenciando el Realtime
   const refetchMissionsInstant = useCallback(() => {
     console.log("⚡ Forzando sincronización instantánea de misiones...");
-    // 🛑 Establece la bandera para ignorar la próxima llamada de Realtime
-    ignoreNextRealtimeRef.current = true;
+    
+    // 🛑 Lógica estricta de silenciamiento: Establecemos un temporizador para ignorar cualquier Realtime
+    // que llegue dentro de los próximos 2 segundos (más largo que el debounce de 1.5s).
+    if (ignoreRealtimeTimeoutRef.current) clearTimeout(ignoreRealtimeTimeoutRef.current);
+    
+    // La bandera es simplemente la existencia de este timeout
+    ignoreRealtimeTimeoutRef.current = setTimeout(() => {
+        ignoreRealtimeTimeoutRef.current = null;
+        console.log("▶️ Realtime listo para recibir nuevas actualizaciones.");
+    }, 2000); // 2000ms > 1500ms (Debounce)
+
     loadAllData(false); 
   }, [loadAllData]);
   
@@ -91,7 +98,6 @@ export const PointsProvider = ({ children }) => {
     if (!user) return;
 
     let timeoutId;
-    let resetFlagTimeoutId; 
 
     const handleRealtimeUpdate = () => {
       // 1. Aplicamos el debounce (1.5s)
@@ -99,22 +105,14 @@ export const PointsProvider = ({ children }) => {
       
       timeoutId = setTimeout(() => {
         // 2. Comprobación Anti-Doble Refresco 🛑
-        if (ignoreNextRealtimeRef.current) {
+        // Si el timeout para ignorar está activo, significa que la actualización fue forzada.
+        if (ignoreRealtimeTimeoutRef.current) {
           console.log("⏸️ Realtime ignorado, la actualización ya fue forzada.");
-          
-          // Resetea la bandera después de ignorar la llamada (limpia el camino)
-          if (resetFlagTimeoutId) clearTimeout(resetFlagTimeoutId);
-          
-          // AJUSTE CLAVE: Esperamos más que el debounce (ej. 2000ms) para asegurarnos 
-          // que la bandera se limpie DESPUÉS de que haya pasado el ciclo de Realtime.
-          resetFlagTimeoutId = setTimeout(() => {
-              ignoreNextRealtimeRef.current = false; 
-              console.log("▶️ Realtime listo para recibir nuevas actualizaciones.");
-          }, 2000); 
-
+          // NO LLAMAMOS A loadAllData(). El temporizador se encargará de limpiar la bandera.
           return;
         }
 
+        // Si llegamos aquí, fue una actualización genuina o no forzada.
         console.log("🔄 Sincronizando datos con la Base de Datos (Realtime)...");
         loadAllData(false);
       }, 1500); // Debounce time
@@ -132,7 +130,8 @@ export const PointsProvider = ({ children }) => {
     return () => { 
       supabase.removeChannel(channel);
       if (timeoutId) clearTimeout(timeoutId);
-      if (resetFlagTimeoutId) clearTimeout(resetFlagTimeoutId);
+      // Limpiamos el timeout de ignorado en el cleanup general del efecto
+      if (ignoreRealtimeTimeoutRef.current) clearTimeout(ignoreRealtimeTimeoutRef.current);
     };
   }, [user, loadAllData]);
 
