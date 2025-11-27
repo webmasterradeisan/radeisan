@@ -6,6 +6,7 @@
 // ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
 //    inserción exitosa en la DB para evitar el doble conteo visual.
 // 🚀 FIX SINCRONIZACIÓN: Llamada a refetchMissionsInstant() tras acciones de misión.
+// 🐞 FIX CRÍTICO: likedVideos debe inicializarse con useState(new Set()).
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -41,7 +42,7 @@ const ReelsContainer = ({
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
     updateLocalBalance,
-    refetchMissionsInstant // <--- AGREGADO: Función para forzar la sincronización
+    refetchMissionsInstant // <--- AGREGADO (Para sincronización inmediata)
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -50,7 +51,7 @@ const ReelsContainer = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [mutedVideos, setMutedVideos] = useState(new Set());
-  const [likedVideos, setLikedVideos] = new Set();
+  const [likedVideos, setLikedVideos] = useState(new Set()); // <-- ¡CORREGIDO! Debe ser useState(new Set())
   
   const [dislikedVideos, setDislikedVideos] = useState(new Set());
   const [savedVideos, setSavedVideos] = useState(new Set());
@@ -318,7 +319,7 @@ const ReelsContainer = ({
           newLiked.delete(videoId);
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
-          showPointsNotification('Like removido', videoId, 'info');
+          showPointsNotification('Like removido', videoId, 'info'); 
           
           // ✅ SINCRONIZACIÓN INSTANTÁNEA después de quitar el like
           if (typeof refetchMissionsInstant === 'function') {
