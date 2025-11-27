@@ -3,8 +3,7 @@
 // REELS CONTAINER - VERSIÓN "COBERTURA TOTAL" 🏆
 // ✅ Fix Visual: Suma puntos al balance SIEMPRE que la acción pague.
 // ✅ Integración de Modal de Celebración (notifyMissionComplete).
-// ⭐️ FIX DOBLE CONTEO: El incremento local de 'likes' se mueve a después de la 
-//    inserción exitosa en la DB para evitar el doble conteo visual.
+// ✅ FIX SINCRONIZACIÓN: Llama a refetchMissionsInstant() para actualizar Dashboard al instante.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,7 +38,8 @@ const ReelsContainer = ({
     rollbackMission, 
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
-    updateLocalBalance 
+    updateLocalBalance,
+    refetchMissionsInstant // ✅ AGREGAMOS FUNCIÓN DE SINCRONIZACIÓN INSTANTÁNEA
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -47,12 +47,12 @@ const ReelsContainer = ({
   // 2. DECLARACIÓN DE ESTADOS
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [mutedVideos, setMutedVideos] = useState(new Set());
-  const [likedVideos, setLikedVideos] = useState(new Set());
+  const [mutedVideos, setMutedVideos] = new Set();
+  const [likedVideos, setLikedVideos] = new Set();
   
-  const [dislikedVideos, setDislikedVideos] = useState(new Set());
-  const [savedVideos, setSavedVideos] = useState(new Set());
-  const [followedCreators, setFollowedCreators] = useState(new Set());
+  const [dislikedVideos, setDislikedVideos] = new Set();
+  const [savedVideos, setSavedVideos] = new Set();
+  const [followedCreators, setFollowedCreators] = new Set();
   
   const [enableTransition, setEnableTransition] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(true);
@@ -317,19 +317,23 @@ const ReelsContainer = ({
           setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
           await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
           showPointsNotification('Like removido', videoId, 'info'); 
+          
+          // ✅ FIX SINCRONIZACIÓN LIKES: Si se quita el like, recargamos las misiones por si se revirtió algo.
+          if (typeof refetchMissionsInstant === 'function') {
+              refetchMissionsInstant();
+          }
+
       } else {
           // LIKE
           newLiked.add(videoId);
           setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
           
-          // ❌ Se elimina la línea de incremento optimista que causaba el doble conteo:
-          // setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}}));
+          // LÓGICA DE INSERCIÓN Y PAGO (MOVIDA Y CORREGIDA EN ARCHIVO ORIGINAL)
           
           const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
           
           if (likeInsertError) {
              showPointsNotification(`❌ Fallo de Inserción: ${likeInsertError.message}`, videoId, 'error');
-             // Ya no necesitamos revertir, solo aseguramos que el estado visual sea correcto:
              newLiked.delete(videoId); 
              setLikedVideos(newLiked); 
              return;
@@ -351,22 +355,32 @@ const ReelsContainer = ({
               }
 
               if (res.result === 'success' && res.points_earned > 0) {
-                  // CASO: MISIÓN CUMPLIDA
+                  // CASO: MISIÓN CUMPLIDA (Dar 10 Likes o Paquete Creador)
                   const earned = Number(res.points_earned);
                   if (notifyMissionComplete) {
-                      notifyMissionComplete(earned); // Modal
+                      notifyMissionComplete(earned, res.message); // ✅ Pasar mensaje para Paquete Creador
                   } else {
                       showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
+                  
+                  // ✅ CORRECCIÓN CRÍTICA 1: Forzar revalidación instantánea
+                  if (typeof refetchMissionsInstant === 'function') {
+                      refetchMissionsInstant();
+                  }
 
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  // CASO: SOLO REGISTRO (Puntos normales)
+                  // CASO: SOLO REGISTRO (Puntos normales, como 1 de 10 likes)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
                   showPointsNotification('✓ Like registrado', videoId, 'info');
+
+                  // ✅ CORRECCIÓN CRÍTICA 2: Forzar revalidación instantánea para actualizar 0/10 -> 1/10
+                  if (typeof refetchMissionsInstant === 'function') {
+                      refetchMissionsInstant();
+                  }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
                   rollbackMission(snapshot); 
@@ -409,6 +423,12 @@ const ReelsContainer = ({
       if(newF.has(creatorId)) {
           newF.delete(creatorId); await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', creatorId);
           showPointsNotification('Dejaste de seguir', videos[currentIndex]?.id, 'info');
+          
+          // ✅ AÑADIR REVALIDACIÓN POST-FOLLOW/UNFOLLOW
+          if (typeof refetchMissionsInstant === 'function') {
+              refetchMissionsInstant();
+          }
+          
       } else {
           newF.add(creatorId); await supabase.from('follows').insert({follower_id: user.id, following_id: creatorId});
           missionsService.trackFollowUser(creatorId).then(r => {
@@ -416,6 +436,11 @@ const ReelsContainer = ({
                  const earned = Number(r.points_earned);
                  if (updateLocalBalance) updateLocalBalance(earned); // ✅ Update visual
                  showPointsNotification(`+${earned} por seguir`, videos[currentIndex]?.id, 'success'); 
+                 
+                 // ✅ AÑADIR REVALIDACIÓN POST-FOLLOW
+                 if (typeof refetchMissionsInstant === 'function') {
+                    refetchMissionsInstant();
+                 }
              }
           });
       }
@@ -439,6 +464,11 @@ const ReelsContainer = ({
          // También podríamos añadir updateLocalBalance aquí si compartir da puntos inmediatos
          if(r.result==='success' && r.points_earned > 0 && updateLocalBalance) {
             updateLocalBalance(Number(r.points_earned));
+            
+            // ✅ AÑADIR REVALIDACIÓN POST-SHARE
+            if (typeof refetchMissionsInstant === 'function') {
+                refetchMissionsInstant();
+            }
          }
      });
   };
@@ -503,6 +533,11 @@ const ReelsContainer = ({
           if (result.result === 'success' && result.points_earned > 0) { 
               const earned = Number(result.points_earned);
               showPointsNotification(`🎉 +${earned} puntos por comentar`, videoId, 'success'); 
+              
+              // ✅ AÑADIR REVALIDACIÓN POST-COMENTARIO
+              if (typeof refetchMissionsInstant === 'function') {
+                  refetchMissionsInstant();
+              }
           } 
           else { showPointsNotification('✓ Comentario agregado', videoId, 'info'); }
           setVideoCounters(prev => ({ ...prev, [videoId]: { ...prev[videoId], comments: (prev[videoId]?.comments || 0) + 1 } }));
@@ -516,7 +551,7 @@ const ReelsContainer = ({
   const handleReply = (commentId, username) => { setReplyingTo(commentId); setNewComment(`@${username || 'Usuario'} `); setTimeout(() => { const input = document.querySelector('textarea[placeholder*="comentario"]'); if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } }, 100); };
   const handleCancelReply = () => { setReplyingTo(null); setNewComment(''); };
   const toggleReplies = (commentId) => { setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
-  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/3600)}h`; return `${Math.floor(diff/86400)}d`; };
+  const formatTimeAgo = (date) => { const now = new Date(); const diff = Math.floor((now - new Date(date)) / 1000); if (diff < 60) return 'Ahora'; if (diff < 3600) return `${Math.floor(diff/60)}m`; if (diff < 86400) return `${Math.floor(diff/86400)}d`; return `${Math.floor(diff/86400)}d`; };
 
 
   // ==========================================================================
