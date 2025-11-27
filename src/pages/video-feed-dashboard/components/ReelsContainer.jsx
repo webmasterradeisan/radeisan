@@ -1,8 +1,8 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "SIN DOBLE CONTEO" ✅ (FINAL)
+// REELS CONTAINER - VERSIÓN DE EMERGENCIA ✅ (Doble Conteo ELIMINADO)
 // 🛑 FIX CRÍTICO: Se ELIMINA updateMissionOptimistic en handleLike.
-// 🚀 SINCRONIZACIÓN GARANTIZADA: Se fuerza el refetch al completar o progresar misión.
+// ✅ Sincronización implementada y flujo de Like simplificado para evitar fallos.
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -38,7 +38,7 @@ const ReelsContainer = ({
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
     updateLocalBalance,
-    refetchMissionsInstant // <-- Función clave para sincronización inmediata
+    refetchMissionsInstant // <-- Aseguramos que se extraiga para evitar errores
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -76,8 +76,8 @@ const ReelsContainer = ({
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
   const isInitialMount = useRef(true);
-  hasPlayedInitial.current = false;
-  lastNavigationIndex.current = -1;
+  const hasPlayedInitial = useRef(false);
+  const lastNavigationIndex = useRef(-1);
 
   // Helper de notificación
   const showPointsNotification = (message, videoId, type = 'success') => {
