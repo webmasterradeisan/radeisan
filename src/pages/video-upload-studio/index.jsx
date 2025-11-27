@@ -416,8 +416,8 @@ const useUserVideos = () => {
 const VideoUploadStudio = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  // ✅ NUEVO: Obtener 'triggerAnimation' de 'usePoints', Y notifyMissionComplete + updateLocalBalance
-  const { triggerAnimation, notifyMissionComplete, updateLocalBalance } = usePoints();
+  // ✅ CORRECCIÓN 1: Desestructurar la función de revalidación instantánea
+  const { triggerAnimation, notifyMissionComplete, updateLocalBalance, refetchMissionsInstant } = usePoints();
   const { uploadVideo, uploadProgress, isUploading, uploadError, uploadSpeed, estimatedTime, detectionResult } = useVideoUpload();
   const { recentVideos, loading: recentLoading } = useUserVideos();
 
@@ -648,7 +648,8 @@ const VideoUploadStudio = () => {
 
             // 2. Disparar Modal si es misión completa ('success')
             if (missionResult.result === 'success') {
-                notifyMissionComplete(earned); 
+                // ✅ LLAMAR CON MENSAJE DE BACKEND PARA MEJOR UX
+                notifyMissionComplete(earned, missionResult.message); 
             } else {
                 // 3. Notificación de progreso
                 triggerAnimation(earned, 'earn', 'free'); 
@@ -660,8 +661,13 @@ const VideoUploadStudio = () => {
              triggerAnimation(0, 'earn', 'free');
              console.log('Notificación de Progreso de Misión (sin puntos inmediatos)');
         }
+        
+        // ✅ CORRECCIÓN 2: FORZAR RECARGA DEL DASHBOARD AL FINAL DE LA MISIÓN
+        if (typeof refetchMissionsInstant === 'function' && (missionResult?.result === 'success' || missionResult?.points_earned > 0)) {
+            refetchMissionsInstant();
+        }
         // ============================================================
-        // ✅ FIN DE LA LÓGICA DE NOTIFICACIÓN
+        // ✅ FIN DE LA LÓGICA DE NOTIFICACIÓN Y REVALIDACIÓN
         // ============================================================
 
       } else {
