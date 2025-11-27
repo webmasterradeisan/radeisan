@@ -1,7 +1,9 @@
 // src/contexts/PointsContext.jsx
 // ============================================================================
-// POINTS CONTEXT - SOLUCIÓN FINAL ANTI-DOBLE REFRESCO 🛑
-// ✅ Lógica de bandera de silenciamiento de Realtime simplificada y más estricta.
+// POINTS CONTEXT - VERSIÓN SIN DOBLE CONTEO ✅
+// ✅ Fix: El Realtime NO suma, solo refresca desde la DB (fuente única de verdad)
+// ✅ Fix: updateLocalBalance activo para feedback inmediato
+// ✅ Fix: Al recargar página, siempre se obtiene el valor real de la DB
 // ============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -40,9 +42,7 @@ export const PointsProvider = ({ children }) => {
 
   const mountedRef = useRef(true);
   const animationTimeoutRef = useRef(null);
-  
-  // 🛑 Bandera para ignorar la siguiente actualización de Realtime
-  const ignoreRealtimeTimeoutRef = useRef(null); 
+  const isUpdatingLocally = useRef(false); // 🔥 NUEVO: Flag para evitar conflictos
   
   // --- CARGA DE DATOS ---
   const loadAllData = useCallback(async (forceLoadingSpinner = false) => {
@@ -58,11 +58,14 @@ export const PointsProvider = ({ children }) => {
       ]);
 
       if (mountedRef.current) {
-        setPoints({
-          total: pointsData?.total || 0,
-          free: pointsData?.free || 0,
-          premium: pointsData?.premium || 0
-        });
+        // 🔥 CRÍTICO: Solo actualizar si NO estamos en medio de una actualización local
+        if (!isUpdatingLocally.current) {
+          setPoints({
+            total: pointsData?.total || 0,
+            free: pointsData?.free || 0,
+            premium: pointsData?.premium || 0
+          });
+        }
 
         if (missionsData.success) setMissions(missionsData.missions);
         if (statsData.success) setPointsEarnedToday(statsData.stats?.points_today || 0);
@@ -75,47 +78,25 @@ export const PointsProvider = ({ children }) => {
     }
   }, [user]);
 
-  // ✅ FUNCIÓN: Revalida misiones y puntos inmediatamente, silenciando el Realtime
-  const refetchMissionsInstant = useCallback(() => {
-    console.log("⚡ Forzando sincronización instantánea de misiones...");
-    
-    // 🛑 Lógica estricta de silenciamiento: Establecemos un temporizador para ignorar cualquier Realtime
-    // que llegue dentro de los próximos 2 segundos (más largo que el debounce de 1.5s).
-    if (ignoreRealtimeTimeoutRef.current) clearTimeout(ignoreRealtimeTimeoutRef.current);
-    
-    // La bandera es simplemente la existencia de este timeout
-    ignoreRealtimeTimeoutRef.current = setTimeout(() => {
-        ignoreRealtimeTimeoutRef.current = null;
-        console.log("▶️ Realtime listo para recibir nuevas actualizaciones.");
-    }, 2000); // 2000ms > 1500ms (Debounce)
-
-    loadAllData(false); 
-  }, [loadAllData]);
-  
-
-  // --- RADAR REAL-TIME CON FRENO (DEBOUNCE) ---
+  // --- RADAR REAL-TIME CON PROTECCIÓN ANTI-CONFLICTO ---
   useEffect(() => {
     if (!user) return;
 
     let timeoutId;
 
     const handleRealtimeUpdate = () => {
-      // 1. Aplicamos el debounce (1.5s)
+      // 🔥 Si estamos actualizando localmente, ignorar el evento de Realtime
+      if (isUpdatingLocally.current) {
+        console.log("⚠️ Ignorando actualización Realtime (hay actualización local en progreso)");
+        return;
+      }
+      
       if (timeoutId) clearTimeout(timeoutId);
       
       timeoutId = setTimeout(() => {
-        // 2. Comprobación Anti-Doble Refresco 🛑
-        // Si el timeout para ignorar está activo, significa que la actualización fue forzada.
-        if (ignoreRealtimeTimeoutRef.current) {
-          console.log("⏸️ Realtime ignorado, la actualización ya fue forzada.");
-          // NO LLAMAMOS A loadAllData(). El temporizador se encargará de limpiar la bandera.
-          return;
-        }
-
-        // Si llegamos aquí, fue una actualización genuina o no forzada.
         console.log("🔄 Sincronizando datos con la Base de Datos (Realtime)...");
         loadAllData(false);
-      }, 1500); // Debounce time
+      }, 1500); 
     };
 
     const channel = supabase.channel('points_ecosystem_updates')
@@ -130,8 +111,6 @@ export const PointsProvider = ({ children }) => {
     return () => { 
       supabase.removeChannel(channel);
       if (timeoutId) clearTimeout(timeoutId);
-      // Limpiamos el timeout de ignorado en el cleanup general del efecto
-      if (ignoreRealtimeTimeoutRef.current) clearTimeout(ignoreRealtimeTimeoutRef.current);
     };
   }, [user, loadAllData]);
 
@@ -148,9 +127,6 @@ export const PointsProvider = ({ children }) => {
   const notifyMissionComplete = (earnedPoints, missionMessage) => {
     console.log("🚀 Orden recibida: Mostrar Modal (+ " + earnedPoints + ")");
     setMissionSuccessData({ show: true, points: earnedPoints, message: missionMessage });
-    
-    // ✅ CORRECCIÓN: Al completar la misión, disparamos la revalidación instantánea
-    refetchMissionsInstant(); 
   };
 
   const handleCloseMissionModal = () => {
@@ -182,9 +158,13 @@ export const PointsProvider = ({ children }) => {
     }));
   }, []);
 
-  // --- ACTUALIZACIÓN VISUAL INMEDIATA ---
+  // --- ACTUALIZACIÓN VISUAL INMEDIATA (CON PROTECCIÓN) ---
   const updateLocalBalance = useCallback((amount) => {
     console.log(`💰 Balance local actualizado: +${amount}`);
+    
+    // 🔥 ACTIVAR FLAG: Estamos actualizando localmente
+    isUpdatingLocally.current = true;
+    
     setPoints(prev => ({
       ...prev,
       total: (prev.total || 0) + amount,
@@ -192,6 +172,12 @@ export const PointsProvider = ({ children }) => {
     }));
     setPointsEarnedToday(prev => (prev || 0) + amount);
     triggerAnimation(amount, 'earn', 'free');
+    
+    // 🔥 DESACTIVAR FLAG después de 3 segundos (suficiente para que Realtime no interfiera)
+    setTimeout(() => {
+      isUpdatingLocally.current = false;
+      console.log("✅ Flag de actualización local desactivado");
+    }, 3000);
   }, [triggerAnimation]);
 
   // Inicialización
@@ -218,10 +204,7 @@ export const PointsProvider = ({ children }) => {
     updateLocalBalance,
     notifyMissionComplete,
     
-    // ✅ EXPORTAR LA FUNCIÓN DE REVALIDACIÓN INSTANTÁNEA
-    refetchMissionsInstant, 
-
-    // ✅ EXPORTAMOS ESTO PARA MissionNotificationContainer.jsx
+    // EXPORTAMOS ESTO PARA MissionNotificationContainer.jsx
     missionSuccessData,      
     handleCloseMissionModal  
   };
@@ -229,10 +212,6 @@ export const PointsProvider = ({ children }) => {
   return (
     <PointsContext.Provider value={value}>
       {children}
-      
-      {/* 🚫 YA NO RENDERIZAMOS EL MODAL AQUÍ */}
-      {/* El trabajo visual ahora lo hace Routes.jsx -> MissionNotificationContainer */}
-      
     </PointsContext.Provider>
   );
 };
