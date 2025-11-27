@@ -1,9 +1,10 @@
 // src/pages/video-feed-dashboard/components/ReelsContainer.jsx
 // ============================================================================
-// REELS CONTAINER - VERSIÓN "OPTIMISTA & SILENCIOSA" 🚀
-// ✅ FIX UI: El botón Like cambia de color AL INSTANTE (Optimistic UI).
-// ✅ FIX ERROR: Los errores de duplicado se ignoran silenciosamente (no más "Error de conexión").
-// ✅ SINCRONIZACIÓN: Mantiene refetchMissionsInstant().
+// REELS CONTAINER - VERSIÓN CORREGIDA Y OPTIMIZADA 🚀
+// ✅ FIX CRÍTICO: Manejo silencioso de errores de duplicado (23505)
+// ✅ FIX CRÍTICO: Eliminación de "Error de conexión" falso
+// ✅ UI OPTIMISTA: Cambios visuales instantáneos
+// ✅ SINCRONIZACIÓN: Actualización automática del dashboard
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -286,19 +287,16 @@ const ReelsContainer = ({
   }, [navigateNext, navigatePrevious, handlePlayPause, showCommentsModal]);
 
   // ==========================================================================
-  // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
+  // 🔥 MANEJADOR DE LIKES - VERSIÓN CORREGIDA Y BLINDADA
   // ==========================================================================
-
-  // 🔥 LÓGICA ACTUALIZADA: Optimistic UI + Manejo Silencioso de Errores
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
-    
-    const snapshot = missions.map(m => ({ ...m })); 
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
       
+      // Verificar que no sea su propio video
       const targetVideo = videos.find(v => v.id === videoId);
       if (targetVideo && targetVideo.creator?.id === user.id) {
           showPointsNotification('No puedes dar like a tus propios videos', videoId, 'restriction');
@@ -309,85 +307,174 @@ const ReelsContainer = ({
       const newLiked = new Set(likedVideos);
 
       if (isLiked) {
-          // --- UNLIKE ---
+          // ========== UNLIKE ==========
           newLiked.delete(videoId);
           setLikedVideos(newLiked); // ⚡ UPDATE VISUAL INMEDIATO
-          setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
+          setVideoCounters(p => ({ 
+              ...p, 
+              [videoId]: { 
+                  ...p[videoId], 
+                  likes: Math.max(0, (p[videoId]?.likes||0)-1)
+              }
+          }));
           
           // Llamada DB
-          const { error } = await supabase.from('video_likes').delete().eq('video_id', videoId).eq('user_id', user.id); 
+          const { error: unlikeError } = await supabase
+              .from('video_likes')
+              .delete()
+              .eq('video_id', videoId)
+              .eq('user_id', user.id); 
           
-          if (error) {
-              // Revertir si falla (opcional, a veces es mejor ignorar en unlike)
-              console.error("Error unlike:", error);
+          if (unlikeError) {
+              console.error("Error unlike:", unlikeError);
+              // En unlike, generalmente no revertimos la UI
           } else {
               showPointsNotification('Like removido', videoId, 'info'); 
-              if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
+              if (typeof refetchMissionsInstant === 'function') {
+                  refetchMissionsInstant();
+              }
           }
 
       } else {
-          // --- LIKE ---
+          // ========== LIKE ==========
           newLiked.add(videoId);
-          setLikedVideos(newLiked); // ⚡ UPDATE VISUAL INMEDIATO (Botón rojo ya)
-          setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: (p[videoId]?.likes||0)+1}})); // +1 Inmediato
-          setDislikedVideos(p => { const n = new Set(p); n.delete(videoId); return n; });
+          setLikedVideos(newLiked); // ⚡ UPDATE VISUAL INMEDIATO (Botón rojo YA)
           
-          // INSERCIÓN DB
-          const { error: likeInsertError } = await supabase.from('video_likes').insert({ video_id: videoId, user_id: user.id });
+          // Optimistic UI: Incrementar contador inmediatamente
+          setVideoCounters(p => ({ 
+              ...p, 
+              [videoId]: { 
+                  ...p[videoId], 
+                  likes: (p[videoId]?.likes||0)+1
+              }
+          }));
           
-          // MANEJO DE ERROR "DUPLICATE KEY" (23505)
+          // Remover dislike si existe
+          setDislikedVideos(p => { 
+              const n = new Set(p); 
+              n.delete(videoId); 
+              return n; 
+          });
+          
+          // ========== INSERCIÓN EN BASE DE DATOS ==========
+          const { error: likeInsertError } = await supabase
+              .from('video_likes')
+              .insert({ 
+                  video_id: videoId, 
+                  user_id: user.id 
+              });
+          
+          // ========== MANEJO INTELIGENTE DE ERRORES ==========
           if (likeInsertError) {
-             // Si el error es "Ya existe", asumimos éxito (el usuario dio doble clic rápido)
-             if (likeInsertError.code === '23505' || likeInsertError.message?.includes('unique')) {
-                 // No hacemos nada, dejamos el botón rojo.
-             } else {
-                 // Error real -> Revertimos la UI
-                 newLiked.delete(videoId); 
-                 setLikedVideos(newLiked); 
-                 setVideoCounters(p => ({ ...p, [videoId]: { ...p[videoId], likes: Math.max(0, (p[videoId]?.likes||0)-1)}}));
-                 showPointsNotification(`Error: ${likeInsertError.message}`, videoId, 'error');
+             // 🔥 CASO 1: Error de Duplicado (23505 o 'unique')
+             // Este es el caso donde el usuario dio doble clic o refrescó
+             // NO es un error real - simplemente ya existe el like
+             if (likeInsertError.code === '23505' || 
+                 likeInsertError.message?.toLowerCase().includes('duplicate') ||
+                 likeInsertError.message?.toLowerCase().includes('unique')) {
+                 
+                 // ✅ Ignoramos el error silenciosamente
+                 // El botón ya está rojo, el contador ya subió
+                 // Todo está bien desde la perspectiva del usuario
+                 console.log('[INFO] Like ya existía, operación idempotente');
+                 
+                 // Sincronizamos el dashboard por si acaso
+                 if (typeof refetchMissionsInstant === 'function') {
+                     refetchMissionsInstant();
+                 }
+                 
+                 // Salimos sin mostrar error
                  return;
              }
+             
+             // 🔥 CASO 2: Error Real (red caída, permisos, etc)
+             // Solo en este caso revertimos la UI y mostramos error
+             console.error('[ERROR] Like insert failed:', likeInsertError);
+             
+             // Revertir UI
+             newLiked.delete(videoId); 
+             setLikedVideos(newLiked); 
+             setVideoCounters(p => ({ 
+                 ...p, 
+                 [videoId]: { 
+                     ...p[videoId], 
+                     likes: Math.max(0, (p[videoId]?.likes||0)-1)
+                 }
+             }));
+             
+             // Mostrar error al usuario
+             showPointsNotification('Error al dar like. Intenta de nuevo', videoId, 'error');
+             return;
           }
 
-          // Si llegamos aquí, el Like está en la DB (o ya estaba). Procesamos misión.
+          // ========== LIKE EXITOSO - PROCESAR MISIÓN ==========
+          // Solo intentamos procesar puntos si NO hemos recompensado este video antes
           if (!pointsRewardedIds.has(videoId)) {
-              const res = await missionsService.trackGiveLike('reel', videoId);
-              
-              if (res.result === 'success' && res.points_earned > 0) {
-                  const earned = Number(res.points_earned);
-                  if (updateLocalBalance) updateLocalBalance(earned);
+              try {
+                  const res = await missionsService.trackGiveLike('reel', videoId);
                   
-                  if (notifyMissionComplete) {
-                      notifyMissionComplete(earned, res.message); 
-                  } else {
-                      showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
+                  if (res.result === 'success' && res.points_earned > 0) {
+                      const earned = Number(res.points_earned);
+                      
+                      // Actualizar balance local
+                      if (updateLocalBalance) {
+                          updateLocalBalance(earned);
+                      }
+                      
+                      // Notificar al usuario
+                      if (notifyMissionComplete) {
+                          notifyMissionComplete(earned, res.message); 
+                      } else {
+                          showPointsNotification(`🎉 ¡Misión Cumplida! +${earned} puntos`, videoId, 'success');
+                      }
+                      
+                      // Marcar como recompensado
+                      setPointsRewardedIds(p => new Set([...p, videoId]));
+
+                      // Sincronizar dashboard
+                      if (typeof refetchMissionsInstant === 'function') {
+                          refetchMissionsInstant();
+                      }
+
+                  } else if (res.result === 'progress_updated' || res.result === 'registered') {
+                      // Like registrado pero sin completar misión aún
+                      setPointsRewardedIds(p => new Set([...p, videoId]));
+                      showPointsNotification('✓ Like registrado', videoId, 'info');
+
+                      // Sincronizar para actualizar progreso
+                      if (typeof refetchMissionsInstant === 'function') {
+                          refetchMissionsInstant();
+                      }
+
+                  } else if (res.result === 'already_paid') {
+                       // Ya se pagó antes, silencioso
+                       console.log('[INFO] Puntos ya pagados para este video');
                   }
-                  setPointsRewardedIds(p => new Set([...p, videoId]));
-
-                  if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
-
-              } else if (res.result === 'progress_updated' || res.result === 'registered') {
-                  setPointsRewardedIds(p => new Set([...p, videoId]));
-                  showPointsNotification('✓ Like registrado', videoId, 'info');
-
-                  if (typeof refetchMissionsInstant === 'function') refetchMissionsInstant();
-
-              } else if (res.result === 'already_paid') {
-                   // Silencioso
+              } catch (missionError) {
+                  // Error al procesar misión (pero el like SÍ se guardó)
+                  console.error('[ERROR] Mission processing failed:', missionError);
+                  // No revertimos el like, solo notificamos
+                  showPointsNotification('Like guardado (error al procesar puntos)', videoId, 'info');
               }
           }
       }
     } catch (err) { 
-        // Catch genérico de seguridad
-        console.error('Error handleLike:', err);
+        // ========== CATCH DE SEGURIDAD FINAL ==========
+        console.error('[CRITICAL] handleLike error:', err);
+        
         // Solo mostramos error si NO es un duplicado que se coló
-        if (!err.message?.includes('unique') && err.code !== '23505') {
-            // Revertimos UI en caso de error fatal
+        if (!err.message?.toLowerCase().includes('unique') && 
+            !err.message?.toLowerCase().includes('duplicate') &&
+            err.code !== '23505') {
+            
+            // Revertimos UI solo en caso de error fatal desconocido
             const rbLiked = new Set(likedVideos);
-            if (likedVideos.has(videoId)) rbLiked.delete(videoId);
+            if (likedVideos.has(videoId)) {
+                rbLiked.delete(videoId);
+            }
             setLikedVideos(rbLiked);
-            showPointsNotification('Error de conexión', videoId, 'error');
+            
+            showPointsNotification('Error inesperado. Intenta de nuevo', videoId, 'error');
         }
     }
   };
@@ -458,7 +545,9 @@ const ReelsContainer = ({
       setShowGiftModal(true);
   };
 
-  // ... (LÓGICA DE COMENTARIOS SE MANTIENE IGUAL)
+  // ==========================================================================
+  // LÓGICA DE COMENTARIOS
+  // ==========================================================================
   const loadComments = async (videoId, retryCount = 0) => {
     try {
       let { data, error } = await supabase.from('video_comments').select('id, video_id, user_id, content, parent_comment_id, created_at, updated_at').eq('video_id', videoId).order('created_at', { ascending: false });
