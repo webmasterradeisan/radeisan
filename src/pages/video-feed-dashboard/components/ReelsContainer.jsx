@@ -64,7 +64,7 @@ const ReelsContainer = ({
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [showReplies, setShowReplies] = useState({});
-  const [currentUser, setCurrentUser] = null; // No need for useState for currentUser if loading data globally
+  const [currentUser, setCurrentUser] = useState(null);
   
   const [showGiftModal, setShowGiftModal] = useState(false); 
   const [videoWatchedIds, setVideoWatchedIds] = useState(new Set());
@@ -117,7 +117,7 @@ const ReelsContainer = ({
     } else { 
       if (videos.length <= 12 && currentIndex === 0) setCurrentIndex(correctIndex);
     }
-  }, [selectedReelId, videos, getInitialReelIndex]);
+  }, [selectedReelId, videos, getInitialReelIndex, currentIndex]);
 
   // Cargar datos del usuario
   useEffect(() => {
@@ -126,8 +126,7 @@ const ReelsContainer = ({
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { data: p } = await supabase.from('user_profiles').select('id, full_name, avatar_url, username').eq('id', user.id).single();
-            // Usamos useState para currentUser, restaurando la definición original si es necesario:
-            // setCurrentUser(p || { id: user.id, name: 'Usuario', avatar: null, username: 'usuario' });
+            setCurrentUser(p || { id: user.id, name: 'Usuario', avatar: null, username: 'usuario' });
             
             const { data: l } = await supabase.from('video_likes').select('video_id').eq('user_id', user.id);
             if (l) setLikedVideos(new Set(l.map(x => x.video_id)));
@@ -141,7 +140,7 @@ const ReelsContainer = ({
       } catch (e) { console.error(e); }
     };
     loadData();
-  }, [videos.length === 0]);
+  }, []);
 
   // Inicializar contadores
   useEffect(() => {
@@ -292,12 +291,9 @@ const ReelsContainer = ({
   // MANEJADORES DE ACCIONES (LIKES, FOLLOW, ETC.)
   // ==========================================================================
 
-  // 🔥 LÓGICA ACTUALIZADA: COBERTURA TOTAL DE PUNTOS
+  // 🔥 LÓGICA ACTUALIZADA: SIN DOBLE CONTEO ✅
   const handleLike = async (videoId, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
-    
-    // Eliminamos el snapshot de misiones que solo usamos para rollback en caso de error
-    // const snapshot = missions.map(m => ({ ...m })); 
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -347,15 +343,16 @@ const ReelsContainer = ({
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
               
-              // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
-              if (res.points_earned > 0) {
-                  const earned = Number(res.points_earned);
-                  if (updateLocalBalance) updateLocalBalance(earned);
-              }
+              // ✅ FIX: ELIMINADA LA PRIMERA LLAMADA DUPLICADA
+              // Solo actualizamos el balance UNA VEZ cuando la misión se completa
 
               if (res.result === 'success' && res.points_earned > 0) {
                   // CASO: MISIÓN CUMPLIDA
                   const earned = Number(res.points_earned);
+                  
+                  // ✅ ÚNICA actualización del balance visual
+                  if (updateLocalBalance) updateLocalBalance(earned);
+                  
                   if (notifyMissionComplete) {
                       notifyMissionComplete(earned); 
                   } else {
@@ -363,7 +360,6 @@ const ReelsContainer = ({
                   }
 
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO
 
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA (Refresca el progreso)
                   if (typeof refetchMissionsInstant === 'function') {
@@ -373,7 +369,6 @@ const ReelsContainer = ({
               } else if (res.result === 'progress_updated' || res.result === 'registered') {
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
-                  // updateMissionOptimistic('give_like', 1); <-- ELIMINADO
                   showPointsNotification('✓ Like registrado', videoId, 'info');
 
                   // ✅ SINCRONIZACIÓN INSTANTÁNEA (Refresca el progreso)
@@ -382,17 +377,13 @@ const ReelsContainer = ({
                   }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
-                  // rollbackMission(snapshot); 
                   showPointsNotification('Ya sumaste puntos por esto hoy', videoId, 'warning'); 
-              } else {
-                  // rollbackMission(snapshot); 
               }
           }
           setLikedVideos(newLiked);
       }
     } catch (err) { 
         console.error('Error like:', err);
-        // rollbackMission(snapshot); 
         showPointsNotification('Error de conexión', videoId, 'error');
     }
   };
