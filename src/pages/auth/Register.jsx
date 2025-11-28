@@ -1,54 +1,73 @@
 // src/pages/auth/Register.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import '../../styles/Auth.css';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import Icon from '../../components/AppIcon';
 
 const Register = () => {
   const navigate = useNavigate();
+  
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    accountType: 'personal',
+    acceptTerms: false
   });
-
-  const [errors, setErrors] = useState({});
+  
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Validación de formulario
+  const accountTypeOptions = [
+    { value: 'personal', label: 'Cuenta Personal' },
+    { value: 'business', label: 'Cuenta de Negocio' }
+  ];
+
+  useEffect(() => {
+    // Check if user is already authenticated
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        navigate('/dashboard', { replace: true });
+      }
+    };
+    checkUser();
+  }, [navigate]);
+
   const validateForm = () => {
     const newErrors = {};
 
-    // Validar nombre
+    // Name validation
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre es requerido';
     } else if (formData.name.trim().length < 2) {
       newErrors.name = 'El nombre debe tener al menos 2 caracteres';
     }
 
-    // Validar username
+    // Username validation
     if (!formData.username.trim()) {
       newErrors.username = 'El nombre de usuario es requerido';
-    } else if (formData.username.length < 3) {
+    } else if (formData.username.trim().length < 3) {
       newErrors.username = 'El nombre de usuario debe tener al menos 3 caracteres';
-    } else if (formData.username.length > 30) {
-      newErrors.username = 'El nombre de usuario no puede tener más de 30 caracteres';
-    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username.trim())) {
       newErrors.username = 'El nombre de usuario solo puede contener letras, números y guiones bajos';
     }
 
-    // Validar email
-    if (!formData.email.trim()) {
+    // Email validation
+    if (!formData.email) {
       newErrors.email = 'El email es requerido';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Email inválido';
+      newErrors.email = 'Por favor ingresa un email válido';
     }
 
-    // Validar contraseña
+    // Password validation
     if (!formData.password) {
       newErrors.password = 'La contraseña es requerida';
     } else if (formData.password.length < 8) {
@@ -57,18 +76,44 @@ const Register = () => {
       newErrors.password = 'La contraseña debe contener al menos una mayúscula, una minúscula y un número';
     }
 
-    // Validar confirmación de contraseña
+    // Confirm password validation
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Debes confirmar tu contraseña';
+      newErrors.confirmPassword = 'Confirma tu contraseña';
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    }
+
+    // Terms validation
+    if (!formData.acceptTerms) {
+      newErrors.acceptTerms = 'Debes aceptar los términos y condiciones';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle form submission
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  // Handle checkbox change specifically
+  const handleCheckboxChange = (e) => {
+    const { checked } = e.target;
+    handleInputChange('acceptTerms', checked);
+  };
+
+  // ✅ VERSIÓN SIMPLIFICADA - Sin verificación de username ni creación manual de perfil
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -83,289 +128,294 @@ const Register = () => {
       console.log('🚀 Iniciando registro para:', formData.email);
 
       // ✅ SOLO REGISTRAR - El trigger handle_new_user() hace TODO el resto
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
             full_name: formData.name.trim(),
             username: formData.username.toLowerCase().trim(),
-            account_type: 'personal'
+            account_type: formData.accountType
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
       });
 
-      // Manejo de errores de autenticación
-      if (authError) {
-        console.error('❌ Error en registro:', authError);
+      if (error) {
+        console.error('❌ Error en registro:', error);
         
-        if (authError.message.includes('User already registered')) {
+        if (error.message.includes('User already registered')) {
           setErrors({
             email: 'Este email ya está registrado. Intenta iniciar sesión.'
           });
-        } else if (authError.message.includes('already exists')) {
-          setErrors({
-            email: 'Este email ya está en uso.'
-          });
         } else {
           setErrors({
-            general: authError.message || 'Error al crear la cuenta'
+            general: error.message
           });
         }
         setIsLoading(false);
         return;
       }
 
-      if (!authData?.user) {
-        console.error('❌ No se recibió datos del usuario');
-        setErrors({
-          general: 'No se pudo crear la cuenta. Intenta de nuevo.'
-        });
-        setIsLoading(false);
-        return;
+      if (data.user) {
+        console.log('✅ Usuario registrado exitosamente:', data.user.email);
+        console.log('✅ ID del usuario:', data.user.id);
+
+        // ✅ Enviar email de bienvenida (NO BLOQUEANTE - en segundo plano)
+        supabase.functions
+          .invoke('send-welcome-email', {
+            body: {
+              email: formData.email,
+              name: formData.name.trim(),
+              username: formData.username.toLowerCase().trim()
+            }
+          })
+          .then(({ error }) => {
+            if (error) {
+              console.warn('⚠️ Email de bienvenida no enviado:', error.message);
+            } else {
+              console.log('✅ Email de bienvenida enviado correctamente');
+            }
+          })
+          .catch(err => {
+            console.warn('⚠️ Error al enviar email de bienvenida:', err.message);
+          });
+
+        // ✅ Redirigir inmediatamente al dashboard
+        console.log('✅ Redirigiendo al dashboard...');
+        navigate('/dashboard', { replace: true });
       }
-
-      console.log('✅ Usuario registrado exitosamente:', authData.user.email);
-      console.log('✅ ID del usuario:', authData.user.id);
-
-      // ✅ Enviar email de bienvenida (NO BLOQUEANTE - en segundo plano)
-      supabase.functions
-        .invoke('send-welcome-email', {
-          body: {
-            email: formData.email,
-            name: formData.name.trim(),
-            username: formData.username.toLowerCase().trim()
-          }
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.warn('⚠️ Email de bienvenida no enviado:', error.message);
-          } else {
-            console.log('✅ Email de bienvenida enviado correctamente');
-          }
-        })
-        .catch(err => {
-          console.warn('⚠️ Error al enviar email de bienvenida:', err.message);
-        });
-
-      // ✅ Redirigir inmediatamente al dashboard
-      console.log('✅ Redirigiendo al dashboard...');
-      navigate('/dashboard', { replace: true });
       
     } catch (error) {
       console.error('❌ Error inesperado en registro:', error);
       setErrors({
-        general: 'Error inesperado. Por favor intenta de nuevo.'
+        general: 'Error al crear la cuenta. Por favor intenta de nuevo.'
       });
       setIsLoading(false);
     }
   };
 
-  // Handle input changes
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const handleSocialRegister = async (provider) => {
+    setIsLoading(true);
     
-    // Limpiar error del campo cuando el usuario empieza a escribir
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+
+      if (error) {
+        setErrors({
+          general: `Error al registrarse con ${provider}: ${error.message}`
+        });
+      }
+      
+    } catch (error) {
+      setErrors({
+        general: `Error al registrarse con ${provider}`
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h1 className="auth-title">Crear Cuenta</h1>
-          <p className="auth-subtitle">Únete a nuestra comunidad</p>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="max-w-md w-full">
+        {/* Logo and Header */}
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-block">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
+                <Icon name="logo" className="w-10 h-10 text-white" />
+              </div>
+            </div>
+          </Link>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Crear cuenta</h1>
+          <p className="text-muted-foreground">
+            Únete a nuestra comunidad
+          </p>
         </div>
 
+        {/* Social Register Buttons */}
+        <div className="space-y-3 mb-6">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => handleSocialRegister('google')}
+            disabled={isLoading}
+          >
+            <Icon name="google" className="w-5 h-5 mr-2" />
+            Continuar con Google
+          </Button>
+          
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => handleSocialRegister('facebook')}
+            disabled={isLoading}
+          >
+            <Icon name="facebook" className="w-5 h-5 mr-2" />
+            Continuar con Facebook
+          </Button>
+        </div>
+
+        <div className="relative mb-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-background text-muted-foreground">O regístrate con email</span>
+          </div>
+        </div>
+
+        {/* Error Message */}
         {errors.general && (
-          <div className="error-banner">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <span>{errors.general}</span>
+          <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
+            <p className="text-sm">{errors.general}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          {/* Nombre Completo */}
-          <div className="form-group">
-            <label htmlFor="name" className="form-label">
-              Nombre Completo
-            </label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              value={formData.name}
-              onChange={handleInputChange}
-              className={`form-input ${errors.name ? 'input-error' : ''}`}
-              placeholder="Tu nombre completo"
-              disabled={isLoading}
-            />
-            {errors.name && (
-              <p className="error-message">{errors.name}</p>
-            )}
-          </div>
+        {/* Registration Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Account Type */}
+          <Select
+            label="Tipo de cuenta"
+            value={formData.accountType}
+            onChange={(value) => handleInputChange('accountType', value)}
+            options={accountTypeOptions}
+            disabled={isLoading}
+          />
+
+          {/* Name */}
+          <Input
+            label="Nombre completo"
+            type="text"
+            value={formData.name}
+            onChange={(value) => handleInputChange('name', value)}
+            error={errors.name}
+            placeholder="Tu nombre completo"
+            disabled={isLoading}
+            required
+          />
 
           {/* Username */}
-          <div className="form-group">
-            <label htmlFor="username" className="form-label">
-              Nombre de Usuario
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              value={formData.username}
-              onChange={handleInputChange}
-              className={`form-input ${errors.username ? 'input-error' : ''}`}
-              placeholder="usuario123"
-              disabled={isLoading}
-            />
-            {errors.username && (
-              <p className="error-message">{errors.username}</p>
-            )}
-          </div>
+          <Input
+            label="Nombre de usuario"
+            type="text"
+            value={formData.username}
+            onChange={(value) => handleInputChange('username', value)}
+            error={errors.username}
+            placeholder="usuario123"
+            disabled={isLoading}
+            required
+          />
 
           {/* Email */}
-          <div className="form-group">
-            <label htmlFor="email" className="form-label">
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className={`form-input ${errors.email ? 'input-error' : ''}`}
-              placeholder="tu@email.com"
-              disabled={isLoading}
-            />
-            {errors.email && (
-              <p className="error-message">{errors.email}</p>
-            )}
-          </div>
+          <Input
+            label="Email"
+            type="email"
+            value={formData.email}
+            onChange={(value) => handleInputChange('email', value)}
+            error={errors.email}
+            placeholder="tu@email.com"
+            disabled={isLoading}
+            required
+          />
 
-          {/* Contraseña */}
-          <div className="form-group">
-            <label htmlFor="password" className="form-label">
-              Contraseña
-            </label>
-            <div className="password-input-wrapper">
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                value={formData.password}
-                onChange={handleInputChange}
-                className={`form-input ${errors.password ? 'input-error' : ''}`}
-                placeholder="Mínimo 8 caracteres"
-                disabled={isLoading}
-              />
+          {/* Password */}
+          <Input
+            label="Contraseña"
+            type={showPassword ? 'text' : 'password'}
+            value={formData.password}
+            onChange={(value) => handleInputChange('password', value)}
+            error={errors.password}
+            placeholder="Mínimo 8 caracteres"
+            disabled={isLoading}
+            required
+            icon={
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="password-toggle"
-                disabled={isLoading}
+                className="text-muted-foreground hover:text-foreground"
               >
-                {showPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                  </svg>
-                )}
+                <Icon name={showPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
               </button>
-            </div>
-            {errors.password && (
-              <p className="error-message">{errors.password}</p>
-            )}
-          </div>
+            }
+          />
 
-          {/* Confirmar Contraseña */}
-          <div className="form-group">
-            <label htmlFor="confirmPassword" className="form-label">
-              Confirmar Contraseña
-            </label>
-            <div className="password-input-wrapper">
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type={showConfirmPassword ? 'text' : 'password'}
-                value={formData.confirmPassword}
-                onChange={handleInputChange}
-                className={`form-input ${errors.confirmPassword ? 'input-error' : ''}`}
-                placeholder="Repite tu contraseña"
-                disabled={isLoading}
-              />
+          {/* Confirm Password */}
+          <Input
+            label="Confirmar contraseña"
+            type={showConfirmPassword ? 'text' : 'password'}
+            value={formData.confirmPassword}
+            onChange={(value) => handleInputChange('confirmPassword', value)}
+            error={errors.confirmPassword}
+            placeholder="Repite tu contraseña"
+            disabled={isLoading}
+            required
+            icon={
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="password-toggle"
-                disabled={isLoading}
+                className="text-muted-foreground hover:text-foreground"
               >
-                {showConfirmPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                  </svg>
-                )}
+                <Icon name={showConfirmPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
               </button>
+            }
+          />
+
+          {/* Terms and Conditions */}
+          <div className="flex items-start">
+            <div className="flex items-center h-5">
+              <input
+                id="acceptTerms"
+                type="checkbox"
+                checked={formData.acceptTerms}
+                onChange={handleCheckboxChange}
+                disabled={isLoading}
+                className="w-4 h-4 border border-input rounded bg-background focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              />
             </div>
-            {errors.confirmPassword && (
-              <p className="error-message">{errors.confirmPassword}</p>
-            )}
+            <div className="ml-3">
+              <label htmlFor="acceptTerms" className="text-sm text-foreground">
+                Acepto los{' '}
+                <Link to="/terms" className="text-primary hover:underline">
+                  términos y condiciones
+                </Link>
+                {' '}y la{' '}
+                <Link to="/privacy" className="text-primary hover:underline">
+                  política de privacidad
+                </Link>
+              </label>
+              {errors.acceptTerms && (
+                <p className="text-sm text-destructive mt-1">{errors.acceptTerms}</p>
+              )}
+            </div>
           </div>
 
           {/* Submit Button */}
-          <button
+          <Button
             type="submit"
-            className="submit-button"
+            className="w-full"
             disabled={isLoading}
+            loading={isLoading}
           >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Creando cuenta...</span>
-              </>
-            ) : (
-              'Crear Cuenta'
-            )}
-          </button>
+            {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
+          </Button>
         </form>
 
         {/* Login Link */}
-        <div className="auth-footer">
-          <p>
-            ¿Ya tienes cuenta?{' '}
-            <Link to="/login" className="auth-link">
-              Inicia Sesión
-            </Link>
-          </p>
-        </div>
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          ¿Ya tienes una cuenta?{' '}
+          <Link to="/login" className="text-primary hover:underline font-medium">
+            Inicia sesión
+          </Link>
+        </p>
       </div>
     </div>
   );
