@@ -153,15 +153,16 @@ const Register = () => {
         return;
       }
 
-      // Sign up the user (EXACTAMENTE como el original que funcionaba)
+      // Sign up the user (sin confirmación de email inmediata)
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
-            name: formData.name.trim(),
+            name: formData.name.trim(),  // ✅ Para compatibilidad con trigger existente
+            full_name: formData.name.trim(),  // ✅ Para la columna full_name
             username: formData.username.toLowerCase().trim(),
-            account_type: 'personal'
+            account_type: 'personal'  // ✅ Siempre personal por defecto
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
@@ -182,10 +183,55 @@ const Register = () => {
       }
 
       if (data.user) {
-        // ✅ Usuario registrado y autenticado automáticamente
         console.log('✅ Usuario registrado exitosamente:', data.user.email);
         
-        // Redirigir al dashboard inmediatamente (SIN esperar el email)
+        // Crear perfil manualmente por si el trigger falla
+        try {
+          const { error: profileError } = await supabase
+            .from('user_profiles')
+            .insert({
+              id: data.user.id,
+              email: data.user.email,
+              full_name: formData.name.trim(),
+              username: formData.username.toLowerCase().trim(),
+              points: 0,
+              is_business_account: false,
+              email_verified: false,
+              account_suspended: false
+            });
+
+          if (profileError) {
+            console.error('⚠️ Error al crear perfil (puede ser que el trigger ya lo creó):', profileError);
+            // No bloqueamos el registro si falla, el trigger podría haberlo creado
+          } else {
+            console.log('✅ Perfil creado manualmente');
+          }
+        } catch (profileError) {
+          console.error('⚠️ Error al crear perfil:', profileError);
+        }
+        
+        // Enviar email de bienvenida personalizado
+        try {
+          const { error: emailError } = await supabase.functions.invoke('send-welcome-email', {
+            body: {
+              email: formData.email,
+              name: formData.name.trim(),
+              username: formData.username.toLowerCase().trim()
+            }
+          });
+
+          if (emailError) {
+            console.error('⚠️ Error al enviar email de bienvenida:', emailError);
+            // No bloqueamos el registro si falla el email
+          } else {
+            console.log('✅ Email de bienvenida enviado exitosamente');
+          }
+        } catch (emailError) {
+          console.error('⚠️ Error al enviar email de bienvenida:', emailError);
+          // No bloqueamos el registro si falla el email
+        }
+
+        // Redirigir al dashboard inmediatamente
         navigate('/dashboard', { replace: true });
       }
       
