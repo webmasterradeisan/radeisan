@@ -4,6 +4,7 @@
 // ✅ FIX CRÍTICO: Claves alineadas con la Base de Datos (points_rules).
 // ✅ Incluye exportación de getMissionStats para evitar error de compilación.
 // ✅ AÑADIDO: Función resetDailyMissions para solucionar el error de compilación.
+// ✅ FIX PARÁMETROS RPC: p_reference_type en lugar de p_content_id (línea 239)
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -231,14 +232,13 @@ export async function trackMissionProgress(missionType, referenceType, reference
   const userId = userAuth.data.user.id;
 
   try {
-    // Se envían las claves corregidas (ej: 'give_comment')
+    // 🔥 FIX CRÍTICO: Usar p_reference_type en lugar de p_content_id
     const { data, error } = await supabase
       .rpc('track_mission_update', {
         p_user_id: userId,
         p_mission_type: missionType, 
-        p_content_id: referenceId, 
+        p_reference_type: referenceType,  // ✅ CORREGIDO: era p_content_id
         p_metadata: {
-            reference_type: referenceType,
             reference_id: referenceId,
             ...metadata
         }
@@ -451,13 +451,12 @@ export default {
   updateStreak,
   getStreakHistory,
   getMissionStats,
-  getTopMissions, // Exportamos esto también
+  getTopMissions,
   createMission,
   updateMission,
   deleteMission,
   toggleMissionActive,
   reorderMissions,
-  // ✅ EXPORTACIÓN DE LA FUNCIÓN AÑADIDA
   resetDailyMissions,
   getAvailableMissionIcons,
   getTimeUntilReset,
