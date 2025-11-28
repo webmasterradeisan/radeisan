@@ -39,7 +39,8 @@ const ReelsContainer = ({
     rollbackMission, 
     // 🔥 EXTRAEMOS LAS FUNCIONES CLAVE
     notifyMissionComplete,
-    updateLocalBalance 
+    updateLocalBalance,
+    refreshMissions  // 🔥 NUEVO: Para sincronizar después del like
   } = usePoints();
 
   const { success, error: notifyError, warning, info } = useNotification();
@@ -344,6 +345,11 @@ const ReelsContainer = ({
               // Llamada al servidor (Paga en DB)
               const res = await missionsService.trackGiveLike('reel', videoId);
               
+              // 🔥 REFRESCAR PROGRESO DESDE SERVIDOR
+              if (refreshMissions) {
+                await refreshMissions();
+              }
+              
               // 🔥 FIX: Si hay puntos ganados, ACTUALIZA SIEMPRE EL BALANCE VISUAL
               if (res.points_earned > 0) {
                   const earned = Number(res.points_earned);
@@ -366,7 +372,14 @@ const ReelsContainer = ({
                   // CASO: SOLO REGISTRO (Puntos normales)
                   setPointsRewardedIds(p => new Set([...p, videoId]));
                   updateMissionOptimistic('give_like', 1); 
-                  showPointsNotification('✓ Like registrado', videoId, 'info');
+                  
+                  // 🔥 MOSTRAR PROGRESO EXPLÍCITO
+                  const match = res.message?.match(/(\d+)\/(\d+)/);
+                  if (match) {
+                    showPointsNotification(`✓ Progreso: ${match[1]}/${match[2]}`, videoId, 'success');
+                  } else {
+                    showPointsNotification('✓ Like registrado', videoId, 'info');
+                  }
 
               } else if (res.result === 'already_paid' || res.result === 'already_completed') {
                   rollbackMission(snapshot); 
