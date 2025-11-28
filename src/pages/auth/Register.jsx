@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
 import Icon from '../../components/AppIcon';
 
 const Register = () => {
@@ -16,7 +15,7 @@ const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    accountType: 'personal',
+    // accountType: 'personal', // REMOVIDO
     acceptTerms: false
   });
   
@@ -25,10 +24,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const accountTypeOptions = [
-    { value: 'personal', label: 'Cuenta Personal' },
-    { value: 'business', label: 'Cuenta de Negocio' }
-  ];
+  // REMOVIDO: accountTypeOptions
 
   useEffect(() => {
     // Check if user is already authenticated
@@ -113,7 +109,7 @@ const Register = () => {
     handleInputChange('acceptTerms', checked);
   };
 
-  // ✅ HANDLESUBMIT CORREGIDO - Sin verificación de username ni creación manual de perfil
+  // ✅ HANDLESUBMIT CORREGIDO y SIMPLIFICADO
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -127,7 +123,7 @@ const Register = () => {
     try {
       console.log('🚀 Iniciando registro para:', formData.email);
 
-      // ✅ SOLO REGISTRAR - El trigger handle_new_user() hace TODO el resto
+      // ✅ SOLO REGISTRAR - Sin account_type en los metadatos
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -135,7 +131,7 @@ const Register = () => {
           data: {
             full_name: formData.name.trim(),
             username: formData.username.toLowerCase().trim(),
-            account_type: formData.accountType
+            // REMOVIDO: account_type
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
@@ -195,31 +191,7 @@ const Register = () => {
     }
   };
 
-  const handleSocialRegister = async (provider) => {
-    setIsLoading(true);
-    
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: provider,
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`
-        }
-      });
-
-      if (error) {
-        setErrors({
-          general: `Error al registrarse con ${provider}: ${error.message}`
-        });
-      }
-      
-    } catch (error) {
-      setErrors({
-        general: `Error al registrarse con ${provider}`
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // REMOVIDO: handleSocialRegister function
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -254,22 +226,8 @@ const Register = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Account Type */}
-            <div>
-              <Select
-                label="Tipo de Cuenta"
-                options={accountTypeOptions}
-                value={formData.accountType}
-                onChange={(value) => handleInputChange('accountType', value)}
-                required
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {formData.accountType === 'business' 
-                  ? 'Perfecta para empresas que quieren vender productos'
-                  : 'Ideal para crear y compartir contenido'
-                }
-              </p>
-            </div>
+            
+            {/* REMOVIDO: Account Type Select */}
 
             {/* Name Input */}
             <div>
@@ -442,38 +400,7 @@ const Register = () => {
             </Button>
           </form>
 
-          {/* Social Register */}
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-card text-muted-foreground">O regístrate con</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                onClick={() => handleSocialRegister('google')}
-                disabled={isLoading}
-                className="w-full"
-              >
-                <Icon name="Mail" size={16} className="mr-2" />
-                Google
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleSocialRegister('facebook')}
-                disabled={isLoading}
-                className="w-full"
-              >
-                <Icon name="Facebook" size={16} className="mr-2" />
-                Facebook
-              </Button>
-            </div>
-          </div>
+          {/* REMOVIDO: Social Register Section */}
         </div>
 
         {/* Login Link */}
