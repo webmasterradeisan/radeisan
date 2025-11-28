@@ -113,7 +113,7 @@ const Register = () => {
     handleInputChange('acceptTerms', checked);
   };
 
-  // ✅ VERSIÓN SIMPLIFICADA - Sin verificación de username ni creación manual de perfil
+  // ✅ HANDLESUBMIT CORREGIDO - Sin verificación de username ni creación manual de perfil
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -229,193 +229,265 @@ const Register = () => {
           <Link to="/" className="inline-block">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-                <Icon name="logo" className="w-10 h-10 text-white" />
+                <Icon name="Video" size={32} color="white" />
               </div>
             </div>
           </Link>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Crear cuenta</h1>
-          <p className="text-muted-foreground">
-            Únete a nuestra comunidad
+          <h1 className="text-3xl font-bold text-foreground">
+            Únete a Radeisan
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Crea tu cuenta y comienza a ganar puntos
           </p>
         </div>
 
-        {/* Social Register Buttons */}
-        <div className="space-y-3 mb-6">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => handleSocialRegister('google')}
-            disabled={isLoading}
-          >
-            <Icon name="google" className="w-5 h-5 mr-2" />
-            Continuar con Google
-          </Button>
-          
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => handleSocialRegister('facebook')}
-            disabled={isLoading}
-          >
-            <Icon name="facebook" className="w-5 h-5 mr-2" />
-            Continuar con Facebook
-          </Button>
-        </div>
+        {/* Register Form */}
+        <div className="bg-card rounded-lg shadow-elevation-2 p-6">
+          {/* General Error */}
+          {errors.general && (
+            <div className="mb-4 p-3 bg-error/10 border border-error/20 rounded-md">
+              <div className="flex items-center space-x-2">
+                <Icon name="AlertTriangle" size={16} className="text-error" />
+                <span className="text-sm text-error">{errors.general}</span>
+              </div>
+            </div>
+          )}
 
-        <div className="relative mb-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-background text-muted-foreground">O regístrate con email</span>
-          </div>
-        </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Account Type */}
+            <div>
+              <Select
+                label="Tipo de Cuenta"
+                options={accountTypeOptions}
+                value={formData.accountType}
+                onChange={(value) => handleInputChange('accountType', value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {formData.accountType === 'business' 
+                  ? 'Perfecta para empresas que quieren vender productos'
+                  : 'Ideal para crear y compartir contenido'
+                }
+              </p>
+            </div>
 
-        {/* Error Message */}
-        {errors.general && (
-          <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-            <p className="text-sm">{errors.general}</p>
-          </div>
-        )}
-
-        {/* Registration Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Account Type */}
-          <Select
-            label="Tipo de cuenta"
-            value={formData.accountType}
-            onChange={(value) => handleInputChange('accountType', value)}
-            options={accountTypeOptions}
-            disabled={isLoading}
-          />
-
-          {/* Name */}
-          <Input
-            label="Nombre completo"
-            type="text"
-            value={formData.name}
-            onChange={(value) => handleInputChange('name', value)}
-            error={errors.name}
-            placeholder="Tu nombre completo"
-            disabled={isLoading}
-            required
-          />
-
-          {/* Username */}
-          <Input
-            label="Nombre de usuario"
-            type="text"
-            value={formData.username}
-            onChange={(value) => handleInputChange('username', value)}
-            error={errors.username}
-            placeholder="usuario123"
-            disabled={isLoading}
-            required
-          />
-
-          {/* Email */}
-          <Input
-            label="Email"
-            type="email"
-            value={formData.email}
-            onChange={(value) => handleInputChange('email', value)}
-            error={errors.email}
-            placeholder="tu@email.com"
-            disabled={isLoading}
-            required
-          />
-
-          {/* Password */}
-          <Input
-            label="Contraseña"
-            type={showPassword ? 'text' : 'password'}
-            value={formData.password}
-            onChange={(value) => handleInputChange('password', value)}
-            error={errors.password}
-            placeholder="Mínimo 8 caracteres"
-            disabled={isLoading}
-            required
-            icon={
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Icon name={showPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
-              </button>
-            }
-          />
-
-          {/* Confirm Password */}
-          <Input
-            label="Confirmar contraseña"
-            type={showConfirmPassword ? 'text' : 'password'}
-            value={formData.confirmPassword}
-            onChange={(value) => handleInputChange('confirmPassword', value)}
-            error={errors.confirmPassword}
-            placeholder="Repite tu contraseña"
-            disabled={isLoading}
-            required
-            icon={
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Icon name={showConfirmPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
-              </button>
-            }
-          />
-
-          {/* Terms and Conditions */}
-          <div className="flex items-start">
-            <div className="flex items-center h-5">
-              <input
-                id="acceptTerms"
-                type="checkbox"
-                checked={formData.acceptTerms}
-                onChange={handleCheckboxChange}
+            {/* Name Input */}
+            <div>
+              <Input
+                label="Nombre Completo"
+                type="text"
+                placeholder="Tu nombre completo"
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                error={errors.name}
+                required
                 disabled={isLoading}
-                className="w-4 h-4 border border-input rounded bg-background focus:ring-2 focus:ring-primary focus:ring-offset-2"
               />
             </div>
-            <div className="ml-3">
-              <label htmlFor="acceptTerms" className="text-sm text-foreground">
-                Acepto los{' '}
-                <Link to="/terms" className="text-primary hover:underline">
-                  términos y condiciones
-                </Link>
-                {' '}y la{' '}
-                <Link to="/privacy" className="text-primary hover:underline">
-                  política de privacidad
-                </Link>
-              </label>
+
+            {/* Username Input */}
+            <div>
+              <Input
+                label="Nombre de Usuario"
+                type="text"
+                placeholder="usuario123"
+                value={formData.username}
+                onChange={(e) => handleInputChange('username', e.target.value.toLowerCase())}
+                error={errors.username}
+                required
+                disabled={isLoading}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Solo letras, números y guiones bajos. Mínimo 3 caracteres.
+              </p>
+            </div>
+
+            {/* Email Input */}
+            <div>
+              <Input
+                label="Email"
+                type="email"
+                placeholder="tu@email.com"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                error={errors.email}
+                required
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* Password Input */}
+            <div>
+              <div className="relative">
+                <Input
+                  label="Contraseña"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 8 caracteres"
+                  value={formData.password}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
+                  error={errors.password}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-8 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
+                >
+                  <Icon name={showPassword ? 'EyeOff' : 'Eye'} size={18} />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Debe incluir mayúscula, minúscula y número.
+              </p>
+            </div>
+
+            {/* Confirm Password Input */}
+            <div>
+              <div className="relative">
+                <Input
+                  label="Confirmar Contraseña"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirma tu contraseña"
+                  value={formData.confirmPassword}
+                  onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                  error={errors.confirmPassword}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-8 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
+                >
+                  <Icon name={showConfirmPassword ? 'EyeOff' : 'Eye'} size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Terms and Conditions */}
+            <div className="space-y-2">
+              <div className="flex items-start space-x-3">
+                {/* Checkbox nativo HTML */}
+                <div className="flex items-center h-5 mt-1">
+                  <input
+                    id="acceptTerms"
+                    name="acceptTerms"
+                    type="checkbox"
+                    checked={formData.acceptTerms}
+                    onChange={handleCheckboxChange}
+                    disabled={isLoading}
+                    className="w-4 h-4 text-primary bg-card border-2 border-border rounded focus:ring-2 focus:ring-primary focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      accentColor: 'var(--color-primary)',
+                      position: 'relative',
+                      zIndex: 10
+                    }}
+                  />
+                </div>
+                
+                {/* Label clickeable */}
+                <label 
+                  htmlFor="acceptTerms" 
+                  className="text-sm text-muted-foreground leading-relaxed cursor-pointer select-none flex-1"
+                >
+                  Acepto los{' '}
+                  <Link 
+                    to="/terms" 
+                    className="text-primary hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    términos y condiciones
+                  </Link>{' '}
+                  y la{' '}
+                  <Link 
+                    to="/privacy" 
+                    className="text-primary hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    política de privacidad
+                  </Link>
+                </label>
+              </div>
+              
+              {/* Error del checkbox */}
               {errors.acceptTerms && (
-                <p className="text-sm text-destructive mt-1">{errors.acceptTerms}</p>
+                <div className="flex items-center space-x-1 text-error">
+                  <Icon name="AlertCircle" size={12} />
+                  <span className="text-sm">{errors.acceptTerms}</span>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isLoading}
-            loading={isLoading}
-          >
-            {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
-          </Button>
-        </form>
+            {/* Register Button */}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Icon name="Loader2" size={16} className="mr-2 animate-spin" />
+                  Creando cuenta...
+                </>
+              ) : (
+                'Crear Cuenta'
+              )}
+            </Button>
+          </form>
+
+          {/* Social Register */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-card text-muted-foreground">O regístrate con</span>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                onClick={() => handleSocialRegister('google')}
+                disabled={isLoading}
+                className="w-full"
+              >
+                <Icon name="Mail" size={16} className="mr-2" />
+                Google
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleSocialRegister('facebook')}
+                disabled={isLoading}
+                className="w-full"
+              >
+                <Icon name="Facebook" size={16} className="mr-2" />
+                Facebook
+              </Button>
+            </div>
+          </div>
+        </div>
 
         {/* Login Link */}
-        <p className="text-center text-sm text-muted-foreground mt-6">
-          ¿Ya tienes una cuenta?{' '}
-          <Link to="/login" className="text-primary hover:underline font-medium">
-            Inicia sesión
-          </Link>
-        </p>
+        <div className="text-center mt-6">
+          <p className="text-sm text-muted-foreground">
+            ¿Ya tienes una cuenta?{' '}
+            <Link
+              to="/login"
+              className="text-primary font-medium hover:underline"
+            >
+              Inicia sesión
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
