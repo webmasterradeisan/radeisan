@@ -157,7 +157,8 @@ const Register = () => {
         console.log('✅ Usuario registrado exitosamente:', data.user.email);
         console.log('✅ ID del usuario:', data.user.id);
 
-        // ✅ Enviar email de bienvenida (NO BLOQUEANTE - en segundo plano)
+        // ✅ Enviar email de bienvenida (COMENTADO TEMPORALMENTE PARA AISLAR ERROR 500)
+        /*
         supabase.functions
           .invoke('send-welcome-email', {
             body: {
@@ -176,6 +177,7 @@ const Register = () => {
           .catch(err => {
             console.warn('⚠️ Error al enviar email de bienvenida:', err.message);
           });
+        */
 
         // ✅ Redirigir inmediatamente al dashboard
         console.log('✅ Redirigiendo al dashboard...');
