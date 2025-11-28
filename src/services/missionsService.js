@@ -5,6 +5,7 @@
 // ✅ Incluye exportación de getMissionStats para evitar error de compilación.
 // ✅ AÑADIDO: Función resetDailyMissions para solucionar el error de compilación.
 // ✅ FIX PARÁMETROS RPC: p_reference_type en lugar de p_content_id (línea 239)
+// ✅ NUEVO: Sistema de rachas integrado - checkAndUpdateStreak() (línea 387)
 // ============================================================================
 
 import { supabase } from '../lib/supabase';
@@ -209,22 +210,18 @@ export async function getMissionProgress(missionId) {
       .select(`*, mission:daily_missions (*)`)
       .eq('user_id', user.id)
       .eq('mission_id', missionId)
+      .order('date', { ascending: false })
+      .limit(1)
       .single();
-    if (error && error.code !== 'PGRST116') throw error;
-    return { success: true, progress: data || null };
-  } catch (error) {
-    return { success: false, error: error.message, progress: null };
-  }
+    if (error) throw error;
+    return { success: true, progress: data };
+  } catch (error) { return { success: false, error: error.message }; }
 }
 
 // ============================================================================
-// FUNCIONES DE TRACKING (REGISTRO DE ACCIONES)
+// FUNCIÓN PRINCIPAL: RASTREAR PROGRESO DE MISIONES
 // ============================================================================
 
-/**
- * Registrar progreso en una misión
- * Llama al RPC maestro 'track_mission_update'
- */
 export async function trackMissionProgress(missionType, referenceType, referenceId, amount = 1, metadata = {}) {
   const userAuth = await supabase.auth.getUser();
   if (!userAuth.data.user) return { result: 'error', points_earned: 0, message: 'No auth' };
@@ -232,23 +229,23 @@ export async function trackMissionProgress(missionType, referenceType, reference
   const userId = userAuth.data.user.id;
 
   try {
-    // 🔥 FIX CRÍTICO: Usar p_reference_type en lugar de p_content_id
+    // ✅ PARÁMETRO CORRECTO: p_reference_type (coincide con el RPC)
     const { data, error } = await supabase
       .rpc('track_mission_update', {
         p_user_id: userId,
         p_mission_type: missionType, 
-        p_reference_type: referenceType,  // ✅ CORREGIDO: era p_content_id
+        p_reference_type: referenceType, 
         p_metadata: {
-            reference_id: referenceId,
-            ...metadata
+          reference_id: referenceId,
+          ...metadata
         }
       });
 
     if (error) {
-        if (error.code === '23505' || error.message?.includes('duplicate key')) { 
-             return { result: 'already_paid', points_earned: 0, message: 'Ya registrado.' };
-        }
-        throw error;
+      if (error.code === '23505' || error.message?.includes('duplicate key')) { 
+        return { result: 'already_paid', points_earned: 0, message: 'Ya registrado.' };
+      }
+      throw error;
     }
     
     const result = data?.result || 'registered';
@@ -362,6 +359,154 @@ export async function claimMissionReward(missionId) {
   } catch (error) { return { success: false, error: error.message }; }
 }
 
+/**
+ * ============================================================================
+ * 🆕 NUEVO: SISTEMA DE RACHAS INTEGRADO
+ * ============================================================================
+ */
+
+/**
+ * Verifica si el usuario completó todas las misiones del día
+ * y actualiza su racha consecutiva automáticamente.
+ * 
+ * Esta función debe llamarse cuando se completa una misión para verificar
+ * si el usuario ya completó TODAS las misiones activas del día.
+ * 
+ * Si es así:
+ * - Actualiza la tabla user_streaks con la racha actual
+ * - Sincroniza con mission_progress para "Racha Imparable (10 Días)"
+ * - Otorga 100 puntos bonus al completar 10 días consecutivos
+ * 
+ * @returns {Promise<Object>} Resultado de la verificación de racha
+ * 
+ * @example
+ * const result = await checkAndUpdateStreak();
+ * // result = {
+ * //   result: 'success',
+ * //   current_streak: 5,
+ * //   all_completed: true,
+ * //   points_earned: 0,
+ * //   message: '¡Racha de 5 días!'
+ * // }
+ */
+export async function checkAndUpdateStreak() {
+  const userAuth = await supabase.auth.getUser();
+  if (!userAuth.data.user) {
+    return { 
+      result: 'error', 
+      message: 'No authenticated',
+      current_streak: 0,
+      all_completed: false,
+      points_earned: 0
+    };
+  }
+
+  const userId = userAuth.data.user.id;
+
+  try {
+    console.log('🔥 Verificando racha para usuario:', userId);
+
+    const { data, error } = await supabase.rpc('check_and_update_streak', {
+      p_user_id: userId
+    });
+
+    if (error) {
+      console.error('❌ Error en check_and_update_streak:', error);
+      throw error;
+    }
+
+    console.log('✅ Resultado de racha:', data);
+
+    return {
+      result: data?.result || 'unknown',
+      current_streak: data?.current_streak || 0,
+      all_completed: data?.all_completed || false,
+      points_earned: data?.points_earned || 0,
+      message: data?.message || 'Sin mensaje',
+      is_new_record: data?.is_new_record || false
+    };
+
+  } catch (error) {
+    console.error('💥 Error en checkAndUpdateStreak:', error);
+    // No lanzar error - retornar estado seguro
+    return {
+      result: 'error',
+      message: error.message || 'Error desconocido',
+      current_streak: 0,
+      all_completed: false,
+      points_earned: 0
+    };
+  }
+}
+
+/**
+ * Obtiene la racha actual del usuario desde la tabla user_streaks
+ * 
+ * @returns {Promise<Object>} Datos de la racha del usuario
+ * 
+ * @example
+ * const streak = await getUserStreakData();
+ * // streak = {
+ * //   current_streak: 5,
+ * //   longest_streak: 10,
+ * //   last_completion_date: '2024-11-27',
+ * //   streak_bonus_multiplier: 1.0,
+ * //   total_missions_completed: 150
+ * // }
+ */
+export async function getUserStreakData() {
+  const userAuth = await supabase.auth.getUser();
+  if (!userAuth.data.user) {
+    return { 
+      current_streak: 0, 
+      longest_streak: 0,
+      last_completion_date: null
+    };
+  }
+
+  const userId = userAuth.data.user.id;
+
+  try {
+    const { data, error } = await supabase
+      .from('user_streaks')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      // Si no existe registro, retornar valores por defecto
+      if (error.code === 'PGRST116') {
+        return { 
+          current_streak: 0, 
+          longest_streak: 0,
+          last_completion_date: null
+        };
+      }
+      throw error;
+    }
+
+    return {
+      current_streak: data?.current_streak || 0,
+      longest_streak: data?.longest_streak || 0,
+      last_completion_date: data?.last_completion_date,
+      streak_bonus_multiplier: data?.streak_bonus_multiplier || 1.0,
+      total_missions_completed: data?.total_missions_completed || 0
+    };
+
+  } catch (error) {
+    console.error('Error obteniendo racha del usuario:', error);
+    return { 
+      current_streak: 0, 
+      longest_streak: 0,
+      last_completion_date: null
+    };
+  }
+}
+
+// ============================================================================
+// FUNCIONES DE RACHAS EXISTENTES (mantenidas para compatibilidad)
+// ============================================================================
+
 export async function getUserStreak() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, streak: null };
@@ -460,5 +605,8 @@ export default {
   resetDailyMissions,
   getAvailableMissionIcons,
   getTimeUntilReset,
-  calculateMissionProgress
+  calculateMissionProgress,
+  // 🆕 NUEVAS FUNCIONES DE RACHAS
+  checkAndUpdateStreak,
+  getUserStreakData
 };
