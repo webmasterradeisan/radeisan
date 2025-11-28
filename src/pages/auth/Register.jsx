@@ -106,27 +106,6 @@ const Register = () => {
     handleInputChange('acceptTerms', checked);
   };
 
-  const checkUsernameAvailability = async (username) => {
-    if (username.length < 3) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('username')
-        .eq('username', username.toLowerCase())
-        .single();
-
-      if (data) {
-        setErrors(prev => ({
-          ...prev,
-          username: 'Este nombre de usuario ya está en uso'
-        }));
-      }
-    } catch (error) {
-      // Username is available (no record found)
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -138,121 +117,84 @@ const Register = () => {
     setErrors({});
 
     try {
-      // Check username availability one more time
-      const { data: existingUser } = await supabase
-        .from('user_profiles')
-        .select('username')
-        .eq('username', formData.username.toLowerCase())
-        .single();
-
-      if (existingUser) {
-        setErrors({
-          username: 'Este nombre de usuario ya está en uso'
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Sign up the user (sin confirmación de email inmediata)
-      const { data, error } = await supabase.auth.signUp({
+      console.log('🚀 Iniciando registro de usuario...');
+      
+      // ✅ SOLO ESTO - El trigger hace el resto automáticamente
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
-            name: formData.name.trim(),  // ✅ Para compatibilidad con trigger existente
-            full_name: formData.name.trim(),  // ✅ Para la columna full_name
+            full_name: formData.name.trim(),
             username: formData.username.toLowerCase().trim(),
-            account_type: 'personal'  // ✅ Siempre personal por defecto
+            account_type: 'personal'
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
       });
 
-      if (error) {
-        if (error.message.includes('User already registered')) {
+      // Manejo de errores de autenticación
+      if (authError) {
+        console.error('❌ Error en registro:', authError);
+        
+        if (authError.message.includes('User already registered')) {
           setErrors({
             email: 'Este email ya está registrado. Intenta iniciar sesión.'
           });
         } else {
           setErrors({
-            general: error.message
+            general: authError.message || 'Error al crear la cuenta'
           });
         }
         setIsLoading(false);
         return;
       }
 
-      if (data.user) {
-        console.log('✅ Usuario registrado exitosamente:', data.user.email);
-        
-        // Crear perfil manualmente por si el trigger falla
-        try {
-          const { error: profileError } = await supabase
-            .from('user_profiles')
-            .insert({
-              id: data.user.id,
-              email: data.user.email,
-              full_name: formData.name.trim(),
-              username: formData.username.toLowerCase().trim(),
-              points: 0,
-              is_business_account: false,
-              email_verified: false,
-              account_suspended: false
-            });
-
-          if (profileError) {
-            console.error('⚠️ Error al crear perfil (puede ser que el trigger ya lo creó):', profileError);
-            // No bloqueamos el registro si falla, el trigger podría haberlo creado
-          } else {
-            console.log('✅ Perfil creado manualmente');
-          }
-        } catch (profileError) {
-          console.error('⚠️ Error al crear perfil:', profileError);
-        }
-        
-        // Enviar email de bienvenida personalizado
-        try {
-          const { error: emailError } = await supabase.functions.invoke('send-welcome-email', {
-            body: {
-              email: formData.email,
-              name: formData.name.trim(),
-              username: formData.username.toLowerCase().trim()
-            }
-          });
-
-          if (emailError) {
-            console.error('⚠️ Error al enviar email de bienvenida:', emailError);
-            // No bloqueamos el registro si falla el email
-          } else {
-            console.log('✅ Email de bienvenida enviado exitosamente');
-          }
-        } catch (emailError) {
-          console.error('⚠️ Error al enviar email de bienvenida:', emailError);
-          // No bloqueamos el registro si falla el email
-        }
-
-        // Redirigir al dashboard inmediatamente
-        navigate('/dashboard', { replace: true });
+      if (!authData?.user) {
+        console.error('❌ No se recibió datos del usuario');
+        setErrors({
+          general: 'No se pudo crear la cuenta. Intenta de nuevo.'
+        });
+        setIsLoading(false);
+        return;
       }
+
+      console.log('✅ Usuario registrado exitosamente:', authData.user.email);
+      console.log('✅ ID de usuario:', authData.user.id);
+
+      // Email de bienvenida (opcional, NO BLOQUEANTE)
+      // Se ejecuta en segundo plano para no retrasar el registro
+      supabase.functions
+        .invoke('send-welcome-email', {
+          body: {
+            email: formData.email,
+            name: formData.name.trim(),
+            username: formData.username.toLowerCase().trim()
+          }
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.warn('⚠️ Email de bienvenida no enviado:', error.message);
+          } else {
+            console.log('✅ Email de bienvenida enviado');
+          }
+        })
+        .catch(() => {
+          console.warn('⚠️ Error al enviar email de bienvenida');
+        });
+
+      // Redirigir al dashboard inmediatamente
+      console.log('✅ Redirigiendo al dashboard...');
+      navigate('/dashboard', { replace: true });
       
     } catch (error) {
-      console.error('Error en registro:', error);
+      console.error('❌ Error inesperado en registro:', error);
       setErrors({
-        general: 'Error al crear la cuenta. Por favor intenta de nuevo.'
+        general: 'Error inesperado. Por favor intenta de nuevo.'
       });
       setIsLoading(false);
     }
   };
-
-  // Username availability check with debounce
-  useEffect(() => {
-    if (formData.username.length >= 3) {
-      const timeoutId = setTimeout(() => {
-        checkUsernameAvailability(formData.username);
-      }, 500);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [formData.username]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
