@@ -218,32 +218,6 @@ const Register = () => {
     }
   };
 
-  const handleSocialRegister = async (provider) => {
-    setIsLoading(true);
-    
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: provider,
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`
-        }
-      });
-
-      if (error) {
-        setErrors({
-          general: `Error al registrarse con ${provider}: ${error.message}`
-        });
-      }
-      
-    } catch (error) {
-      setErrors({
-        general: `Error al registrarse con ${provider}`
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Username availability check with debounce
   useEffect(() => {
     if (formData.username.length >= 3) {
@@ -455,39 +429,6 @@ const Register = () => {
               )}
             </Button>
           </form>
-
-          {/* Social Register */}
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-card text-muted-foreground">O regístrate con</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                onClick={() => handleSocialRegister('google')}
-                disabled={isLoading}
-                className="w-full"
-              >
-                <Icon name="Mail" size={16} className="mr-2" />
-                Google
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleSocialRegister('facebook')}
-                disabled={isLoading}
-                className="w-full"
-              >
-                <Icon name="Facebook" size={16} className="mr-2" />
-                Facebook
-              </Button>
-            </div>
-          </div>
         </div>
 
         {/* Login Link */}
