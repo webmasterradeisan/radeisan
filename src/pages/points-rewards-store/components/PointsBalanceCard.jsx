@@ -1,11 +1,10 @@
 // src/pages/points-rewards-store/components/PointsBalanceCard.jsx
 // ============================================================================
-// POINTS BALANCE CARD - FIXED VISUAL COMPLETION + STREAK DISPLAY
+// POINTS BALANCE CARD - FIXED VISUAL COMPLETION
 // ============================================================================
 // ✅ CORREGIDO: Ahora detecta "Misión Cumplida" matemáticamente.
 //    Si llegas a 10/10, muestra el éxito AUNQUE la base de datos tarde un poco.
 // ✅ CORREGIDO: Evita el parpadeo visual (intermitencia).
-// ✅ NUEVO: Visualización especial para misión "Racha Imparable" con icono 🔥
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -157,7 +156,7 @@ const PointsBalanceCard = ({
       </div>
       
       {/* ================================================== */}
-      {/* ✅ PROGRESO DE MISIONES (LÓGICA MEJORADA + RACHAS) */}
+      {/* ✅ PROGRESO DE MISIONES (LÓGICA MEJORADA)          */}
       {/* ================================================== */}
       <div className="border-t border-border pt-6 mt-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">
@@ -186,41 +185,20 @@ const PointsBalanceCard = ({
                     ? Math.min(Math.round((mission.current_count / mission.target_count) * 100), 100)
                     : 0);
 
-              // 🔥 DETECTAR SI ES LA MISIÓN DE RACHA
-              const isStreakMission = mission.mission_type === 'all_missions_streak' || 
-                                     mission.title?.toLowerCase().includes('racha');
-
               // Colores dinámicos
-              let statusColor = isCompleted ? 'text-green-600' : 'text-accent';
-              let barColor = isCompleted ? 'bg-green-500' : 'bg-accent';
-              let titleClass = isCompleted ? 'text-green-700 font-bold' : 'text-foreground font-medium';
-              let iconName = isCompleted ? 'CheckCircle' : (mission.icon || 'Target');
-
-              // 🔥 OVERRIDE para racha (colores especiales)
-              if (isStreakMission && !isCompleted) {
-                statusColor = 'text-orange-500';
-                barColor = 'bg-gradient-to-r from-orange-400 to-red-500';
-                iconName = 'Flame';
-              }
-
-              // 🔥 Calcular si está cerca de completarse (80%+)
-              const isCloseToComplete = percentage >= 80 && !isCompleted;
+              const statusColor = isCompleted ? 'text-green-600' : 'text-accent';
+              const barColor = isCompleted ? 'bg-green-500' : 'bg-accent';
+              const titleClass = isCompleted ? 'text-green-700 font-bold' : 'text-foreground font-medium';
+              const iconName = isCompleted ? 'CheckCircle' : (mission.icon || 'Target');
 
               return (
-                <div key={mission.id} className={`group ${isStreakMission ? 'relative' : ''}`}>
-                  {/* 🔥 BADGE ESPECIAL PARA RACHA */}
-                  {isStreakMission && !isCompleted && mission.current_count > 0 && (
-                    <div className="absolute -top-2 -right-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-pulse">
-                      {mission.current_count} {mission.current_count === 1 ? 'día' : 'días'}
-                    </div>
-                  )}
-
+                <div key={mission.id} className="group">
                   <div className="flex items-center justify-between mb-1.5 text-sm">
                     <div className="flex items-center overflow-hidden">
                       <Icon 
                         name={iconName} 
                         size={14} 
-                        className={`${statusColor} mr-2 flex-shrink-0 ${isStreakMission && !isCompleted ? 'animate-pulse' : ''}`} 
+                        className={`${statusColor} mr-2 flex-shrink-0`} 
                       />
                       <span className={`${titleClass} truncate`} title={mission.title}>
                         {mission.title}
@@ -233,9 +211,7 @@ const PointsBalanceCard = ({
                         <span className="text-[10px] font-bold uppercase tracking-wider">¡Completada!</span>
                       </div>
                     ) : (
-                      <span className={`font-mono text-xs flex-shrink-0 ml-2 ${
-                        isCloseToComplete ? 'text-orange-600 font-bold' : 'text-muted-foreground'
-                      }`}>
+                      <span className="text-muted-foreground font-mono text-xs flex-shrink-0 ml-2">
                         {mission.current_count}/{mission.target_count}
                       </span>
                     )}
@@ -244,19 +220,10 @@ const PointsBalanceCard = ({
                   {/* Barra */}
                   <div className="w-full bg-muted rounded-full h-2 overflow-hidden shadow-inner">
                     <div 
-                      className={`h-2 rounded-full transition-all duration-500 ease-out ${barColor} ${
-                        isCloseToComplete ? 'animate-pulse' : ''
-                      }`}
+                      className={`h-2 rounded-full transition-all duration-500 ease-out ${barColor}`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
-
-                  {/* 🔥 MENSAJE MOTIVACIONAL PARA RACHA (cuando está cerca) */}
-                  {isStreakMission && isCloseToComplete && !isCompleted && (
-                    <p className="text-[10px] text-orange-600 font-medium mt-1 animate-pulse">
-                      ¡Solo {mission.target_count - mission.current_count} {mission.target_count - mission.current_count === 1 ? 'día' : 'días'} más para +100 puntos!
-                    </p>
-                  )}
                 </div>
               );
             })}
