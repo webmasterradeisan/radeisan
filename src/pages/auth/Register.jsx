@@ -153,15 +153,15 @@ const Register = () => {
         return;
       }
 
-      // Sign up the user (sin confirmación de email)
+      // Sign up the user (sin confirmación de email inmediata)
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
-            name: formData.name.trim(),
-            username: formData.username.toLowerCase().trim(),
-            account_type: 'personal' // Siempre cuenta personal
+            full_name: formData.name.trim(),  // ✅ Cambiado a full_name
+            username: formData.username.toLowerCase().trim()
+            // ✅ NO incluimos account_type - todos son "personal" por defecto
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
