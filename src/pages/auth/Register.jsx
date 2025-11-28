@@ -159,9 +159,10 @@ const Register = () => {
         password: formData.password,
         options: {
           data: {
-            full_name: formData.name.trim(),  // ✅ Cambiado a full_name
-            username: formData.username.toLowerCase().trim()
-            // ✅ NO incluimos account_type - todos son "personal" por defecto
+            name: formData.name.trim(),  // ✅ Para compatibilidad con trigger existente
+            full_name: formData.name.trim(),  // ✅ Para la columna full_name
+            username: formData.username.toLowerCase().trim(),
+            account_type: 'personal'  // ✅ Siempre personal por defecto
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
