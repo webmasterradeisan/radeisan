@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/auth/Register.jsx
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
-import '../styles/Auth.css';
+import { supabase } from '../../lib/supabase';
+import '../../styles/Auth.css';
 
 const Register = () => {
   const navigate = useNavigate();
