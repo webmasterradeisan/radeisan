@@ -3,27 +3,29 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { supabase } from '../../lib/supabase';
 
-// --- COMPONENTES UI EXISTENTES ---
+// Componentes UI Existentes
+import Icon from '../../components/AppIcon'; 
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
-import { Checkbox } from '../../components/ui/Checkbox'; 
+import { Checkbox } from '../../components/ui/Checkbox';
+import Select from '../../components/ui/Select'; 
 import UserContextMenu from '../../components/ui/UserContextMenu';
+
+// Componentes UI Nuevos (que ya creaste)
 import Modal from '../../components/ui/Modal';
 import Badge from '../../components/ui/Badge';
-import Icon from '../../components/AppIcon'; 
 
 const UserManagement = () => {
   // --- ESTADOS ---
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Modales
+  // Estados de Selección y Modales
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  // Estado de carga para acciones
+  // Estado de carga para guardar cambios
   const [saving, setSaving] = useState(false);
 
   // Filtros y Paginación
@@ -32,19 +34,23 @@ const UserManagement = () => {
   const [totalUsers, setTotalUsers] = useState(0);
   const usersPerPage = 20;
 
-  // --- 1. CARGA DE DATOS (Sincronizado con user_profiles) ---
+  // ------------------------------------------------------------------
+  // 1. CARGA DE DATOS (Sincronizada con user_profiles)
+  // ------------------------------------------------------------------
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      // ✅ CONSULTA SEGURA: Traemos solo lo que existe en user_profiles
+      // Consultamos user_profiles. NO hacemos join complejos que rompan la tabla.
       let query = supabase
         .from('user_profiles')
         .select('*', { count: 'exact' });
 
+      // Filtro por email
       if (searchTerm) {
         query = query.ilike('email', `%${searchTerm}%`);
       }
       
+      // Paginación
       const from = (currentPage - 1) * usersPerPage;
       const { data, count, error } = await query
         .range(from, from + usersPerPage - 1)
@@ -52,14 +58,15 @@ const UserManagement = () => {
 
       if (error) throw error;
 
-      // ✅ MAPEO DEFENSIVO: Si la columna no está en el CSV, ponemos un valor por defecto
-      // para que la tabla no se rompa visualmente.
+      // Mapeo de datos para asegurar que la UI no falle si faltan columnas
       const mappedUsers = data.map(user => ({
         ...user,
-        // Si tu tabla user_profiles no tiene 'role', asumimos 'user' visualmente
+        // Si la columna 'role' no existe en user_profiles, mostramos 'user' por defecto
         role: user.role || 'user', 
-        // Si tu tabla user_profiles no tiene 'status' (o suspended), asumimos 'active'
-        status: user.status || 'active'
+        // Si la columna 'status' no existe, mostramos 'active' por defecto
+        status: user.status || 'active',
+        // Aseguramos que points sea un número
+        points: user.points || 0
       }));
 
       setUsers(mappedUsers);
@@ -77,13 +84,13 @@ const UserManagement = () => {
   }, [fetchUsers]);
 
 
-  // --- 2. ACCIONES (Suspender, Eliminar, Rol) ---
-  
+  // ------------------------------------------------------------------
+  // 2. ACCIONES (Suspender, Eliminar, Cambiar Rol)
+  // ------------------------------------------------------------------
   const handleUserAction = async (userId, action, value = null) => {
     setSaving(true);
     try {
-      // ⚠️ IMPORTANTE: Aquí se llama a tu Backend para evitar el error de permisos.
-      // Si no tienes el backend listo, esto dará error, pero la lógica del Frontend es correcta.
+      // ⚠️ CRÍTICO: Llamamos a la API del backend para evitar errores de permisos en Supabase
       const response = await fetch('/api/admin/user-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,28 +98,30 @@ const UserManagement = () => {
       });
 
       if (!response.ok) {
-        // Si falla la API, lanzamos error
-        throw new Error('Error al conectar con el servidor de administración');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al procesar la acción en el servidor');
       }
       
       const result = await response.json();
       
-      // ✅ ACTUALIZACIÓN OPTIMISTA (Para que la UI cambie inmediatamente)
+      // Actualización Local (Feedback inmediato en la UI)
       if (action === 'delete') {
         setShowDeleteConfirm(false);
         setSelectedUser(null);
         setUsers(prev => prev.filter(u => u.id !== userId));
       } else if (action === 'change_role') {
-         // Corregimos el rol visualmente en la tabla y en el modal
-         const newRole = value; 
-         setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
-         if (selectedUser?.id === userId) setSelectedUser(prev => ({ ...prev, role: newRole }));
+         // Actualizamos el rol en la lista y en el usuario seleccionado
+         setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: value } : u));
+         if (selectedUser?.id === userId) {
+             setSelectedUser(prev => ({ ...prev, role: value }));
+         }
       } else if (action === 'suspend' || action === 'activate') {
          const newStatus = action === 'suspend' ? 'suspended' : 'active';
          setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
       }
       
-      alert(result.message || 'Acción realizada correctamente');
+      // Mensaje de éxito (opcional, puedes usar un Toast si tienes)
+      console.log(result.message);
 
     } catch (error) {
       console.error(error);
@@ -122,34 +131,64 @@ const UserManagement = () => {
     }
   };
 
-  // Paginación
+  // Navegación de Paginación
   const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalUsers / usersPerPage)));
   const handlePreviousPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
   const totalPages = Math.ceil(totalUsers / usersPerPage);
 
 
-  // --- 3. MODALES Y RENDERIZADO ---
+  // ------------------------------------------------------------------
+  // 3. MODALES (Detalles y Eliminar)
+  // ------------------------------------------------------------------
 
-  // Modal de Detalles (Corregido el error de cambio de rol)
+  // Modal de Confirmación de Eliminación
+  const renderDeleteModal = () => (
+    <Modal
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      title="Confirmar Eliminación"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
+          <Button 
+            onClick={() => handleUserAction(selectedUser.id, 'delete')} 
+            disabled={saving}
+            // Intento usar variante danger, si no existe, uso clases de Tailwind
+            className="bg-red-600 text-white hover:bg-red-700 border-red-600"
+          >
+            {saving ? 'Eliminando...' : 'Eliminar Usuario'}
+          </Button>
+        </>
+      }
+    >
+      <div className="text-gray-600">
+        <p className="mb-2">¿Estás seguro que deseas eliminar a <strong>{selectedUser?.email}</strong>?</p>
+        <p className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100 mt-2">
+            ⚠️ Esta acción es irreversible. Se borrará el perfil, los puntos y el acceso.
+        </p>
+      </div>
+    </Modal>
+  );
+
+  // Modal de Detalles (Corrección del Select de Rol)
   const renderDetailsModal = () => (
     <Modal
       isOpen={showDetailsModal}
       onClose={() => setShowDetailsModal(false)}
-      title="Detalles y Edición"
+      title="Detalles del Usuario"
       footer={<Button onClick={() => setShowDetailsModal(false)}>Cerrar</Button>}
     >
       {selectedUser && (
         <div className="space-y-4">
-          {/* Info Básica */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
+             <div>
                 <label className="text-xs font-bold text-gray-500 uppercase">Nombre</label>
-                <p className="text-sm font-medium">{selectedUser.full_name || 'N/A'}</p>
-            </div>
-            <div>
+                <div className="text-sm font-medium">{selectedUser.full_name || 'N/A'}</div>
+             </div>
+             <div>
                 <label className="text-xs font-bold text-gray-500 uppercase">Puntos</label>
-                <p className="text-sm font-medium">{selectedUser.points || 0}</p>
-            </div>
+                <div className="text-sm font-medium">{selectedUser.points || 0}</div>
+             </div>
           </div>
 
           <div>
@@ -157,12 +196,16 @@ const UserManagement = () => {
             <Input value={selectedUser.email} readOnly disabled className="bg-gray-100" />
           </div>
           
-          {/* ✅ SELECT DE ROL CORREGIDO: Asegura enviar el valor simple */}
+          {/* CORRECCIÓN: Manejo explícito del valor del Select para evitar [object Object] */}
           <div>
             <label className="text-sm font-medium text-gray-700 block mb-1">Rol del Sistema</label>
             <Select
-              value={selectedUser.role} 
-              onChange={(e) => handleUserAction(selectedUser.id, 'change_role', e.target.value)}
+              value={selectedUser.role}
+              onChange={(e) => {
+                 // Algunos componentes Select pasan el evento (e.target.value), otros pasan el valor directo.
+                 const newValue = e.target ? e.target.value : e;
+                 handleUserAction(selectedUser.id, 'change_role', newValue);
+              }}
               options={[
                 { value: 'user', label: 'Usuario Estándar' },
                 { value: 'premium', label: 'Premium' },
@@ -180,43 +223,14 @@ const UserManagement = () => {
     </Modal>
   );
 
-  // Modal de Eliminar (Nuevo requerimiento)
-  const renderDeleteModal = () => (
-    <Modal
-      isOpen={showDeleteConfirm}
-      onClose={() => setShowDeleteConfirm(false)}
-      title="Confirmar Eliminación"
-      footer={
-        <>
-          <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
-          <Button 
-            onClick={() => handleUserAction(selectedUser.id, 'delete')} 
-            disabled={saving}
-            // Estilo manual rojo si tu componente Button no soporta 'danger'
-            className="bg-red-600 text-white hover:bg-red-700 border-red-600"
-          >
-            {saving ? 'Eliminando...' : 'Eliminar Usuario'}
-          </Button>
-        </>
-      }
-    >
-      <div className="text-gray-600">
-        <p className="mb-2">¿Estás seguro que deseas eliminar a <strong>{selectedUser?.email}</strong>?</p>
-        <p className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100 mt-2">
-            ⚠️ Se borrará el perfil, puntos y datos de autenticación permanentemente.
-        </p>
-      </div>
-    </Modal>
-  );
-
   return (
     <>
-      <Helmet><title>Gestión de Usuarios | Admin</title></Helmet>
+      <Helmet><title>Gestión de Usuarios - Admin</title></Helmet>
       
       <div className="p-6 max-w-7xl mx-auto">
         <h1 className="text-2xl font-bold mb-6 text-gray-900">Gestión de Usuarios</h1>
 
-        {/* Buscador */}
+        {/* Barra de Herramientas */}
         <div className="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="w-full md:w-1/3 relative">
                 <Input 
@@ -234,7 +248,7 @@ const UserManagement = () => {
             </Button>
         </div>
 
-        {/* Tabla */}
+        {/* Tabla de Usuarios */}
         <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -268,14 +282,14 @@ const UserManagement = () => {
                         {user.points || 0} pts
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant={user.role === 'admin' ? 'info' : (user.role === 'premium' ? 'warning' : 'default')}>
+                         <Badge variant={user.role === 'admin' ? 'info' : (user.role === 'premium' ? 'warning' : 'default')}>
                             {user.role}
-                        </Badge>
+                         </Badge>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant={user.status === 'suspended' ? 'danger' : 'success'}>
+                         <Badge variant={user.status === 'suspended' ? 'danger' : 'success'}>
                             {user.status === 'suspended' ? 'Suspendido' : 'Activo'}
-                        </Badge>
+                         </Badge>
                       </td>
                       <td className="px-6 py-4">
                         {user.is_verified 
@@ -284,7 +298,7 @@ const UserManagement = () => {
                         }
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {/* ✅ CONTEXT MENU: Conecta las acciones solicitadas */}
+                        {/* Menú de Acciones: Se pasan las funciones para Suspender y Eliminar */}
                         <UserContextMenu 
                             user={user}
                             onEdit={() => { setSelectedUser(user); setShowDetailsModal(true); }}
@@ -318,6 +332,7 @@ const UserManagement = () => {
         </div>
       </div>
 
+      {/* Renderizado de Modales */}
       {renderDetailsModal()}
       {renderDeleteModal()}
     </>
