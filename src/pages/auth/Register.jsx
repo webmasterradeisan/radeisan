@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
 import Icon from '../../components/AppIcon';
 
 const Register = () => {
@@ -16,7 +15,6 @@ const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    accountType: 'personal',
     acceptTerms: false
   });
   
@@ -24,11 +22,6 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const accountTypeOptions = [
-    { value: 'personal', label: 'Cuenta Personal' },
-    { value: 'business', label: 'Cuenta de Negocio' }
-  ];
 
   useEffect(() => {
     // Check if user is already authenticated
@@ -168,7 +161,7 @@ const Register = () => {
           data: {
             name: formData.name.trim(),
             username: formData.username.toLowerCase().trim(),
-            account_type: formData.accountType
+            account_type: 'personal' // Siempre cuenta personal
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
@@ -189,9 +182,30 @@ const Register = () => {
       }
 
       if (data.user) {
-        // ✅ Usuario registrado y autenticado automáticamente
-        // Redirigir al dashboard inmediatamente
         console.log('✅ Usuario registrado exitosamente:', data.user.email);
+        
+        // Enviar email de bienvenida personalizado
+        try {
+          const { error: emailError } = await supabase.functions.invoke('send-welcome-email', {
+            body: {
+              email: formData.email,
+              name: formData.name.trim(),
+              username: formData.username.toLowerCase().trim()
+            }
+          });
+
+          if (emailError) {
+            console.error('⚠️ Error al enviar email de bienvenida:', emailError);
+            // No bloqueamos el registro si falla el email
+          } else {
+            console.log('✅ Email de bienvenida enviado exitosamente');
+          }
+        } catch (emailError) {
+          console.error('⚠️ Error al enviar email de bienvenida:', emailError);
+          // No bloqueamos el registro si falla el email
+        }
+
+        // Redirigir al dashboard inmediatamente
         navigate('/dashboard', { replace: true });
       }
       
@@ -246,50 +260,31 @@ const Register = () => {
         {/* Logo and Header */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-                <Icon name="Video" size={32} color="white" />
-              </div>
+            <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <Icon name="Sparkles" size={32} className="text-white" />
             </div>
           </Link>
-          <h1 className="text-3xl font-bold text-foreground">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             Únete a Radeisan
           </h1>
-          <p className="text-muted-foreground mt-2">
-            Crea tu cuenta y comienza a ganar puntos
+          <p className="text-muted-foreground">
+            Crea tu cuenta y comienza a compartir
           </p>
         </div>
 
-        {/* Register Form */}
-        <div className="bg-card rounded-lg shadow-elevation-2 p-6">
+        {/* Register Card */}
+        <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
           {/* General Error */}
           {errors.general && (
-            <div className="mb-4 p-3 bg-error/10 border border-error/20 rounded-md">
-              <div className="flex items-center space-x-2">
-                <Icon name="AlertTriangle" size={16} className="text-error" />
+            <div className="mb-4 p-3 bg-error/10 border border-error/20 rounded-lg">
+              <div className="flex items-center space-x-2 text-error">
+                <Icon name="AlertCircle" size={16} />
                 <span className="text-sm text-error">{errors.general}</span>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Account Type */}
-            <div>
-              <Select
-                label="Tipo de Cuenta"
-                options={accountTypeOptions}
-                value={formData.accountType}
-                onChange={(value) => handleInputChange('accountType', value)}
-                required
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {formData.accountType === 'business' 
-                  ? 'Perfecta para empresas que quieren vender productos'
-                  : 'Ideal para crear y compartir contenido'
-                }
-              </p>
-            </div>
-
             {/* Name Input */}
             <div>
               <Input
