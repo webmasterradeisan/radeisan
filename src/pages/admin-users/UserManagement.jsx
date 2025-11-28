@@ -1,305 +1,288 @@
 // src/pages/admin-users/UserManagement.jsx
-// ✅ SPRINT 4 - Gestión Completa de Usuarios
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
-// Importa tus librerías de UI
-import Icon from '../../components/AppIcon'; 
+import { supabase } from '../../lib/supabase';
+
+// --- 1. COMPONENTES UI EXISTENTES ---
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import { Checkbox } from '../../components/ui/Checkbox';
+import Select from '../../components/ui/Select';
+import { Checkbox } from '../../components/ui/Checkbox'; 
+import UserContextMenu from '../../components/ui/UserContextMenu';
 
-// 🚨 CORRECCIÓN DE RUTAS DE COMPONENTES DE UI
-// Se asume que estos son los archivos que sí existen en tu carpeta 'components/ui'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu'; 
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
-// Si necesitas el componente Dialog para el renderUserModal, deberás importarlo también.
+// --- 2. COMPONENTES NUEVOS (Recién creados) ---
+import Modal from '../../components/ui/Modal';
+import Badge from '../../components/ui/Badge';
 
-// Asumo que tu cliente Supabase está en esta ruta
-import { supabase } from '../../lib/supabase'; 
+// --- 3. ICONOS ---
+import Icon from '../../components/AppIcon'; 
 
 const UserManagement = () => {
-  // Estados principales
+  // --- ESTADOS ---
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estados de Interfaz (Modales y Selección)
   const [selectedUser, setSelectedUser] = useState(null);
-  const [showUserModal, setShowUserModal] = useState(false);
-  // ✅ NUEVO ESTADO: Usaremos el estado para controlar la apertura del AlertDialog
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); 
-  
-  // Estados de filtros y búsqueda
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Filtros y Paginación
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('desc');
-  
-  // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const usersPerPage = 20;
+
+  // --- LÓGICA DE BACKEND (API SEGURA) ---
   
-  // Estados de edición
-  const [editingUser, setEditingUser] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [userActivity, setUserActivity] = useState([]);
-
-  // Roles disponibles para el filtro y el cambio de rol
-  const availableRoles = ['admin', 'premium', 'standard', 'guest'];
-
-  // ----------------------------------------------------------------------
-  // FUNCIONES DE ACCIÓN (Llamadas a Backend SEGURO)
-  // ----------------------------------------------------------------------
-
-  // Esta función simula la llamada al backend que usa la Service Role Key.
-  const handleUserAction = useCallback(async (userId, action, value = null) => {
+  const handleUserAction = async (userId, action, value = null) => {
     setSaving(true);
-    let success = false;
-    let message = '';
-
     try {
-      // ⚠️ Reemplaza esto con tu lógica de FETCH a tu Edge Function/API
+      // Llamada al endpoint seguro (Edge Function)
       const response = await fetch('/api/admin/user-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, action, value }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || `Error al ejecutar la acción: ${action}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error en la operación del servidor');
       }
-
-      success = true;
-      message = data.message || `Acción '${action}' completada con éxito.`;
+      
+      const result = await response.json();
+      
+      // Actualización optimista de la UI (Feedback inmediato)
+      if (action === 'delete') {
+        setShowDeleteConfirm(false);
+        setSelectedUser(null);
+        setUsers(prev => prev.filter(u => u.id !== userId));
+      } else if (action === 'change_role') {
+         setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: value } : u));
+         // Actualizamos también el usuario seleccionado para que el modal refleje el cambio
+         if (selectedUser?.id === userId) {
+            setSelectedUser(prev => ({ ...prev, role: value }));
+         }
+      } else if (action === 'suspend' || action === 'activate') {
+         const newStatus = action === 'suspend' ? 'suspended' : 'active';
+         setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      }
+      
+      alert(result.message || 'Acción completada exitosamente');
 
     } catch (error) {
-      console.error(`Error en la acción ${action}:`, error.message);
-      message = error.message;
+      console.error(error);
+      alert('Error: ' + error.message);
     } finally {
       setSaving(false);
-      alert(message); 
-      if (success) {
-        fetchUsers();
-      }
     }
-  }, []);
-
-
-  // MANEJADOR DE CAMBIO DE ROL (Para la vista de detalles del usuario)
-  const handleRoleChange = async (newRole) => {
-    if (!selectedUser) return;
-    
-    // Llama a la acción segura en el backend para actualizar el app_metadata de Auth.
-    await handleUserAction(selectedUser.id, 'change_role', newRole);
-
-    setSelectedUser(prev => ({
-        ...prev, 
-        role: newRole 
-    }));
   };
 
-
-  // ✅ MANEJADOR DE ELIMINACIÓN
-  const handleDeleteUser = async () => {
-    if (!selectedUser) return;
-    
-    // Llamada a la acción segura de eliminación
-    await handleUserAction(selectedUser.id, 'delete');
-    
-    // Limpiar estados
-    setSelectedUser(null);
-    setShowDeleteConfirm(false); // Cierra el AlertDialog al terminar
-  };
-
-
-  // ----------------------------------------------------------------------
-  // FUNCIONES DE SUPABASE (fetchUsers y paginación)
-  // ----------------------------------------------------------------------
+  // --- CARGA DE DATOS ---
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
+      // Consulta a user_profiles con join a admin_roles (si aplica)
       let query = supabase
         .from('user_profiles')
         .select(`
-          id, 
-          email, 
-          full_name, 
-          is_verified, 
-          created_at, 
-          free_points, 
-          premium_points,
-          // Placeholder para rol y estado, que deben venir de joins o RPC
-          // Si tienes una tabla 'user_roles' la puedes consultar aquí
-          role: user_roles (role) 
+            *,
+            admin_roles ( role )
         `, { count: 'exact' });
 
-      // ... Aplica filtros y búsqueda aquí ...
-
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-
-      const { data, error, count } = await query
-        .range((currentPage - 1) * usersPerPage, currentPage * usersPerPage - 1);
-        
-      if (error) throw error;
+      if (searchTerm) {
+        query = query.ilike('email', `%${searchTerm}%`);
+      }
       
-      setUsers(data || []);
-      setTotalUsers(count || 0);
+      const from = (currentPage - 1) * usersPerPage;
+      const { data, count, error } = await query
+        .range(from, from + usersPerPage - 1)
+        .order('created_at', { ascending: false });
 
+      if (error) throw error;
+
+      // Mapeo de datos para aplanar la estructura
+      const mappedUsers = data.map(user => {
+        let userRole = 'user';
+        // Lógica defensiva para extraer el rol desde la relación
+        if (user.admin_roles) {
+            if (Array.isArray(user.admin_roles) && user.admin_roles.length > 0) userRole = user.admin_roles[0].role;
+            else if (typeof user.admin_roles === 'object') userRole = user.admin_roles.role;
+        }
+
+        return {
+            ...user,
+            role: userRole || 'user',
+            status: user.status || 'active' 
+        };
+      });
+
+      setUsers(mappedUsers);
+      setTotalUsers(count || 0);
     } catch (error) {
-      console.error('Error fetching users:', error.message);
-      setUsers([]);
-      setTotalUsers(0);
+      console.error('Error cargando usuarios:', error.message);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, sortBy, sortOrder, searchTerm, roleFilter, statusFilter, usersPerPage]);
+  }, [currentPage, searchTerm]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  // Manejadores de Paginación
+  const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalUsers / usersPerPage)));
   const handlePreviousPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
   const totalPages = Math.ceil(totalUsers / usersPerPage);
 
-  // ----------------------------------------------------------------------
-  // FUNCIONES DE RENDERIZADO
-  // ----------------------------------------------------------------------
+  // --- RENDERIZADO DE MODALES ---
 
-  const renderStatusBadge = (isSuspended) => {
-    if (isSuspended) {
-      return <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Suspendido</span>;
-    }
-    return <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Activo</span>;
-  };
-
-  const renderActionsDropdown = (user) => {
-    const isSuspended = user.status === 'suspended';
-    
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon"><Icon name="MoreVertical" size={18} /></Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          
-          <DropdownMenuItem onClick={(e) => {
-            e.stopPropagation();
-            setSelectedUser(user);
-            setShowUserModal(true); 
-          }}>
-            <Icon name="Eye" size={16} className="mr-2" />
-            Ver Detalles
-          </DropdownMenuItem>
-          
-          {/* ✅ ACCIÓN DE SUSPENDER/ACTIVAR - Llama a la función segura (corrige error de suspensión) */}
-          <DropdownMenuItem
-            onClick={(e) => {
-              e.stopPropagation();
-              handleUserAction(user.id, isSuspended ? 'activate' : 'suspend');
-            }}
+  const renderDeleteModal = () => (
+    <Modal
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      title="Confirmar Eliminación"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
+          <Button 
+            variant="danger" // Asegúrate de que tu Button soporte esta variante, si no, usa style manual
+            onClick={() => handleUserAction(selectedUser.id, 'delete')} 
+            disabled={saving}
+            className="bg-red-600 text-white hover:bg-red-700"
           >
-            <Icon name={isSuspended ? 'CheckCircle' : 'Slash'} size={16} className="mr-2" />
-            {isSuspended ? 'Activar Usuario' : 'Suspender Usuario'}
-          </DropdownMenuItem>
+            {saving ? 'Eliminando...' : 'Eliminar Permanentemente'}
+          </Button>
+        </>
+      }
+    >
+      <div className="text-gray-600">
+        <p className="mb-2">¿Estás seguro que deseas eliminar al usuario <strong>{selectedUser?.email}</strong>?</p>
+        <p className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100">
+            ⚠️ Esta acción es irreversible y eliminará todos los datos, puntos y fotos asociados.
+        </p>
+      </div>
+    </Modal>
+  );
 
-          {/* ✅ ACCIÓN DE ELIMINAR - Setea el estado y abre el AlertDialog */}
-          <DropdownMenuItem
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedUser(user);
-              setShowDeleteConfirm(true); 
-            }}
-            className="text-red-600 focus:bg-red-50"
-          >
-            <Icon name="Trash" size={16} className="mr-2" />
-            Eliminar Usuario
-          </DropdownMenuItem>
+  const renderDetailsModal = () => (
+    <Modal
+      isOpen={showDetailsModal}
+      onClose={() => setShowDetailsModal(false)}
+      title="Detalles del Usuario"
+      footer={
+        <Button onClick={() => setShowDetailsModal(false)}>Cerrar</Button>
+      }
+    >
+      {selectedUser && (
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1">Email</label>
+            <Input value={selectedUser.email} readOnly disabled className="bg-gray-100" />
+          </div>
+          
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1">Rol del Sistema</label>
+            <Select
+              value={selectedUser.role}
+              onChange={(e) => handleUserAction(selectedUser.id, 'change_role', e.target.value)}
+              options={[
+                { value: 'user', label: 'Usuario Estándar' },
+                { value: 'premium', label: 'Usuario Premium' },
+                { value: 'admin', label: 'Administrador' }
+              ]}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+                Cambiar el rol actualizará los permisos inmediatamente.
+            </p>
+          </div>
 
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  };
-  
-  // ✅ MODAL DE CONFIRMACIÓN DE ELIMINACIÓN (Usando AlertDialog)
-  const renderDeleteConfirm = () => {
-    if (!selectedUser) return null;
+          <div className="flex items-center space-x-2 pt-2 border-t mt-4">
+             <Checkbox checked={selectedUser.is_verified} disabled />
+             <span className="text-sm text-gray-700">Cuenta Verificada</span>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 
-    return (
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        {/* <AlertDialogTrigger asChild> (No se necesita trigger, se abre por estado) </AlertDialogTrigger> */}
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Eliminación de Usuario</AlertDialogTitle>
-            <AlertDialogDescription>
-              Estás a punto de **ELIMINAR PERMANENTEMENTE** al usuario **{selectedUser.full_name || selectedUser.email}**. 
-              Esta acción es irreversible y eliminará todos los datos asociados.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={saving}>
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDeleteUser} 
-              disabled={saving}
-              // Puedes necesitar una clase para que el botón se vea rojo (Ej: variant="destructive")
-              className="bg-red-600 hover:bg-red-700 text-white" 
-            >
-              {saving ? 'Eliminando...' : 'Eliminar Permanentemente'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    );
-  };
-
-  const renderUserModal = () => {
-    // ... tu lógica de modal existente, si usas Dialog, debes importarlo y usarlo aquí
-    // Si sigue faltando, este renderizado fallará, pero no afectará el deploy.
-    return null; // Placeholder
-  };
-  
   return (
     <>
-      <Helmet>
-        <title>Gestión de Usuarios - Admin</title>
-      </Helmet>
+      <Helmet><title>Gestión de Usuarios - Admin</title></Helmet>
+      
+      <div className="p-6 max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold mb-6 text-gray-900">Gestión de Usuarios</h1>
 
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Gestión de Usuarios</h1>
-        {/* ... Filtros y Buscador ... */}
+        {/* Barra de Herramientas */}
+        <div className="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="w-full md:w-1/3 relative">
+                <Input 
+                    placeholder="Buscar por email..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+                <Icon name="Search" size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            </div>
+            <Button onClick={fetchUsers} variant="outline" size="sm">
+                <Icon name="RefreshCw" size={16} className="mr-2" /> Actualizar Lista
+            </Button>
+        </div>
 
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          {/* ... Contenido de la tabla ... */}
+        {/* Tabla de Usuarios */}
+        <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border">
-              <thead>
-                {/* ... Encabezados ... */}
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Verificado</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-border">
-                {/* ... Filas de usuarios ... */}
+              <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
-                  <tr><td colSpan="6" className="text-center py-4">Cargando usuarios...</td></tr>
+                  <tr><td colSpan="5" className="text-center py-8 text-gray-500">Cargando usuarios...</td></tr>
                 ) : users.length === 0 ? (
-                  <tr><td colSpan="6" className="text-center py-4">No se encontraron usuarios.</td></tr>
+                  <tr><td colSpan="5" className="text-center py-8 text-gray-500">No se encontraron usuarios.</td></tr>
                 ) : (
                   users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">{user.full_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{user.email}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                        {/* El rol debe ser legible aquí (corregido con el backend handleRoleChange) */}
-                        {user.role || 'N/A'} 
+                    <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{user.full_name || 'Sin Nombre'}</div>
+                            <div className="text-sm text-gray-500">{user.email}</div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">{renderStatusBadge(user.status === 'suspended')}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {user.is_verified ? <Icon name="Check" className="text-green-500" /> : <Icon name="X" className="text-red-500" />}
+                      <td className="px-6 py-4">
+                        <Badge variant={user.role === 'admin' ? 'info' : (user.role === 'premium' ? 'warning' : 'default')}>
+                            {user.role}
+                        </Badge>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {renderActionsDropdown(user)}
+                      <td className="px-6 py-4">
+                        <Badge variant={user.status === 'suspended' ? 'danger' : 'success'}>
+                            {user.status === 'suspended' ? 'Suspendido' : 'Activo'}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        {user.is_verified 
+                            ? <Icon name="Check" className="text-green-500" size={18} /> 
+                            : <Icon name="X" className="text-gray-300" size={18} />
+                        }
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <UserContextMenu 
+                            user={user}
+                            onEdit={() => { setSelectedUser(user); setShowDetailsModal(true); }}
+                            onSuspend={() => handleUserAction(user.id, user.status === 'suspended' ? 'activate' : 'suspend')}
+                            onDelete={() => { setSelectedUser(user); setShowDeleteConfirm(true); }}
+                        />
                       </td>
                     </tr>
                   ))
@@ -308,13 +291,28 @@ const UserManagement = () => {
             </table>
           </div>
 
-          {/* ... Paginación ... */}
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <span className="text-sm text-gray-500">
+                Página {currentPage} de {totalPages}
+              </span>
+              <div className="flex space-x-2">
+                <Button variant="outline" size="sm" onClick={handlePreviousPage} disabled={currentPage === 1}>
+                  <Icon name="ChevronLeft" size={16} />
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleNextPage} disabled={currentPage === totalPages}>
+                  <Icon name="ChevronRight" size={16} />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Modales */}
-      {renderUserModal()}
-      {renderDeleteConfirm()} 
+      {/* Renderizado de Modales */}
+      {renderDetailsModal()}
+      {renderDeleteModal()}
     </>
   );
 };
