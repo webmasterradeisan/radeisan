@@ -15,7 +15,6 @@ const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    // accountType: 'personal', // REMOVIDO
     acceptTerms: false
   });
   
@@ -23,8 +22,6 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // REMOVIDO: accountTypeOptions
 
   useEffect(() => {
     // Check if user is already authenticated
@@ -109,7 +106,7 @@ const Register = () => {
     handleInputChange('acceptTerms', checked);
   };
 
-  // ✅ HANDLESUBMIT CORREGIDO y SIMPLIFICADO
+  // ✅ HANDLESUBMIT: Con envío de email reactivado
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -123,7 +120,7 @@ const Register = () => {
     try {
       console.log('🚀 Iniciando registro para:', formData.email);
 
-      // ✅ SOLO REGISTRAR - Sin account_type en los metadatos
+      // 1. Registro en Supabase Auth (Dispara el Trigger en la BD)
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -131,7 +128,6 @@ const Register = () => {
           data: {
             full_name: formData.name.trim(),
             username: formData.username.toLowerCase().trim(),
-            // REMOVIDO: account_type
           },
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
@@ -157,8 +153,8 @@ const Register = () => {
         console.log('✅ Usuario registrado exitosamente:', data.user.email);
         console.log('✅ ID del usuario:', data.user.id);
 
-        // ✅ Enviar email de bienvenida (COMENTADO TEMPORALMENTE PARA AISLAR ERROR 500)
-        /*
+        // 2. Enviar email de bienvenida (DESCOMENTADO)
+        // Esto se ejecuta en segundo plano y no bloquea la redirección
         supabase.functions
           .invoke('send-welcome-email', {
             body: {
@@ -169,17 +165,16 @@ const Register = () => {
           })
           .then(({ error }) => {
             if (error) {
-              console.warn('⚠️ Email de bienvenida no enviado:', error.message);
+              console.warn('⚠️ Email de bienvenida no enviado (API Error):', error.message);
             } else {
               console.log('✅ Email de bienvenida enviado correctamente');
             }
           })
           .catch(err => {
-            console.warn('⚠️ Error al enviar email de bienvenida:', err.message);
+            console.warn('⚠️ Error de red al enviar email:', err.message);
           });
-        */
 
-        // ✅ Redirigir inmediatamente al dashboard
+        // 3. Redirigir inmediatamente al dashboard
         console.log('✅ Redirigiendo al dashboard...');
         navigate('/dashboard', { replace: true });
       }
@@ -192,8 +187,6 @@ const Register = () => {
       setIsLoading(false);
     }
   };
-
-  // REMOVIDO: handleSocialRegister function
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -229,8 +222,6 @@ const Register = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {/* REMOVIDO: Account Type Select */}
-
             {/* Name Input */}
             <div>
               <Input
@@ -402,7 +393,6 @@ const Register = () => {
             </Button>
           </form>
 
-          {/* REMOVIDO: Social Register Section */}
         </div>
 
         {/* Login Link */}
