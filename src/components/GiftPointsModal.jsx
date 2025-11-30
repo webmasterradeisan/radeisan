@@ -40,15 +40,13 @@ const GiftPointsModal = ({
         loadingPoints
     }); 
 
-    // ✅ EFECTO PARA REFRESCAR PUNTOS AL ABRIR EL MODAL
+    // ✅ EFECTO PARA LIMPIAR ERRORES AL ABRIR EL MODAL
     useEffect(() => {
-        if (isOpen && user) {
+        if (isOpen) {
             setError(null);
             setSuccessMessage(null);
-            // Refrescar el saldo desde la base de datos
-            refreshPoints();
         }
-    }, [isOpen, user, refreshPoints]);
+    }, [isOpen]);
 
     // ✅ VALIDACIÓN DE ERRORES VISUALES RELACIONADAS AL SALDO
     useEffect(() => {
