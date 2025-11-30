@@ -22,38 +22,44 @@ const GiftPointsModal = ({
     onSuccess 
 }) => {
     const { user } = useAuth();
-    const { points, refreshPoints, loading: loadingPoints } = usePoints(); // ✅ Usamos loading del contexto
+    // ✅ CORRECCIÓN: Usar las propiedades correctas que exporta PointsContext
+    const { freePoints, refreshPoints, loading: loadingPoints } = usePoints(); 
     
     const [amount, setAmount] = useState(GIFT_AMOUNTS[0]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
     
-    // Si el contexto de puntos está cargando, asumimos 0 para evitar errores, pero inhabilitamos el botón
     const isGiftingToSelf = user?.id === receiverId;
-    const senderFreePoints = points?.free || 0; 
+    // ✅ Ahora usamos directamente freePoints del contexto
+    const senderFreePoints = freePoints || 0;
+    
+    console.log('🔍 GiftPointsModal - Debug:', {
+        freePoints,
+        senderFreePoints,
+        loadingPoints
+    }); 
 
     // ✅ EFECTO PARA REFRESCAR PUNTOS AL ABRIR EL MODAL
     useEffect(() => {
         if (isOpen && user) {
             setError(null);
             setSuccessMessage(null);
-            // Forzar un refresh del saldo desde la base de datos
-            refreshPoints(); 
-            // Esto asegura que points?.free refleje el saldo más reciente
+            // Refrescar el saldo desde la base de datos
+            refreshPoints();
         }
     }, [isOpen, user, refreshPoints]);
 
     // ✅ VALIDACIÓN DE ERRORES VISUALES RELACIONADAS AL SALDO
     useEffect(() => {
-        if (isOpen) {
-             // Si el error actual es el de saldo y el saldo real se actualizó, limpiamos el error.
+        if (isOpen && !loadingPoints) {
+            // Si el error actual es el de saldo y el saldo real se actualizó, limpiamos el error.
             if (error?.includes('Saldo insuficiente') && senderFreePoints >= amount) {
                 setError(null);
             }
-             // Si el saldo es 0 (y el contexto no está cargando), mostramos el error.
-            if (!loadingPoints && senderFreePoints === 0) {
-                 setError('¡Saldo insuficiente! Solo tienes 0 puntos disponibles.');
+            // Si el saldo es 0, mostramos el error.
+            if (senderFreePoints === 0) {
+                setError('¡Saldo insuficiente! Solo tienes 0 puntos disponibles.');
             }
         }
     }, [isOpen, senderFreePoints, amount, loadingPoints, error]);
@@ -123,7 +129,7 @@ const GiftPointsModal = ({
 
     if (!isOpen || !user) return null;
     
-    // ✅ Deshabilitar si está cargando los puntos del contexto
+    // ✅ Estado de botón deshabilitado
     const isDisabled = loading || loadingPoints || amount <= 0 || amount > senderFreePoints || isGiftingToSelf;
 
     return (
@@ -170,7 +176,6 @@ const GiftPointsModal = ({
                                         key={a}
                                         type="button"
                                         onClick={() => setAmount(a)}
-                                        // ✅ Se deshabilita si el monto es mayor al saldo
                                         disabled={a > senderFreePoints && !loadingPoints} 
                                         className={`
                                             px-3 py-2 rounded-lg font-semibold transition-colors text-sm
