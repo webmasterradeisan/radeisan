@@ -742,7 +742,15 @@ const ReelsContainer = ({
       )}
 
       {showGiftModal && currentVideo && (
-        <GiftPointsModal isOpen={showGiftModal} onClose={()=>setShowGiftModal(false)} receiverId={currentVideo.creator?.id} contentId={currentVideo.id} contentType="reel" onSuccess={()=>{}} />
+        <GiftPointsModal 
+          isOpen={showGiftModal} 
+          onClose={()=>setShowGiftModal(false)} 
+          receiverId={currentVideo.creator?.id} 
+          receiverUsername={currentVideo.creator?.username}
+          contentId={currentVideo.id} 
+          contentType="reel" 
+          onSuccess={()=>{}} 
+        />
       )}
     </div>
   );
