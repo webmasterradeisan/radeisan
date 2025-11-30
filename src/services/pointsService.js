@@ -208,10 +208,53 @@ export const getUserPurchaseHistory = async (userId) => {
 // ===========================================================
 
 /**
- * Enviar regalo (Wrapper para la lógica nueva de la DB)
+ * Enviar regalo de puntos directamente (Wrapper para el RPC correcto)
  * Necesario para: src/components/GiftPointsModal.jsx
+ * 
+ * @param {string} senderId - ID del usuario que envía
+ * @param {string} receiverId - ID del usuario que recibe
+ * @param {number} amount - Cantidad de puntos a regalar
+ * @param {string} contentType - Tipo de contenido ('video', 'photo', 'reel')
+ * @param {string} contentId - ID del contenido
  */
-export const giftPoints = async (receiverId, giftId) => {
+export const giftPoints = async (senderId, receiverId, amount, contentType, contentId) => {
+  try {
+    const { data, error } = await supabase.rpc('rpc_gift_points', {
+      p_sender_id: senderId,
+      p_receiver_id: receiverId,
+      p_amount: amount,
+      p_content_type: contentType,
+      p_content_id: contentId
+    });
+
+    if (error) {
+      console.error('Error en RPC rpc_gift_points:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Error al regalar puntos'
+      };
+    }
+
+    return { 
+      success: true, 
+      data,
+      message: `¡${amount} puntos enviados exitosamente!`
+    };
+  } catch (error) {
+    console.error('Error gifting points:', error);
+    return { 
+      success: false, 
+      message: error.message || 'Error inesperado al regalar puntos'
+    };
+  }
+};
+
+/**
+ * Enviar regalo virtual del catálogo (Wrapper para send_virtual_gift)
+ * @param {string} receiverId - ID del usuario que recibe
+ * @param {string} giftId - ID del regalo virtual del catálogo
+ */
+export const sendVirtualGift = async (receiverId, giftId) => {
   try {
     const { data, error } = await supabase.rpc('send_virtual_gift', {
       receiver_id: receiverId,
@@ -221,7 +264,7 @@ export const giftPoints = async (receiverId, giftId) => {
     if (error) throw error;
     return { success: true, data };
   } catch (error) {
-    console.error('Error gifting points:', error);
+    console.error('Error sending virtual gift:', error);
     return { success: false, error: error.message };
   }
 };
