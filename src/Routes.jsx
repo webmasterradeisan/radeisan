@@ -102,6 +102,14 @@ import OrdersManagement from './pages/admin-shop/OrdersManagement';
 // ✅ NUEVO - GESTIÓN DE INVENTARIO DE TIENDA (ADMIN)
 import ShopInventory from './pages/admin-shop/ShopInventory';
 
+// ===============================
+// ✅ NUEVO: SHOP MANAGEMENT (Shop Manager + Admin)
+// ===============================
+import { ProtectedShopRoute } from './components/ProtectedShopRoute';
+import ShopManagementLayout from './pages/shop-management/ShopManagementLayout';
+import ManageOrders from './pages/shop-management/ManageOrders';
+import ManageInventory from './pages/shop-management/ManageInventory';
+
 
 // ===============================
 // WRAPPER PARA MOBILELAYOUT
@@ -488,6 +496,23 @@ const Routes = () => {
                     <Route path="/notifications" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Notificaciones" description="Mantente al día con tu actividad" /></MobileLayoutWrapper></ProtectedRoute>} />
                     <Route path="/saved" element={<ProtectedRoute><MobileLayoutWrapper><PlaceholderPage title="Contenido Guardado" description="Accede a todo el contenido que has guardado" /></MobileLayoutWrapper></ProtectedRoute>} />
                     <Route path="/settings" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
+
+                    {/* =================== SHOP MANAGEMENT (SHOP MANAGER + ADMIN) =================== */}
+                    
+                    <Route
+                      path="/shop/manage"
+                      element={
+                        <ProtectedRoute>
+                          <ProtectedShopRoute>
+                            <ShopManagementLayout />
+                          </ProtectedShopRoute>
+                        </ProtectedRoute>
+                      }
+                    >
+                      <Route path="orders" element={<ManageOrders />} />
+                      <Route path="inventory" element={<ManageInventory />} />
+                      <Route index element={<Navigate to="orders" replace />} />
+                    </Route>
 
                     {/* =================== PANEL DE ADMINISTRACIÓN =================== */}
                     
