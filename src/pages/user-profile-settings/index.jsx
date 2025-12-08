@@ -2014,10 +2014,6 @@ const UserProfileSettings = () => {
                           <Icon name="Edit" size={16} className="mr-2" />
                           Editar Perfil
                         </Button>
-                        <Button variant="outline">
-                          <Icon name="Crown" size={16} className="mr-2" />
-                          Upgrade
-                        </Button>
                       </div>
                     </div>
                   </div>
