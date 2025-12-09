@@ -536,7 +536,7 @@ const Header = () => {
                       </div>
                     )}
                   </div>
-                </>
+                </div>
               ) : (
                 // NO AUTENTICADO
                 <div className="flex items-center space-x-4">
