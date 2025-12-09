@@ -4,7 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePoints } from '../../contexts/PointsContext';
 import { useBranding } from '../../hooks/useBranding';
-import { useGiftNotifications } from '../../contexts/GiftNotificationContext'; // ✅ IMPORT
+import { useGiftNotifications } from '../../contexts/GiftNotificationContext'; // ✅ NUEVO IMPORT
 import { useShopPermissions } from '../../hooks/useShopPermissions'; // ✅ NUEVO: Para shop_manager
 import AppIcon from '../AppIcon';
 import Button from './Button';
@@ -552,7 +552,7 @@ const Header = () => {
           </div>
         </div>
         
-        {/* MODAL MENÚ MÓVIL */}
+        {/* MODAL MENÚ MÓVIL (MANTENIDO IGUAL) */}
         {isMainMenuModalOpen && user && (
            <div className="fixed inset-0 z-[100] md:hidden">
               {/* Overlay */}
