@@ -321,14 +321,14 @@ const Header = () => {
                   </Link>
                 )}
 
-                {/* Link Admin (Solo Super Admins) */}
+                {/* Link Admin (Solo Admins) */}
                 {isAdmin() && (
                   <Link 
                     to="/admin" 
                     className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       location.pathname.startsWith('/admin')
-                        ? 'bg-primary/10 text-primary border border-primary/20' 
-                        : 'text-primary hover:bg-primary/5 border border-transparent'
+                        ? 'bg-primary/10 text-primary' 
+                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
                     }`}
                   >
                     <Icon name="Shield" size={18} />
@@ -338,14 +338,12 @@ const Header = () => {
               </nav>
             )}
 
-            {/* ------------------ DERECHA: ACCIONES ------------------ */}
-            <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* ------------------ DERECHA: PUNTOS & PERFIL ------------------ */}
+            <div className="flex items-center space-x-4">
               {user ? (
                 <>
-                  {/* Puntos y Botones (Mostrar siempre) */}
-                  <div className="flex items-center space-x-2 sm:space-x-3">
-                    {/* Puntos Gratis */}
-                    <div className="flex flex-col items-center cursor-pointer group" title={`Puntos Gratis: ${freePoints.toLocaleString()}`}>
+                  {/* Puntos Gratis */}
+                  <div className="flex flex-col items-center cursor-pointer group" title={`Puntos Gratis: ${freePoints.toLocaleString()}`}>
                     <div className="flex items-center space-x-1">
                       <Icon name="Star" size={18} className="text-orange-400 transition-transform group-hover:scale-110" />
                       {pointsLoading ? (
@@ -457,7 +455,7 @@ const Header = () => {
                     )}
                   </div>
 
-                  {/* MENÚ DE USUARIO */}
+                  {/* MENÚ DE USUARIO (MANTENIDO) */}
                   <div className="relative" ref={userMenuRef}>
                     <Button variant="ghost" size="icon" onClick={toggleUserMenu} className="rounded-full border border-transparent hover:border-border transition-all">
                       <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden shadow-sm">
@@ -536,7 +534,7 @@ const Header = () => {
                       </div>
                     )}
                   </div>
-                </div>
+                </>
               ) : (
                 // NO AUTENTICADO
                 <div className="flex items-center space-x-4">
