@@ -37,8 +37,10 @@ export const useShopPermissions = () => {
   return {
     userRole,
     loading,
-    isAdmin: () => userRole === 'admin',
+    // ✅ Verifica si es admin o super_admin
+    isAdmin: () => userRole === 'admin' || userRole === 'super_admin',
     isShopManager: () => userRole === 'shop_manager',
-    canManageShop: () => userRole === 'admin' || userRole === 'shop_manager'
+    // ✅ Puede gestionar tienda si es admin, super_admin o shop_manager
+    canManageShop: () => userRole === 'admin' || userRole === 'super_admin' || userRole === 'shop_manager'
   };
 };
