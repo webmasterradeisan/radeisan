@@ -4,7 +4,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePoints } from '../../contexts/PointsContext';
 import { useBranding } from '../../hooks/useBranding';
-import { useGiftNotifications } from '../../contexts/GiftNotificationContext'; // ✅ NUEVO IMPORT
+import { useGiftNotifications } from '../../contexts/GiftNotificationContext'; // ✅ IMPORT
+import { useShopPermissions } from '../../hooks/useShopPermissions'; // ✅ NUEVO: Para shop_manager
 import AppIcon from '../AppIcon';
 import Button from './Button';
 
@@ -101,6 +102,9 @@ const Header = () => {
   
   // ✅ HOOK DE NOTIFICACIONES DE REGALOS
   const { unreadGiftCount, giftNotifications, markGiftAsRead, markAllGiftsAsRead } = useGiftNotifications();
+  
+  // ✅ NUEVO: Hook para verificar permisos de shop_manager
+  const { canManageShop, isAdmin } = useShopPermissions();
   
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMainMenuModalOpen, setIsMainMenuModalOpen] = useState(false);
@@ -302,14 +306,29 @@ const Header = () => {
                   <span>Recompensas</span>
                 </Link>
 
-                {/* Link Admin (Solo Admins) */}
-                {user.isAdmin && (
+                {/* ✅ NUEVO: Link Gestión Tienda (Shop Manager + Admin) */}
+                {canManageShop() && (
+                  <Link 
+                    to="/shop/manage/orders" 
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      location.pathname.startsWith('/shop/manage')
+                        ? 'bg-blue-500/10 text-blue-600 border border-blue-200' 
+                        : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 border border-transparent'
+                    }`}
+                  >
+                    <Icon name="Settings" size={18} />
+                    <span>Gestionar Tienda</span>
+                  </Link>
+                )}
+
+                {/* Link Admin (Solo Super Admins) */}
+                {isAdmin() && (
                   <Link 
                     to="/admin" 
                     className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       location.pathname.startsWith('/admin')
-                        ? 'bg-primary/10 text-primary' 
-                        : 'text-muted-foreground hover:text-primary hover:bg-muted/50'
+                        ? 'bg-primary/10 text-primary border border-primary/20' 
+                        : 'text-primary hover:bg-primary/5 border border-transparent'
                     }`}
                   >
                     <Icon name="Shield" size={18} />
@@ -319,12 +338,14 @@ const Header = () => {
               </nav>
             )}
 
-            {/* ------------------ DERECHA: PUNTOS & PERFIL ------------------ */}
-            <div className="flex items-center space-x-4">
+            {/* ------------------ DERECHA: ACCIONES ------------------ */}
+            <div className="flex items-center space-x-2 sm:space-x-3">
               {user ? (
                 <>
-                  {/* Puntos Gratis */}
-                  <div className="flex flex-col items-center cursor-pointer group" title={`Puntos Gratis: ${freePoints.toLocaleString()}`}>
+                  {/* Puntos y Botones (Mostrar siempre) */}
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    {/* Puntos Gratis */}
+                    <div className="flex flex-col items-center cursor-pointer group" title={`Puntos Gratis: ${freePoints.toLocaleString()}`}>
                     <div className="flex items-center space-x-1">
                       <Icon name="Star" size={18} className="text-orange-400 transition-transform group-hover:scale-110" />
                       {pointsLoading ? (
@@ -436,7 +457,7 @@ const Header = () => {
                     )}
                   </div>
 
-                  {/* MENÚ DE USUARIO (MANTENIDO) */}
+                  {/* MENÚ DE USUARIO */}
                   <div className="relative" ref={userMenuRef}>
                     <Button variant="ghost" size="icon" onClick={toggleUserMenu} className="rounded-full border border-transparent hover:border-border transition-all">
                       <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center overflow-hidden shadow-sm">
@@ -476,7 +497,18 @@ const Header = () => {
                                Mis Recompensas
                              </Link>
 
-                             {user.isAdmin && (
+                             {/* ✅ NUEVO: Link Gestión Tienda en menú usuario */}
+                             {canManageShop() && (
+                               <>
+                                 <div className="border-t border-border my-1 mx-2"></div>
+                                 <Link to="/shop/manage/orders" className="flex items-center px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" onClick={() => setIsUserMenuOpen(false)}>
+                                   <Icon name="Settings" size={16} className="mr-3" />
+                                   Gestionar Tienda
+                                 </Link>
+                               </>
+                             )}
+
+                             {isAdmin() && (
                                <>
                                  <div className="border-t border-border my-1 mx-2"></div>
                                  <Link to="/admin" className="flex items-center px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors" onClick={() => setIsUserMenuOpen(false)}>
@@ -520,7 +552,7 @@ const Header = () => {
           </div>
         </div>
         
-        {/* MODAL MENÚ MÓVIL (MANTENIDO IGUAL) */}
+        {/* MODAL MENÚ MÓVIL */}
         {isMainMenuModalOpen && user && (
            <div className="fixed inset-0 z-[100] md:hidden">
               {/* Overlay */}
@@ -596,8 +628,15 @@ const Header = () => {
                        <Link to="/rewards" onClick={() => setIsMainMenuModalOpen(false)} className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium transition-colors ${location.pathname === '/rewards' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
                           <Icon name="Gift" size={20} /><span>Recompensas</span>
                        </Link>
+
+                       {/* ✅ NUEVO: Link Gestión Tienda (Móvil) */}
+                       {canManageShop() && (
+                          <Link to="/shop/manage/orders" onClick={() => setIsMainMenuModalOpen(false)} className="flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium text-blue-600 hover:bg-blue-50 mt-2 bg-blue-50/50 border border-blue-200">
+                             <Icon name="Settings" size={20} /><span>Gestionar Tienda</span>
+                          </Link>
+                       )}
                        
-                       {user.isAdmin && (
+                       {isAdmin() && (
                           <Link to="/admin" onClick={() => setIsMainMenuModalOpen(false)} className="flex items-center space-x-3 px-4 py-3 rounded-xl text-base font-medium text-primary hover:bg-primary/10 mt-4 bg-primary/5">
                              <Icon name="Shield" size={20} /><span>Panel Admin</span>
                           </Link>
