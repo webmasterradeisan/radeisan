@@ -1,21 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '../../../components/AppIcon';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import { Checkbox } from '../../../components/ui/Checkbox';
-import ProfileImageEditor from '../../../components/ProfileImageEditor'; // 🆕 Import del editor
+import ProfileImageEditor from '../../../components/ProfileImageEditor';
 
 const SettingsPanel = ({ 
   user, 
   onUpdateSettings, 
-  loading = false,          // 🆕 Prop para estados de carga
-  onUploadAvatar,          // 🆕 Prop para subir avatar
-  onUploadCover,           // 🆕 Prop para subir cover
-  onSignOut,               // 🆕 Prop para cerrar sesión
-  editing = false,         // 🆕 Prop para modo edición
-  onCancelEdit             // 🆕 Prop para cancelar edición
+  loading = false,
+  onUploadAvatar,
+  onUploadCover,
+  onSignOut,
+  editing = false,
+  onCancelEdit
 }) => {
   const [activeSection, setActiveSection] = useState('account');
+  
+  // ✅ Estado para datos del perfil (información personal)
+  const [profileData, setProfileData] = useState({
+    full_name: '',
+    username: '',
+    email: '',
+    bio: ''
+  });
+
+  // Estado para configuraciones (notificaciones, privacidad, etc)
   const [settings, setSettings] = useState({
     notifications: {
       email: true,
@@ -36,6 +46,18 @@ const SettingsPanel = ({
       quality: 'auto'
     }
   });
+
+  // ✅ Cargar datos del usuario cuando cambia
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        full_name: user.name || user.fullName || user.full_name || '',
+        username: user.username || '',
+        email: user.email || '',
+        bio: user.bio || ''
+      });
+    }
+  }, [user]);
 
   const sections = [
     {
@@ -64,6 +86,14 @@ const SettingsPanel = ({
       icon: 'Lock'
     }
   ];
+
+  // ✅ Handler para cambios en datos de perfil
+  const handleProfileDataChange = (field, value) => {
+    setProfileData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
 
   const handleSettingChange = (section, key, value) => {
     setSettings(prev => ({
@@ -94,7 +124,7 @@ const SettingsPanel = ({
 
   const renderAccountSection = () => (
     <div className="space-y-6">
-      {/* 🆕 NUEVA SECCIÓN: Imágenes de Perfil */}
+      {/* Imágenes de Perfil */}
       <div className="border-b border-border pb-6">
         <h3 className="text-lg font-medium text-foreground mb-4">Imágenes de Perfil</h3>
         <div className="bg-muted/30 rounded-lg p-4">
@@ -108,21 +138,23 @@ const SettingsPanel = ({
         </div>
       </div>
 
-      {/* SECCIÓN EXISTENTE: Información Personal */}
+      {/* Información Personal */}
       <div>
         <h3 className="text-lg font-medium text-foreground mb-4">Información Personal</h3>
         <div className="space-y-4">
           <Input
             label="Nombre completo"
             type="text"
-            value={user?.name || ''}
+            value={profileData.full_name}
+            onChange={(e) => handleProfileDataChange('full_name', e.target.value)}
             placeholder="Tu nombre completo"
             disabled={loading}
           />
           <Input
             label="Nombre de usuario"
             type="text"
-            value={user?.username || ''}
+            value={profileData.username}
+            onChange={(e) => handleProfileDataChange('username', e.target.value)}
             placeholder="@usuario"
             description="Tu nombre de usuario único"
             disabled={loading}
@@ -130,49 +162,47 @@ const SettingsPanel = ({
           <Input
             label="Email"
             type="email"
-            value={user?.email || ''}
+            value={profileData.email}
+            onChange={(e) => handleProfileDataChange('email', e.target.value)}
             placeholder="tu@email.com"
             disabled={loading}
           />
-          <Input
-            label="Biografía"
-            type="text"
-            value={user?.bio || ''}
-            placeholder="Cuéntanos sobre ti..."
-            description="Máximo 160 caracteres"
-            disabled={loading}
-          />
+          
+          {/* ✅ BIOGRAFÍA MEJORADA - Textarea con contador */}
+          <div>
+            <label htmlFor="bio" className="block text-sm font-medium text-foreground mb-1">
+              Biografía
+            </label>
+            <textarea
+              id="bio"
+              name="bio"
+              value={profileData.bio}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Limitar a 160 caracteres
+                if (value.length <= 160) {
+                  handleProfileDataChange('bio', value);
+                }
+              }}
+              rows={3}
+              maxLength={160}
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              placeholder="Cuéntanos sobre ti..."
+              disabled={loading}
+            />
+            <div className="mt-1 flex justify-between items-center">
+              <p className="text-xs text-muted-foreground">
+                Máximo 160 caracteres
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {profileData.bio.length}/160
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* SECCIÓN EXISTENTE: Cuenta de Negocio */}
-      <div className="pt-4 border-t border-border">
-        <h4 className="font-medium text-foreground mb-3">Cuenta de Negocio</h4>
-        {user?.isBusinessAccount ? (
-          <div className="flex items-center justify-between p-4 bg-accent/10 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <Icon name="Building2" size={20} color="var(--color-accent)" />
-              <div>
-                <p className="font-medium text-foreground">Cuenta Business Activa</p>
-                <p className="text-sm text-muted-foreground">Puedes vender productos en el marketplace</p>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" disabled={loading}>
-              Gestionar
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-            <div>
-              <p className="font-medium text-foreground">Upgrade a Business</p>
-              <p className="text-sm text-muted-foreground">Comienza a vender productos y gana más puntos</p>
-            </div>
-            <Button variant="default" size="sm" disabled={loading}>
-              Actualizar
-            </Button>
-          </div>
-        )}
-      </div>
+      {/* ❌ ELIMINADO: Sección "Cuenta de Negocio" */}
     </div>
   );
 
@@ -514,7 +544,7 @@ const SettingsPanel = ({
             
             {/* Save Button */}
             <div className="flex justify-between pt-6 border-t border-border mt-6">
-              {/* 🆕 Botón cancelar edición */}
+              {/* Botón cancelar edición */}
               {editing && onCancelEdit && (
                 <Button
                   variant="outline"
@@ -527,7 +557,14 @@ const SettingsPanel = ({
               
               <Button
                 variant="default"
-                onClick={() => onUpdateSettings(settings)}
+                onClick={() => {
+                  // ✅ Enviar tanto profileData como settings
+                  const allData = {
+                    ...profileData,
+                    settings
+                  };
+                  onUpdateSettings(allData);
+                }}
                 iconName="Save"
                 iconPosition="left"
                 disabled={loading}
