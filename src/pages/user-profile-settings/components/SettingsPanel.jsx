@@ -558,12 +558,8 @@ const SettingsPanel = ({
               <Button
                 variant="default"
                 onClick={() => {
-                  // ✅ Enviar tanto profileData como settings
-                  const allData = {
-                    ...profileData,
-                    settings
-                  };
-                  onUpdateSettings(allData);
+                  // ✅ Enviar solo profileData (sin settings que no existen en DB)
+                  onUpdateSettings(profileData);
                 }}
                 iconName="Save"
                 iconPosition="left"
