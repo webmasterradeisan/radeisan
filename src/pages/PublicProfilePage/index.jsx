@@ -62,9 +62,9 @@ const PublicProfilePage = () => {
 
       let profileQuery;
       if (isUUID(identifier)) {
-        profileQuery = supabase.from('user_profiles').select('*').eq('id', identifier).single();
+        profileQuery = supabase.from('user_profiles').select('*, bio').eq('id', identifier).single();
       } else {
-        profileQuery = supabase.from('user_profiles').select('*').eq('username', identifier).single();
+        profileQuery = supabase.from('user_profiles').select('*, bio').eq('username', identifier).single();
       }
 
       const { data: profile, error: profileError } = await profileQuery;
@@ -344,6 +344,13 @@ const PublicProfilePage = () => {
                       <p className="text-sm text-muted-foreground mb-3">
                         @{profileData.username}
                       </p>
+
+                      {/* ✅ Biografía - Nueva sección */}
+                      {profileData.bio && (
+                        <p className="text-sm text-foreground mb-4 max-w-md leading-relaxed">
+                          {profileData.bio}
+                        </p>
+                      )}
                       
                       {/* Stats en UNA LÍNEA HORIZONTAL */}
                       <div className="flex items-center flex-wrap gap-4 text-sm">
