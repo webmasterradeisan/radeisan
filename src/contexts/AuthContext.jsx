@@ -404,7 +404,8 @@ export const AuthProvider = ({ children }) => {
         ...user,
         ...updates,
         name: updates.full_name || updates.name || user.name,
-        full_name: updates.full_name || user.full_name
+        full_name: updates.full_name || user.full_name,
+        bio: updates.bio || user.bio || ''
       };
       
       setUser(updatedUser);
